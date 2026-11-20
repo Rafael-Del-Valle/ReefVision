@@ -2,13 +2,17 @@ import type { WorkspacePresetId } from "./workspacePresets";
 
 export type WorkspaceInspectorView =
   | "gallery"
+  | "field_capture"
   | "versions"
   | "interoperability"
   | "environmental_context"
   | "computed_metrics"
   | "scientific_heatmaps"
   | "ecology"
+  | "study_design"
+  | "reproducibility"
   | "models"
+  | "model_comparison"
   | "training"
   | "classification"
   | "video"
@@ -16,6 +20,7 @@ export type WorkspaceInspectorView =
   | "classes"
   | "quality_control"
   | "review_queue"
+  | "reviewer_lab"
   | "advanced_providers"
   | "workflows";
 
@@ -43,13 +48,17 @@ export interface WorkspacePresetInspectorGuidance {
 
 export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "gallery",
+  "field_capture",
   "versions",
   "interoperability",
   "environmental_context",
   "computed_metrics",
   "scientific_heatmaps",
   "ecology",
+  "study_design",
+  "reproducibility",
   "models",
+  "model_comparison",
   "training",
   "classification",
   "video",
@@ -57,6 +66,7 @@ export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "classes",
   "quality_control",
   "review_queue",
+  "reviewer_lab",
   "advanced_providers",
   "workflows",
 ];
@@ -65,6 +75,81 @@ const WORKSPACE_INSPECTORS: Record<
   WorkspaceInspectorView,
   WorkspaceInspectorDefinition
 > = {
+  model_comparison: {
+    title: "Model comparison",
+    summary:
+      "Inspect paired observations and differences between two reviewed checkpoints.",
+    boundary: "review",
+    recordPolicy:
+      "Reference groups, exclusions and model identities are frozen with the report.",
+    actions: [
+      {
+        label: "Model Hub",
+        target: "models",
+        description: "Review model and runtime compatibility.",
+      },
+    ],
+  },
+  reproducibility: {
+    title: "Research reproducibility package",
+    summary:
+      "Export or verify frozen study, review and model evidence with source checksums.",
+    boundary: "record",
+    recordPolicy:
+      "Imports create an independent project and retain the original proof.",
+    actions: [
+      {
+        label: "Study design",
+        target: "study_design",
+        description: "Open frozen design revisions.",
+      },
+      {
+        label: "Reviewer lab",
+        target: "reviewer_lab",
+        description: "Open sealed agreement reports.",
+      },
+      {
+        label: "Model comparison",
+        target: "model_comparison",
+        description: "Open paired comparisons.",
+      },
+    ],
+  },
+  study_design: {
+    title: "Study design",
+    summary:
+      "Review the frozen roster, independent units and paired growth evidence.",
+    boundary: "record",
+    recordPolicy:
+      "Each saved revision retains the declaration and its review time.",
+    actions: [
+      {
+        label: "Organisms & ecology",
+        target: "ecology",
+        description: "Review assignments and calibrated growth evidence.",
+      },
+    ],
+  },
+  field_capture: {
+    title: "Field evidence",
+    summary:
+      "Keep local observations with the original media and documented source clock.",
+    boundary: "review",
+    recordPolicy:
+      "Reconciliation preserves conflicting observations for an attributed decision.",
+    actions: [
+      {
+        label: "Quality control",
+        target: "quality_control",
+        description: "Review acquisition quality on imported project media.",
+      },
+      {
+        label: "Workflow builder",
+        target: "workflows",
+        description: "Run a saved, sealed field batch reconciliation.",
+      },
+    ],
+  },
   ecology: {
     title: "Organisms & ecology",
     summary:
@@ -351,6 +436,26 @@ const WORKSPACE_INSPECTORS: Record<
         label: "Images & annotation",
         target: "gallery",
         description: "Inspect and correct the underlying image evidence.",
+      },
+    ],
+  },
+  reviewer_lab: {
+    title: "Independent reviewer agreement",
+    summary:
+      "Assign two blinded decisions on pinned project originals and send disagreements to a distinct adjudicator.",
+    boundary: "review",
+    recordPolicy:
+      "Sealed reports preserve local role revisions and independent decisions.",
+    actions: [
+      {
+        label: "Review queue",
+        target: "review_queue",
+        description: "Review the project queue that supplies candidates.",
+      },
+      {
+        label: "Workflow Builder",
+        target: "workflows",
+        description: "Replay a sealed agreement report.",
       },
     ],
   },

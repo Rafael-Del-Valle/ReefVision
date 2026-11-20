@@ -37,6 +37,15 @@ class AdvancedProviderManifestResponse(BaseModel):
     recommended_devices: list[str]
     known_limitations: list[str]
     integration_notes: list[str]
+    source_kind: Literal["built_in", "local_manifest"] = "built_in"
+    manifest_version: int | None = None
+    declared_capabilities: list[str] = Field(default_factory=list)
+    availability_status: str | None = None
+    availability_reason: str | None = None
+    source_filename: str | None = None
+    source_sha256: str | None = None
+    discovery_status: str = "built_in"
+    discovery_errors: list[str] = Field(default_factory=list)
 
 
 class AdvancedProviderPreflightRequest(BaseModel):

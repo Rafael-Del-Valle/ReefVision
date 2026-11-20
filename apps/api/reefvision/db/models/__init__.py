@@ -41,6 +41,12 @@ from reefvision.db.models.environmental_analysis import (
 )
 from reefvision.db.models.experiment_record import ExperimentRecord
 from reefvision.db.models.export_record import ExportRecord
+from reefvision.db.models.field_capture import (
+    FieldCaptureBatch,
+    FieldCaptureObservation,
+    FieldCaptureReconciliationRecord,
+    FieldCaptureReview,
+)
 from reefvision.db.models.geo_referenced_observation import GeoReferencedObservation
 from reefvision.db.models.image import ImageAsset
 from reefvision.db.models.image_label import ImageLabel
@@ -49,6 +55,7 @@ from reefvision.db.models.label_class import LabelClass
 from reefvision.db.models.mask_annotation import MaskAnnotation
 from reefvision.db.models.mask_annotation_event import MaskAnnotationEvent
 from reefvision.db.models.model_registration import ModelRegistration
+from reefvision.db.models.model_runtime_selection import ModelRuntimeSelection
 from reefvision.db.models.pose_active_learning import (
     PoseActiveLearningCandidate,
     PoseActiveLearningRound,
@@ -99,6 +106,14 @@ from reefvision.db.models.quality_control_run import QualityControlRun
 from reefvision.db.models.reefpose_validation import ReefPoseReference
 from reefvision.db.models.review_queue import ReviewQueue
 from reefvision.db.models.review_queue_item import ReviewQueueItem
+from reefvision.db.models.reviewer_lab_v15 import (
+    ReviewerLabCredential,
+    ReviewerLabDecisionRecord,
+    ReviewerLabMember,
+    ReviewerLabReportRecord,
+    ReviewerLabRoleRevision,
+    ReviewerLabRoundRecord,
+)
 from reefvision.db.models.scientific_record import (
     EnvironmentalCacheEntry,
     EnvironmentalEventDefinition,
@@ -112,6 +127,7 @@ from reefvision.db.models.spatial_condition_v14 import (
     SpatialConditionRubric,
 )
 from reefvision.db.models.spatial_source_asset_v14 import SpatialSourceAsset
+from reefvision.db.models.study_design import StudyDesignRevision
 from reefvision.db.models.temporal_reefpose import (
     TemporalReefPoseDataset,
     TemporalReefPoseFrame,
@@ -161,6 +177,10 @@ __all__ = [
     "EnvironmentalEventDefinition",
     "ExperimentRecord",
     "ExportRecord",
+    "FieldCaptureBatch",
+    "FieldCaptureObservation",
+    "FieldCaptureReconciliationRecord",
+    "FieldCaptureReview",
     "GeoReferencedObservation",
     "ImageAsset",
     "ImageLabel",
@@ -169,6 +189,7 @@ __all__ = [
     "MaskAnnotation",
     "MaskAnnotationEvent",
     "ModelRegistration",
+    "ModelRuntimeSelection",
     "PoseActiveLearningCandidate",
     "PoseActiveLearningRound",
     "PoseAnimalIdentity",
@@ -205,6 +226,12 @@ __all__ = [
     "ReefPoseReference",
     "ReviewQueue",
     "ReviewQueueItem",
+    "ReviewerLabCredential",
+    "ReviewerLabDecisionRecord",
+    "ReviewerLabMember",
+    "ReviewerLabReportRecord",
+    "ReviewerLabRoleRevision",
+    "ReviewerLabRoundRecord",
     "ScientificRecord",
     "SkeletonAnalysisRevision",
     "SpatialAssetMetadataRevision",
@@ -212,6 +239,7 @@ __all__ = [
     "SpatialConditionRevision",
     "SpatialConditionRubric",
     "SpatialSourceAsset",
+    "StudyDesignRevision",
     "TemporalReefPoseDataset",
     "TemporalReefPoseFrame",
     "TemporalReefPoseRun",

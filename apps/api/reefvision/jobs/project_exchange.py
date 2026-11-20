@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from reefvision.config import Settings
 from reefvision.db.models import Job, ProjectExchangePackage
 from reefvision.services.project_exchange_v1 import ProjectExchangeV1Service
+from reefvision.services.reproducibility_v15 import complete_research_export
 
 
 def process_project_exchange_export_job(
@@ -50,6 +51,7 @@ def process_project_exchange_export_job(
                 "manifest_sha256": package_response.manifest_sha256,
                 "format_version": package_response.format_version,
             }
+            complete_research_export(session, settings, package_id, job)
             job.completed_at = datetime.now(UTC)
             session.commit()
         return True

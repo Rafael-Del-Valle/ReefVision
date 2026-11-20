@@ -32,6 +32,7 @@ from reefvision.db.models import (
     ImageAsset,
     Job,
     MaskAnnotationEvent,
+    ModelRegistration,
     Project,
     ProjectClassVisibilityDefault,
     ProjectExchangePackage,
@@ -42,12 +43,14 @@ from reefvision.db.models import (
     SpatialConditionRubric,
     SpatialSourceAsset,
     TrainingDraft,
+    TrainingRun,
     VideoAsset,
     WorkflowArtifact,
     WorkflowGraphRecord,
     WorkflowNodeRun,
     WorkflowRun,
 )
+from reefvision.db.models.field_capture import FieldCaptureObservation
 from reefvision.db.models.pose_active_learning import (
     PoseActiveLearningCandidate,
     PoseActiveLearningRound,
@@ -70,8 +73,17 @@ from reefvision.db.models.pose_training_dataset import (
     PoseTrainingDatasetItem,
 )
 from reefvision.domain.errors import ValidationError
+from reefvision.domain.reproducibility_v15 import HISTORICAL_PROOFS
 from reefvision.schemas.project_exchange import ProjectExchangePackageResponse
-from reefvision.services.project_exchange import MANIFEST_NAME, ProjectExchangeService
+from reefvision.services.project_exchange import MANIFEST_NAME, ProjectExchangeService, _row
+from reefvision.services.project_exchange_field_v15 import (
+    FIELD_EXCHANGE_FORMAT,
+    FIELD_ORIGIN,
+    field_exchange_records,
+    field_owned_project_path,
+    gather_field_media,
+    has_field_capture_batches,
+)
 from reefvision.services.project_exchange_integrated import (
     FORMAT_VERSION as INTEGRATED_FORMAT_VERSION,
 )
@@ -79,10 +91,15 @@ from reefvision.services.project_exchange_integrated import (
     has_integrated_records,
     integrated_records,
 )
+from reefvision.services.project_exchange_paired_models_v15 import paired_comparison_raster_paths
+from reefvision.services.project_exchange_v15 import FORMAT_VERSION as RESEARCH_FORMAT_VERSION
+from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, has_v15_records
 from reefvision.services.project_exchange_workflows import is_spatial_workflow_graph
+from reefvision.services.reproducibility_lineage_v15 import project_proofs
 from reefvision.services.spatial_source_assets_v14 import SpatialSourceAssetService
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.results_packages import results_package_checkpoint_paths
 
 
 class _IdentifiedRecord(Protocol):
@@ -146,6 +163,10 @@ class ProjectExchangeV1Service(ProjectExchangeService):
     """Project exchange service with executable-workflow provenance included."""
 
     def _format_version(self, project_id: str) -> str:
+        if has_v15_records(self.session, project_id) or has_field_capture_batches(
+            self.session, project_id
+        ):
+            return RESEARCH_FORMAT_VERSION
         if has_integrated_records(self.session, project_id):
             return INTEGRATED_FORMAT_VERSION
         return super()._format_version(project_id)
@@ -558,6 +579,7 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         integrated = integrated_records(self.session, project.id)
         if any(integrated.values()):
             sections.update(integrated)
+        sections.update(field_exchange_records(self.session, project.id))
         return sections
 
     def _telemetry_sidecars(
@@ -641,6 +663,8 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         self,
         project: Project,
         records: Mapping[str, Sequence[Base]],
+        *,
+        include_model_weights: bool,
     ) -> list[tuple[dict[str, object], Path]]:
         if not records:
             return []
@@ -676,6 +700,10 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                     original_paths.add(managed_path)
 
         project_root = resolve_managed_project_path(self.settings, project.storage_root)
+        weight_paths: set[Path] = set()
+        weight_hashes: set[str] = set()
+        if not include_model_weights:
+            weight_paths, weight_hashes = self._omitted_weights(project_root, records)
         exchange_prefix = project.storage_root.rstrip("/") + "/exchanges/"
         generated: list[tuple[dict[str, object], Path]] = []
         for path in sorted(
@@ -683,20 +711,68 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             key=lambda item: item.as_posix(),
         ):
             relative_to_data = path.relative_to(self.settings.resolved_data_dir).as_posix()
-            if relative_to_data in original_paths:
+            if relative_to_data in original_paths or path in weight_paths:
                 continue
             if relative_to_data.startswith(exchange_prefix):
                 continue
             relative_to_project = path.relative_to(project_root).as_posix()
+            if field_owned_project_path(relative_to_project):
+                continue
+            digest = _file_sha256(path)
+            if digest in weight_hashes:
+                continue
             descriptor: dict[str, object] = {
                 "kind": "generated",
                 "source_relative_path": relative_to_project,
                 "path": f"generated/{relative_to_project}",
-                "sha256": _file_sha256(path),
+                "sha256": digest,
                 "size_bytes": path.stat().st_size,
             }
             generated.append((descriptor, path))
         return generated
+
+    def _omitted_weights(
+        self, project_root: Path, records: Mapping[str, Sequence[Base]]
+    ) -> tuple[set[Path], set[str]]:
+        models = cast(Sequence[ModelRegistration], records.get("models", []))
+        checkpoint_paths = {model.managed_path for model in models}
+        runs = cast(Sequence[TrainingRun], records.get("training_runs", []))
+        for run in runs:
+            if run.result_checkpoint_path is not None:
+                checkpoint_paths.add(run.result_checkpoint_path)
+            manifest = run.artifact_manifest_json or {}
+            for key in (
+                "best_checkpoint_path",
+                "last_checkpoint_path",
+                "resume_checkpoint_path",
+                "resume_best_checkpoint_path",
+                "semantic_model_bundle",
+            ):
+                if isinstance(path := manifest.get(key), str):
+                    checkpoint_paths.add(path)
+            artifacts = manifest.get("artifacts")
+            if not isinstance(artifacts, list):
+                continue
+            for artifact in artifacts:
+                if (
+                    isinstance(artifact, dict)
+                    and artifact.get("category") == "checkpoint"
+                    and isinstance(path := artifact.get("relative_path"), str)
+                ):
+                    checkpoint_paths.add(path)
+        data_root = self.settings.resolved_data_dir
+        paths = {
+            candidate
+            for path in results_package_checkpoint_paths(project_root / "results-packages")
+            if (candidate := path.resolve()).is_relative_to(project_root)
+        }
+        for relative in checkpoint_paths:
+            candidate = (data_root / relative).resolve()
+            if candidate.is_relative_to(project_root):
+                paths.add(candidate)
+        hashes = {model.sha256 for model in models}
+        hashes.update(_file_sha256(path) for path in paths if path.is_file())
+        return paths, hashes
 
     def build_export(self, package_id: str) -> ProjectExchangePackageResponse:
         """Build a complete 1.0 archive and advertise its safe round-trip policy."""
@@ -712,12 +788,21 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             raise ValidationError(
                 "Project Exchange must include original media when the project has spatial sources"
             )
+        if not includes_media and self.session.scalar(
+            select(FieldCaptureObservation.id)
+            .where(FieldCaptureObservation.project_id == queued_package.project_id)
+            .limit(1)
+        ):
+            raise ValidationError(
+                "Project Exchange must include original media for field observations"
+            )
         super().build_export(package_id)
         package = self._package(package_id)
         project = self._project(package.project_id)
         manifest = dict(package.manifest_json)
         records = self._records(project)
         spatial_sources: list[tuple[dict[str, object], Path]] = []
+        field_sources: list[tuple[dict[str, object], Path | None]] = []
         if bool(package.options_json.get("include_media", False)):
             source_service = SpatialSourceAssetService(self.session, self.settings)
             for asset in cast(Sequence[SpatialSourceAsset], records["spatial_source_assets"]):
@@ -733,16 +818,60 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                 spatial_sources.append((descriptor, source_path))
             media = list(manifest.get("media", []))
             media.extend(descriptor for descriptor, _ in spatial_sources)
+            field_sources = gather_field_media(
+                self.settings,
+                project.storage_root,
+                cast(
+                    Sequence[FieldCaptureObservation], records.get("field_capture_observations", [])
+                ),
+                media,
+            )
+            media.extend(descriptor for descriptor, _ in field_sources)
             manifest["media"] = media
         telemetry_sidecars = self._telemetry_sidecars(
             project,
             records,
         )
         generated = (
-            self._generated_artifacts(project, records)
+            self._generated_artifacts(
+                project,
+                records,
+                include_model_weights=bool(package.options_json.get("include_model_weights")),
+            )
             if bool(package.options_json.get("include_generated_artifacts", False))
             else []
         )
+        raster_sections = {
+            name: [_row(row) for row in records.get(name, [])]
+            for name in ("jobs", "dataset_version_items", "prediction_proposals")
+        }
+        mandatory_rasters = paired_comparison_raster_paths(raster_sections, include_legacy=False)
+        raster_paths = paired_comparison_raster_paths(raster_sections)
+        seen_generated = {descriptor["source_relative_path"] for descriptor, _ in generated}
+        prefix = project.storage_root.rstrip("/") + "/"
+        for managed, digest in sorted(raster_paths.items()):
+            if not managed.startswith(prefix):
+                raise ValidationError("Paired raster is outside its project")
+            relative = managed[len(prefix) :]
+            if relative in seen_generated:
+                continue
+            path = resolve_managed_project_path(self.settings, managed)
+            if managed not in mandatory_rasters and not path.is_file():
+                continue
+            if _file_sha256(path) != digest:
+                raise ValidationError("Paired raster changed before export")
+            generated.append(
+                (
+                    {
+                        "kind": "generated",
+                        "source_relative_path": relative,
+                        "path": f"generated/{relative}",
+                        "sha256": digest,
+                        "size_bytes": path.stat().st_size,
+                    },
+                    path,
+                )
+            )
         manifest["telemetry_sidecars"] = [descriptor for descriptor, _ in telemetry_sidecars]
         manifest["generated_artifacts"] = [descriptor for descriptor, _ in generated]
         manifest["import_policy"] = {
@@ -751,7 +880,7 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             "existing_projects_must_not_be_overwritten": True,
             "source_ids_are_preserved_in_import_provenance": True,
         }
-        if package.format_version == INTEGRATED_FORMAT_VERSION or any(
+        if package.format_version in INTEGRATED_FORMATS or any(
             is_spatial_workflow_graph(graph.graph_json)
             for graph in cast(Sequence[WorkflowGraphRecord], records["workflow_graphs"])
         ):
@@ -770,6 +899,12 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                     "manifest_sha256": parent.manifest_sha256,
                     "id_map": source.get("origin_id_map") or source.get("id_map", {}),
                 }
+                if package.format_version == FIELD_EXCHANGE_FORMAT and source.get(FIELD_ORIGIN):
+                    manifest[FIELD_ORIGIN] = source[FIELD_ORIGIN]
+
+        proofs = project_proofs(self.session, project.id)
+        if proofs:
+            manifest[HISTORICAL_PROOFS] = [proof.model_dump(mode="json") for proof in proofs]
 
         archive_path = resolve_managed_project_path(self.settings, package.archive_path)
         temporary = archive_path.with_suffix(archive_path.suffix + ".manifest.part")
@@ -798,6 +933,10 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                         source_path,
                         arcname=str(descriptor["path"]),
                     )
+
+                for descriptor, field_path in field_sources:
+                    if field_path is not None:
+                        target_archive.write(field_path, arcname=str(descriptor["path"]))
 
                 for descriptor, source_path in generated:
                     target_archive.write(

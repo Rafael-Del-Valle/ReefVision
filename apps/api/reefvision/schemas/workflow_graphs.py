@@ -33,6 +33,7 @@ WorkflowDataType = Literal[
     "mesh_longitudinal_comparison",
     "point_cloud_measurement_preview",
     "spatial_condition_report",
+    "reviewer_lab_agreement_report",
     "longitudinal_analysis",
     "ecology_identity_registry",
     "connected_branch_preview",
@@ -40,9 +41,13 @@ WorkflowDataType = Literal[
     "coral_branch_growth",
     "verified_ecology_analysis",
     "paired_growth_contrast",
+    "study_design_report",
+    "paired_model_report",
+    "research_reproducibility_proof",
     "reviewed_ecology_event_summary",
     "research_report_figure",
     "acquisition_quality_result",
+    "field_capture_reconciliation",
     "scientific_comparison_report",
     "ecology_measurement_candidates",
     "ecology_measurement_csv",
@@ -79,6 +84,8 @@ WorkflowDataType = Literal[
     "temporal_reefpose_evaluation",
     "results_package",
     "project_exchange_package",
+    "provider_manifest_snapshot",
+    "reviewed_model_reference",
 ]
 
 

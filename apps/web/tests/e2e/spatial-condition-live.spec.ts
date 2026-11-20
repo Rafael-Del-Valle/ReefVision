@@ -12,7 +12,7 @@ test("records and reopens an attributed condition disagreement from a project as
   });
   expect(created.ok(), await created.text()).toBeTruthy();
   await page.addInitScript(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.4.0", "true"),
+    localStorage.setItem("reefvision.onboarding.dismissed.1.5.0", "true"),
   );
   const open = async () => {
     await page.goto(web);

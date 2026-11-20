@@ -1,5 +1,9 @@
 Set-StrictMode -Version Latest
 
+function Get-ReefVisionStudyDesignJourneyTitle {
+    return 'study design freezes, reopens, exports and replays a reviewed declaration'
+}
+
 function Get-ReefVisionLoopbackDebugPort {
     $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
     try {
@@ -267,7 +271,8 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
             'ordinary-detector-live.spec.ts',
             'backup-restore-live.spec.ts'
         )
-        & $NodePath $playwrightCli test @specs --workers=1 --retries=0 --reporter=list,json --output=$output *> $log
+        $studyDesign = [regex]::Escape((Get-ReefVisionStudyDesignJourneyTitle)) + '$'
+        & $NodePath $playwrightCli test @specs --grep-invert $studyDesign --workers=1 --retries=0 --reporter=list,json --output=$output *> $log
         if ($LASTEXITCODE -ne 0) {
             $tail = Get-Content -LiteralPath $log -Tail 25 | Out-String
             throw "Packaged WebView2 spatial workflow failed with exit code $LASTEXITCODE. $tail"

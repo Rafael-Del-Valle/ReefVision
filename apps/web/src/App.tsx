@@ -32,12 +32,16 @@ import { ClassificationWorkspace } from "./features/classification/Classificatio
 import { ComputedMetricsPanel } from "./features/computed-metrics/ComputedMetricsPanel";
 import { DatasetVersionsPanel } from "./features/dataset-versions/DatasetVersionsPanel";
 import { EnvironmentalContextPanel } from "./features/environmental-context/EnvironmentalContextPanel";
+import { FieldCaptureWorkspace } from "./features/field-capture/FieldCaptureWorkspace";
 import { Gallery } from "./features/gallery/Gallery";
 import { ScientificHeatmapsPanel } from "./features/scientific-heatmaps/ScientificHeatmapsPanel";
 import { InteroperabilityWorkspace } from "./features/interoperability/InteroperabilityWorkspace";
 import { ModelManager } from "./features/models/ModelManager";
 import { OnboardingModal } from "./features/onboarding/OnboardingModal";
 import { QualityControlDashboard } from "./features/quality-control/QualityControlDashboard";
+import { ReproducibilityWorkspace } from "./features/reproducibility/ReproducibilityWorkspace";
+import type { WorkflowGraphRecord } from "./features/workflow-graphs/workflowGraphApi";
+import { ReviewerLab } from "./features/reviewer-lab/ReviewerLab";
 import { ReviewQueueDashboard } from "./features/review-queues/ReviewQueueDashboard";
 import { SystemPanel } from "./features/system/SystemPanel";
 import { TrainingWorkspace } from "./features/training/TrainingWorkspace";
@@ -73,6 +77,8 @@ import {
 } from "./components/layout/workspacePresets";
 import "./styles/design-system.css";
 import { EcologyWorkspace } from "./features/ecology/EcologyWorkspace";
+import { StudyDesignWorkspace } from "./features/ecology/StudyDesignPanel";
+import { ModelComparisonWorkspace } from "./features/models/ModelComparisonWorkspace";
 
 import "./styles/app.css";
 import "./styles/phase12-workspace.css";
@@ -89,13 +95,17 @@ interface AnnotationLaunchState {
 
 type ProjectView =
   | "gallery"
+  | "field_capture"
   | "versions"
   | "interoperability"
   | "environmental_context"
   | "computed_metrics"
   | "scientific_heatmaps"
   | "ecology"
+  | "study_design"
+  | "reproducibility"
   | "models"
+  | "model_comparison"
   | "training"
   | "classification"
   | "video"
@@ -103,11 +113,12 @@ type ProjectView =
   | "classes"
   | "quality_control"
   | "review_queue"
+  | "reviewer_lab"
   | "advanced_providers"
   | "workflows"
   | "system";
 
-const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.4.0";
+const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.5.0";
 
 type ProjectTab = Exclude<ProjectView, "system">;
 
@@ -128,6 +139,12 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Images & annotation",
         description:
           "Browse imagery, run inference, and open the annotation editor.",
+      },
+      {
+        id: "field_capture",
+        label: "Field capture",
+        description:
+          "Collect local originals and reconcile portable field batches.",
       },
       {
         id: "versions",
@@ -185,6 +202,11 @@ const PROJECT_NAV_GROUPS: Array<{
           "Train from architectures and register local trained models.",
       },
       {
+        id: "model_comparison",
+        label: "Model comparison",
+        description: "Compare reviewed checkpoints on frozen images or video.",
+      },
+      {
         id: "training",
         label: "Training",
         description: "Launch and inspect reproducible model-training runs.",
@@ -201,9 +223,28 @@ const PROJECT_NAV_GROUPS: Array<{
       },
       {
         id: "advanced_providers",
-        label: "Advanced providers",
+        label: "Providers",
         description:
-          "Use prompt, segmentation, depth, OCR, and VLM provider tools.",
+          "Inspect local manifests and use supported prompt, segmentation, depth, OCR, and VLM provider tools.",
+      },
+    ],
+  },
+  {
+    id: "research",
+    label: "Research",
+    description: "Freeze the study design and review its evidence.",
+    items: [
+      {
+        id: "study_design",
+        label: "Study design",
+        description:
+          "Declare treatments, independent units, exclusions and the statistical plan.",
+      },
+      {
+        id: "reproducibility",
+        label: "Export reproducibility package",
+        description:
+          "Verify and exchange frozen study, review and model evidence.",
       },
     ],
   },
@@ -217,6 +258,12 @@ const PROJECT_NAV_GROUPS: Array<{
         id: "quality_control",
         label: "Quality control",
         description: "Run explainable project or dataset-version QC checks.",
+      },
+      {
+        id: "reviewer_lab",
+        label: "Reviewer lab",
+        description:
+          "Assign blinded project reviews and adjudicate disagreement.",
       },
       {
         id: "review_queue",
@@ -255,6 +302,8 @@ function ReefVisionMainApp() {
   );
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [researchGraph, setResearchGraph] =
+    useState<WorkflowGraphRecord | null>(null);
   const [editorLaunch, setEditorLaunch] =
     useState<AnnotationLaunchState | null>(null);
   const [trainingCatalogModelId, setTrainingCatalogModelId] = useState<
@@ -989,6 +1038,14 @@ function ReefVisionMainApp() {
             {activeView === "versions" && (
               <DatasetVersionsPanel project={selectedProject} />
             )}
+            {activeView === "field_capture" && (
+              <FieldCaptureWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+                onOpenQC={() => setActiveView("quality_control")}
+                onOpenWorkflow={() => setActiveView("workflows")}
+              />
+            )}
             {activeView === "interoperability" && (
               <InteroperabilityWorkspace project={selectedProject} />
             )}
@@ -1036,6 +1093,29 @@ function ReefVisionMainApp() {
                 }}
               />
             )}
+            {activeView === "reproducibility" && (
+              <ReproducibilityWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+                onOpenProject={(projectId) => {
+                  setSelectedProjectId(projectId);
+                  setEditorLaunch(null);
+                  void queryClient.invalidateQueries({
+                    queryKey: ["project_summaries"],
+                  });
+                }}
+                onOpenWorkflow={(graph) => {
+                  setResearchGraph(graph);
+                  setActiveView("workflows");
+                }}
+              />
+            )}
+            {activeView === "study_design" && (
+              <StudyDesignWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+              />
+            )}
             {activeView === "scientific_heatmaps" && (
               <ScientificHeatmapsPanel
                 key={selectedProject.id}
@@ -1056,6 +1136,11 @@ function ReefVisionMainApp() {
                 key={selectedProject.id}
                 project={selectedProject}
                 initialPoseArchitecture={poseArchitecture}
+                initialGraph={
+                  researchGraph?.project_id === selectedProject.id
+                    ? researchGraph.graph_json
+                    : undefined
+                }
                 onOpenScience={setActiveView}
               />
             )}
@@ -1083,6 +1168,31 @@ function ReefVisionMainApp() {
               <ActiveLearningWorkspace
                 project={selectedProject}
                 onOpenReviewQueue={() => setActiveView("review_queue")}
+              />
+            )}
+            {activeView === "model_comparison" && (
+              <ModelComparisonWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+                onWorkflow={() => setActiveView("workflows")}
+                onOpen={(kind, id, frame, seconds) => {
+                  if (kind === "image") {
+                    setEditorLaunch({
+                      imageId: id,
+                      returnLabel: "Back to model comparison",
+                      contextTitle: "Paired comparison evidence",
+                    });
+                  } else {
+                    setVideoWorkspaceCommand({
+                      id: ++videoWorkspaceCommandSequenceRef.current,
+                      type: "open_comparison_frame",
+                      videoId: id,
+                      frameIndex: frame,
+                      seconds,
+                    });
+                    setActiveView("video");
+                  }
+                }}
               />
             )}
             {activeView === "models" && (
@@ -1134,6 +1244,13 @@ function ReefVisionMainApp() {
                     highlightPredictionIds: issue.prediction_ids_json,
                   })
                 }
+              />
+            )}
+            {activeView === "reviewer_lab" && (
+              <ReviewerLab
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+                onOpenWorkflow={() => setActiveView("workflows")}
               />
             )}
             {activeView === "review_queue" && (

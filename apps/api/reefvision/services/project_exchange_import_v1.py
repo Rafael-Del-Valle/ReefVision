@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import zipfile
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from typing import Any, BinaryIO
@@ -78,6 +79,12 @@ from reefvision.services.pose_training_datasets import (
     MANIFEST_SCHEMA_VERSION,
     PoseTrainingDatasetService,
 )
+from reefvision.services.project_exchange_field_v15 import FIELD_SECTION_MODELS
+from reefvision.services.review_queue_exchange_checksums import (
+    QUEUE_IMPORT_CHECKSUM_SCHEMA,
+    imported_queue_item_checksum,
+    queue_item_snapshot,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -126,6 +133,7 @@ def register_v1_sections() -> None:
             "spatial_condition_revisions": SpatialConditionRevision,
         }
     )
+    base_import.SECTION_MODELS.update(FIELD_SECTION_MODELS)
 
     _insert_after(
         "project_class_visibility_defaults",
@@ -156,6 +164,10 @@ def register_v1_sections() -> None:
     _insert_after("spatial_asset_metadata_revisions", "spatial_calibration_reviews")
     _insert_after("spatial_condition_rubrics", "spatial_asset_metadata_revisions")
     _insert_after("spatial_condition_revisions", "spatial_condition_rubrics")
+    _insert_after("field_capture_batches", "videos")
+    _insert_after("field_capture_observations", "field_capture_batches")
+    _insert_after("field_capture_reconciliations", "field_capture_observations")
+    _insert_after("field_capture_reviews", "field_capture_reconciliations")
 
     _insert_after("pose_landmark_schemas", "models")
     _insert_after(
@@ -482,33 +494,14 @@ def _refresh_review_queue_checksums(session: Session, project_id: str) -> None:
         source_queue_checksums = dict(queue.input_checksums_json or {})
         configuration = dict(queue.configuration_json or {})
         configuration["exchange_import"] = {
-            "checksum_schema": "review-queue-item-exchange-import-0001",
+            "checksum_schema": QUEUE_IMPORT_CHECKSUM_SCHEMA,
             "source_queue_input_checksums": source_queue_checksums,
             "source_item_checksums_by_imported_item_id": source_item_checksums,
         }
         queue.configuration_json = configuration
 
         for item in queue_items:
-            item.input_checksum = canonical_json_sha256(
-                {
-                    "schema_version": "review-queue-item-exchange-import-0001",
-                    "review_queue_id": item.review_queue_id,
-                    "project_id": item.project_id,
-                    "dataset_version_id": item.dataset_version_id,
-                    "image_id": item.image_id,
-                    "split": item.split,
-                    "score": item.score,
-                    "rank_position": item.rank_position,
-                    "highest_qc_severity": item.highest_qc_severity,
-                    "label_class_ids": item.label_class_ids_json,
-                    "model_ids": item.model_ids_json,
-                    "related_issue_ids": item.related_issue_ids_json,
-                    "signal_values": item.signal_values_json,
-                    "normalized_signals": item.normalized_signals_json,
-                    "weights": item.weights_json,
-                    "score_breakdown": item.score_breakdown_json,
-                }
-            )
+            item.input_checksum = imported_queue_item_checksum(queue_item_snapshot(item))
 
         queue.input_checksums_json = {
             "queue_scope_sha256": canonical_json_sha256(
@@ -1082,6 +1075,7 @@ def import_project_exchange_v1(
     settings: Settings,
     *,
     project_name: str | None = None,
+    after_restore: Callable[[Project, ProjectExchangePackage], None] | None = None,
 ) -> ProjectExchangeImportResponse:
     """Import the complete 1.0 portable record inventory into a new project."""
 
@@ -1201,6 +1195,8 @@ def import_project_exchange_v1(
             "copied_generated_artifact_count": copied_generated,
             "copied_telemetry_sidecar_count": copied_telemetry,
         }
+        if after_restore is not None:
+            after_restore(project, package)
 
     result = base_import.import_project_exchange(
         source, session, settings, project_name=project_name, finalize=finalize

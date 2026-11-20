@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import runpy
 from collections.abc import Iterator
 from pathlib import Path
@@ -12,14 +13,17 @@ from alembic.runtime.migration import MigrationContext
 from alembic.util import CommandError
 from sqlalchemy import Engine, create_engine, inspect
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
+from reefvision.db.models import ModelRegistration, ProjectExchangePackage
 from reefvision.desktop import run_pending_migrations
 from reefvision.services.system import SystemService
+from reefvision.storage.datasets import canonical_json_sha256
 
 _API_ROOT = Path(__file__).resolve().parents[2]
 _VERSIONS = _API_ROOT / "migrations" / "versions"
-_INTEGRATED_HEAD = "b14_condition_0041"
+_INTEGRATED_HEAD = "b15_integrated_0002"
 _POSE_MIGRATIONS = (
     "0038_pose_anatomy_definitions.py",
     "0039_pose_evaluation_runs.py",
@@ -94,6 +98,95 @@ def _create_standalone_reefpose_db(config: Config, engine: Engine, revision: str
 def _read_heads(engine: Engine) -> tuple[str, ...]:
     with engine.connect() as connection:
         return MigrationContext.configure(connection).get_current_heads()
+
+
+@pytest.mark.parametrize("origin", ["local", "restored", "unknown", "empty"])
+def test_desktop_recovers_early_runtime_schema_preserving_receipts(
+    migration_db: MigrationDatabase, origin: str
+) -> None:
+    settings, config, engine = migration_db
+    command.upgrade(config, "b15_model_0001")
+    _create_project(engine)
+    model_id = "f59e9b26-2737-4760-9225-d77ce2117358"
+    source_project = _PROJECT_ID if origin == "local" else "e594820a-554c-49f9-b7d8-cff196b42e2c"
+    source_model = model_id if origin == "local" else "8481cfdc-965e-40c0-8ecc-83ac52edb681"
+    origin_map = {source_project: _PROJECT_ID, source_model: model_id}
+    snapshot = {
+        "schema_version": "reviewed-model-runtime-0001",
+        "source_project_id": source_project,
+        "source_model_id": source_model,
+        "checkpoint_sha256": "a" * 64,
+    }
+    raw, digest = json.dumps(snapshot), canonical_json_sha256(snapshot)
+    with Session(engine) as session:
+        session.add(
+            ModelRegistration(
+                id=model_id,
+                project_id=_PROJECT_ID,
+                purpose="detector",
+                display_name="Prior model",
+                source_filename="prior.pt",
+                managed_path="models/prior.pt",
+                sha256="a" * 64,
+                file_size_bytes=10,
+                framework="ultralytics",
+                task="detect",
+                provider_name="ultralytics",
+                provider_version="fixture",
+            )
+        )
+        if origin == "restored":
+            session.add(
+                ProjectExchangePackage(
+                    project_id=_PROJECT_ID,
+                    direction="import",
+                    status="complete",
+                    format_version="1.5",
+                    archive_path="exchange/copied.zip",
+                    options_json={"origin_id_map": origin_map},
+                )
+            )
+        session.commit()
+    with engine.begin() as con:
+        con.exec_driver_sql("ALTER TABLE model_runtime_selections DROP COLUMN source_id_map_json")
+        if origin != "empty":
+            con.exec_driver_sql(
+                "INSERT INTO model_runtime_selections "
+                "(id, project_id, model_id, snapshot_json, content_sha256, created_at) "
+                "VALUES (?, ?, ?, ?, ?, '2026-11-19 23:59:50')",
+                (_SCHEMA_ID, _PROJECT_ID, model_id, raw, digest),
+            )
+    if origin == "unknown":
+        old_tables = inspect(engine).get_table_names()
+        with pytest.raises(CommandError, match="pre-upgrade backup"):
+            run_pending_migrations(settings)
+        assert inspect(engine).get_table_names() == old_tables
+        assert _read_heads(engine) == ("b15_model_0001",)
+        assert "source_id_map_json" not in {
+            c["name"] for c in inspect(engine).get_columns("model_runtime_selections")
+        }
+    else:
+        run_pending_migrations(settings)
+        run_pending_migrations(settings)
+        assert _read_heads(engine) == ("b15_integrated_0002",)
+        with engine.connect() as con:
+            mapping = con.exec_driver_sql(
+                "SELECT source_id_map_json FROM model_runtime_selections"
+            ).scalar()
+            assert (json.loads(mapping) if mapping else None) == (
+                origin_map if origin == "restored" else {} if origin == "local" else None
+            )
+            assert con.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+    with engine.connect() as con:
+        preserved = con.exec_driver_sql(
+            "SELECT id, project_id, model_id, snapshot_json, content_sha256, created_at "
+            "FROM model_runtime_selections"
+        ).all()
+        assert preserved == (
+            []
+            if origin == "empty"
+            else [(_SCHEMA_ID, _PROJECT_ID, model_id, raw, digest, "2026-11-19 23:59:50")]
+        )
 
 
 @pytest.mark.parametrize(

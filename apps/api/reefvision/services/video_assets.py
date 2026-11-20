@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import BinaryIO
 from uuid import uuid4
 
-import cv2
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -41,10 +40,10 @@ from reefvision.storage.telemetry import (
     write_airdata,
     write_srt,
 )
+from reefvision.storage.video_media import SUPPORTED_VIDEO_EXTENSIONS
+from reefvision.storage.video_media import inspect_video as _inspect_video
 
 LOGGER = logging.getLogger(__name__)
-
-SUPPORTED_VIDEO_EXTENSIONS = {".avi", ".m4v", ".mkv", ".mov", ".mp4", ".webm"}
 
 
 def _safe_video_name(filename: str | None) -> str:
@@ -73,28 +72,6 @@ def _stream_video(source: BinaryIO, destination: Path) -> tuple[str, int]:
         destination.unlink(missing_ok=True)
         raise ValidationError("Uploaded video is empty")
     return digest.hexdigest(), size
-
-
-def _inspect_video(path: Path) -> dict[str, float | int]:
-    capture = cv2.VideoCapture(str(path))
-    if not capture.isOpened():
-        raise ValidationError("Uploaded video could not be opened")
-    try:
-        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = float(capture.get(cv2.CAP_PROP_FPS))
-    finally:
-        capture.release()
-    if width <= 0 or height <= 0 or frame_count <= 0 or fps <= 0:
-        raise ValidationError("Uploaded video metadata is incomplete or unsupported")
-    return {
-        "width_px": width,
-        "height_px": height,
-        "frame_count": frame_count,
-        "fps": fps,
-        "duration_seconds": frame_count / fps,
-    }
 
 
 class VideoAssetService:

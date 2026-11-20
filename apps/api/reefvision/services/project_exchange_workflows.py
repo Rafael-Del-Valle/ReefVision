@@ -18,6 +18,7 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.services.project_exchange_comparison import restore_comparison_artifact
+from reefvision.services.project_exchange_field_v15 import FIELD_DATA_TYPE
 from reefvision.services.project_exchange_mesh_v14 import (
     MESH_NODE_TYPES,
     restore_mesh_measurement,
@@ -27,10 +28,13 @@ from reefvision.services.project_exchange_paired_growth import (
     PAIRED_GROWTH_TYPE,
     remap_paired_growth_parameters,
 )
+from reefvision.services.project_exchange_paired_models_v15 import remap_paired_models_parameters
+from reefvision.services.project_exchange_study_v15 import remap_study_parameters
 from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
     verify_succeeded_node_artifacts,
 )
+from reefvision.services.workflow_reviewer_lab_v15 import NODE_TYPE as REVIEWER_LAB_TYPE
 from reefvision.storage.datasets import canonical_json_sha256
 
 # These payloads bind nested, historical hashes to source UUIDs. Preserve them
@@ -45,7 +49,11 @@ HISTORICAL_ARTIFACT_TYPES = frozenset(
         "connected_branch_preview",
         "coral_branch_growth",
         "mesh_longitudinal_comparison",
+        "study_design_report",
+        "paired_model_report",
+        "research_reproducibility_proof",
         PAIRED_GROWTH_TYPE,
+        REVIEWER_LAB_TYPE,
     }
 )
 
@@ -180,6 +188,12 @@ def restore_workflow_provenance(
                     node["parameters"] = remap_paired_growth_parameters(
                         source["parameters"], id_map
                     )
+                elif node_type == "reviewed_study_design":
+                    node["parameters"] = remap_study_parameters(source["parameters"], id_map)
+                elif node_type == "paired_model_comparison":
+                    node["parameters"] = remap_paired_models_parameters(
+                        source["parameters"], id_map
+                    )
                 else:
                     node["parameters"] = _restore_parameters(
                         node_type, node["parameters"], digest_map
@@ -208,6 +222,14 @@ def restore_workflow_provenance(
                 node.parameters_json = remap_paired_growth_parameters(
                     source_nodes[node.id]["parameters_json"], id_map
                 )
+            elif node.node_type == "reviewed_study_design":
+                node.parameters_json = remap_study_parameters(
+                    source_nodes[node.id]["parameters_json"], id_map
+                )
+            elif node.node_type == "paired_model_comparison":
+                node.parameters_json = remap_paired_models_parameters(
+                    source_nodes[node.id]["parameters_json"], id_map
+                )
             else:
                 node.parameters_json = _restore_parameters(
                     node.node_type, node.parameters_json, digest_map
@@ -223,8 +245,8 @@ def restore_workflow_provenance(
                     artifact.payload_json = restore_mesh_measurement(
                         original["payload_json"], id_map
                     )
-                elif artifact.data_type != "spatial_condition_report":
-                    # Condition artifacts already use a typed remap during row import.
+                elif artifact.data_type not in {"spatial_condition_report", FIELD_DATA_TYPE}:
+                    # Condition and field receipts already use typed remapping during row import.
                     artifact.payload_json = map_values(artifact.payload_json, digest_map)
                     if artifact.data_type == "reefpose_validation_report":
                         artifact.payload_json = _restore_report_link(

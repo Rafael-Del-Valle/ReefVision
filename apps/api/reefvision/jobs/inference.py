@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import ImageAsset, Job, ModelRegistration, PredictionProposal, Project
-from reefvision.domain.errors import ValidationError
+from reefvision.domain.errors import ReefVisionError, ValidationError
 from reefvision.ml.provider_hub import detection_provider_for_name
 from reefvision.ml.providers import (
     DetectionPrediction,
@@ -37,8 +37,10 @@ from reefvision.ml.semantic_segmentation import (
 )
 from reefvision.ml.sleap_nn_provider import SLEAP_NN_ACTIONABLE_RETIREMENT, SLEAP_NN_PROVIDER_ID
 from reefvision.repositories.images import ImageRepository
+from reefvision.repositories.jobs import paired_owner_active
 from reefvision.repositories.models import ModelRepository
 from reefvision.services.annotations import _polygon_area, _polygon_self_intersects
+from reefvision.services.model_runtime import verify_queued_selection
 from reefvision.storage.projects import resolve_managed_project_path
 
 
@@ -324,6 +326,15 @@ def _semantic_proposals(
     return proposals
 
 
+def _paired_owner_stopped(session: Session, job: Job) -> bool:
+    owner = job.request_json.get("paired_owner_run_id")
+    return owner is not None and (
+        not isinstance(owner, str)
+        or job.request_json.get("evaluation_only") is not True
+        or not paired_owner_active(session, job.project_id, owner)
+    )
+
+
 def process_inference_job(
     settings: Settings,
     factory: sessionmaker[Session],
@@ -333,12 +344,26 @@ def process_inference_job(
         job = session.get(Job, job_id)
         if job is None or job.job_type != "inference" or job.status != "queued":
             return False
+        if _paired_owner_stopped(session, job):
+            job.status = "cancelled"
+            job.completed_at = _utc_now()
+            job.error_message = "Paired comparison stopped"
+            session.commit()
+            return False
         job.status = "running"
         job.started_at = _utc_now()
         job.error_message = None
         session.commit()
         request = dict(job.request_json)
         model = _model(session, str(request["model_id"]))
+        try:
+            verify_queued_selection(session, settings, model.project_id, request)
+        except ReefVisionError as exc:
+            job.status = "failed"
+            job.error_message = str(exc)
+            job.completed_at = _utc_now()
+            session.commit()
+            return False
         if model.provider_name.strip().casefold() == SLEAP_NN_PROVIDER_ID:
             job.status = "failed"
             job.error_message = SLEAP_NN_ACTIONABLE_RETIREMENT
@@ -410,7 +435,7 @@ def process_inference_job(
                 job = session.get(Job, job_id)
                 if job is None:
                     return False
-                if job.status == "cancel_requested":
+                if job.status == "cancel_requested" or _paired_owner_stopped(session, job):
                     job.status = "cancelled"
                     job.completed_at = _utc_now()
                     session.commit()
@@ -527,6 +552,13 @@ def process_inference_job(
                                 },
                             )
                         )
+                if "runtime_selection_id" in request:
+                    for proposal in proposals:
+                        proposal.provenance_json = {
+                            **(proposal.provenance_json or {}),
+                            "runtime_selection_id": request["runtime_selection_id"],
+                            "runtime_selection_sha256": request["runtime_selection_sha256"],
+                        }
                 session.add_all(proposals)
                 job.progress_current = index
                 previous = dict(job.result_json or {})

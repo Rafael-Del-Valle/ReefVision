@@ -1107,6 +1107,9 @@ function mockApi({
       if (url.endsWith(`/images/${image.id}/annotations`)) {
         return jsonResponse(session);
       }
+      if (url.endsWith("/advanced-providers/manifests")) {
+        return jsonResponse([]);
+      }
       throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
     });
 }
@@ -1118,7 +1121,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  window.localStorage.setItem("reefvision.onboarding.dismissed.1.4.0", "true");
+  window.localStorage.setItem("reefvision.onboarding.dismissed.1.5.0", "true");
 });
 
 function renderApp() {
@@ -1227,7 +1230,7 @@ describe("App", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: /Welcome to ReefVision 1.4.0/,
+        name: /Welcome to ReefVision 1.5.0/,
       }),
     ).toBeInTheDocument();
 
@@ -1237,7 +1240,7 @@ describe("App", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("heading", { name: /Welcome to ReefVision 1.4.0/ }),
+        screen.queryByRole("heading", { name: /Welcome to ReefVision 1.5.0/ }),
       ).not.toBeInTheDocument(),
     );
   });
@@ -1256,6 +1259,30 @@ describe("App", () => {
     ).toBeInTheDocument();
     expect(screen.getByDisplayValue("Muricea Closed")).toBeInTheDocument();
     expect(screen.getByText("Muricea pendula | Closed")).toBeInTheDocument();
+  });
+
+  it("finds provider manifests through project Models & AI navigation", async () => {
+    mockApi({ projects: [project] });
+    renderApp();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /CPT Coral Study/ }),
+    );
+    await userEvent.click(screen.getByRole("tab", { name: "Models & AI" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Providers" }));
+
+    expect(screen.getByRole("tab", { name: "Providers" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      await screen.findAllByRole("heading", { name: "Providers" }),
+    ).not.toHaveLength(0);
+    expect(
+      screen.getByText(
+        /Local JSON manifests are inspected without loading provider code/i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("opens the managed image gallery for a project", async () => {

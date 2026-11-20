@@ -38,6 +38,7 @@ RUNNING_CANCELLABLE_JOB_TYPES = frozenset(
         "pose_evaluation",
         "reefpose_validation",
         "static_comparison",
+        "paired_model_comparison",
         "pose_identity_tracking",
         "pose_biological_measurement",
         "pose_biological_event_detection",
@@ -162,6 +163,7 @@ class JobService:
         ordinary_retry = job.status == "failed" and job.job_type in {
             "reefpose_validation",
             "static_comparison",
+            "paired_model_comparison",
             "thumbnail",
             "inference",
             "sam_image_proposals",

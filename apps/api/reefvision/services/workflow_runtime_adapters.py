@@ -27,16 +27,21 @@ from reefvision.jobs.classification_inference import process_classification_infe
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.services.mask_measurements import MaskMeasurementService
+from reefvision.services.model_runtime import workflow_runtime_settings
 from reefvision.services.workflow_acquisition_quality import execute_acquisition_quality
 from reefvision.services.workflow_coral_growth import execute_coral_growth
 from reefvision.services.workflow_coral_skeleton import execute_coral_skeleton
 from reefvision.services.workflow_depth import create_depth_map_artifacts
 from reefvision.services.workflow_ecology_analysis import execute_verified_ecology_analysis
 from reefvision.services.workflow_ecology_event_summary import execute_event_summary
+from reefvision.services.workflow_field_capture import execute_field_capture_reconcile
 from reefvision.services.workflow_paired_growth_contrast import execute_paired_growth_contrast
+from reefvision.services.workflow_paired_models_v15 import execute_paired_models
 from reefvision.services.workflow_prompt_assist import create_prompt_assist_mask_proposals
+from reefvision.services.workflow_reproducibility_v15 import execute_reproducibility
 from reefvision.services.workflow_research_reports import execute_research_report
 from reefvision.services.workflow_review import WorkflowReviewRequired
+from reefvision.services.workflow_study_design import execute_reviewed_study_design
 from reefvision.services.workflow_vlm import VlmClassDefinition, run_vlm_detection
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -58,9 +63,13 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "ecology_coral_growth",
     "ecology_verified_analysis",
     "paired_growth_contrast",
+    "reviewed_study_design",
+    "paired_model_comparison",
+    "research_reproducibility_package",
     "ecology_event_summary",
     "research_publication_figure",
     "image_acquisition_quality",
+    "field_capture_reconcile",
     "ecology_measurement_csv_export",
     "ecology_population_csv_export",
     "ecology_paired_count_comparison",
@@ -143,6 +152,7 @@ def _segmentation_inference(
                 "iou_threshold": float(parameters.get("iou", 0.5)),
                 "device": str(parameters.get("device", "auto")),
                 "model_task": model.task,
+                **workflow_runtime_settings(model_payload),
                 "created_by_workflow": True,
             },
             result_json={"stage": "queued", "created_by_workflow": True},
@@ -762,6 +772,7 @@ def _video_tracking(
                 "iou": float(parameters.get("iou", 0.5)),
                 "minimum_track_frames": int(parameters.get("minimum_track_frames", 2)),
                 "device": str(parameters.get("device", "auto")),
+                **workflow_runtime_settings(model_payload, video=True),
                 "created_by_workflow": True,
             },
             result_json={"stage": "queued", "created_by_workflow": True},
@@ -1143,6 +1154,10 @@ _ADAPTERS = {
     "ecology_coral_skeleton": execute_coral_skeleton,
     "ecology_verified_analysis": execute_verified_ecology_analysis,
     "paired_growth_contrast": execute_paired_growth_contrast,
+    "reviewed_study_design": execute_reviewed_study_design,
+    "paired_model_comparison": execute_paired_models,
+    "research_reproducibility_package": execute_reproducibility,
+    "field_capture_reconcile": execute_field_capture_reconcile,
     "ecology_event_summary": execute_event_summary,
     "research_publication_figure": execute_research_report,
     "image_acquisition_quality": execute_acquisition_quality,

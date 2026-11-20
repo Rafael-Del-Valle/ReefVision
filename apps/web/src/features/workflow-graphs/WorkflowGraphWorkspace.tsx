@@ -25,6 +25,7 @@ import { LocalMeshPreview } from "./LocalMeshPreview";
 import { LocalPointCloudPreview } from "./LocalPointCloudPreview";
 import { ProjectSpatialAssetPreview } from "./ProjectSpatialAssetPreview";
 import { downloadPairedReport } from "../ecology/pairedGrowthContrastApi";
+import { downloadFieldReconciliation } from "../field-capture/fieldCaptureApi";
 import { MeshArtifactViewer } from "./MeshArtifactViewer";
 import { PointCloudArtifactViewer } from "./PointCloudArtifactViewer";
 import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
@@ -33,6 +34,7 @@ import { scientificConfigurationIssue } from "./ScientificNodeControls";
 interface WorkflowGraphWorkspaceProps {
   project: Project;
   initialPoseArchitecture?: string | null;
+  initialGraph?: Record<string, unknown>;
   onOpenScience?: (
     view: "ecology" | "models" | "quality_control" | "video",
   ) => void;
@@ -49,6 +51,41 @@ function ScienceArtifact({
 }) {
   const data = artifact.payload_json;
   const api = `${getApiBaseUrl()}/projects/${projectId}`;
+  if (
+    artifact.data_type === "research_reproducibility_proof" &&
+    typeof data.proof_sha256 === "string"
+  ) {
+    return (
+      <p>
+        Verified research proof · SHA-256 <code>{data.proof_sha256}</code>
+      </p>
+    );
+  }
+  if (
+    artifact.data_type === "study_design_report" &&
+    typeof data.content_sha256 === "string"
+  ) {
+    return (
+      <p>
+        Replayed frozen study design · SHA-256{" "}
+        <code>{data.content_sha256}</code>
+      </p>
+    );
+  }
+  if (
+    artifact.data_type === "field_capture_reconciliation" &&
+    typeof data.report_sha256 === "string"
+  ) {
+    const digest = data.report_sha256;
+    return (
+      <button
+        type="button"
+        onClick={() => downloadFieldReconciliation(data, digest)}
+      >
+        Download field reconciliation JSON
+      </button>
+    );
+  }
   if (
     artifact.data_type === "paired_growth_contrast" &&
     typeof data.report_sha256 === "string"
@@ -204,14 +241,16 @@ function safeParseGraph(value: string): Record<string, unknown> | null {
 export function WorkflowGraphWorkspace({
   project,
   initialPoseArchitecture,
+  initialGraph,
   onOpenScience,
 }: WorkflowGraphWorkspaceProps) {
   const queryClient = useQueryClient();
   const [graphJson, setGraphJson] = useState(() =>
     JSON.stringify(
-      initialPoseArchitecture
-        ? createPoseArchitectureWorkflow(initialPoseArchitecture)
-        : (workflowTemplates[0]?.graph ?? {}),
+      initialGraph ??
+        (initialPoseArchitecture
+          ? createPoseArchitectureWorkflow(initialPoseArchitecture)
+          : (workflowTemplates[0]?.graph ?? {})),
       null,
       2,
     ),

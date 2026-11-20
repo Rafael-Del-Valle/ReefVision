@@ -1,6 +1,7 @@
 import { expect, type APIResponse, type Page } from "@playwright/test";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
+import type { StudyDesignRecord } from "../../src/features/ecology/studyDesignApi";
 import type {
   WorkflowGraphRecord,
   WorkflowRunDetail,
@@ -79,6 +80,7 @@ async function seedReviewedGrowth(
   page: Page,
   api: string,
   projectName: string,
+  withReviewedAssignments = false,
 ) {
   expect(visitDateOffset).toBeGreaterThanOrEqual(0);
   const { id: projectId } = await checkedJson<{ id: string }>(
@@ -107,6 +109,16 @@ async function seedReviewedGrowth(
         kind: parent ? "fragment" : "colony",
         parent_colony_key: parent,
         reason: "Synthetic roster recorded before selecting the two visits.",
+        ...(withReviewedAssignments
+          ? {
+              study_assignment: {
+                tank_code: unitType === "tank" ? unit : null,
+                treatment_code: "observation",
+                reviewer: "Synthetic assignment reviewer",
+                confirm_review: true,
+              },
+            }
+          : {}),
       },
     });
     expect(response.status(), await response.text()).toBe(201);
@@ -685,6 +697,216 @@ test(`declares, downloads and replays an equal-${unitType} two-visit growth cont
         original_files: sourceFiles,
         original_recordings: recordings,
         experimental_unit_type: unitType,
+      },
+      null,
+      2,
+    ),
+  );
+});
+
+test("study design freezes, reopens, exports and replays a reviewed declaration", async ({
+  desktop: { page, api, web, surface },
+}, info) => {
+  test.setTimeout(120_000);
+  const title = "Synthetic repeated-visit study";
+  const projectName = `Study design ${randomUUID()}`;
+  const { root, projectId, analysis, samplingPlan } = await seedReviewedGrowth(
+    page,
+    api,
+    projectName,
+    true,
+  );
+  const { version } = JSON.parse(await readFile("package.json", "utf8")) as {
+    version: string;
+  };
+  await page.addInitScript((value) => {
+    localStorage.setItem(`reefvision.onboarding.dismissed.${value}`, "true");
+  }, version);
+  async function openProject() {
+    await page.goto(web);
+    await page
+      .getByRole("button", { name: `Open ${projectName}`, exact: true })
+      .click();
+  }
+  async function openStudies() {
+    await openProject();
+    await page.getByRole("tab", { name: "Research", exact: true }).click();
+    await page.getByRole("tab", { name: "Study design", exact: true }).click();
+    return page.getByRole("region", { name: "Study design", exact: true });
+  }
+
+  const path = `${root}/ecology/study-designs`;
+  const post = (url: string) =>
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" && response.url() === url,
+    );
+  const studies = await openStudies();
+  const form = studies.getByRole("form", { name: "Declare study design" });
+
+  async function fillDeclaration(title: string, first: string, last: string) {
+    await form.getByLabel("Study title").fill(title);
+    await form.getByLabel("Baseline UTC date").fill(first);
+    await form.getByLabel("Follow-up UTC date").fill(last);
+    await form.getByLabel("Estimand", { exact: true }).fill(estimand);
+    await form
+      .getByLabel("Treatment label for observation")
+      .fill("Observed cohort");
+    await form
+      .getByLabel("Analysis method")
+      .selectOption("paired_growth_contrast");
+    await form
+      .getByLabel("Missing observations policy")
+      .selectOption("complete_unit");
+    await form
+      .getByLabel("Exclusion rule")
+      .fill("Exclude frames whose visible boundary is obscured.");
+    await form.getByLabel("Study reviewer").fill("Study browser reviewer");
+    await form
+      .getByLabel("Review note")
+      .fill("Reviewed the selected cohort, visits and exclusions.");
+    await form.getByLabel("I reviewed this design").check();
+    const frozen = post(path);
+    await form
+      .getByRole("button", { name: "Freeze study design", exact: true })
+      .click();
+    return checkedJson<StudyDesignRecord>(await frozen, 201);
+  }
+
+  const prospectiveTitle = "Synthetic future repeated-visit study";
+  const futureUtc = (days: number) =>
+    new Date(Date.now() + days * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+  await form.getByLabel("Independent experimental unit type").fill(unitType);
+  for (const unit of samplingPlan.slice(0, 2)) {
+    await form
+      .getByRole("checkbox", {
+        name: `${unit.organism_keys[0]} · ${unit.experimental_unit_id}`,
+        exact: true,
+      })
+      .check();
+  }
+  const prospective = await fillDeclaration(
+    prospectiveTitle,
+    futureUtc(2),
+    futureUtc(4),
+  );
+  expect(prospective.snapshot.declaration.timing).toBe("prospective");
+  expect(prospective.snapshot.binding).toBeNull();
+  await expect(
+    studies.getByText(/Prospective plan awaiting reviewed growth evidence/),
+  ).toBeVisible();
+
+  await openStudies();
+  await form
+    .getByLabel("Timing", { exact: true })
+    .selectOption("retrospective");
+  await form
+    .getByLabel("Reviewed growth evidence", { exact: true })
+    .selectOption(analysis.id);
+  const source = await fillDeclaration(title, baseline, followup);
+  expect(source.snapshot.declaration.timing).toBe("retrospective");
+  expect(source.snapshot.roster).toHaveLength(
+    samplingPlan.flatMap((row) => row.organism_keys).length,
+  );
+  expect(source.snapshot.binding?.analysis_id).toBe(analysis.id);
+  expect(source.snapshot.binding?.source_sha256).toBe(analysis.content_sha256);
+
+  const reopened = await openStudies();
+  await reopened
+    .getByRole("button", { name: `Open ${title} revision 1` })
+    .click();
+  await expect(
+    reopened.getByText(source.content_sha256, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    reopened.getByText("3 of 4 planned independent units included", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  const download = page.waitForEvent("download");
+  await reopened
+    .getByRole("link", { name: "Download frozen study JSON" })
+    .click();
+  const downloaded = await download;
+  const exportPath = info.outputPath("frozen-study.json");
+  await downloaded.saveAs(exportPath);
+  expect(JSON.parse(await readFile(exportPath, "utf8"))).toEqual(
+    source.snapshot,
+  );
+
+  const savingGraph = post(`${root}/workflow-graphs`);
+  await reopened.getByRole("button", { name: "Save study workflow" }).click();
+  const graph = await checkedJson<WorkflowGraphRecord>(await savingGraph, 201);
+  expect(graph.graph_json.nodes).toContainEqual(
+    expect.objectContaining({
+      node_type: "reviewed_study_design",
+      parameters: {
+        design_revision_id: source.id,
+        design_sha256: source.content_sha256,
+      },
+    }),
+  );
+
+  const runs = [];
+  for (let index = 0; index < 2; index++) {
+    await openProject();
+    await page
+      .getByRole("tab", { name: "Video & automation", exact: true })
+      .click();
+    await page
+      .getByRole("tab", { name: "Workflow builder", exact: true })
+      .click();
+    const saved = page.getByRole("listitem").filter({ hasText: graph.name });
+    await saved.getByRole("button", { name: "Load", exact: true }).click();
+    const queued = post(`${root}/workflow-runs`);
+    await saved
+      .getByRole("button", { name: "Run saved revision", exact: true })
+      .click();
+    const { id } = await checkedJson<{ id: string }>(await queued, 202);
+    let detail!: WorkflowRunDetail;
+    await expect
+      .poll(
+        async () => {
+          detail = await checkedJson<WorkflowRunDetail>(
+            await page.request.get(`${api}/workflow-runs/${id}`),
+            200,
+          );
+          return detail.run.status;
+        },
+        { timeout: 30_000 },
+      )
+      .not.toMatch(/queued|running/);
+    expect(detail.run.status, detail.run.error_message ?? undefined).toBe(
+      "succeeded",
+    );
+    const artifact = detail.artifacts.find(
+      (row) => row.data_type === "study_design_report",
+    );
+    expect(artifact?.payload_json).toEqual({
+      content_sha256: source.content_sha256,
+      snapshot: source.snapshot,
+    });
+    runs.push({ id, payload_sha256: artifact?.payload_sha256 });
+  }
+  expect(runs[0].id).not.toBe(runs[1].id);
+  expect(runs[0].payload_sha256).toBe(runs[1].payload_sha256);
+  await writeFile(
+    info.outputPath("study-design-evidence.json"),
+    JSON.stringify(
+      {
+        surface,
+        project_id: projectId,
+        growth_analysis_id: analysis.id,
+        growth_source_sha256: analysis.content_sha256,
+        prospective_revision_id: prospective.id,
+        prospective_sha256: prospective.content_sha256,
+        study_revision_id: source.id,
+        study_sha256: source.content_sha256,
+        graph_id: graph.id,
+        graph_sha256: graph.graph_sha256,
+        runs,
       },
       null,
       2,

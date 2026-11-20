@@ -757,6 +757,10 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
             return process_reefpose_validation_job(settings, factory, job_id)
         if job_type == "static_comparison":
             return process_static_comparison_job(settings, factory, job_id)
+        if job_type == "paired_model_comparison":
+            from reefvision.services.paired_models_v15 import process_comparison
+
+            return process_comparison(settings, factory, job_id)
         if job_type == "pose_identity_tracking":
             return process_pose_identity_tracking_job(settings, factory, job_id)
         if job_type == "temporal_reefpose":

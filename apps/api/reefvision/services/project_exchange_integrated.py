@@ -28,7 +28,9 @@ from reefvision.services.project_exchange_comparison import validate_comparison_
 from reefvision.services.project_exchange_event_summary import validate_event_summary_exchange
 from reefvision.services.project_exchange_pose import validate_pose_rows
 from reefvision.services.project_exchange_reports import validate_report_exchange
+from reefvision.services.project_exchange_reviewer_lab_v15 import REVIEWER_LAB_PARENTS
 from reefvision.services.project_exchange_temporal_reefpose import validate_temporal_exchange
+from reefvision.services.project_exchange_v15 import SECTIONS as V15_SECTIONS
 from reefvision.services.project_exchange_workflows import validate_workflow_rows
 from reefvision.services.reefpose_validation import heldout_scope
 from reefvision.services.static_comparison import STATIC_COMPARISON_JOB
@@ -72,6 +74,7 @@ _NEW_SECTION_NAMES = (
     "ecology_analysis_records",
 )
 _PARENTS = {
+    **REVIEWER_LAB_PARENTS,
     "pose_animal_identities": ("association_run_id", "pose_identity_association_runs"),
     "pose_identity_observations": ("association_run_id", "pose_identity_association_runs"),
     "pose_identity_association_decisions": ("association_run_id", "pose_identity_association_runs"),
@@ -113,7 +116,7 @@ def integrated_models() -> dict[str, type[Base]]:
     by_table = {
         cast(Table, mapper.local_table).name: mapper.class_ for mapper in Base.registry.mappers
     }
-    return {name: by_table[name] for name in (*SECTION_NAMES, *_NEW_SECTION_NAMES)}
+    return {name: by_table[name] for name in (*SECTION_NAMES, *_NEW_SECTION_NAMES, *V15_SECTIONS)}
 
 
 def integrated_records(session: Session, project_id: str) -> dict[str, Sequence[Base]]:

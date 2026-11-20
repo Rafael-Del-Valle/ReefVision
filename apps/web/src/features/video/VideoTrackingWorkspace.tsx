@@ -1314,13 +1314,17 @@ export function VideoTrackingWorkspace({
 
     if (
       (workspaceCommand.type === "select_video" ||
+        workspaceCommand.type === "open_comparison_frame" ||
         workspaceCommand.type === "open_pose_evidence") &&
       videosQuery.data === undefined
     ) {
       return;
     }
 
-    if (workspaceCommand.type === "open_pose_evidence") {
+    if (
+      workspaceCommand.type === "open_pose_evidence" ||
+      workspaceCommand.type === "open_comparison_frame"
+    ) {
       const targetExists = videosQuery.data?.some(
         (video) => video.id === workspaceCommand.videoId,
       );
@@ -1328,11 +1332,36 @@ export function VideoTrackingWorkspace({
         setSelectedVideoId(workspaceCommand.videoId);
         return;
       }
-      if (targetExists && workspaceCommand.sourceTrackId && !tracksQuery.data)
+      if (
+        targetExists &&
+        workspaceCommand.type === "open_pose_evidence" &&
+        workspaceCommand.sourceTrackId &&
+        !tracksQuery.data
+      )
         return;
     }
 
     lastWorkspaceCommandIdRef.current = workspaceCommand.id;
+
+    if (
+      workspaceCommand.type === "open_comparison_frame" &&
+      selectedVideo?.id === workspaceCommand.videoId
+    ) {
+      const frame = Math.min(
+        Math.max(
+          0,
+          workspaceCommand.frameIndex ??
+            Math.round((workspaceCommand.seconds ?? 0) * selectedVideo.fps),
+        ),
+        Math.max(0, selectedVideo.frame_count - 1),
+      );
+      seekVideoFromMap(
+        frame,
+        workspaceCommand.seconds ??
+          (selectedVideo.fps > 0 ? frame / selectedVideo.fps : 0),
+      );
+      setPreviewFrameIndex(frame);
+    }
 
     if (
       workspaceCommand.type === "open_pose_evidence" &&

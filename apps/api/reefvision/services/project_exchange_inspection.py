@@ -9,11 +9,23 @@ from collections import Counter
 from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any, BinaryIO
 
-from reefvision.domain.errors import ValidationError
+from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.domain.reproducibility_v15 import validate_native_proofs
 from reefvision.schemas.project_exchange import (
     ProjectExchangeInspectionResponse,
     ProjectExchangeUnavailableAsset,
 )
+from reefvision.services.project_exchange_field_v15 import (
+    FIELD_EXCHANGE_FORMAT,
+    FIELD_MEDIA_KIND,
+    FIELD_ORIGIN,
+    FIELD_SECTION_MODELS,
+    contains_field_exchange_records,
+    field_owned_project_path,
+    validate_field_exchange,
+    validate_field_origin,
+)
+from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, validate_v15_exchange
 from reefvision.services.static_comparison import STATIC_COMPARISON_JOB
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -133,7 +145,9 @@ def _integrated_media_gaps(
     ]
 
 
-def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionResponse:
+def inspect_project_exchange(
+    source: BinaryIO, *, verified_paired_comparison_ids: set[str] | None = None
+) -> ProjectExchangeInspectionResponse:
     warnings: list[str] = []
     errors: list[str] = []
     section_counts: dict[str, int] = {}
@@ -181,7 +195,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
             if manifest.get("format_name") != FORMAT_NAME:
                 errors.append("Archive is not a ReefVision project exchange package")
             version = str(manifest.get("format_version", ""))
-            if version not in {"1.0", "1.1", "1.2"}:
+            if version not in {"1.0", "1.1", *INTEGRATED_FORMATS}:
                 errors.append("Unsupported exchange format version")
 
             excluded = manifest.get("excluded_record_groups", [])
@@ -237,6 +251,9 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                     errors.append("Exchange archive source project ID is invalid")
                 else:
                     try:
+                        validate_v15_exchange(
+                            version, project_id, section_rows, manifest.get("origin")
+                        )
                         validate_spatial_exchange_records(project_id, section_rows)
                         validate_paired_growth_exchange(
                             project_id, section_rows, manifest.get("origin")
@@ -253,7 +270,15 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                                 validate_origin(manifest["origin"])
                     except ValidationError as exc:
                         errors.append(str(exc))
-            if version == "1.2" and not errors:
+            is_integrated = version in INTEGRATED_FORMATS
+            source_project_rows = section_rows.get("project", [])
+            if version != FIELD_EXCHANGE_FORMAT and (
+                set(section_rows).intersection(FIELD_SECTION_MODELS)
+                or contains_field_exchange_records(section_rows)
+                or FIELD_ORIGIN in manifest
+            ):
+                errors.append("Field records require the 1.5 exchange format")
+            if is_integrated and not errors:
                 from reefvision.services.project_exchange_import import SECTION_MODELS
                 from reefvision.services.project_exchange_import_v1 import register_v1_sections
                 from reefvision.services.project_exchange_integrated import (
@@ -278,12 +303,16 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                     or project_rows[0].get("id") != project["id"]
                 ):
                     raise ValidationError("Exchange archive must identify one source project")
-                if not any(section_rows.get(name) for name in integration) and not any(
+                if not any(
+                    section_rows.get(name) for name in (*integration, *FIELD_SECTION_MODELS)
+                ) and not any(
                     row.get("job_type") == STATIC_COMPARISON_JOB
                     for row in section_rows.get("jobs", [])
                 ):
                     raise ValidationError(
                         "Exchange 1.2 archive has no integrated scientific records"
+                        if version == "1.2"
+                        else "Exchange 1.5 archive has no declared research records"
                     )
                 validate_exchange_records(project["id"], section_rows, models)
                 validate_integrated_records(project["id"], section_rows, models)
@@ -295,17 +324,33 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                 descriptors=manifest.get("media", []),
                 label="media",
                 require_source_relative_path=False,
-                require_integrity=version == "1.2",
+                require_integrity=is_integrated,
                 errors=errors,
             )
             included_media_count = len(media)
             if not errors:
                 try:
-                    media_gaps = _integrated_media_gaps(section_rows, media)
+                    ordinary_media = [
+                        item for item in media if item.get("kind") != FIELD_MEDIA_KIND
+                    ]
+                    if version != FIELD_EXCHANGE_FORMAT and len(ordinary_media) != len(media):
+                        raise ValidationError("Field originals require the 1.5 exchange format")
+                    media_gaps = _integrated_media_gaps(section_rows, ordinary_media)
+                    if version == FIELD_EXCHANGE_FORMAT:
+                        project_id = str(manifest["project"]["id"])
+                        validate_field_exchange(
+                            project_id,
+                            str(source_project_rows[0]["storage_root"]),
+                            section_rows,
+                            media,
+                        )
+                        validate_field_origin(
+                            section_rows, manifest.get(FIELD_ORIGIN), manifest.get("origin")
+                        )
                 except ValidationError as exc:
                     errors.append(str(exc))
                 else:
-                    if version == "1.2":
+                    if is_integrated:
                         unavailable_assets = media_gaps
                     missing_spatial = [item for item in media_gaps if item.kind == "spatial_source"]
                     if missing_spatial:
@@ -328,7 +373,7 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                 ),
                 label="telemetry sidecar",
                 require_source_relative_path=True,
-                require_integrity=version == "1.2",
+                require_integrity=is_integrated,
                 errors=errors,
             )
 
@@ -358,11 +403,16 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                 descriptors=manifest.get("generated_artifacts", []),
                 label="generated artifact",
                 require_source_relative_path=True,
-                require_integrity=version == "1.2",
+                require_integrity=is_integrated,
                 errors=errors,
             )
             included_generated_artifact_count = len(generated)
-            if version == "1.2" and not errors:
+            if version == FIELD_EXCHANGE_FORMAT and any(
+                field_owned_project_path(str(item.get("source_relative_path", "")))
+                for item in generated
+            ):
+                errors.append("Generated files cannot overwrite field originals or staging")
+            if is_integrated and not errors:
                 paths = [
                     str(item["source_relative_path"]).replace("\\", "/").casefold()
                     for item in generated
@@ -371,6 +421,41 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                     path.split("/", 1)[0] in {"exchanges", "exchange-import"} for path in paths
                 ):
                     raise ValidationError("Exchange generated file destinations overlap")
+            verified_comparisons: frozenset[str] = frozenset()
+            if not errors and source_project_rows:
+                from reefvision.services.project_exchange_paired_models_v15 import (
+                    validate_paired_models_exchange,
+                )
+                from reefvision.storage.segmentation_metric_masks import MAX_MASK_PNG_BYTES
+
+                source_record = source_project_rows[0]
+                prefix = source_record["storage_root"].rstrip("/") + "/"
+                raster_members = {row["source_relative_path"]: row["path"] for row in generated}
+
+                def read_raster(path: str) -> bytes:
+                    if not path.startswith(prefix) or path[len(prefix) :] not in raster_members:
+                        raise NotFoundError("A required paired comparison raster is missing")
+                    member = raster_members[path[len(prefix) :]]
+                    with archive.open(member) as stream:
+                        data = stream.read(MAX_MASK_PNG_BYTES + 1)
+                    if len(data) > MAX_MASK_PNG_BYTES:
+                        raise ValidationError("Paired raster is too large")
+                    return data
+
+                verified_comparisons = validate_paired_models_exchange(
+                    source_record["id"],
+                    section_rows,
+                    (manifest.get("origin") or {}).get("id_map", {}),
+                    read_raster=read_raster,
+                )
+            if not errors:
+                validate_native_proofs(
+                    section_rows,
+                    manifest,
+                    verified_paired_comparison_ids=verified_comparisons,
+                )
+                if verified_paired_comparison_ids is not None:
+                    verified_paired_comparison_ids.update(verified_comparisons)
     except (zipfile.BadZipFile, OSError, ValueError, TypeError, KeyError, ValidationError) as exc:
         errors.append(f"Archive could not be inspected: {exc}")
 

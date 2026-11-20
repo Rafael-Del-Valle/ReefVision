@@ -16,6 +16,7 @@ from reefvision.db.models import (
     Job,
     LabelClass,
     ModelRegistration,
+    ModelRuntimeSelection,
     PoseEvaluationRun,
     Project,
     TrainingRun,
@@ -350,6 +351,12 @@ class ModelService:
 
     def delete_model(self, model_id: str) -> None:
         model = self._model(model_id)
+        if self.session.scalar(
+            select(ModelRuntimeSelection.id)
+            .where(ModelRuntimeSelection.model_id == model.id)
+            .limit(1)
+        ):
+            raise ConflictError("A reviewed runtime selection references this model")
         evaluation_id = self.session.scalar(
             select(PoseEvaluationRun.id).where(PoseEvaluationRun.model_id == model.id).limit(1)
         )

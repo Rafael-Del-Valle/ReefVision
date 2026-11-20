@@ -33,6 +33,7 @@ from reefvision.api.routes.ecology_identity import router as ecology_identity_ro
 from reefvision.api.routes.ecology_pose_links import router as ecology_pose_links_router
 from reefvision.api.routes.environmental_analysis import router as environmental_analysis_router
 from reefvision.api.routes.environmental_context import router as environmental_context_router
+from reefvision.api.routes.field_capture import router as field_capture_router
 from reefvision.api.routes.geographic_movement_analytics import (
     router as geographic_movement_analytics_router,
 )
@@ -50,7 +51,9 @@ from reefvision.api.routes.mask_refinements import router as mask_refinements_ro
 from reefvision.api.routes.measurements import router as measurements_router
 from reefvision.api.routes.model_agreement import router as model_agreement_router
 from reefvision.api.routes.model_catalog import router as model_catalog_router
+from reefvision.api.routes.model_runtime import router as model_runtime_router
 from reefvision.api.routes.models import router as models_router
+from reefvision.api.routes.paired_models_v15 import router as paired_models_router
 from reefvision.api.routes.pose_active_learning import router as pose_active_learning_router
 from reefvision.api.routes.pose_biological_measurement import (
     router as pose_biological_measurement_router,
@@ -68,8 +71,10 @@ from reefvision.api.routes.projects import router as projects_router
 from reefvision.api.routes.quality_control import router as quality_control_router
 from reefvision.api.routes.raster_edits import router as raster_edits_router
 from reefvision.api.routes.reefpose_validation import router as reefpose_validation_router
+from reefvision.api.routes.reproducibility_v15 import router as reproducibility_router
 from reefvision.api.routes.research_reports import router as research_reports_router
 from reefvision.api.routes.review_queues import router as review_queues_router
+from reefvision.api.routes.reviewer_lab_v15 import router as reviewer_lab_router
 from reefvision.api.routes.sam2_models import router as sam2_models_router
 from reefvision.api.routes.sam_image_proposals import router as sam_image_proposals_router
 from reefvision.api.routes.scale_label_ocr import router as scale_label_ocr_router
@@ -89,6 +94,7 @@ from reefvision.api.routes.spatial_source_assets_v14 import (
     router as spatial_source_assets_router,
 )
 from reefvision.api.routes.static_comparison import router as static_comparison_router
+from reefvision.api.routes.study_design import router as study_design_router
 from reefvision.api.routes.system import router as system_router
 from reefvision.api.routes.temporal_reefpose import router as temporal_reefpose_router
 from reefvision.api.routes.training import router as training_router
@@ -102,6 +108,7 @@ install_workflow_v1_extensions()
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(environmental_analysis_router)
 api_router.include_router(environmental_context_router)
+api_router.include_router(field_capture_router)
 api_router.include_router(lunar_context_router)
 api_router.include_router(scientific_data_router)
 api_router.include_router(scientific_heatmaps_router)
@@ -138,6 +145,8 @@ api_router.include_router(scale_label_ocr_router)
 api_router.include_router(dataset_versions_router)
 api_router.include_router(jobs_router)
 api_router.include_router(model_catalog_router)
+api_router.include_router(model_runtime_router)
+api_router.include_router(paired_models_router)
 api_router.include_router(sam2_models_router)
 api_router.include_router(models_router)
 api_router.include_router(predictions_router)
@@ -158,11 +167,14 @@ api_router.include_router(advanced_provider_execution_router)
 api_router.include_router(workflow_graphs_router)
 api_router.include_router(spatial_source_assets_router)
 api_router.include_router(spatial_condition_router)
+api_router.include_router(reviewer_lab_router)
+api_router.include_router(reproducibility_router)
 api_router.include_router(learning_evaluation_router)
 api_router.include_router(longitudinal_monitoring_router)
 api_router.include_router(ecology_identity_router)
 api_router.include_router(coral_graph_router)
 api_router.include_router(ecology_analysis_router)
+api_router.include_router(study_design_router)
 api_router.include_router(ecology_event_summary_router)
 api_router.include_router(scientific_comparison_router)
 api_router.include_router(static_comparison_router)

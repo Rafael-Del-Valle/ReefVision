@@ -296,3 +296,38 @@ it("requires measured registration diagnostics and preserves explicit zero resid
     scientificConfigurationIssue("mesh_longitudinal_comparison", saved()),
   ).toBeUndefined();
 });
+
+it("selects an inspect-only local provider manifest for a saved workflow", async () => {
+  vi.spyOn(api, "request").mockResolvedValue([
+    {
+      provider_id: "grounding_dino",
+      display_name: "Grounding DINO",
+      source_kind: "built_in",
+      discovery_status: "built_in",
+      source_filename: null,
+      source_sha256: null,
+    },
+    {
+      provider_id: "local_depth",
+      display_name: "Local Depth Inspector",
+      source_kind: "local_manifest",
+      discovery_status: "valid",
+      source_filename: "local-depth.json",
+      source_sha256: "a".repeat(64),
+    },
+  ] as never);
+
+  expect(hasScientificNodeControls("provider_manifest_snapshot")).toBe(true);
+  renderControls("provider_manifest_snapshot");
+  await screen.findByRole("option", { name: "Local Depth Inspector · valid" });
+  fireEvent.change(screen.getByLabelText("Local provider manifest"), {
+    target: { value: "local_depth" },
+  });
+
+  const output = screen.getByRole("status").textContent ?? "";
+  expect(output).toContain('"record_id":"local_depth"');
+  expect(output).toContain(`"expected_source_sha256":"${"a".repeat(64)}"`);
+  expect(
+    screen.getByText(/snapshots metadata only and never executes/),
+  ).toBeVisible();
+});

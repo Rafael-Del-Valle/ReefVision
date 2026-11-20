@@ -37,7 +37,6 @@ from reefvision.schemas.pose_interoperability import (
 )
 from reefvision.schemas.videos import VideoPoseObservation, VideoTrackKeyframe
 from reefvision.services.pose_temporal_tracking import PoseTemporalTrackingService
-from reefvision.services.video_assets import _inspect_video
 from reefvision.storage import pose_text_records
 from reefvision.storage.pose_exchange_text import (
     read_legacy_dlc,
@@ -47,6 +46,7 @@ from reefvision.storage.pose_exchange_text import (
 )
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.results_packages import sha256_file
+from reefvision.storage.video_media import inspect_video as _inspect_video
 
 
 @dataclass(frozen=True)

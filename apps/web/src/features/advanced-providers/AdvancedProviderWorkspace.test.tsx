@@ -79,6 +79,15 @@ describe("AdvancedProviderWorkspace", () => {
         recommended_devices: ["cuda", "cpu"],
         known_limitations: [],
         integration_notes: [],
+        source_kind: "built_in",
+        manifest_version: null,
+        declared_capabilities: [],
+        availability_status: "ready",
+        availability_reason: null,
+        source_filename: null,
+        source_sha256: null,
+        discovery_status: "built_in",
+        discovery_errors: [],
       },
       {
         provider_id: "segment_anything",
@@ -98,6 +107,15 @@ describe("AdvancedProviderWorkspace", () => {
         recommended_devices: ["cuda", "cpu"],
         known_limitations: [],
         integration_notes: [],
+        source_kind: "built_in",
+        manifest_version: null,
+        declared_capabilities: [],
+        availability_status: "ready",
+        availability_reason: null,
+        source_filename: null,
+        source_sha256: null,
+        discovery_status: "built_in",
+        discovery_errors: [],
       },
     ]);
 
@@ -158,6 +176,100 @@ describe("AdvancedProviderWorkspace", () => {
       screen.getByRole("button", {
         name: "Run provider",
       }),
+    ).toBeDisabled();
+  });
+
+  it("inspects a local manifest without offering preflight or execution", async () => {
+    vi.mocked(providerApi.getAdvancedProviderManifests).mockResolvedValue([
+      {
+        provider_id: "local_depth",
+        display_name: "Local Depth Inspector",
+        maturity: "unavailable",
+        execution_supported: false,
+        execution_surface: "blocked",
+        supported_tasks: ["relative_depth"],
+        prompt_fields_by_task: { relative_depth: [] },
+        output_contracts_by_task: { relative_depth: [] },
+        required_model_extensions: [],
+        required_packages: [],
+        recommended_devices: [],
+        known_limitations: [
+          "Local provider manifests are inspect-only in ReefVision 1.5; no provider code was loaded.",
+        ],
+        integration_notes: ["Inspection only"],
+        source_kind: "local_manifest",
+        manifest_version: 1,
+        declared_capabilities: ["image_semantic_segmentation", "cpu_inference"],
+        availability_status: "unavailable",
+        availability_reason: "A reviewed ReefVision adapter is not installed.",
+        source_filename: "local-depth.json",
+        source_sha256: "a".repeat(64),
+        discovery_status: "valid",
+        discovery_errors: [],
+      },
+    ] as unknown as providerApi.AdvancedProviderManifest[]);
+
+    renderWorkspace();
+
+    expect(
+      await screen.findByRole("heading", { name: "Local provider manifest" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Source file").closest("p")).toHaveTextContent(
+      "local-depth.json",
+    );
+    expect(screen.getByText("Schema version 1")).toBeInTheDocument();
+    expect(screen.getByText("image semantic segmentation")).toBeInTheDocument();
+    expect(screen.getByText("cpu inference")).toBeInTheDocument();
+    expect(
+      screen.getByText("A reviewed ReefVision adapter is not installed."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/no provider code was loaded/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Run preflight" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Run provider" })).toBeDisabled();
+  });
+
+  it("shows isolated local manifest validation errors", async () => {
+    vi.mocked(providerApi.getAdvancedProviderManifests).mockResolvedValue([
+      {
+        provider_id: "local_manifest_deadbeef",
+        display_name: "Unavailable local manifest: broken.json",
+        maturity: "invalid",
+        execution_supported: false,
+        execution_surface: "blocked",
+        supported_tasks: [],
+        prompt_fields_by_task: {},
+        output_contracts_by_task: {},
+        required_model_extensions: [],
+        required_packages: [],
+        recommended_devices: [],
+        known_limitations: [],
+        integration_notes: [],
+        source_kind: "local_manifest",
+        manifest_version: null,
+        declared_capabilities: [],
+        availability_status: "invalid",
+        availability_reason: "Manifest JSON is invalid at line 1, column 2",
+        source_filename: "broken.json",
+        source_sha256: "b".repeat(64),
+        discovery_status: "invalid",
+        discovery_errors: ["Manifest JSON is invalid at line 1, column 2"],
+      },
+    ] as unknown as providerApi.AdvancedProviderManifest[]);
+
+    renderWorkspace();
+
+    expect(
+      await screen.findByText("Manifest validation failed"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Manifest JSON is invalid at line 1, column 2"),
+    ).toHaveLength(2);
+    expect(
+      screen.getByRole("button", { name: "Run preflight" }),
     ).toBeDisabled();
   });
 });

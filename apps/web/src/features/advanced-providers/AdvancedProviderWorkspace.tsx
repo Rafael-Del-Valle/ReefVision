@@ -138,6 +138,8 @@ export function AdvancedProviderWorkspace({
     [manifestsQuery.data, providerId],
   );
   const managedCatalogId = MANAGED_PROVIDER_CATALOG_IDS[providerId] ?? null;
+  const localManifestSelected =
+    selectedManifest?.source_kind === "local_manifest";
   const managedModel = useMemo(
     () =>
       managedCatalogId
@@ -214,11 +216,11 @@ export function AdvancedProviderWorkspace({
       <div className="section-heading">
         <div>
           <p className="eyebrow">Models &amp; AI</p>
-          <h3>Advanced Provider Lab</h3>
+          <h3>Providers</h3>
           <p>
-            Run optional vision providers through a guided, fail-closed
-            workflow. SAM 2.1 supports explicitly approved model installation;
-            other providers continue to require compatible local checkpoints.
+            Inspect provider availability and run supported optional vision
+            providers through a guided, fail-closed workflow. Local JSON
+            manifests are inspected without loading provider code.
           </p>
         </div>
       </div>
@@ -265,11 +267,13 @@ export function AdvancedProviderWorkspace({
           </label>
           {selectedManifest && (
             <p className="annotation-helper">
-              {selectedManifest.execution_surface === "provider_lab"
-                ? "This provider runs here in Advanced Provider Lab."
-                : selectedManifest.execution_surface === "existing_workflow"
-                  ? "This provider is available through an existing ReefVision workflow; Provider Lab launch is disabled."
-                  : "This provider remains documented/preflight-only."}
+              {localManifestSelected
+                ? "This local manifest is inspect-only. It cannot install or execute provider code."
+                : selectedManifest.execution_surface === "provider_lab"
+                  ? "This provider runs here in Advanced Provider Lab."
+                  : selectedManifest.execution_surface === "existing_workflow"
+                    ? "This provider is available through an existing ReefVision workflow; Provider Lab launch is disabled."
+                    : "This provider remains documented/preflight-only."}
             </p>
           )}
           {providerId === "sam2" && (
@@ -383,6 +387,55 @@ export function AdvancedProviderWorkspace({
             </p>
           )}
         </div>
+
+        {localManifestSelected && selectedManifest && (
+          <div className="panel-card">
+            <h4>Local provider manifest</h4>
+            <p>
+              <strong>Source file</strong> · {selectedManifest.source_filename}
+            </p>
+            <p>
+              {selectedManifest.manifest_version === null
+                ? "Schema version unavailable"
+                : `Schema version ${selectedManifest.manifest_version}`}
+            </p>
+            <p>
+              <strong>Discovery</strong> · {selectedManifest.discovery_status}
+            </p>
+            <p>
+              <strong>Availability</strong> ·{" "}
+              {selectedManifest.availability_status ?? "not declared"}
+            </p>
+            {selectedManifest.availability_reason && (
+              <p>{selectedManifest.availability_reason}</p>
+            )}
+            <h5>Declared capabilities</h5>
+            {selectedManifest.declared_capabilities.length > 0 ? (
+              <ul>
+                {selectedManifest.declared_capabilities.map((capability) => (
+                  <li key={capability}>{capability.replaceAll("_", " ")}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="muted-copy">No valid capabilities were declared.</p>
+            )}
+            {selectedManifest.discovery_errors.length > 0 && (
+              <div role="alert">
+                <strong>Manifest validation failed</strong>
+                <ul>
+                  {selectedManifest.discovery_errors.map((error) => (
+                    <li key={error}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <p className="annotation-helper">
+              Add or review JSON files in the ReefVision data directory under
+              provider-manifests. ReefVision 1.5 never imports manifest modules,
+              installs packages, or loads checkpoints from these records.
+            </p>
+          </div>
+        )}
 
         <div className="panel-card">
           <h4>2. Configure the action</h4>
@@ -526,7 +579,12 @@ export function AdvancedProviderWorkspace({
               type="button"
               className="secondary"
               onClick={() => preflightMutation.mutate()}
-              disabled={!providerId || !task || preflightMutation.isPending}
+              disabled={
+                localManifestSelected ||
+                !providerId ||
+                !task ||
+                preflightMutation.isPending
+              }
             >
               {preflightMutation.isPending ? "Checking…" : "Run preflight"}
             </button>

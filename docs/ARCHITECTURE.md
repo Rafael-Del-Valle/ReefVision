@@ -81,6 +81,21 @@ The provider hub owns:
 
 This keeps ReefVision operational when future provider families remain unimplemented or require optional packs.
 
+### Inspect-only local provider manifests
+
+The 1.5 provider-foundation slice adds a deliberately non-executable discovery boundary. ReefVision scans direct JSON files beneath `<data_dir>/provider-manifests`, validates them against a strict schema, records their source digest, and exposes both valid and invalid records in **Models & AI → Providers**.
+
+```text
+provider-manifests/*.json
+  -> strict bounded JSON reader
+  -> manifest or isolated discovery error
+  -> provider catalog API
+  -> Providers workspace
+  -> metadata-only Workflow Builder snapshot
+```
+
+Discovery never imports Python modules, resolves entry points, launches commands, installs packages, or loads model code. Local records therefore cannot use inference routes; their preflight response is explicitly blocked. The Workflow Builder node copies validated metadata and the source digest into an artifact so a scientific workflow can cite the manifest without granting it execution authority. Executable plugins, permission handling, lifecycle management, and a stable SDK remain separate 2.0 work.
+
 ## Dataset-version subsystem
 
 Milestone 6 adds an immutable dataset-version service layer that snapshots eligible images, active annotations, class-map metadata, split assignments, and a canonical manifest checksum into dedicated database tables. The snapshot is stored in the database rather than derived lazily from mutable current annotations.

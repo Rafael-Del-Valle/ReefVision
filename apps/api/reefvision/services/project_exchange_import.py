@@ -82,12 +82,19 @@ from reefvision.services.project_exchange_environmental_analysis import (
     validate_environmental_analysis_exchange,
 )
 from reefvision.services.project_exchange_event_summary import remap_event_summary_archive_job
+from reefvision.services.project_exchange_field_v15 import (
+    FIELD_EXCHANGE_FORMAT,
+    FIELD_MEDIA_KIND,
+    FIELD_ORIGIN,
+    restore_field_media,
+    restore_field_origin,
+    restore_field_row,
+    validate_field_exchange,
+    validate_field_origin,
+)
 from reefvision.services.project_exchange_inspection import (
     MANIFEST_NAME,
     inspect_project_exchange,
-)
-from reefvision.services.project_exchange_integrated import (
-    FORMAT_VERSION as INTEGRATED_FORMAT_VERSION,
 )
 from reefvision.services.project_exchange_integrated import (
     heldout_scope_mappings,
@@ -108,6 +115,10 @@ from reefvision.services.project_exchange_pose import (
     validate_frozen_pose_frames,
 )
 from reefvision.services.project_exchange_reports import remap_report_archive_job
+from reefvision.services.project_exchange_reviewer_lab_v15 import (
+    restore_reviewer_lab_exchange,
+    reviewer_lab_exchange_ids,
+)
 from reefvision.services.project_exchange_scientific import (
     SCIENCE_SECTIONS,
     remap_scientific_sections,
@@ -117,6 +128,11 @@ from reefvision.services.project_exchange_spatial import validate_spatial_exchan
 from reefvision.services.project_exchange_temporal_reefpose import (
     remap_temporal_exchange_row,
     restore_temporal_links,
+)
+from reefvision.services.project_exchange_v15 import (
+    INTEGRATED_FORMATS,
+    restore_v15_row,
+    validate_v15_exchange,
 )
 from reefvision.services.project_exchange_workflows import (
     has_spatial_workflow_history,
@@ -443,17 +459,27 @@ def import_project_exchange(
             if isinstance(member, str):
                 section_rows[section_name] = _read_jsonl(archive, member)
 
-        integrated = (
-            integrated_models() if inspection.format_version == INTEGRATED_FORMAT_VERSION else {}
-        )
+        field_format = inspection.format_version == FIELD_EXCHANGE_FORMAT
+        integrated = integrated_models() if inspection.format_version in INTEGRATED_FORMATS else {}
         models = {**SECTION_MODELS, **integrated}
         order = [*SECTION_ORDER, *integrated]
         validate_exchange_records(old_project_id, section_rows, models)
+        validate_v15_exchange(
+            inspection.format_version or "", old_project_id, section_rows, manifest.get("origin")
+        )
         validate_frozen_pose_frames(section_rows)
         validate_acquisition_exchange(section_rows)
         validate_computed_exchange_records(old_project_id, section_rows)
         validate_environmental_analysis_exchange(old_project_id, section_rows)
         validate_spatial_exchange_records(old_project_id, section_rows)
+        if field_format:
+            validate_field_exchange(
+                old_project_id,
+                source_storage_root,
+                section_rows,
+                list(_media_inventory(manifest).values()),
+            )
+            validate_field_origin(section_rows, manifest.get(FIELD_ORIGIN), manifest.get("origin"))
         _validate_heatmap_artifacts(old_project_id, section_rows)
         restores_workflow_provenance = bool(integrated) or has_spatial_workflow_history(
             section_rows
@@ -493,6 +519,9 @@ def import_project_exchange(
                     if isinstance(old_id, str) and old_id:
                         id_map[old_id] = str(uuid4())
             id_map.update(heldout_scope_mappings(old_project_id, project.id, section_rows))
+            original_ids = (manifest.get("origin") or {}).get("id_map", {})
+            for subject_id in reviewer_lab_exchange_ids(section_rows, original_ids):
+                id_map.setdefault(subject_id, str(uuid4()))
 
             # Immutable revision-series identifiers are not primary keys, but they
             # still must be remapped when a package is imported more than once.
@@ -506,6 +535,7 @@ def import_project_exchange(
                         "analysis_series_id",
                         "event_series_id",
                         "link_id",
+                        "design_id",
                         "graph_id",
                         "correspondence_id",
                     ):
@@ -545,6 +575,12 @@ def import_project_exchange(
                 if row["result_kind"] == "mask_coverage"
             }
             media = _media_inventory(manifest)
+            field_media = {
+                descriptor["sha256"]: descriptor
+                for (kind, _), descriptor in media.items()
+                if kind == FIELD_MEDIA_KIND
+            }
+            field_destinations: dict[str, str] = {}
             warnings = list(inspection.warnings)
             imported_counts: dict[str, int] = {}
             copied_media_count = 0
@@ -595,6 +631,8 @@ def import_project_exchange(
                         values = _coerce_row(model, mapped_ecology[section_name][row_index], {})
                     else:
                         values = _coerce_row(model, row, id_map)
+                    if field_format:
+                        restore_field_row(section_name, row, values, id_map)
                     if integrated and section_name in integrated:
                         # Literal text may happen to equal a UUID. Physical
                         # lineage keys remap independently of investigator text.
@@ -635,6 +673,7 @@ def import_project_exchange(
                         remap_reviewed_snapshot(
                             section_name, row, values, by_section, id_map, digests
                         )
+                        restore_v15_row(section_name, row, values, id_map)
                         remap_temporal_exchange_row(
                             section_name, row, values, id_map, digests, track_digests
                         )
@@ -789,7 +828,15 @@ def import_project_exchange(
                         )
 
                     media_kind = MEDIA_KIND_BY_SECTION.get(section_name)
-                    if media_kind is not None and isinstance(old_id, str):
+                    if field_format and section_name == "field_capture_observations":
+                        digest = row["sha256"]
+                        if digest not in field_destinations:
+                            field_destinations[digest] = restore_field_media(
+                                archive, settings, project.storage_root, row, field_media
+                            )
+                            copied_media_count += 1
+                        values["managed_path"] = field_destinations[digest]
+                    elif media_kind is not None and isinstance(old_id, str):
                         descriptor = media.get((media_kind, old_id))
                         if descriptor is not None:
                             values["managed_path"] = _copy_packaged_media(
@@ -856,6 +903,11 @@ def import_project_exchange(
             manifest_sha256 = canonical_json_sha256(manifest)
             origin = (manifest.get("origin") or {}) if restores_workflow_provenance else {}
             origin_ids = map_origin_ids(origin, id_map)
+            field_origin = (
+                restore_field_origin(section_rows, manifest.get(FIELD_ORIGIN) or {}, id_map)
+                if field_format
+                else {}
+            )
             package = ProjectExchangePackage(
                 id=package_id,
                 project_id=project.id,
@@ -876,6 +928,7 @@ def import_project_exchange(
                         else {}
                     ),
                     "copied_media_count": copied_media_count,
+                    **({FIELD_ORIGIN: field_origin} if field_origin else {}),
                 },
                 completed_at=datetime.now(UTC),
             )
@@ -896,12 +949,25 @@ def import_project_exchange(
                     if lock is not None:
                         lock.protocol_sha256 = protocol
                 restore_pose_comparisons(session, project.id, digests)
+                from reefvision.services.project_exchange_paired_models_v15 import (
+                    restore_paired_model_comparisons,
+                )
+
+                restore_paired_model_comparisons(
+                    session,
+                    project.id,
+                    section_rows,
+                    id_map,
+                    digests,
+                    source_storage_root=source_storage_root,
+                )
                 restore_comparison_jobs(session, project.id, section_rows, id_map, digests)
             if restores_workflow_provenance:
                 restore_workflow_provenance(
                     session, project.id, section_rows, id_map, digests, _remap_json
                 )
                 package.options_json = {**package.options_json, "digest_map": digests}
+            restore_reviewer_lab_exchange(session, section_rows, id_map)
             session.commit()
             session.refresh(project)
             session.refresh(package)

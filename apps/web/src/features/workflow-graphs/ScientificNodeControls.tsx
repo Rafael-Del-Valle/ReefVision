@@ -13,6 +13,9 @@ import {
 } from "../ecology/PairedGrowthFields";
 import type { EventSummary } from "../ecology/EventSummaryPanel";
 import type { PoseLink } from "../ecology/poseOrganismLinksApi";
+import { ModelSelectionField } from "../models/ReviewedModelRuntime";
+import { listStudyDesigns } from "../ecology/studyDesignApi";
+import { listResearchProofs } from "../reproducibility/reproducibilityApi";
 import {
   AcquisitionQualityControls,
   defaultAcquisitionThresholds,
@@ -36,9 +39,14 @@ const scientificNodes = new Set([
   "image_acquisition_quality",
   "ecology_verified_analysis",
   "paired_growth_contrast",
+  "reviewed_study_design",
+  "paired_model_comparison",
+  "research_reproducibility_package",
   "mesh_surface_preview",
   "point_cloud_preview",
   "mesh_longitudinal_comparison",
+  "provider_manifest_snapshot",
+  "reviewed_model_runtime",
 ]);
 
 export const hasScientificNodeControls = (nodeType: string) =>
@@ -129,6 +137,32 @@ export function scientificConfigurationIssue(
 ): string | undefined {
   const config = object(parameters.configuration);
   if (
+    nodeType === "research_reproducibility_package" &&
+    !/^[0-9a-f]{64}$/.test(string(parameters.proof_sha256))
+  ) {
+    return "Choose a verified research package proof.";
+  }
+  if (
+    nodeType === "paired_model_comparison" &&
+    (!string(parameters.comparison_id) ||
+      !/^[0-9a-f]{64}$/.test(string(parameters.comparison_sha256)))
+  ) {
+    return "Choose a completed paired model comparison.";
+  }
+  if (
+    nodeType === "reviewed_model_runtime" &&
+    (!string(parameters.selection_id) ||
+      !/^[0-9a-f]{64}$/.test(string(parameters.selection_sha256)))
+  )
+    return "Choose a reviewed project model configuration.";
+  if (
+    nodeType === "reviewed_study_design" &&
+    (!string(parameters.design_revision_id) ||
+      !/^[0-9a-f]{64}$/.test(string(parameters.design_sha256)))
+  ) {
+    return "Choose a frozen study design revision.";
+  }
+  if (
     nodeType === "paired_growth_contrast" &&
     (!string(parameters.analysis_id) ||
       !/^[0-9a-f]{64}$/.test(string(parameters.source_sha256)) ||
@@ -136,6 +170,11 @@ export function scientificConfigurationIssue(
   ) {
     return "Choose a frozen growth analysis and declare its paired visits, independent unit, estimand and missingness policy.";
   }
+  if (
+    nodeType === "provider_manifest_snapshot" &&
+    !string(parameters.record_id)
+  )
+    return "Choose an inspect-only local provider manifest.";
   if (nodeType === "scientific_comparison") {
     if (
       string(parameters.comparison_id) ||
@@ -1201,6 +1240,84 @@ function SpatialTimestamp({
   );
 }
 
+type LocalProviderManifestChoice = {
+  provider_id: string;
+  display_name: string;
+  source_kind: "built_in" | "local_manifest";
+  discovery_status: string;
+  source_filename: string | null;
+  source_sha256: string | null;
+};
+
+function ProviderManifestSnapshotFields({
+  parameters,
+  onChange,
+}: {
+  parameters: Parameters;
+  onChange: (value: Parameters) => void;
+}) {
+  const manifests = useQuery({
+    queryKey: ["workflow-provider-manifests"],
+    queryFn: ({ signal }) =>
+      request<LocalProviderManifestChoice[]>("/advanced-providers/manifests", {
+        signal,
+      }),
+  });
+  const localManifests = (manifests.data ?? []).filter(
+    (item) => item.source_kind === "local_manifest",
+  );
+  const selected = localManifests.find(
+    (item) => item.provider_id === string(parameters.record_id),
+  );
+
+  return (
+    <fieldset>
+      <legend>Provider manifest provenance</legend>
+      <p>
+        This node snapshots metadata only and never executes provider code,
+        installs packages, or loads checkpoints.
+      </p>
+      {manifests.isPending && <p role="status">Loading local manifests…</p>}
+      {manifests.error && <p role="alert">{manifests.error.message}</p>}
+      <label>
+        Local provider manifest
+        <select
+          value={string(parameters.record_id)}
+          onChange={(event) => {
+            const manifest = localManifests.find(
+              (item) => item.provider_id === event.target.value,
+            );
+            onChange({
+              ...parameters,
+              record_id: event.target.value,
+              expected_source_sha256: manifest?.source_sha256 ?? null,
+            });
+          }}
+        >
+          <option value="">Choose a local manifest</option>
+          {localManifests.map((manifest) => (
+            <option key={manifest.provider_id} value={manifest.provider_id}>
+              {manifest.display_name} · {manifest.discovery_status}
+            </option>
+          ))}
+        </select>
+      </label>
+      {selected && (
+        <p className="annotation-helper">
+          {selected.source_filename ?? "Unknown source file"} · SHA-256{" "}
+          {selected.source_sha256 ?? "unavailable"}
+        </p>
+      )}
+      {!manifests.isPending && localManifests.length === 0 && (
+        <p className="muted-copy">
+          No local JSON manifests were found in the ReefVision data directory
+          under provider-manifests.
+        </p>
+      )}
+    </fieldset>
+  );
+}
+
 function SpatialMeasurementFields({
   projectId,
   kind,
@@ -1764,6 +1881,127 @@ export function ScientificNodeControls({
   onChange: (value: Parameters) => void;
 }) {
   const base = `/projects/${projectId}`;
+  if (nodeType === "reviewed_model_runtime")
+    return (
+      <ModelSelectionField
+        projectId={projectId}
+        value={string(parameters.selection_id)}
+        onChange={(selection) =>
+          onChange({
+            ...parameters,
+            selection_id: selection?.id ?? "",
+            selection_sha256: selection?.content_sha256 ?? "",
+          })
+        }
+      />
+    );
+  if (nodeType === "provider_manifest_snapshot")
+    return (
+      <ProviderManifestSnapshotFields
+        parameters={parameters}
+        onChange={onChange}
+      />
+    );
+  if (nodeType === "research_reproducibility_package")
+    return (
+      <Records
+        queryKey={[base, "saved", "reproducibility-proofs"]}
+        load={async (offset, signal) => {
+          const proofs = await listResearchProofs(projectId, signal);
+          return proofs.slice(offset, offset + PAGE).map((proof) => ({
+            id: proof.proof_sha256,
+            label: "Verified proof · " + proof.proof_sha256.slice(0, 12),
+          }));
+        }}
+        render={(options) => (
+          <SourceSelect
+            label="Pinned proof"
+            value={string(parameters.proof_sha256)}
+            options={options}
+            onChange={(proof_sha256) =>
+              onChange({ ...parameters, proof_sha256 })
+            }
+          />
+        )}
+      />
+    );
+  if (nodeType === "paired_model_comparison")
+    return (
+      <Records
+        queryKey={[base, "saved", "paired-model-comparisons"]}
+        load={async (offset, signal) => {
+          const page = await request<
+            {
+              id: string;
+              task: string;
+              status: string;
+              content_sha256: string | null;
+            }[]
+          >(
+            base +
+              "/paired-model-comparisons?limit=" +
+              PAGE +
+              "&offset=" +
+              offset +
+              "&completed_only=true",
+            { signal },
+          );
+          return page.map((item) => ({
+            id: item.id,
+            label: item.task + " · " + item.id.slice(0, 8),
+            digest: item.content_sha256 ?? "",
+          }));
+        }}
+        render={(options) => (
+          <SourceSelect
+            label="Paired model comparison"
+            value={string(parameters.comparison_id)}
+            options={options}
+            onChange={(id) =>
+              onChange({
+                ...parameters,
+                comparison_id: id,
+                comparison_sha256:
+                  options.find((item) => item.id === id)?.digest ?? "",
+              })
+            }
+          />
+        )}
+      />
+    );
+  if (nodeType === "reviewed_study_design")
+    return (
+      <Records
+        queryKey={[base, "saved", "study-design"]}
+        load={async (offset, signal) => {
+          const page = await listStudyDesigns(
+            projectId,
+            offset / PAGE + 1,
+            signal,
+          );
+          return page.items.map((record) => ({
+            id: record.id,
+            label: `${record.snapshot.declaration.title} · r${record.revision} · ${record.id.slice(0, 8)}`,
+            digest: record.content_sha256,
+          }));
+        }}
+        render={(options) => (
+          <SourceSelect
+            label="Study design revision"
+            value={string(parameters.design_revision_id)}
+            options={options}
+            onChange={(id) =>
+              onChange({
+                ...parameters,
+                design_revision_id: id,
+                design_sha256:
+                  options.find((item) => item.id === id)?.digest ?? "",
+              })
+            }
+          />
+        )}
+      />
+    );
   if (nodeType === "mesh_surface_preview" || nodeType === "point_cloud_preview")
     return (
       <SpatialMeasurementFields

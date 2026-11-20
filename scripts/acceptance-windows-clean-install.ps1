@@ -10,6 +10,7 @@ param(
     [string]$LineageVerificationPath = '',
     [string]$ExpectedInitialSchemaRevision = '',
     [string]$SpatialWorkflowNodePath = '',
+    [switch]$ResearchWorkflowAcceptance,
     [switch]$HostedStandardUserWebView2,
     [switch]$VerifyPreviousInstallerRejectsUpgradedProfile,
     [switch]$PreviousInstallerSupportsIsolatedAcceptance,
@@ -26,12 +27,16 @@ Set-StrictMode -Version Latest
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'lib\windows-clean-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-spatial-webview2-acceptance.ps1')
+. (Join-Path $PSScriptRoot 'lib\windows-research-webview2-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-standard-user-webview2.ps1')
 
 if (-not $DisposableTest -and -not $PlanOnly) {
     throw 'Refusing destructive MSI acceptance. Supply -DisposableTest on a disposable Windows VM/machine, or use -PlanOnly.'
 }
 if ($DisposableTest -and $PlanOnly) { throw '-DisposableTest and -PlanOnly are mutually exclusive.' }
+if ($ResearchWorkflowAcceptance -and -not $SpatialWorkflowNodePath) {
+    throw 'Installed research journeys require -SpatialWorkflowNodePath for the packaged WebView2 driver.'
+}
 if ($HostedStandardUserWebView2) {
     if (-not $DisposableTest -or -not $SpatialWorkflowNodePath) {
         throw 'A hosted standard WebView2 user requires disposable installed spatial acceptance.'
@@ -143,8 +148,10 @@ $report = [ordered]@{
     frontend_backend_connectivity = New-ReefVisionEvidenceResult
     webview2 = New-ReefVisionEvidenceResult
     spatial_workflow = if ($SpatialWorkflowNodePath) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Packaged spatial WebView2 acceptance not requested' }
+    research_workflow = if ($ResearchWorkflowAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Packaged research WebView2 acceptance not requested' }
     schema_migration = New-ReefVisionEvidenceResult
     model_policy = New-ReefVisionEvidenceResult
+    provider_manifests = New-ReefVisionEvidenceResult
     sam2_live = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real SAM 2.1 packaged runtime acceptance not requested' }
     external_annotation_imports = New-ReefVisionEvidenceResult
     camera_jpeg = if ($CameraFixturePath) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real camera JPEG fixture not supplied' }
@@ -558,6 +565,36 @@ try {
         $report.lineage_preflight = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Verified and staged $LineageProfile at revision $($LineageFixture.revision); live database SHA-256 $((Get-FileHash -LiteralPath $stagedLineage.database -Algorithm SHA256).Hash.ToLowerInvariant()); backup remained outside the live profile."
     }
 
+    # Seed a declarative record before launch so the installed candidate, not
+    # a source checkout, proves the inspect-only discovery boundary. Earlier
+    # upgrade baselines may ignore this directory; only the final candidate is
+    # allowed to mark provider_manifests PASS below.
+    $providerManifestDirectory = Join-Path $DataRoot 'provider-manifests'
+    $providerManifestPath = Join-Path $providerManifestDirectory 'local-acceptance.json'
+    New-Item -ItemType Directory -Path $providerManifestDirectory -Force | Out-Null
+    $providerManifestJson = @{
+        manifest_version = 1
+        provider_id = 'local_acceptance'
+        display_name = 'Installed acceptance manifest'
+        provider_version = '0.1.0'
+        description = 'Declarative installed-app acceptance record with no executable adapter.'
+        capabilities = @('image_semantic_segmentation', 'cpu_inference')
+        supported_tasks = @('relative_depth')
+        availability = @{
+            status = 'unavailable'
+            reason = 'Installed acceptance deliberately supplies no executable adapter.'
+        }
+        code_license = 'Apache-2.0'
+        weight_license = 'No weights supplied'
+        notes = @('Inspection only')
+    } | ConvertTo-Json -Depth 8
+    [IO.File]::WriteAllText(
+        $providerManifestPath,
+        $providerManifestJson,
+        [Text.UTF8Encoding]::new($false)
+    )
+    $providerManifestHash = (Get-FileHash -LiteralPath $providerManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+
     $initialInstaller = if ($PreviousInstallerPath -and -not $SkipUpgrade) { $PreviousInstallerPath } else { $InstallerPath }
     $exitCode = Run-Msi -Action Install -PackageOrProduct $initialInstaller -LogName 'install.log' -TargetRoot $InstallRoot
     if (-not (Test-Path (Join-Path $InstallRoot 'ReefVision.exe'))) { throw 'Installed ReefVision.exe is missing.' }
@@ -595,6 +632,13 @@ try {
                 $spatialPort = Wait-BackendPort -Path (Join-Path $SpatialDataRoot 'runtime\backend-port.txt') -DesktopProcess $spatialDesktop -BackendLogPath (Join-Path $SpatialDataRoot 'logs\backend.log')
                 $spatialApi = "http://127.0.0.1:$spatialPort/api/v1"
                 $null = Assert-AcceptancePackagedBackend -Api $spatialApi -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision
+                if ($ResearchWorkflowAcceptance) {
+                    $report.research_workflow = Get-ReefVisionResearchJourneyEvidence {
+                        Invoke-ReefVisionResearchJourneyAcceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot `
+                            -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id `
+                            -ExpectedBrowserSid $browserSid -BrowserArtifactsDirectory $browserArtifacts
+                    }
+                }
                 Invoke-ReefVisionSpatialWebView2Acceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot `
                     -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id `
                     -ExpectedBrowserSid $browserSid -BrowserArtifactsDirectory $browserArtifacts
@@ -618,6 +662,9 @@ try {
                     Wait-ReefVisionWebView2DebugClosure -Port $debugPort
                 }
             }
+        }
+        if ($ResearchWorkflowAcceptance -and $report.research_workflow.status -eq 'NOT RUN') {
+            $report.research_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $report.spatial_workflow.detail
         }
         Save-Report
     }
@@ -903,6 +950,41 @@ try {
         $lineageFinal = Assert-AcceptanceLineageEvidence -Api $api -Fixture $LineageFixture -ProjectId $LineageFixture.project_id
         $report.lineage_final_evidence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Candidate $ProductVersion migrated the historical profile to $($finalMigration.current_schema_revision) without changing project $($LineageFixture.project_id) or its $(@($lineageFinal).Count) declared evidence IDs and hashes."
     }
+    $providerManifestResponse = Invoke-RestMethod "$api/advanced-providers/manifests"
+    $localProviderRecords = @(
+        foreach ($manifest in $providerManifestResponse) {
+            if ($null -ne $manifest -and
+                $manifest.PSObject.Properties['provider_id'] -and
+                $manifest.provider_id -eq 'local_acceptance') {
+                $manifest
+            }
+        }
+    )
+    if ($localProviderRecords.Count -ne 1) {
+        throw "Installed provider catalog returned $($localProviderRecords.Count) local acceptance records instead of one."
+    }
+    $localProviderRecord = $localProviderRecords[0]
+    if ($localProviderRecord.source_kind -ne 'local_manifest' -or
+        $localProviderRecord.discovery_status -ne 'valid' -or
+        $localProviderRecord.source_filename -ne 'local-acceptance.json' -or
+        $localProviderRecord.source_sha256 -cne $providerManifestHash -or
+        $localProviderRecord.execution_supported -ne $false -or
+        $localProviderRecord.execution_surface -ne 'blocked') {
+        throw "Installed provider manifest lost its inspect-only identity: $($localProviderRecord | ConvertTo-Json -Depth 6 -Compress)"
+    }
+    $providerPreflight = Invoke-RestMethod "$api/projects/$projectId/advanced-providers/local_acceptance/preflight" -Method Post -ContentType 'application/json' -Body (@{
+        task = 'relative_depth'
+        device = 'cpu'
+        prompt_fields = @{ image_id = 'must-not-execute' }
+    } | ConvertTo-Json -Depth 6)
+    $inspectOnlyBlockers = @($providerPreflight.blockers | Where-Object { [string]$_ -match 'inspect-only' })
+    if ($providerPreflight.ready -ne $false -or
+        $providerPreflight.execution_supported -ne $false -or
+        $providerPreflight.execution_surface -ne 'blocked' -or
+        $inspectOnlyBlockers.Count -lt 1) {
+        throw "Installed local provider preflight did not fail closed: $($providerPreflight | ConvertTo-Json -Depth 6 -Compress)"
+    }
+    $report.provider_manifests = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed packaged API discovered local-acceptance.json at SHA256 $providerManifestHash and returned inspect-only blocked preflight."
     $persisted = Invoke-RestMethod "$api/projects/$projectId"
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
@@ -1024,6 +1106,9 @@ try {
     }
     if ($report.spatial_workflow.status -eq 'FAIL') {
         throw $report.spatial_workflow.detail
+    }
+    if ($report.research_workflow.status -eq 'FAIL') {
+        throw $report.research_workflow.detail
     }
 } catch {
     $report.failure_reason = $_.Exception.Message

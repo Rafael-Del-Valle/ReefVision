@@ -34,6 +34,7 @@ from reefvision.schemas.models import (
     PoseLandmarkSchemaUpdateRequest,
     RegisterModelFromRunRequest,
 )
+from reefvision.services.model_runtime import ModelRuntimeService, pinned_job_settings
 from reefvision.services.pose_schemas import definition_for_revision
 from reefvision.services.segmentation_models import SegmentationModelService
 from reefvision.storage.datasets import canonical_json_sha256
@@ -679,6 +680,17 @@ class SemanticModelService(SegmentationModelService):
             )
         if model.provider_name.strip().casefold() == SLEAP_NN_PROVIDER_ID:
             raise ValidationError(SLEAP_NN_ACTIONABLE_RETIREMENT)
+        pinned: dict[str, Any] = {}
+        if payload.runtime_selection_id is not None:
+            selection = ModelRuntimeService(self.session, self.settings).verify(
+                project_id, payload.runtime_selection_id, model_id=model.id
+            )
+            pinned = pinned_job_settings(selection)
+            for key in ("device", "confidence_threshold", "iou_threshold"):
+                if key in payload.model_fields_set and getattr(payload, key) != pinned[key]:
+                    raise ConflictError(
+                        "The requested inference settings differ from the reviewed selection"
+                    )
         images = self.images.list_by_ids(payload.image_ids)
         if len(images) != len(payload.image_ids):
             raise ValidationError("One or more requested images do not exist")
@@ -704,6 +716,7 @@ class SemanticModelService(SegmentationModelService):
                     if payload.iou_threshold is not None
                     else self.settings.inference_default_iou
                 ),
+                **pinned,
             },
         )
         self.session.add(job)

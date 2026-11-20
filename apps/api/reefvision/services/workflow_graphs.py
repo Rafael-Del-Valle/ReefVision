@@ -12,6 +12,7 @@ from reefvision.db.models import (
     DatasetVersion,
     LabelClass,
     ModelRegistration,
+    ModelRuntimeSelection,
     Project,
     VideoAsset,
 )
@@ -193,10 +194,14 @@ _ACTIONS: dict[str, str] = {
     "ecology_coral_growth": "Calculate 2D coral growth from reviewed correspondence.",
     "ecology_verified_analysis": "Recalculate a reviewed ecological analysis.",
     "paired_growth_contrast": "Compare two planned UTC visits from reviewed growth.",
+    "reviewed_study_design": "Replay the pinned study design and its reviewed growth evidence.",
+    "paired_model_comparison": "Recompute the paired independent-group comparison.",
+    "research_reproducibility_package": "Reopen the verified research package proof.",
     "ecology_event_summary": "Calculate or replay an event summary from reviewed evidence.",
     "scientific_comparison": "Calculate or replay agreement on frozen held-out evidence.",
     "research_publication_figure": "Create or reopen a figure and table with its source.",
     "image_acquisition_quality": "Measure acquisition quality and retain reviewable image flags.",
+    "field_capture_reconcile": "Reconcile the sealed field batch and retain its review receipt.",
     "temporal_reefpose_dataset": "Freeze or load a recording-group-split temporal pose dataset.",
     "temporal_reefpose_training": "Train or replay a native temporal pose checkpoint.",
     "temporal_reefpose_inference": "Refine video pose observations for explicit review.",
@@ -418,6 +423,7 @@ class WorkflowGraphService:
     ) -> WorkflowGraphValidationResponse:
         issues: list[WorkflowGraphIssue] = []
         referenced_model_ids: set[str] = set()
+        reviewed_models: dict[str, str] = {}
         referenced_dataset_ids: set[str] = set()
         referenced_video_ids: set[str] = set()
 
@@ -480,6 +486,26 @@ class WorkflowGraphService:
                     issues,
                     referenced_dataset_ids,
                 )
+            elif node.node_type == "reviewed_model_runtime":
+                selection = self.session.get(
+                    ModelRuntimeSelection, str(node.parameters.get("selection_id", ""))
+                )
+                if (
+                    selection is None
+                    or selection.project_id != project_id
+                    or selection.content_sha256 != node.parameters.get("selection_sha256")
+                ):
+                    issues.append(
+                        self._issue(
+                            "error",
+                            "reviewed_model_missing",
+                            "Choose a matching reviewed configuration from this project",
+                            node_id=node.node_id,
+                        )
+                    )
+                else:
+                    reviewed_models[node.node_id] = selection.model_id
+                    referenced_model_ids.add(selection.model_id)
             elif node.node_type == "registered_model_source":
                 self._validate_model_source(
                     project_id,
@@ -621,18 +647,22 @@ class WorkflowGraphService:
             source_node = nodes.get(model_edges[0].source_node_id)
             if source_node is not None and source_node.node_type == "register_trained_model":
                 continue
-            if source_node is None or source_node.node_type != "registered_model_source":
+            if source_node is None or source_node.node_type not in {
+                "registered_model_source",
+                "reviewed_model_runtime",
+            }:
                 issues.append(
                     self._issue(
                         "error",
                         "model_source_required",
-                        "Model input must come from a registered-model source or training "
-                        "registration node",
+                        "Choose a registered model, a reviewed runtime or a training registration.",
                         node_id=node.node_id,
                     )
                 )
                 continue
-            model_id = str(source_node.parameters.get("model_id", ""))
+            model_id = reviewed_models.get(source_node.node_id) or str(
+                source_node.parameters.get("model_id", "")
+            )
             model = self.session.get(ModelRegistration, model_id) if model_id else None
             if (
                 model is not None
