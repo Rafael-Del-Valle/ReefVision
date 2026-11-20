@@ -92,7 +92,9 @@ function Wait-ReefVisionWebView2DebugEndpoint {
     param(
         [Parameter(Mandatory = $true)][int]$Port,
         [Parameter(Mandatory = $true)][int]$DesktopProcessId,
-        [string]$FailureEvidencePath
+        [string]$FailureEvidencePath,
+        [string]$AttachmentEvidencePath,
+        [string]$ExpectedBrowserSid
     )
 
     $timer = [System.Diagnostics.Stopwatch]::StartNew()
@@ -120,6 +122,7 @@ function Wait-ReefVisionWebView2DebugEndpoint {
                     pid = $listener.OwningProcess
                     owner_name = $null
                     owner_parent_pid = $null
+                    owner_sid = $null
                     expected_owner = $false
                 }
                 $observedListeners += $observation
@@ -131,6 +134,11 @@ function Wait-ReefVisionWebView2DebugEndpoint {
                     $observation.owner_name = $owner.Name
                     $observation.owner_parent_pid = $owner.ParentProcessId
                     $observation.expected_owner = $owner.Name -ieq 'msedgewebview2.exe' -and $owner.ParentProcessId -eq $DesktopProcessId
+                    if ($observation.expected_owner -and $ExpectedBrowserSid) {
+                        $browserOwner = Invoke-CimMethod -InputObject $owner -MethodName GetOwnerSid
+                        $observation.owner_sid = $browserOwner.Sid
+                        $observation.expected_owner = $browserOwner.ReturnValue -eq 0 -and $browserOwner.Sid -eq $ExpectedBrowserSid
+                    }
                 }
                 if (-not $observation.expected_owner) {
                     throw "The listener on port $Port does not belong to this acceptance WebView2 process."
@@ -161,6 +169,10 @@ function Wait-ReefVisionWebView2DebugEndpoint {
                     if ($endpoint -notmatch "^ws://127[.]0[.]0[.]1:$Port/devtools/browser/[a-f0-9-]+$") {
                         $probe.result = 'unexpected_endpoint'
                         throw 'WebView2 reported an unexpected debugger endpoint.'
+                    }
+                    if ($AttachmentEvidencePath) {
+                        [ordered]@{port=$Port; desktop_pid=$DesktopProcessId; listeners=$observedListeners} |
+                            ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $AttachmentEvidencePath -Encoding utf8
                     }
                     return $endpoint
                 }
@@ -213,11 +225,13 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
         [Parameter(Mandatory = $true)][string]$EvidenceRoot,
         [Parameter(Mandatory = $true)][string]$Api,
         [Parameter(Mandatory = $true)][int]$DebugPort,
-        [Parameter(Mandatory = $true)][int]$DesktopProcessId
+        [Parameter(Mandatory = $true)][int]$DesktopProcessId,
+        [string]$ExpectedBrowserSid
     )
 
     $endpoint = Wait-ReefVisionWebView2DebugEndpoint -Port $DebugPort -DesktopProcessId $DesktopProcessId `
-        -FailureEvidencePath (Join-Path $EvidenceRoot 'spatial-webview2-startup.log')
+        -FailureEvidencePath (Join-Path $EvidenceRoot 'spatial-webview2-startup.log') `
+        -AttachmentEvidencePath (Join-Path $EvidenceRoot 'spatial-webview2-attached.log') -ExpectedBrowserSid $ExpectedBrowserSid
     $playwrightRoot = Join-Path $RepositoryRoot 'apps\web'
     $playwrightCli = Join-Path $playwrightRoot 'node_modules\@playwright\test\cli.js'
     $output = Join-Path $EvidenceRoot 'spatial-playwright'
