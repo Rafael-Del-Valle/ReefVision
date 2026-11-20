@@ -22,7 +22,7 @@ Candidate target: `2.0`
 | 1.1 | Current-field interpolation, streamlines, and trajectory context | verified | Research → Environmental context → Currents |
 | 1.1 | Offline-pinned NOAA/Copernicus and tidal/lunar context | verified | Research → Scientific records → Environmental context |
 | 1.1 | Project Exchange, backup, upgrade, and rollback integrity | verified | Project menu → Project Exchange / Backup |
-| 1.1 | Projective density on a declared surveyed reference plane | blocked | Research → Density → Projective reference plane |
+| 1.1 | Projective density on a declared surveyed reference plane | blocked | Project → Data & annotation → Computed Metrics → Open verified mask coverage |
 | 1.1 | Repeated-measures scientific analysis | blocked | Research → Analyses → Repeated measures |
 | 1.1 | Versioned scientific records, provenance, and computed metrics | verified | Open project → Research → Scientific records |
 | 1.1 | Telemetry and geographic measurements with uncertainty | verified | Research → Scientific records → Geographic measurements |
@@ -183,18 +183,19 @@ Evidence:
 - Target: `1.1`
 - Status: `blocked`
 - Dependencies: `rv11-telemetry-geographic-measurements`
-- Entry point: Research → Density → Projective reference plane
+- Entry point: Project → Data & annotation → Computed Metrics → Open verified mask coverage
 - Workflow Builder: `required`
 - Missing input: An approved projective-density method, surveyed reference-plane fixtures with scale/calibration uncertainty, expected density values, and independent reviewer thresholds.
 
 Acceptance checks:
 
 - **blocked** — Compare computed projective density with independently surveyed plane area and propagate calibration/reference uncertainty. (`rv11-projective-density-check`)
+- **verified** — Calculate density over a declared synthetic reference plane, exclude other classes and targets outside the region, then compare the standalone result, two saved graph runs and CSV. (`rv11-projective-density-fixture-check`)
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: A declared homography gives known clipped physical areas and rejects a transform crossing the horizon. — `apps/api/reefvision/tests/test_computed_mask_coverage.py` (`rv11-density-fixture-source`)
+- `browser`: Two eligible masks over 1.40625 cm² give 1.422222 masks/cm² in the normal workspace, saved workflow and CSV. The clipped target union is 0.9375 cm². — `apps/web/tests/e2e/projective-density-live.spec.ts` (`rv11-density-fixture-browser`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -720,10 +721,12 @@ Acceptance checks:
 
 - **blocked** — Record condition against a versioned biological rubric with source evidence, independent review, disagreement/adjudication, revision, uncertainty, and export/replay. (`rv14-biological-condition-check`)
 - **verified** — Record an observation under a frozen, investigator-supplied rubric, attribute disagreement and adjudication, reopen the original, and export a report with its revision history and stated uncertainty. (`rv14-condition-project-engineering-check`)
+- **verified** — Restore multiple frozen rubric versions, verify historical workflow reports against the observation ledger and their producing nodes, and preserve original revision identities across two exchanges. (`rv14-condition-exchange-ledger-check`)
 
 Evidence:
 
 - `source`: Record an observation under a frozen, investigator-supplied rubric, attribute disagreement and adjudication, reopen the original, and export a report with its revision history and stated uncertainty. — `apps/api/reefvision/tests/test_spatial_condition_v14.py` (`rv14-condition-project-source`)
+- `source`: Restore multiple frozen rubric versions, verify historical workflow reports against the observation ledger and their producing nodes, and preserve original revision identities across two exchanges. — `apps/api/reefvision/tests/test_spatial_condition_v14.py` (`rv14-condition-exchange-ledger`)
 - `browser`: Record an observation under a frozen, investigator-supplied rubric, attribute disagreement and adjudication, reopen the original, and export a report with its revision history and stated uncertainty. — `apps/web/tests/e2e/spatial-condition-live.spec.ts` (`rv14-condition-project-browser`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -787,10 +790,12 @@ Acceptance checks:
 
 - **blocked** — Report change only for reviewed correspondence, compatible frames/units, and pinned measurement revisions with propagated uncertainty. (`rv14-longitudinal-3d-change-check`)
 - **verified** — Enter from Home, import two dated project meshes, compare calibrated geometry, review, save, reopen, run the identical revision twice and export the result with matching source and artifact hashes. (`rv14-longitudinal-project-replay-check`)
+- **verified** — Exchange two acquired meshes, reopen the original comparison and its original receipt, then rerun the saved graph under the restored asset identities with identical measured change and original byte hashes. (`rv14-longitudinal-exchange-receipt-check`)
 
 Evidence:
 
 - `source`: Deterministic comparisons enforce observation chronology, source and calibration fingerprints, frame and registration evidence, specimen correspondence, conservative scale-uncertainty intervals, topology QC, and stale review-bundle rejection. — `apps/api/reefvision/tests/test_spatial_mesh_longitudinal_v14.py` (`rv14-longitudinal-source`)
+- `source`: Exchange two acquired meshes, reopen the original comparison and its original receipt, then rerun the saved graph under the restored asset identities with identical measured change and original byte hashes. — `apps/api/reefvision/tests/test_spatial_mesh_workflow_exchange_v14.py` (`rv14-longitudinal-exchange-receipt`)
 - `browser`: Enter from Home, import two dated project meshes, compare calibrated geometry, review, save, reopen, run the identical revision twice and export the result with matching source and artifact hashes. — `apps/web/tests/e2e/project-spatial-comparison-live.spec.ts` (`rv14-longitudinal-project-replay`)
 - `browser`: Saved Workflow Builder graphs provide contextual registration and organism-correspondence controls while preserving exact transforms, hashes, times and uncertainty in the same node's advanced controls. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-longitudinal-guided-ui`)
 - `windows_installed`: none recorded

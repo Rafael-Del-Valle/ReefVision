@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 test("compares two project originals, reviews identity, reopens and exports the same result", async ({
   desktop: { page, web, api },
 }, info) => {
+  test.setTimeout(90_000);
   const name = `Two synthetic acquisitions ${randomUUID().slice(0, 8)}`;
   const project = await page.request.post(`${api}/projects`, {
     data: { name },
@@ -15,11 +16,14 @@ test("compares two project originals, reviews identity, reopens and exports the 
   await page.addInitScript(() =>
     localStorage.setItem("reefvision.onboarding.dismissed.1.4.0", "true"),
   );
-  async function open() {
+  async function openProject(projectName: string) {
     await page.goto(web);
     await page
-      .getByRole("button", { name: `Open ${name}`, exact: true })
+      .getByRole("button", { name: `Open ${projectName}`, exact: true })
       .click();
+  }
+  async function openWorkflow(projectName: string) {
+    await openProject(projectName);
     await page
       .getByRole("tab", { name: "Video & automation", exact: true })
       .click();
@@ -27,7 +31,7 @@ test("compares two project originals, reviews identity, reopens and exports the 
       .getByRole("tab", { name: "Workflow builder", exact: true })
       .click();
   }
-  await open();
+  await openWorkflow(name);
   const assets = page.getByRole("region", { name: "Project 3D source assets" });
   async function importMesh(filename: string, height: number) {
     const buffer = Buffer.from(`v 0 0 0\nv 1 0 0\nv 0 ${height} 0\nf 1 2 3\n`);
@@ -160,9 +164,21 @@ test("compares two project originals, reviews identity, reopens and exports the 
   );
   await task.getByRole("button", { name: "Save comparison workflow" }).click();
   const saved = await (await saving).json();
-  const filename = info.outputPath("reopened-comparison.json");
-  async function replayAndExport() {
-    await open();
+  async function downloadComparison(filename: string) {
+    const download = page.waitForEvent("download");
+    await page
+      .getByRole("button", { name: "Download 3D comparison JSON", exact: true })
+      .click();
+    const path = info.outputPath(filename);
+    await (await download).saveAs(path);
+    return JSON.parse(await readFile(path, "utf8"));
+  }
+  async function replayAndExport(
+    projectName: string,
+    graphId: string,
+    filename: string,
+  ) {
+    await openWorkflow(projectName);
     const row = page.getByRole("listitem").filter({ hasText: saved.name });
     await row.getByRole("button", { name: "Load", exact: true }).click();
     const queued = page.waitForResponse(
@@ -173,19 +189,80 @@ test("compares two project originals, reviews identity, reopens and exports the 
       .getByRole("button", { name: "Run saved revision", exact: true })
       .click();
     const run = await (await queued).json();
-    expect(run.workflow_graph_record_id).toBe(saved.id);
-    const download = page.waitForEvent("download");
-    await page
-      .getByRole("button", { name: "Download 3D comparison JSON", exact: true })
-      .click();
-    await (await download).saveAs(filename);
-    const artifact = JSON.parse(await readFile(filename, "utf8"));
+    expect(run.workflow_graph_record_id).toBe(graphId);
+    const artifact = await downloadComparison(filename);
     expect(artifact.workflow_run_id).toBe(run.id);
-    expect(artifact.payload_json).toEqual(standalone);
     return artifact;
   }
-  const first = await replayAndExport();
-  const second = await replayAndExport();
+  const first = await replayAndExport(name, saved.id, "first-comparison.json");
+  const second = await replayAndExport(
+    name,
+    saved.id,
+    "reopened-comparison.json",
+  );
+  expect(first.payload_json).toEqual(standalone);
+  expect(second.payload_json).toEqual(standalone);
   expect(second.workflow_run_id).not.toBe(first.workflow_run_id);
   expect(second.payload_sha256).toBe(first.payload_sha256);
+
+  await openProject(name);
+  await page.getByRole("tab", { name: "Data & annotation" }).click();
+  await page.getByRole("tab", { name: "Interoperability" }).click();
+  await page.getByRole("button", { name: "Create exchange ZIP" }).click();
+  const link = page.getByRole("link", { name: "Download ZIP" }).first();
+  const href = await link.getAttribute("href", { timeout: 20_000 });
+  expect(href).toBeTruthy();
+  const archive = await page.request.get(href!);
+  expect(archive.ok(), await archive.statusText()).toBeTruthy();
+  await page.getByLabel("Project exchange ZIP").setInputFiles({
+    name: "spatial-comparison.reefvision.zip",
+    mimeType: "application/zip",
+    buffer: await archive.body(),
+  });
+  await page.getByRole("button", { name: "Inspect safely" }).click();
+  const restoredName = name + " restored";
+  await page.getByLabel("Imported project name (optional)").fill(restoredName);
+  const importing = page.waitForResponse((response) =>
+    response.url().endsWith("/exchange-packages/import"),
+  );
+  await page.getByRole("button", { name: "Import as new project" }).click();
+  const response = await importing;
+  expect(response.status(), await response.text()).toBe(201);
+  const restored = await response.json();
+  const mapped = restored.package.options_json.id_map;
+  expect(restored.project_id).not.toBe(projectId);
+  await expect(
+    page.getByText("Imported project", { exact: true }),
+  ).toBeVisible();
+
+  await openWorkflow(restoredName);
+  await page
+    .getByRole("button", { name: /^succeeded ·/ })
+    .first()
+    .click();
+  const historical = await downloadComparison("archived-comparison.json");
+  expect(historical.payload_json).toEqual(standalone);
+  expect(historical.payload_sha256).toBe(first.payload_sha256);
+
+  const local = await replayAndExport(
+    restoredName,
+    mapped[saved.id],
+    "restored-replay.json",
+  );
+  expect(local.payload_json.delta_surface_area_m2).toBe(
+    standalone.delta_surface_area_m2,
+  );
+  expect(local.payload_json.delta_surface_area_scale_interval_m2).toEqual(
+    standalone.delta_surface_area_scale_interval_m2,
+  );
+  expect(local.payload_json.provenance.review_evidence_bundle).toMatchObject({
+    project_id: restored.project_id,
+    before_spatial_source_asset_id: mapped[before.id],
+    after_spatial_source_asset_id: mapped[after.id],
+    before_source_payload_sha256: before.sha256,
+    after_source_payload_sha256: after.sha256,
+  });
+  expect(local.payload_json.provenance.review_evidence_bundle_sha256).not.toBe(
+    standalone.provenance.review_evidence_bundle_sha256,
+  );
 });

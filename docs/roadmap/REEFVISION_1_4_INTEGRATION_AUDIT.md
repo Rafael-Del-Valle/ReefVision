@@ -139,3 +139,41 @@ reference material, independent review and tolerances in the respective
 inventory rows. The Windows clean-install job exercises the packaged WebView2
 using a per-process disposable profile and a loopback connection. Its result
 belongs to the SHA identified by the installer provenance.
+
+### Project Exchange and Windows source-shell verification
+
+At `5333e84e9`, an exchanged mesh-comparison run keeps the original project,
+asset identifiers and receipt. Running the imported graph creates a receipt
+for the new local assets. On the fixture, both results measured 0.5 m² and
+the original bytes and scale interval agreed. The desktop test exercised
+**Create exchange ZIP → Inspect safely → Import as new project → Recent runs**
+and downloaded both receipts. Before the fix the ordinary import changed
+the old receipt's asset identifiers. After the fix the original and historical
+payloads both had SHA-256
+`d8d73ab3672b7429f9519063851541ffcc9c60d0236e2a365868137d569c7b68`.
+Replay in the restored project produced
+`05e3f592ef2090ec7bb227641dbc2566a3ee162d87de1711737e20f4c4a994c8`.
+
+At `d54e742d7` imported condition reports must match the frozen rubric,
+observation ledger and saved producing node. Two rubric versions in the
+same project restore successfully. A later metadata revision can mark
+future replay stale while the saved observation still opens. Tests exercised
+two consecutive exchanges for comparison and condition and verified the
+original-to-restored identifiers across both imports.
+
+A source-built Windows Tauri shell at `5f79aad60` executed all four spatial
+journeys in its own WebView2 using a marked disposable profile and a
+restricted PATH. The native suite recorded 4 passes and 0 skips on
+`b14_condition_0041`. Its comparison spec predates the expanded Exchange
+journey. Separately, all four source Chromium journeys including Exchange
+passed against the integrated backend. The full standard CI and all three
+hosted Windows jobs also passed on the incoming #79 head `bf727f458`.
+[Incoming CI](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44660806843)
+and [incoming Windows results](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44660806808).
+
+The 1.1 projected-plane fixture at `646c8ec54` exercised **Computed Metrics
+→ Open verified mask coverage**, a saved graph, a second execution and CSV.
+Two eligible masks over 1.40625 cm² gave 1.422222 masks/cm² in all three
+exports. The clipped target union was 0.9375 cm². A wrong-class mask and an
+out-of-region mask contributed zero to the numerator. Surveyed reference
+area, calibration uncertainty and independent thresholds remain open.
