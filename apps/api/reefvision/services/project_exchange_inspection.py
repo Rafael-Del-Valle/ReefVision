@@ -418,6 +418,32 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                     path.split("/", 1)[0] in {"exchanges", "exchange-import"} for path in paths
                 ):
                     raise ValidationError("Exchange generated file destinations overlap")
+            if not errors and source_project_rows:
+                from reefvision.services.project_exchange_paired_models_v15 import (
+                    validate_paired_models_exchange,
+                )
+                from reefvision.storage.segmentation_metric_masks import MAX_MASK_PNG_BYTES
+
+                source_record = source_project_rows[0]
+                prefix = source_record["storage_root"].rstrip("/") + "/"
+                raster_members = {row["source_relative_path"]: row["path"] for row in generated}
+
+                def read_raster(path: str) -> bytes:
+                    if not path.startswith(prefix) or path[len(prefix) :] not in raster_members:
+                        raise ValidationError("A required paired comparison raster is missing")
+                    member = raster_members[path[len(prefix) :]]
+                    with archive.open(member) as stream:
+                        data = stream.read(MAX_MASK_PNG_BYTES + 1)
+                    if len(data) > MAX_MASK_PNG_BYTES:
+                        raise ValidationError("Paired raster is too large")
+                    return data
+
+                validate_paired_models_exchange(
+                    source_record["id"],
+                    section_rows,
+                    (manifest.get("origin") or {}).get("id_map", {}),
+                    read_raster=read_raster,
+                )
     except (zipfile.BadZipFile, OSError, ValueError, TypeError, KeyError, ValidationError) as exc:
         errors.append(f"Archive could not be inspected: {exc}")
 

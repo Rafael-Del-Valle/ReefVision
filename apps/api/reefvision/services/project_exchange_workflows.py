@@ -28,6 +28,7 @@ from reefvision.services.project_exchange_paired_growth import (
     PAIRED_GROWTH_TYPE,
     remap_paired_growth_parameters,
 )
+from reefvision.services.project_exchange_paired_models_v15 import remap_paired_models_parameters
 from reefvision.services.project_exchange_study_v15 import remap_study_parameters
 from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
@@ -188,6 +189,10 @@ def restore_workflow_provenance(
                     )
                 elif node_type == "reviewed_study_design":
                     node["parameters"] = remap_study_parameters(source["parameters"], id_map)
+                elif node_type == "paired_model_comparison":
+                    node["parameters"] = remap_paired_models_parameters(
+                        source["parameters"], id_map
+                    )
                 else:
                     node["parameters"] = _restore_parameters(
                         node_type, node["parameters"], digest_map
@@ -218,6 +223,10 @@ def restore_workflow_provenance(
                 )
             elif node.node_type == "reviewed_study_design":
                 node.parameters_json = remap_study_parameters(
+                    source_nodes[node.id]["parameters_json"], id_map
+                )
+            elif node.node_type == "paired_model_comparison":
+                node.parameters_json = remap_paired_models_parameters(
                     source_nodes[node.id]["parameters_json"], id_map
                 )
             else:

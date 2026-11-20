@@ -72,7 +72,7 @@ from reefvision.db.models.pose_training_dataset import (
 )
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.project_exchange import ProjectExchangePackageResponse
-from reefvision.services.project_exchange import MANIFEST_NAME, ProjectExchangeService
+from reefvision.services.project_exchange import MANIFEST_NAME, ProjectExchangeService, _row
 from reefvision.services.project_exchange_field_v15 import (
     FIELD_EXCHANGE_FORMAT,
     FIELD_ORIGIN,
@@ -88,6 +88,7 @@ from reefvision.services.project_exchange_integrated import (
     has_integrated_records,
     integrated_records,
 )
+from reefvision.services.project_exchange_paired_models_v15 import paired_comparison_raster_paths
 from reefvision.services.project_exchange_v15 import FORMAT_VERSION as RESEARCH_FORMAT_VERSION
 from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, has_v15_records
 from reefvision.services.project_exchange_workflows import is_spatial_workflow_graph
@@ -779,6 +780,35 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             if bool(package.options_json.get("include_generated_artifacts", False))
             else []
         )
+        raster_paths = paired_comparison_raster_paths(
+            {
+                name: [_row(row) for row in records.get(name, [])]
+                for name in ("jobs", "dataset_version_items", "prediction_proposals")
+            }
+        )
+        seen_generated = {descriptor["source_relative_path"] for descriptor, _ in generated}
+        prefix = project.storage_root.rstrip("/") + "/"
+        for managed, digest in sorted(raster_paths.items()):
+            if not managed.startswith(prefix):
+                raise ValidationError("Paired raster is outside its project")
+            relative = managed[len(prefix) :]
+            if relative in seen_generated:
+                continue
+            path = resolve_managed_project_path(self.settings, managed)
+            if _file_sha256(path) != digest:
+                raise ValidationError("Paired raster changed before export")
+            generated.append(
+                (
+                    {
+                        "kind": "generated",
+                        "source_relative_path": relative,
+                        "path": f"generated/{relative}",
+                        "sha256": digest,
+                        "size_bytes": path.stat().st_size,
+                    },
+                    path,
+                )
+            )
         manifest["telemetry_sidecars"] = [descriptor for descriptor, _ in telemetry_sidecars]
         manifest["generated_artifacts"] = [descriptor for descriptor, _ in generated]
         manifest["import_policy"] = {
