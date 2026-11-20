@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
+
+from reefvision.schemas.temporal_reefpose import ReefPoseSourceGrouping
 
 PoseActiveLearningSelectionUnit = Literal["frame", "clip"]
 PoseActiveLearningSelectionMode = Literal[
@@ -44,6 +46,15 @@ class PoseActiveLearningRoundCreateRequest(BaseModel):
     )
     weights: PoseActiveLearningScoreWeights = Field(default_factory=PoseActiveLearningScoreWeights)
     created_by: str | None = Field(default=None, max_length=100)
+    grouping: ReefPoseSourceGrouping | None = None
+
+    @model_validator(mode="after")
+    def require_one_grouped_track(self) -> PoseActiveLearningRoundCreateRequest:
+        if self.grouping is not None and len(self.track_ids) != 1:
+            raise ValueError(
+                "Choose exactly one source track when declaring its animal and recording"
+            )
+        return self
 
 
 class PoseActiveLearningRoundResponse(BaseModel):

@@ -1896,6 +1896,7 @@ export function VideoTrackingWorkspace({
               projectId={project.id}
               videoId={selectedVideo.id}
               activeCandidateId={activePoseActiveLearningCandidate?.id ?? null}
+              selectedTrack={selectedTrack ?? undefined}
               onOpenCandidate={(candidate) => {
                 setActivePoseActiveLearningCandidate(candidate);
                 setSelectedTrackId(candidate.video_track_id);

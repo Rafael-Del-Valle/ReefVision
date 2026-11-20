@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections import Counter
 from itertools import pairwise
 from typing import Any
+from unicodedata import normalize
 
+from pydantic import ValidationError as SchemaError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -23,7 +25,11 @@ from reefvision.db.models import (
     VideoTrack,
 )
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
-from reefvision.schemas.temporal_reefpose import TemporalPointRead, TemporalSource
+from reefvision.schemas.temporal_reefpose import (
+    ReefPoseSourceGrouping,
+    TemporalPointRead,
+    TemporalSource,
+)
 from reefvision.schemas.videos import VideoTrackKeyframe
 from reefvision.services.pose_schemas import definition_for_revision
 from reefvision.storage.datasets import canonical_json_sha256
@@ -40,6 +46,24 @@ def _group_tokens(metadata: dict[str, Any]) -> list[str]:
         f"group:{metadata[key]}"
         for key in GROUP_FIELDS
         if isinstance(metadata.get(key), str) and metadata[key].strip()
+    ]
+
+
+def _reviewed_group_tokens(study: object) -> list[str]:
+    if not isinstance(study, dict):
+        return []
+    assignment = study.get("study_assignment")
+    if not isinstance(assignment, dict):
+        assignment = {}
+    identifiers = [
+        ("organism", study.get("organism_key")),
+        ("experimental", study.get("experimental_unit_type"), study.get("experimental_unit_id")),
+        ("sampling", assignment.get("sampling_unit_type"), assignment.get("sampling_unit_id")),
+    ]
+    return [
+        "group:" + ":".join(normalize("NFKC", str(value)).strip().casefold() for value in parts)
+        for parts in identifiers
+        if all(isinstance(value, str) and value.strip() for value in parts)
     ]
 
 
@@ -423,7 +447,19 @@ def freeze_source(session: Session, project_id: str, payload: TemporalSource) ->
     ]
     if payload.group_key:
         related_groups.append(f"group:{payload.group_key}")
+    grouping = payload.grouping
+    study = None
+    if grouping:
+        from reefvision.services.ecology_pose_links import EcologyPoseLinkService
+
+        related_groups.extend(grouping.split_tokens())
+        study = EcologyPoseLinkService(session).reviewed_grouping_evidence(
+            video, track.id, set(frames)
+        )
+        related_groups.extend(_reviewed_group_tokens(study))
     return {
+        **({"source_grouping_study": study} if study else {}),
+        **({"source_grouping": grouping.model_dump(mode="json")} if grouping else {}),
         "recording": {
             "id": video.id,
             "name": video.original_filename,
@@ -477,6 +513,8 @@ def frame_training_lineage(
     recordings: dict[str, list[str]] = {}
     datasets = []
     complete = True
+    declared_groups = True
+    uses_declared_groups = False
     for role in ("training", "validation"):
         identifier = metadata.get(f"source_pose_{role}_dataset_id")
         expected = metadata.get(f"source_pose_{role}_dataset_manifest_sha256")
@@ -509,6 +547,18 @@ def frame_training_lineage(
             video = session.get(VideoAsset, item.video_id)
             tags = video.metadata_json if video is not None else {}
             frozen_groups = _group_tokens(provenance)
+            try:
+                declaration = ReefPoseSourceGrouping.model_validate(
+                    provenance.get("source_grouping")
+                )
+            except SchemaError:
+                declared_groups = False
+            else:
+                uses_declared_groups = True
+                frozen_groups.extend(declaration.split_tokens())
+                frozen_groups.extend(
+                    _reviewed_group_tokens(provenance.get("source_grouping_study"))
+                )
             if not frozen_groups:
                 complete = False
             groups.extend(frozen_groups)
@@ -531,11 +581,14 @@ def frame_training_lineage(
         else:
             ancestry = frame_training_lineage(session, parent, visited=visited | {model.id})
             complete &= ancestry["complete"]
+            declared_groups &= ancestry.get("declared_groups", False)
+            uses_declared_groups |= "declared_groups" in ancestry
             datasets.extend(ancestry["datasets"])
             for item in ancestry["recordings"]:
                 recordings.setdefault(item["sha256"], []).extend(item["groups"])
     return {
         "complete": complete,
+        **({"declared_groups": declared_groups} if uses_declared_groups else {}),
         "datasets": datasets,
         "recordings": [
             {"sha256": checksum, "groups": sorted(set(groups))}

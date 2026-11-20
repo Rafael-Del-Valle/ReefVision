@@ -21,7 +21,7 @@ from reefvision.ml.reefpose.model import ReefPoseConfig, ReefPoseS
 from reefvision.ml.reefpose.schema import AnatomySchema, LandmarkDefinition, SkeletonEdge
 
 
-def write_clip(path: Path, index: int) -> None:
+def write_clip(path: Path, index: int, *, centers: list[tuple[int, int]] | None = None) -> None:
     writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), 10, (96, 64))
     if not writer.isOpened():
         raise RuntimeError("The local OpenCV runtime could not write the synthetic MP4")
@@ -29,8 +29,9 @@ def write_clip(path: Path, index: int) -> None:
         for frame in range(12):
             data = np.zeros((64, 96, 3), dtype=np.uint8)
             data[:, :, 0] = 20 * (index + 1)
-            cv2.circle(data, (28 + frame, 32), 8, (130, 180, 190), -1)
-            cv2.circle(data, (40 + frame, 32), 4, (200, 200, 200), -1)
+            left, right = centers[frame] if centers is not None else (28 + frame, 40 + frame)
+            cv2.circle(data, (left, 32), 8, (130, 180, 190), -1)
+            cv2.circle(data, (right, 32), 4, (200, 200, 200), -1)
             writer.write(data)
     finally:
         writer.release()
