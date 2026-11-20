@@ -352,6 +352,12 @@ $Arguments = @(
     $SpecPath,
     "--paths",
     $ApiRoot,
+    "--exclude-module",
+    "sleap",
+    "--exclude-module",
+    "sleap_nn",
+    "--exclude-module",
+    "sleap_io",
     "--collect-submodules",
     "alembic",
     "--collect-submodules",
@@ -565,7 +571,8 @@ if (Test-Path $LegacyTargetExe -PathType Leaf) {
     Remove-Item -LiteralPath $LegacyTargetExe -Force
 }
 
-Copy-Item -LiteralPath $SourceBundle -Destination $PackagedBackendPath -Recurse
+& $VenvPython (Join-Path $PSScriptRoot "stage-desktop-backend.py") $SourceBundle $PackagedBackendPath
+if ($LASTEXITCODE -ne 0) { throw "Staging the frozen desktop backend failed." }
 $StagedPydanticCoreBinaries = @(
     Get-ChildItem `
         -LiteralPath (Join-Path $PackagedBackendPath "_internal\pydantic_core") `
