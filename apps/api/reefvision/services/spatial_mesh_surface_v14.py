@@ -426,11 +426,22 @@ def measure_mesh_preview(
             volume_qc_warnings.add("enclosed_volume_requires_closed_oriented_nondegenerate_patch")
             continue
         try:
-            raw_volume = abs(
-                spatial_mesh_volume_v14.signed_enclosed_volume_mesh_units(
-                    points, patch_faces[patch]
+            source_volume_underflowed = False
+            try:
+                raw_volume = abs(
+                    spatial_mesh_volume_v14.signed_enclosed_volume_mesh_units(
+                        points, patch_faces[patch]
+                    )
                 )
-            )
+            except ValueError as exc:
+                if str(exc) != "Enclosed mesh volume underflowed numeric precision":
+                    raise
+                if scale <= 1:
+                    raise
+                # The source volume is genuinely positive but too small for
+                # binary64. A larger calibration scale may recover it below.
+                raw_volume = 0.0
+                source_volume_underflowed = True
             # Scaling first with scale**3 can underflow even when the
             # calibrated result is representable. Multiply in stages.
             calibrated_volume = raw_volume * scale * scale * scale
@@ -462,7 +473,16 @@ def measure_mesh_preview(
                 if recovered_volume > 0:
                     calibrated_volume = recovered_volume
                     volume_qc_warnings.add("enclosed_volume_source_unit_numeric_recovery")
-        except (ValueError, OverflowError):
+                elif source_volume_underflowed:
+                    raise ValueError("Enclosed mesh volume underflowed numeric precision")
+        except ValueError as exc:
+            if str(exc) == "Enclosed mesh volume underflowed numeric precision":
+                # Do not report a zero or missing volume for known positive
+                # geometry solely because floating-point precision was lost.
+                raise
+            calibrated_volume = float("inf")
+            raw_volume = float("inf")
+        except OverflowError:
             calibrated_volume = float("inf")
             raw_volume = float("inf")
         if not isfinite(calibrated_volume):
