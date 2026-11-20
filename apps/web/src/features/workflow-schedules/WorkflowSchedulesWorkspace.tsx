@@ -31,7 +31,7 @@ const purposes: Record<SchedulePurpose, string> = {
   report: "Report",
 };
 
-const statuses: Record<ScheduleStatus | ScheduleOccurrenceStatus, string> = {
+const statuses: Record<ScheduleStatus, string> = {
   scheduled: "Scheduled",
   paused: "Paused",
   queued: "Queued",
@@ -157,6 +157,7 @@ function ScheduleForm({
           Schedule name
           <input
             required
+            maxLength={200}
             value={name}
             onChange={(event) => setName(event.currentTarget.value)}
           />

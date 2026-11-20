@@ -2,15 +2,6 @@ import { request } from "../../api/client";
 
 export type SchedulePurpose = "acquisition" | "inference" | "qc" | "report";
 
-export type ScheduleStatus =
-  | "scheduled"
-  | "paused"
-  | "queued"
-  | "waiting_previous_run"
-  | "blocked_storage"
-  | "dispatch_failed"
-  | "failed";
-
 export type ScheduleOccurrenceStatus =
   | "queued"
   | "running"
@@ -19,6 +10,14 @@ export type ScheduleOccurrenceStatus =
   | "cancelled"
   | "succeeded"
   | "failed";
+
+export type ScheduleStatus =
+  | "scheduled"
+  | "paused"
+  | "waiting_previous_run"
+  | "blocked_storage"
+  | "dispatch_failed"
+  | ScheduleOccurrenceStatus;
 
 export interface WorkflowSchedule {
   id: string;
