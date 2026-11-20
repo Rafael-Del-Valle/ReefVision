@@ -759,10 +759,7 @@ def test_concave_prism_volume_surface_and_saved_workflow(
     if reference_frame == "shifted_reflected":
         # Preserve geometry but reverse frame handedness and translate every axis.
         # An origin-dependent tetrahedral sum must not distort an enclosed mesh.
-        vertices = [
-            [length - point[0], point[1] - length, point[2] + length]
-            for point in vertices
-        ]
+        vertices = [[length - point[0], point[1] - length, point[2] + length] for point in vertices]
     # Six top triangles tessellate only the U, not its empty central notch.
     top_triangles = [
         (7, 0, 5),
