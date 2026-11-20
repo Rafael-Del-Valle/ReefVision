@@ -333,3 +333,20 @@ scientific workflow acceptance and explicit researcher approval remain HOLD.
 No Workflow Builder operation was added: the verifier is an out-of-band
 offline migration diagnostic, and existing executable typed QC graphs,
 provenance, retries and researcher-review gates were not changed.
+
+## 2026-11-20 — Dense-object browser recovery after list shrink (Track D)
+
+The existing 1.6 editor already bounds dense object rendering, preserves
+selection pins and allows source-position jumps; no replacement browser or
+scientific workflow node is needed. An earlier jump offset could remain above
+the available filtered-document count after annotations were deleted or the
+list changed. The browser previously clamped to only the last record even
+when a full 200-row inspection window remained. It now recovers the last
+available full window for an out-of-range offset, while preserving deliberate
+in-range jumps and any selected objects outside the window. Annotation and
+mask document arrays, saved research evidence, QC decisions and existing typed
+saved Workflow Builder graphs are not modified. Vitest regression cases cover
+the annotation-to-mask boundary, pinned selections, unchanged source arrays
+and an intentional near-end jump. Full frontend/E2E CI and real installed
+Windows usability validation remain required; version 1.6 remains on release
+HOLD for the unrelated Alembic-0038 collision and scientific/packaging gates.

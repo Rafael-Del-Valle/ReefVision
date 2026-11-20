@@ -332,8 +332,49 @@ describe("dense object-browser window", () => {
       boundedDenseObjectRows(annotations, masks, 2, [], [], 999).map(
         (row) => row.position,
       ),
-    ).toEqual([2]);
+    ).toEqual([1, 2]);
     expect(annotations).toEqual([{ id: "a" }, { id: "b" }]);
     expect(masks).toEqual([{ id: "m" }]);
+  });
+
+  it("recovers a full final window when previously mounted objects were deleted", () => {
+    const annotations = Array.from({ length: 350 }, (_, index) => ({
+      id: `box-${index}`,
+    }));
+    const masks = Array.from({ length: 50 }, (_, index) => ({
+      id: `mask-${index}`,
+    }));
+    const selectedAnnotationIds = ["box-3"];
+    const selectedMaskIds = ["mask-49"];
+    // This state was valid when the image contained more than 500 objects.
+    // Deleting/filtering objects must not strand the reviewer on one row.
+    const rows = boundedDenseObjectRows(
+      annotations,
+      masks,
+      200,
+      selectedAnnotationIds,
+      selectedMaskIds,
+      500,
+    );
+    expect(rows).toHaveLength(201);
+    expect(rows[0].position).toBe(3);
+    expect(rows[1].position).toBe(200);
+    expect(rows[200].position).toBe(399);
+    expect(rows.filter((row) => row.item.id === "mask-49")).toHaveLength(1);
+    expect(rows.filter((row) => row.item.id === "box-3")).toHaveLength(1);
+    expect(selectedAnnotationIds).toEqual(["box-3"]);
+    expect(selectedMaskIds).toEqual(["mask-49"]);
+    expect(annotations).toHaveLength(350);
+    expect(masks).toHaveLength(50);
+  });
+
+  it("keeps valid near-end jump positions anchored instead of shifting full pages", () => {
+    const annotations = Array.from({ length: 420 }, (_, index) => ({
+      id: `box-${index}`,
+    }));
+    const rows = boundedDenseObjectRows(annotations, [], 200, [], [], 400);
+    expect(rows).toHaveLength(20);
+    expect(rows[0].position).toBe(400);
+    expect(rows[19].position).toBe(419);
   });
 });

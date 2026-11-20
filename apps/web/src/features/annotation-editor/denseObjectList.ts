@@ -48,9 +48,14 @@ export function boundedDenseObjectRows<
   const limit = Number.isFinite(requestedLimit)
     ? Math.min(total, Math.max(0, Math.floor(requestedLimit)))
     : 0;
-  const start = Number.isFinite(requestedStart)
-    ? Math.min(Math.max(0, total - 1), Math.max(0, Math.floor(requestedStart)))
+  // A saved deep-list window may outlive deletions or a new filtered result.
+  // Recover a full final window rather than rendering only the last record;
+  // keep valid in-range jumps anchored at their requested source position.
+  const normalizedStart = Number.isFinite(requestedStart)
+    ? Math.max(0, Math.floor(requestedStart))
     : 0;
+  const start =
+    normalizedStart >= total ? Math.max(0, total - limit) : normalizedStart;
   const end = Math.min(total, start + limit);
   const annotationStart = Math.min(start, annotations.length);
   const annotationEnd = Math.min(end, annotations.length);
