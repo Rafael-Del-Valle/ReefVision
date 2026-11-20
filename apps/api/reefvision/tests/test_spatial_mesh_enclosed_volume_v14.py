@@ -11,7 +11,9 @@ from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
-from reefvision.services.spatial_mesh_volume_v14 import signed_enclosed_volume_mesh_units
+from reefvision.services.spatial_mesh_volume_v14 import (
+    signed_enclosed_volume_mesh_units,
+)
 from reefvision.tests.test_annotations import create_project
 
 TETRA_FACES = [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]]
