@@ -45,7 +45,7 @@ interface RestartWitness {
 }
 
 const graphLabel = "QC review queue from a frozen dataset";
-const intervalSeconds = 20;
+const intervalSeconds = 30;
 
 async function checked<T>(response: APIResponse | Response, status: number) {
   expect(response.status(), await response.text()).toBe(status);
@@ -290,7 +290,9 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
     await openProject(page, web, fixture.projectName);
     await page.getByRole("tab", { name: "Schedules", exact: true }).click();
     await expect(
-      page.getByRole("heading", { name: "Schedules", exact: true }),
+      page
+        .getByRole("region", { name: "Schedules", exact: true })
+        .getByRole("heading", { name: "Schedules", exact: true }),
     ).toBeVisible();
   }
   async function fillSchedule(
