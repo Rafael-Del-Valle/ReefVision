@@ -7,6 +7,10 @@ param(
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 
+function Set-ProbeRestrictedPath {
+    $env:PATH = @((Join-Path $env:SystemRoot 'System32'),$env:SystemRoot,(Join-Path $env:SystemRoot 'System32\Wbem'),(Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0')) -join ';'
+}
+
 if ($PSCmdlet.ParameterSetName -eq 'Launch') {
     $params = Get-Content -LiteralPath $LaunchContext -Raw | ConvertFrom-Json
     $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
@@ -15,6 +19,10 @@ if ($PSCmdlet.ParameterSetName -eq 'Launch') {
         throw 'The credential launcher must run under the designated standard user.'
     }
     . (Join-Path $PSScriptRoot 'lib/windows-clean-acceptance.ps1')
+    Set-ProbeRestrictedPath
+    foreach ($runtime in 'node','npm','python','python3','rustc','cargo') {
+        if (Get-Command $runtime -ErrorAction SilentlyContinue) { throw 'A development runtime reached the standard-user PATH.' }
+    }
     $desktop = Invoke-ReefVisionIsolatedEnvironment -DataRoot $params.profile -AdditionalEnvironment @{
         REEFVISION_WINDOWS_ACCEPTANCE = '1'
         REEFVISION_ACCEPTANCE_DATA_DIR = $params.profile
@@ -34,6 +42,9 @@ if ($PSCmdlet.ParameterSetName -eq 'Launch') {
     $pending = $params.receipt + '.tmp'
     $identityReport | ConvertTo-Json | Set-Content -LiteralPath $pending
     Move-Item -LiteralPath $pending -Destination $params.receipt
+    # The credential-launched helper holds the temporary user's registry hive
+    # loaded while the GUI and its browser child use it.
+    $desktop.WaitForExit()
     exit
 }
 
@@ -144,7 +155,7 @@ try {
     if (-not (Test-Path -LiteralPath $desktopPath -PathType Leaf)) { throw 'The exact probe MSI did not install ReefVision.exe in its disposable path.' }
 
     $password = ConvertTo-SecureString ('xRv!7' + [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')) -AsPlainText -Force
-    $user = New-LocalUser -Name $userName -Password $password -Description 'Disposable ReefVision hosted WebView2 verification'
+    $user = New-LocalUser -Name $userName -Password $password -Description 'Disposable ReefVision WebView2 probe'
     Add-LocalGroupMember -SID 'S-1-5-32-545' -Member $user
     $sid = $user.SID.Value
     $cred = [System.Management.Automation.PSCredential]::new("$env:COMPUTERNAME\$userName",$password)
@@ -159,7 +170,7 @@ try {
     } | ConvertTo-Json | Set-Content -LiteralPath $context
 
     # Use absolute executables; only the Playwright driver has access to Node.
-    $env:PATH = @((Join-Path $env:SystemRoot 'System32'),$env:SystemRoot,(Join-Path $env:SystemRoot 'System32\Wbem'),(Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0')) -join ';'
+    Set-ProbeRestrictedPath
     $argsLine = '-NoLogo -NoProfile -NonInteractive -File "{0}" -LaunchContext "{1}"' -f (Join-Path $bootstrap 'launch.ps1'),$context
     $launcher = Start-Process -FilePath $credentialShell -ArgumentList $argsLine -Credential $cred -LoadUserProfile -PassThru -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput (Join-Path $handshake 'launcher.stdout') -RedirectStandardError (Join-Path $handshake 'launcher.stderr')
     Wait-ProbeFile -Path $ack -Seconds 35
