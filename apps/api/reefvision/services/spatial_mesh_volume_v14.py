@@ -11,6 +11,14 @@ from fractions import Fraction
 from math import fsum, isfinite
 
 
+class EnclosedVolumeUnderflowError(ValueError):
+    """A nonzero signed source volume that rounds to zero in binary64."""
+
+    def __init__(self, signed_volume: Fraction) -> None:
+        super().__init__("Enclosed mesh volume underflowed numeric precision")
+        self.signed_volume = signed_volume
+
+
 def signed_enclosed_volume_mesh_units(
     points: list[tuple[float, float, float]],
     faces: list[list[int]],
@@ -51,12 +59,14 @@ def signed_enclosed_volume_mesh_units(
                 + exact_u[2] * (exact_v[0] * exact_w[1] - exact_v[1] * exact_w[0])
             )
         if exact_six_volume:
+            exact_volume = exact_six_volume / 6
             try:
-                recovered = float(exact_six_volume / 6)
+                recovered = float(exact_volume)
             except OverflowError as exc:
                 raise ValueError("Enclosed mesh volume overflowed") from exc
             if not isfinite(recovered):
                 raise ValueError("Enclosed mesh volume overflowed")
-            if recovered != 0.0:
-                return recovered
+            if recovered == 0.0:
+                raise EnclosedVolumeUnderflowError(exact_volume)
+            return recovered
     return volume

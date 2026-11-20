@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from fractions import Fraction
 from math import sqrt
 from typing import cast
 
@@ -12,6 +13,7 @@ from fastapi.testclient import TestClient
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
 from reefvision.services.spatial_mesh_volume_v14 import (
+    EnclosedVolumeUnderflowError,
     signed_enclosed_volume_mesh_units,
 )
 from reefvision.tests.test_annotations import create_project
@@ -365,3 +367,110 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
         hashes.append(artifacts[0]["payload_sha256"])
     assert len(hashes[0]) == 64
     assert hashes[0] == hashes[1]
+
+
+@pytest.mark.parametrize("reverse_winding", [False, True])
+def test_tilted_planar_mesh_cannot_gain_volume_in_calibration(reverse_winding: bool) -> None:
+    vertices = [[0.0, 0.0, 0.0], [1.0, 2.0, 3.0], [3.0, 1.0, 4.0], [4.0, 3.0, 7.0]]
+    assert all(z == x + y for x, y, z in vertices)
+    faces = [list(reversed(face)) for face in TETRA_FACES] if reverse_winding else TETRA_FACES
+    params = _params(vertices=vertices, faces=faces)
+    params["meters_per_unit"] = 999_998.1
+    result = measure_mesh_preview(**params)
+    assert result["surface_area_m2"] > 0
+    assert result["enclosed_volume_m3"] is None
+    assert result["qc_warnings"] == ["enclosed_volume_zero_or_underflow"]
+
+
+@pytest.mark.parametrize("reverse_winding", [False, True])
+@pytest.mark.parametrize(("edge", "scale"), [(1e-110, 1.0), (1e-120, 1e6)])
+def test_unrepresentable_positive_volume_fails_standalone_and_saved_graph(
+    client: TestClient, reverse_winding: bool, edge: float, scale: float
+) -> None:
+    """Do not publish a false zero for closed volume below binary64 range."""
+    exact_volume = Fraction(edge) ** 3 / 6
+    assert exact_volume > 0
+    assert float(exact_volume) == 0.0
+    assert float(exact_volume * Fraction(scale) ** 3) == 0.0
+    assert float(Fraction(edge) ** 2 * Fraction(scale) ** 2) > 0
+    vertices = [
+        [0.0, 0.0, 0.0],
+        [edge, 0.0, 0.0],
+        [0.0, edge, 0.0],
+        [0.0, 0.0, edge],
+    ]
+    faces = [list(reversed(face)) for face in TETRA_FACES] if reverse_winding else TETRA_FACES
+    with pytest.raises(
+        EnclosedVolumeUnderflowError, match="volume underflowed numeric precision"
+    ) as error:
+        signed_enclosed_volume_mesh_units([tuple(vertex) for vertex in vertices], faces)
+    assert error.value.signed_volume == (-exact_volume if reverse_winding else exact_volume)
+
+    # A truly zero-volume source must still be allowed through the direct kernel.
+    planar = [
+        (0.0, 0.0, 0.0),
+        (edge, 0.0, 0.0),
+        (0.0, edge, 0.0),
+        (edge, edge, 0.0),
+    ]
+    assert signed_enclosed_volume_mesh_units(planar, faces) == 0.0
+    planar_params = _params(vertices=[list(vertex) for vertex in planar], faces=faces)
+    planar_params["meters_per_unit"] = scale
+    planar_preview = measure_mesh_preview(**planar_params)
+    assert planar_preview["surface_area_m2"] > 0
+    assert planar_preview["enclosed_volume_m3"] is None
+    assert "enclosed_volume_zero_or_underflow" in planar_preview["qc_warnings"]
+    representable_edge = 1e-100
+    representable = [
+        (0.0, 0.0, 0.0),
+        (representable_edge, 0.0, 0.0),
+        (0.0, representable_edge, 0.0),
+        (0.0, 0.0, representable_edge),
+    ]
+    assert abs(signed_enclosed_volume_mesh_units(representable, faces)) == pytest.approx(
+        float(Fraction(representable_edge) ** 3 / 6), rel=1e-12, abs=0
+    )
+
+    project_id = str(create_project(client, "Subnormal volume integrity")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = _params(vertices=vertices, faces=faces)
+    params["meters_per_unit"] = scale
+    params["specimen_id"] = "synthetic-unverified-volume-limit"
+    response = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert response.status_code == 400, response.text
+    assert "volume underflowed numeric precision" in response.text
+
+    graph = {
+        "graph_id": "mesh-volume-underflow-integrity-v14",
+        "name": "Reject unrepresentable positive source volume",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert not process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "failed"
+        assert "volume underflowed numeric precision" in detail.json()["run"]["error_message"]
+        assert not any(
+            artifact["data_type"] == "mesh_measurement_preview"
+            for artifact in detail.json()["artifacts"]
+        )

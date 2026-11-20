@@ -7,6 +7,7 @@ import hashlib
 import json
 from collections import Counter
 from datetime import UTC
+from fractions import Fraction
 from math import dist, fsum, isfinite
 from typing import Any
 
@@ -435,37 +436,21 @@ def measure_mesh_preview(
             # Scaling first with scale**3 can underflow even when the
             # calibrated result is representable. Multiply in stages.
             calibrated_volume = raw_volume * scale * scale * scale
-            # Conversely, the source-unit tetrahedron sum can underflow
-            # before a large (>1) calibration scale is applied. Recover only
-            # this zero-source-volume case by re-evaluating in calibrated
-            # coordinates; retain a QC warning and provisional status.
-            if raw_volume == 0 and scale > 1:
-                patch_indices = sorted(patch_vertex_indices[patch])
-                local_index = {source: index for index, source in enumerate(patch_indices)}
-                # Preserve the fixed XYZ tuple type for the strict typed
-                # volume kernel rather than producing variable-length tuples.
-                calibrated_points = [
-                    (
-                        points[source][0] * scale,
-                        points[source][1] * scale,
-                        points[source][2] * scale,
-                    )
-                    for source in patch_indices
-                ]
-                calibrated_faces = [
-                    [local_index[source] for source in face] for face in patch_faces[patch]
-                ]
-                recovered_volume = abs(
-                    spatial_mesh_volume_v14.signed_enclosed_volume_mesh_units(
-                        calibrated_points, calibrated_faces
-                    )
-                )
-                if recovered_volume > 0:
-                    calibrated_volume = recovered_volume
-                    volume_qc_warnings.add("enclosed_volume_source_unit_numeric_recovery")
+        except spatial_mesh_volume_v14.EnclosedVolumeUnderflowError as exc:
+            # Apply calibration before rounding the already-computed exact
+            # volume, keeping exact planar zero out of this recovery path.
+            try:
+                calibrated_volume = float(abs(exc.signed_volume) * Fraction(scale) ** 3)
+            except OverflowError:
+                calibrated_volume = float("inf")
+            if calibrated_volume == 0:
+                raise ValueError(
+                    "Enclosed mesh volume underflowed numeric precision after calibration"
+                ) from exc
+            if isfinite(calibrated_volume):
+                volume_qc_warnings.add("enclosed_volume_source_unit_numeric_recovery")
         except (ValueError, OverflowError):
             calibrated_volume = float("inf")
-            raw_volume = float("inf")
         if not isfinite(calibrated_volume):
             patch_volumes_m3.append(None)
             volume_qc_warnings.add("enclosed_volume_numeric_overflow")
