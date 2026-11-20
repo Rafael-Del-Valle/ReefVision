@@ -31,6 +31,7 @@ from reefvision.services.project_exchange_pose import validate_pose_rows
 from reefvision.services.project_exchange_qc_v16 import EVENTS as QC_EVENTS
 from reefvision.services.project_exchange_qc_v16 import SECTIONS as QC_SECTIONS
 from reefvision.services.project_exchange_reports import validate_report_exchange
+from reefvision.services.project_exchange_research_v18 import SECTIONS as RESEARCH_SECTIONS
 from reefvision.services.project_exchange_reviewer_lab_v15 import REVIEWER_LAB_PARENTS
 from reefvision.services.project_exchange_schedules import SECTIONS as SCHEDULE_SECTIONS
 from reefvision.services.project_exchange_temporal_reefpose import validate_temporal_exchange
@@ -129,6 +130,7 @@ def integrated_models() -> dict[str, type[Base]]:
             *QC_SECTIONS,
             *SCHEDULE_SECTIONS,
             *MONITORING_SECTIONS,
+            *RESEARCH_SECTIONS,
         )
     }
 

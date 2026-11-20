@@ -38,7 +38,9 @@ def validate_monitoring_exchange(
     version: str, project_id: str, sections: Rows, origin: Any
 ) -> None:
     present = any(sections.get(name) for name in SECTIONS)
-    if version != FORMAT:
+    if version == "1.8" and not present:
+        return
+    if version not in {FORMAT, "1.8"}:
         if present:
             raise ValidationError(
                 "Local acquisition and monitoring history requires Project Exchange 1.7.1"

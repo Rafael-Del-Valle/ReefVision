@@ -60,6 +60,7 @@ HISTORICAL_ARTIFACT_TYPES = frozenset(
         "acquisition_capture_receipt",
         "monitoring_assessment",
         "monitoring_project_summary",
+        "detectability_assessment",
         PAIRED_GROWTH_TYPE,
         REVIEWER_LAB_TYPE,
     }

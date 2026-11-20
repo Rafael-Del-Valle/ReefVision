@@ -27,6 +27,7 @@ from reefvision.services.project_exchange_field_v15 import (
 )
 from reefvision.services.project_exchange_monitoring_v17 import validate_monitoring_exchange
 from reefvision.services.project_exchange_qc_v16 import QC_FORMATS, validate_qc_exchange
+from reefvision.services.project_exchange_research_v18 import validate_research_format
 from reefvision.services.project_exchange_schedules import validate_schedule_exchange
 from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, validate_v15_exchange
 from reefvision.services.static_comparison import STATIC_COMPARISON_JOB
@@ -254,6 +255,9 @@ def inspect_project_exchange(
                     errors.append("Exchange archive source project ID is invalid")
                 else:
                     try:
+                        validate_research_format(
+                            version, project_id, section_rows, manifest.get("origin")
+                        )
                         validate_v15_exchange(
                             version, project_id, section_rows, manifest.get("origin")
                         )
