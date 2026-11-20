@@ -4,6 +4,24 @@ This is a **test plan**, not evidence that ReefVision 1.4 or 1.5 is validated or
 
 ## 1.4: 3D geometry and longitudinal studies
 
+**Calibrated-volume underflow contract reconciliation (synthetic; exact-head CI pending):**
+A source-coordinate tetrahedron with orthogonal 1e-110-unit edges has a
+strictly positive but binary64-unrepresentable source volume. The direct signed
+volume helper must raise `Enclosed mesh volume underflowed numeric precision`,
+not return a misleading zero. With caller-supplied 1e6 m/unit scaling, the
+measurement service can recompute a positive approximately 1.6667e-313 m³
+volume in calibrated coordinates; it must record
+`enclosed_volume_source_unit_numeric_recovery` and keep calibration and
+specimen identity unverified. With 1e-120-unit edges, even that scaling leaves
+a positive volume below binary64 precision: the direct service must reject it,
+the standalone endpoint must return HTTP 400, and two executions of the same
+persisted typed Workflow Builder graph must fail with **no**
+`mesh_measurement_preview` artifact, in both winding directions. Regressions
+live in `test_spatial_mesh_volume_cubic_scale_underflow_v14.py`. These tests
+reconcile earlier expectations of silent missing values with the newer fail-closed
+volume engine; they do not verify real coral volume, calibration or identity.
+Record final-head CI and human scientific review separately before acceptance.
+
 **Source-coordinate triangle cancellation gate (synthetic, not field validation):**
 Two nearly parallel XYZ triangles with exact source determinants of -1 and -3 must
 produce areas of 0.5 and 1.5 source units squared, even if binary64 cross products
