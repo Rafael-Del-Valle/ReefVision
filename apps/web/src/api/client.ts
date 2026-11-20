@@ -102,6 +102,7 @@ export interface LabelClassUsage {
   class_id: string;
   project_id: string;
   class_name: string;
+  reference_fingerprint: string;
   is_active: boolean;
   archived_at: string | null;
   total_references: number;
@@ -331,6 +332,7 @@ export interface ClassVisibilityScopeState {
   hidden_class_ids: string[];
   updated_at: string | null;
   updated_by_identity: string | null;
+  record_id?: string | null;
 }
 
 export interface ClassVisibilityBundle {
@@ -344,6 +346,9 @@ export interface ClassVisibilityBundle {
 
 export interface ClassVisibilityUpdatePayload {
   hidden_class_ids: string[];
+  /** Explicit null creates only when absent; a timestamp updates that revision. */
+  expected_updated_at?: string | null;
+  expected_record_id?: string | null;
 }
 
 export interface AnnotationDraftPayload {
@@ -1382,6 +1387,55 @@ export interface ReviewQueueItemPage {
   pages: number;
 }
 
+export type ReviewQueueBulkAction = "start" | "skip" | "return" | "complete";
+
+export interface ReviewQueueBulkResponse {
+  queue_id: string;
+  action: ReviewQueueBulkAction;
+  changed_count: number;
+  items: ReviewQueueItem[];
+  requires_researcher_review: boolean;
+}
+
+export type ReviewQueueEventType =
+  | "comment"
+  | "assign"
+  | "unassign"
+  | "triage_start"
+  | "triage_skip"
+  | "triage_return"
+  | "triage_complete";
+
+export interface ReviewQueueEvent {
+  id: string;
+  review_queue_id: string;
+  review_queue_item_id: string;
+  project_id: string;
+  client_request_id: string;
+  event_type: ReviewQueueEventType;
+  actor: string;
+  comment: string | null;
+  assignee: string | null;
+  created_at: string;
+}
+
+export interface ReviewQueueEventsPage {
+  items: ReviewQueueEvent[];
+  total: number;
+  page: number;
+  page_size: number;
+  current_assignee: string | null;
+  requires_researcher_review: boolean;
+}
+
+export interface ReviewQueueEventCreate {
+  client_request_id: string;
+  event_type: "comment" | "assign" | "unassign";
+  actor: string;
+  comment?: string;
+  assignee?: string;
+}
+
 export type DatasetSplit = "train" | "validation" | "test" | "unassigned";
 export type DatasetSplitMethod = "none" | "manual" | "random" | "group_random";
 
@@ -1898,7 +1952,23 @@ export async function deleteLabelClass(classId: string): Promise<void> {
 
 export async function mergeLabelClass(
   classId: string,
-  payload: { target_class_id: string },
+  payload: {
+    target_class_id: string;
+    expected_usage_counts?: Record<string, number>;
+    expected_usage_fingerprint?: string;
+    expected_target_identity?: {
+      name: string;
+      class_index: number;
+      scientific_name: string | null;
+      state_name: string | null;
+    };
+    expected_source_identity?: {
+      name: string;
+      class_index: number;
+      scientific_name: string | null;
+      state_name: string | null;
+    };
+  },
 ): Promise<LabelClassMergeResponse> {
   return request<LabelClassMergeResponse>(`/classes/${classId}/merge`, {
     method: "POST",
@@ -2068,9 +2138,16 @@ export async function saveClassVisibilityPreference(
 export async function deleteClassVisibilityPreference(
   projectId: string,
   layerType: ClassVisibilityLayerType,
+  expectedUpdatedAt?: string,
+  expectedRecordId?: string | null,
 ): Promise<void> {
+  const params = new URLSearchParams();
+  if (expectedUpdatedAt) params.set("expected_updated_at", expectedUpdatedAt);
+  if (expectedRecordId) params.set("expected_record_id", expectedRecordId);
+  const query = params.toString();
+  const revision = query ? `?${query}` : "";
   return request<void>(
-    `/projects/${projectId}/class-visibility/preferences/${layerType}`,
+    `/projects/${projectId}/class-visibility/preferences/${layerType}${revision}`,
     {
       method: "DELETE",
     },
@@ -2094,9 +2171,16 @@ export async function saveProjectClassVisibilityDefault(
 export async function deleteProjectClassVisibilityDefault(
   projectId: string,
   layerType: ClassVisibilityLayerType,
+  expectedUpdatedAt?: string,
+  expectedRecordId?: string | null,
 ): Promise<void> {
+  const params = new URLSearchParams();
+  if (expectedUpdatedAt) params.set("expected_updated_at", expectedUpdatedAt);
+  if (expectedRecordId) params.set("expected_record_id", expectedRecordId);
+  const query = params.toString();
+  const revision = query ? `?${query}` : "";
   return request<void>(
-    `/projects/${projectId}/class-visibility/defaults/${layerType}`,
+    `/projects/${projectId}/class-visibility/defaults/${layerType}${revision}`,
     {
       method: "DELETE",
     },
@@ -2958,37 +3042,85 @@ export async function getReviewQueueItems(
   );
 }
 
+export async function bulkTriageReviewQueueItems(
+  queueId: string,
+  payload: {
+    item_ids: string[];
+    action: ReviewQueueBulkAction;
+    reason?: string;
+    actor?: string;
+    review_confirmed?: boolean;
+    client_request_id?: string;
+  },
+): Promise<ReviewQueueBulkResponse> {
+  return request<ReviewQueueBulkResponse>(
+    `/review-queues/${queueId}/items/bulk`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export async function getReviewQueueEvents(
+  queueId: string,
+  itemId: string,
+  page = 1,
+  signal?: AbortSignal,
+): Promise<ReviewQueueEventsPage> {
+  return request<ReviewQueueEventsPage>(
+    `/review-queues/${queueId}/items/${itemId}/events?page=${page}`,
+    { signal },
+  );
+}
+
+export async function addReviewQueueEvent(
+  queueId: string,
+  itemId: string,
+  payload: ReviewQueueEventCreate,
+): Promise<ReviewQueueEvent> {
+  return request<ReviewQueueEvent>(
+    `/review-queues/${queueId}/items/${itemId}/events`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
 export async function startReviewQueueItem(
   itemId: string,
+  actor?: string,
 ): Promise<ReviewQueueItem> {
   return request<ReviewQueueItem>(`/review-queue-items/${itemId}/start`, {
     method: "POST",
+    ...(actor ? { body: JSON.stringify({ actor }) } : {}),
   });
 }
 
 export async function completeReviewQueueItem(
   itemId: string,
+  actor: string,
+  reviewConfirmed: true,
 ): Promise<ReviewQueueItem> {
   return request<ReviewQueueItem>(`/review-queue-items/${itemId}/complete`, {
     method: "POST",
+    body: JSON.stringify({ actor, review_confirmed: reviewConfirmed }),
   });
 }
 
 export async function skipReviewQueueItem(
   itemId: string,
   reason: string,
+  actor?: string,
 ): Promise<ReviewQueueItem> {
   return request<ReviewQueueItem>(`/review-queue-items/${itemId}/skip`, {
     method: "POST",
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify({ reason, ...(actor ? { actor } : {}) }),
   });
 }
 
 export async function returnReviewQueueItem(
   itemId: string,
+  actor?: string,
 ): Promise<ReviewQueueItem> {
   return request<ReviewQueueItem>(`/review-queue-items/${itemId}/return`, {
     method: "POST",
+    ...(actor ? { body: JSON.stringify({ actor }) } : {}),
   });
 }
 

@@ -44,6 +44,7 @@ interface QuickConfidenceReviewDialogProps {
   onMarkComplete?: () => void;
   onReviewSaved?: () => void;
   markingComplete?: boolean;
+  completionError?: string | null;
 }
 
 function eligibleProposals(
@@ -72,6 +73,7 @@ export function QuickConfidenceReviewDialog({
   onMarkComplete,
   onReviewSaved,
   markingComplete = false,
+  completionError = null,
 }: QuickConfidenceReviewDialogProps) {
   const queryClient = useQueryClient();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -486,6 +488,12 @@ export function QuickConfidenceReviewDialog({
               Next image
             </button>
           </div>
+          {completionError && (
+            <p className="form-error" role="alert">
+              QC completion was not confirmed. Verify the review state and audit
+              history before retrying. {completionError}
+            </p>
+          )}
           {onMarkComplete && (
             <button
               type="button"

@@ -1,0 +1,558 @@
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+
+import {
+  addReviewQueueEvent,
+  getReviewQueueEvents,
+  type ReviewQueueEventCreate,
+} from "../../api/client";
+
+type EventMutationRequest = {
+  queueId: string;
+  itemId: string;
+  scopeEpoch: number;
+  payload: ReviewQueueEventCreate;
+  commentRevision: number;
+  assigneeRevision: number;
+  actorRevision: number;
+  draftKey: string;
+};
+
+type CoordinationDraft = {
+  actor: string;
+  assignee: string;
+  comment: string;
+  page: number;
+};
+
+const emptyDraft: CoordinationDraft = {
+  actor: "",
+  assignee: "",
+  comment: "",
+  page: 1,
+};
+
+interface Props {
+  queueId: string;
+  itemId: string;
+  onClose: () => void;
+}
+
+function newRequestId(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (value) =>
+    value.toString(16).padStart(2, "0"),
+  ).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+export function ReviewQueueCoordinationPanel({
+  queueId,
+  itemId,
+  onClose,
+}: Props) {
+  const queryClient = useQueryClient();
+  // Bind each request to the queue/item and navigation epoch at submission.
+  // This also protects direct consumers that reuse the panel without a React key.
+  const currentScope = useRef({ queueId, itemId, epoch: 0 });
+  if (
+    currentScope.current.queueId !== queueId ||
+    currentScope.current.itemId !== itemId
+  ) {
+    currentScope.current = {
+      queueId,
+      itemId,
+      epoch: currentScope.current.epoch + 1,
+    };
+  }
+  // The panel can be reused for another review item. Keep unsent research
+  // notes, reviewer attribution and history pagination isolated by item.
+  // A -> B -> A restores A's unsent work without copying it onto B.
+  const draftKey = JSON.stringify([queueId, itemId]);
+  // An approval to abandon unsent scientific notes is valid only for the
+  // navigation epoch in which it was requested. A -> B -> A must not revive
+  // a stale approval merely because the original item key matches again.
+  const closeApprovalScopeKey = `${draftKey}:${currentScope.current.epoch}`;
+  const [drafts, setDrafts] = useState<Record<string, CoordinationDraft>>({});
+  const { actor, assignee, comment, page } = drafts[draftKey] ?? emptyDraft;
+  const updateDraft = (patch: Partial<CoordinationDraft>) => {
+    // A confirmation authorizes discarding only the draft the researcher saw.
+    // Any edit, including a reviewer-label change or edit-then-revert, must
+    // require a fresh explicit decision before closing the panel.
+    setCloseConfirmationKey(null);
+    setDrafts((current) => ({
+      ...current,
+      [draftKey]: { ...(current[draftKey] ?? emptyDraft), ...patch },
+    }));
+  };
+  // A response may arrive after the researcher has begun a different draft.
+  // Retain the exact request for idempotent retries without erasing new work.
+  // A changed reviewer label also makes a draft a distinct researcher's work.
+  const commentRevision = useRef(0);
+  const assigneeRevision = useRef(0);
+  const actorRevision = useRef(0);
+  const [closeConfirmationKey, setCloseConfirmationKey] = useState<
+    string | null
+  >(null);
+  const [discardRequestConfirmationKey, setDiscardRequestConfirmationKey] =
+    useState<string | null>(null);
+  const [failedRequests, setFailedRequests] = useState<
+    Record<string, { request: EventMutationRequest; errorMessage: string }>
+  >({});
+  const events = useQuery({
+    queryKey: ["review_queue_events", queueId, itemId, page],
+    queryFn: ({ signal }) =>
+      getReviewQueueEvents(queueId, itemId, page, signal),
+  });
+  const isCurrentRequest = (request: EventMutationRequest) =>
+    currentScope.current.queueId === request.queueId &&
+    currentScope.current.itemId === request.itemId &&
+    currentScope.current.epoch === request.scopeEpoch;
+  const mutation = useMutation({
+    mutationFn: async (request: EventMutationRequest) => {
+      const result = await addReviewQueueEvent(
+        request.queueId,
+        request.itemId,
+        request.payload,
+      );
+      // A successful HTTP response must still match the exact audit event.
+      // Otherwise keep the UUID for an identical retry; do not clear drafts.
+      if (
+        !result ||
+        result.review_queue_id !== request.queueId ||
+        result.review_queue_item_id !== request.itemId ||
+        result.client_request_id !== request.payload.client_request_id ||
+        result.event_type !== request.payload.event_type ||
+        result.actor !== request.payload.actor ||
+        result.comment !== (request.payload.comment ?? null) ||
+        result.assignee !== (request.payload.assignee ?? null)
+      ) {
+        throw new Error(
+          "Review event response does not match the submitted queue, item, request UUID, actor, or event contents. Retry the identical request before taking another action.",
+        );
+      }
+      return result;
+    },
+    onSuccess: async (_, request) => {
+      // Clear only the matching item and request UUID, even if navigation
+      // changed while the event was in flight. Other uncertain events survive.
+      setFailedRequests((current) => {
+        if (
+          current[request.draftKey]?.request.payload.client_request_id !==
+          request.payload.client_request_id
+        ) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[request.draftKey];
+        return next;
+      });
+      if (
+        isCurrentRequest(request) &&
+        request.payload.event_type === "comment" &&
+        commentRevision.current === request.commentRevision &&
+        actorRevision.current === request.actorRevision
+      ) {
+        setDrafts((current) => ({
+          ...current,
+          [request.draftKey]: {
+            ...(current[request.draftKey] ?? emptyDraft),
+            comment: "",
+          },
+        }));
+      }
+      if (
+        isCurrentRequest(request) &&
+        request.payload.event_type === "assign" &&
+        assigneeRevision.current === request.assigneeRevision &&
+        actorRevision.current === request.actorRevision
+      ) {
+        setDrafts((current) => ({
+          ...current,
+          [request.draftKey]: {
+            ...(current[request.draftKey] ?? emptyDraft),
+            assignee: "",
+          },
+        }));
+      }
+      await queryClient.invalidateQueries({
+        queryKey: ["review_queue_events", request.queueId, request.itemId],
+      });
+    },
+    onError: (error, request) => {
+      // A late failure belongs to its original review item. Keep its UUID
+      // available for an exact replay when the researcher returns to that item.
+      setFailedRequests((current) => ({
+        ...current,
+        [request.draftKey]: {
+          request,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        },
+      }));
+    },
+  });
+
+  const activeFailure = failedRequests[draftKey];
+  const activeFailedRequest = activeFailure?.request ?? null;
+  // An uncertain event may already be committed on the server. A discard
+  // decision is valid only for this exact UUID, item and navigation epoch.
+  const discardRequestKey = activeFailedRequest
+    ? JSON.stringify([
+        draftKey,
+        currentScope.current.epoch,
+        activeFailedRequest.payload.client_request_id,
+      ])
+    : null;
+
+  function submit(eventType: ReviewQueueEventCreate["event_type"]) {
+    const name = actor.trim();
+    const text = comment.trim();
+    const reviewer = assignee.trim();
+    if (!name || activeFailedRequest || mutation.isPending) return;
+    if (eventType === "comment" && !text) return;
+    if (eventType === "assign" && !reviewer) return;
+    const payload: ReviewQueueEventCreate = {
+      client_request_id: newRequestId(),
+      event_type: eventType,
+      actor: name,
+      ...(eventType === "comment" ? { comment: text } : {}),
+      ...(eventType === "assign" ? { assignee: reviewer } : {}),
+    };
+    mutation.mutate({
+      queueId,
+      itemId,
+      scopeEpoch: currentScope.current.epoch,
+      payload,
+      commentRevision: commentRevision.current,
+      assigneeRevision: assigneeRevision.current,
+      actorRevision: actorRevision.current,
+      draftKey,
+    });
+  }
+
+  const locked = mutation.isPending || activeFailedRequest !== null;
+  // Closing unmounts *all* in-memory item drafts and retry UUIDs, not only
+  // those belonging to the currently displayed item. A -> B -> Close must
+  // never silently destroy A's unsent biological note or uncertain event.
+  const hasUnsentDrafts = Object.values(drafts).some(
+    (draft) => draft.comment.trim() || draft.assignee.trim(),
+  );
+  const hasUnresolvedEvents = Object.keys(failedRequests).length > 0;
+  const closeBlocked = mutation.isPending || hasUnresolvedEvents;
+  const unsafeWindowClose =
+    hasUnsentDrafts || hasUnresolvedEvents || mutation.isPending;
+  const [nativeCloseBlocked, setNativeCloseBlocked] = useState(false);
+  const [nativeCloseGuardAttempt, setNativeCloseGuardAttempt] = useState(0);
+  const [nativeCloseGuardUnavailable, setNativeCloseGuardUnavailable] =
+    useState(false);
+  // Tauri window-close requests do not reliably emit browser beforeunload.
+  // Refuse native closure while any biological note or audit UUID is at risk.
+  // Register only while unsafe; an asynchronous late registration is removed
+  // immediately after cleanup so it cannot protect an unrelated workspace.
+  useEffect(() => {
+    if (!unsafeWindowClose || !isTauri()) {
+      setNativeCloseBlocked(false);
+      setNativeCloseGuardUnavailable(false);
+      return;
+    }
+    let active = true;
+    let unlisten: (() => void) | undefined;
+    // Native bridge access and listener registration can fail synchronously
+    // before a Promise exists. Treat both failures like a rejected listener
+    // registration; never discard unsent observations or retry UUIDs.
+    try {
+      void getCurrentWindow()
+        .onCloseRequested((event) => {
+          if (!active) return;
+          event.preventDefault();
+          setNativeCloseBlocked(true);
+        })
+        .then((stop) => {
+          if (active) {
+            unlisten = stop;
+            setNativeCloseGuardUnavailable(false);
+          } else {
+            stop();
+          }
+        })
+        .catch(() => {
+          if (active) setNativeCloseGuardUnavailable(true);
+        });
+    } catch {
+      if (active) setNativeCloseGuardUnavailable(true);
+    }
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, [unsafeWindowClose, nativeCloseGuardAttempt]);
+  // The panel's close button is guarded, but browser reload/window close
+  // bypasses it. Warn before losing unsent biological notes, an in-flight
+  // audit event, or an uncertain idempotency UUID. This is a best-effort
+  // browser confirmation, NOT durable recovery after an abrupt crash.
+  useEffect(() => {
+    if (!unsafeWindowClose) return;
+    const warnOnUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnOnUnload);
+    return () => window.removeEventListener("beforeunload", warnOnUnload);
+  }, [unsafeWindowClose]);
+
+  function requestClose() {
+    // An unresolved request may already have reached the server. Keep its
+    // idempotency UUID available for exact retry or explicit discard.
+    if (closeBlocked) return;
+    if (hasUnsentDrafts) {
+      setCloseConfirmationKey(closeApprovalScopeKey);
+      return;
+    }
+    onClose();
+  }
+
+  return (
+    <section aria-label="Review coordination" className="dashboard-card">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Researcher coordination</p>
+          <h4>Comments and assignments</h4>
+        </div>
+        <button
+          type="button"
+          className="secondary"
+          disabled={closeBlocked}
+          onClick={requestClose}
+        >
+          Close coordination
+        </button>
+      </div>
+      {nativeCloseBlocked && unsafeWindowClose && (
+        <p role="alert">
+          Desktop window close was blocked to protect unsent reviewer notes or
+          an uncertain audit request. Resolve the event or explicitly discard
+          drafts in coordination before closing ReefVision.
+        </p>
+      )}
+      {nativeCloseGuardUnavailable && unsafeWindowClose && (
+        <p role="alert">
+          Desktop close protection could not be registered. Keep ReefVision open
+          until all unsent notes and uncertain requests are resolved.
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setNativeCloseGuardUnavailable(false);
+              setNativeCloseGuardAttempt((attempt) => attempt + 1);
+            }}
+          >
+            Retry desktop close protection
+          </button>
+        </p>
+      )}
+      {closeBlocked && (
+        <p role="status">
+          Finish the pending event or revisit any review item with an uncertain
+          outcome before closing. An interrupted request may already be
+          recorded; its original retry ID must be preserved.
+        </p>
+      )}
+      {closeConfirmationKey === closeApprovalScopeKey && (
+        <div role="group" aria-label="Discard unsent coordination drafts">
+          <p>
+            One or more review items have unsent reviewer notes or assignment
+            drafts. Closing now will discard all of those local drafts without
+            saving an event.
+          </p>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setCloseConfirmationKey(null)}
+          >
+            Continue editing
+          </button>
+          <button type="button" disabled={closeBlocked} onClick={onClose}>
+            Close without saving drafts
+          </button>
+        </div>
+      )}
+      <p className="annotation-helper">
+        Actor labels are self-reported on this local workstation, not verified
+        accounts. Coordination does not approve or verify biological
+        annotations.
+      </p>
+      <label>
+        Your local reviewer label
+        <input
+          aria-label="Your local reviewer label"
+          maxLength={100}
+          value={actor}
+          onChange={(event) => {
+            actorRevision.current += 1;
+            updateDraft({ actor: event.target.value });
+          }}
+        />
+      </label>
+      <p>Assigned reviewer: {events.data?.current_assignee ?? "Unassigned"}</p>
+      <label>
+        Reviewer to assign
+        <input
+          aria-label="Reviewer to assign"
+          maxLength={100}
+          value={assignee}
+          onChange={(event) => {
+            assigneeRevision.current += 1;
+            updateDraft({ assignee: event.target.value });
+          }}
+        />
+      </label>
+      <div className="version-actions">
+        <button
+          type="button"
+          disabled={locked || !actor.trim() || !assignee.trim()}
+          onClick={() => submit("assign")}
+        >
+          Assign reviewer
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          disabled={locked || !actor.trim() || !events.data?.current_assignee}
+          onClick={() => submit("unassign")}
+        >
+          Unassign reviewer
+        </button>
+      </div>
+      <label>
+        Review comment
+        <textarea
+          aria-label="Review comment"
+          maxLength={2000}
+          value={comment}
+          onChange={(event) => {
+            commentRevision.current += 1;
+            updateDraft({ comment: event.target.value });
+          }}
+        />
+      </label>
+      <button
+        type="button"
+        disabled={locked || !actor.trim() || !comment.trim()}
+        onClick={() => submit("comment")}
+      >
+        Add comment
+      </button>
+      {activeFailure && <p role="alert">{activeFailure.errorMessage}</p>}
+      {activeFailedRequest && (
+        <div role="group" aria-label="Failed review event">
+          <p>
+            The outcome may be uncertain. Retry with the same request ID or
+            discard.
+          </p>
+          <button
+            type="button"
+            disabled={mutation.isPending}
+            onClick={() => {
+              setDiscardRequestConfirmationKey(null);
+              mutation.mutate({
+                ...activeFailedRequest,
+                scopeEpoch: currentScope.current.epoch,
+              });
+            }}
+          >
+            Retry event
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            disabled={mutation.isPending}
+            onClick={() => setDiscardRequestConfirmationKey(discardRequestKey)}
+          >
+            Discard failed action
+          </button>
+          {discardRequestKey !== null &&
+            discardRequestConfirmationKey === discardRequestKey && (
+              <div
+                role="group"
+                aria-label="Confirm abandoning uncertain review event"
+              >
+                <p>
+                  This request may already have been recorded. Abandoning its
+                  retry does not undo a server event. Submitting the same
+                  observation again with a new request ID could duplicate
+                  scientific audit history.
+                </p>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setDiscardRequestConfirmationKey(null)}
+                >
+                  Keep retry available
+                </button>
+                <button
+                  type="button"
+                  disabled={mutation.isPending}
+                  onClick={() => {
+                    if (!activeFailedRequest || mutation.isPending) return;
+                    setFailedRequests((current) => {
+                      if (
+                        current[draftKey]?.request.payload.client_request_id !==
+                        activeFailedRequest.payload.client_request_id
+                      ) {
+                        return current;
+                      }
+                      const next = { ...current };
+                      delete next[draftKey];
+                      return next;
+                    });
+                    setDiscardRequestConfirmationKey(null);
+                    mutation.reset();
+                  }}
+                >
+                  Confirm abandon retry
+                </button>
+              </div>
+            )}
+        </div>
+      )}
+      {events.error && <p role="alert">{events.error.message}</p>}
+      {events.isPending && <p role="status">Loading review history...</p>}
+      <ol aria-label="Review event history">
+        {events.data?.items.map((event) => (
+          <li key={event.id}>
+            <strong>{event.actor}</strong> — {event.event_type}
+            {event.comment ? `: ${event.comment}` : ""}
+            {event.assignee ? `: ${event.assignee}` : ""}
+            <small> · {new Date(event.created_at).toLocaleString()}</small>
+          </li>
+        ))}
+      </ol>
+      {events.data && events.data.total > 50 && (
+        <nav aria-label="Review event pages" className="version-actions">
+          <button
+            type="button"
+            className="secondary"
+            disabled={page === 1}
+            onClick={() => updateDraft({ page: Math.max(1, page - 1) })}
+          >
+            Previous events
+          </button>
+          <span>Page {page}</span>
+          <button
+            type="button"
+            className="secondary"
+            disabled={page * 50 >= events.data.total}
+            onClick={() => updateDraft({ page: page + 1 })}
+          >
+            Next events
+          </button>
+        </nav>
+      )}
+    </section>
+  );
+}

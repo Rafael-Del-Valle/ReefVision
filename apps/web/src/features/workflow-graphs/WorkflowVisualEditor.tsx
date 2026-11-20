@@ -18,6 +18,10 @@ import {
   temporalKind,
   TemporalWorkflowControls,
 } from "../video/TemporalReefPoseFields";
+import {
+  QcReviewQueueFields,
+  WorkflowDatasetPicker,
+} from "./QcReviewQueueFields";
 
 interface GraphNode {
   node_id: string;
@@ -203,6 +207,27 @@ export function WorkflowVisualEditor({
 
   const currentGraph = graph;
   const feedbackLoop = asFeedbackLoop(currentGraph.metadata);
+  const qcDatasetEdge = currentGraph.edges.find(
+    (edge) =>
+      edge.target_node_id === selectedNodeId &&
+      edge.target_port_id === "dataset",
+  );
+  const qcDatasetSource = currentGraph.nodes.find(
+    (node) => node.node_id === qcDatasetEdge?.source_node_id,
+  );
+  const guidesQcDataset =
+    selectedNode?.node_type === "dataset_version_source" &&
+    currentGraph.edges.some(
+      (edge) =>
+        edge.source_node_id === selectedNodeId &&
+        edge.source_port_id === "dataset" &&
+        edge.target_port_id === "dataset" &&
+        currentGraph.nodes.some(
+          (node) =>
+            node.node_id === edge.target_node_id &&
+            node.node_type === "qc_review_queue",
+        ),
+    );
 
   function emit(next: GraphShape): void {
     onChange(next as unknown as Record<string, unknown>);
@@ -1159,12 +1184,44 @@ export function WorkflowVisualEditor({
                 </div>
               )}
 
+              {projectId && guidesQcDataset && (
+                <WorkflowDatasetPicker
+                  projectId={projectId}
+                  selected={String(
+                    selectedNode.parameters?.dataset_version_id ?? "",
+                  )}
+                  onSelect={(id) =>
+                    setSelectedParameter("dataset_version_id", id)
+                  }
+                />
+              )}
+              {projectId && selectedNode.node_type === "qc_review_queue" && (
+                <QcReviewQueueFields
+                  projectId={projectId}
+                  datasetVersionId={
+                    qcDatasetEdge
+                      ? String(
+                          qcDatasetSource?.parameters?.dataset_version_id ?? "",
+                        )
+                      : null
+                  }
+                  parameters={selectedNode.parameters ?? {}}
+                  onChange={setSelectedParameter}
+                />
+              )}
               {parameterKeys.length > 0 &&
                 (!projectId ||
                   (!hasScientificNodeControls(selectedNode.node_type) &&
+                    selectedNode.node_type !== "qc_review_queue" &&
                     !temporalKind(selectedNode.node_type))) && (
                   <div className="workflow-parameter-grid">
                     {parameterKeys
+                      .filter(
+                        (key) =>
+                          !projectId ||
+                          !guidesQcDataset ||
+                          key !== "dataset_version_id",
+                      )
                       .filter(
                         (key) =>
                           selectedNode.node_type !== "pose_model_training" ||
