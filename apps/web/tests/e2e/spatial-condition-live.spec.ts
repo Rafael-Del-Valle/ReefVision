@@ -76,8 +76,12 @@ test("records and reopens an attributed condition disagreement from a project as
   ).toBeVisible();
 
   await panel.getByLabel("Reviewer ID").fill("reviewer-2");
-  await panel.getByLabel("Decision", { exact: true }).selectOption("disagree");
-  await panel.getByLabel("Decision label").selectOption("fixture-b");
+  await panel
+    .getByRole("combobox", { name: "Decision", exact: true })
+    .selectOption("disagree");
+  await panel
+    .getByRole("combobox", { name: "Decision label", exact: true })
+    .selectOption("fixture-b");
   await panel.getByLabel("Decided at (local time)").fill("2026-01-02T10:30");
   await panel
     .getByLabel("Decision evidence")
@@ -89,7 +93,10 @@ test("records and reopens an attributed condition disagreement from a project as
   ).toBeVisible();
 
   await open();
-  const assets = page.getByLabel("Project 3D source");
+  const assets = page.getByRole("combobox", {
+    name: "Project 3D source",
+    exact: true,
+  });
   await expect(
     assets.getByRole("option", { name: /condition-fixture\.obj/ }),
   ).toHaveCount(1);

@@ -25,7 +25,11 @@ export function SpatialConditionReview(props: Props) {
   const [open, setOpen] = useState(false);
   return (
     <section aria-label="Biological condition">
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
         Condition review
       </button>
       {open && (
@@ -79,7 +83,7 @@ function ConditionPanel({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [projectId, assetId, offset, reload]);
+  }, [projectId, assetId, metadataRevisionId, offset, reload]);
 
   async function save(operation: () => Promise<ConditionRevision>) {
     setBusy(true);
@@ -335,6 +339,7 @@ function DecisionForm({
         <label>
           Decision
           <select
+            aria-label="Decision"
             value={kind}
             onChange={(event) =>
               setKind(event.currentTarget.value as ConditionDecisionKind)
@@ -354,7 +359,12 @@ function DecisionForm({
         {(kind === "disagree" || kind === "adjudicated") && (
           <label>
             Decision label
-            <select name="choice" defaultValue="" required>
+            <select
+              aria-label="Decision label"
+              name="choice"
+              defaultValue=""
+              required
+            >
               <option value="" disabled>
                 Choose a rubric label
               </option>
