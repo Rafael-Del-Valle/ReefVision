@@ -23,6 +23,10 @@ from reefvision.services.project_exchange_mesh_v14 import (
     restore_mesh_measurement,
     restore_mesh_parameters,
 )
+from reefvision.services.project_exchange_paired_growth import (
+    PAIRED_GROWTH_TYPE,
+    remap_paired_growth_parameters,
+)
 from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
     verify_succeeded_node_artifacts,
@@ -41,6 +45,7 @@ HISTORICAL_ARTIFACT_TYPES = frozenset(
         "connected_branch_preview",
         "coral_branch_growth",
         "mesh_longitudinal_comparison",
+        PAIRED_GROWTH_TYPE,
     }
 )
 
@@ -171,6 +176,10 @@ def restore_workflow_provenance(
                     node["parameters"] = restore_mesh_parameters(
                         node_type, source["parameters"], id_map
                     )
+                elif node_type == PAIRED_GROWTH_TYPE:
+                    node["parameters"] = remap_paired_growth_parameters(
+                        source["parameters"], id_map
+                    )
                 else:
                     node["parameters"] = _restore_parameters(
                         node_type, node["parameters"], digest_map
@@ -194,6 +203,10 @@ def restore_workflow_provenance(
             if node.node_type in MESH_NODE_TYPES:
                 node.parameters_json = restore_mesh_parameters(
                     node.node_type, source_nodes[node.id]["parameters_json"], id_map
+                )
+            elif node.node_type == PAIRED_GROWTH_TYPE:
+                node.parameters_json = remap_paired_growth_parameters(
+                    source_nodes[node.id]["parameters_json"], id_map
                 )
             else:
                 node.parameters_json = _restore_parameters(

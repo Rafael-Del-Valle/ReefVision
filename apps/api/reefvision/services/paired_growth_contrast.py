@@ -3,23 +3,30 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Mapping
 from datetime import UTC, date
 from importlib import import_module
 from math import isfinite, sqrt
 from statistics import mean, stdev
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from reefvision.db.models.ecology_identity_revision import EcologyIdentityRevision
 from reefvision.domain.ecology_lineage_policy import classify_ecological_unit_level
 from reefvision.domain.errors import ConflictError, ValidationError
-from reefvision.schemas.ecology_analysis import GrowthObservation, GrowthResult, GrowthSelection
+from reefvision.schemas.ecology_analysis import (
+    EcologyAnalysisSnapshot,
+    GrowthObservation,
+    GrowthResult,
+    GrowthSelection,
+)
 from reefvision.schemas.paired_growth_contrast import (
     PairedGrowthContrastReport,
     PairedGrowthContrastRequest,
     PairedGrowthDesign,
     PairedGrowthOrganism,
     PairedGrowthReportBody,
+    PairedGrowthRosterIdentity,
     PairedGrowthStatistics,
     PairedGrowthUnit,
 )
@@ -41,7 +48,9 @@ ASSUMPTIONS = [
 ]
 
 
-def _paired_statistics(differences: list[float]) -> PairedGrowthStatistics:
+def _paired_statistics(
+    differences: list[float], *, calculate_t_interval: bool
+) -> PairedGrowthStatistics:
     count = len(differences)
     average = mean(differences) if count else None
     result = PairedGrowthStatistics(
@@ -61,9 +70,16 @@ def _paired_statistics(differences: list[float]) -> PairedGrowthStatistics:
     if not isfinite(error):
         result.interval_status = "precision_unavailable"
         return result
-    result.standard_error = error
     if error == 0:
-        result.interval_status = "zero_between_unit_variation"
+        if any(value != differences[0] for value in differences):
+            result.interval_status = "precision_unavailable"
+        else:
+            result.standard_error = 0.0
+            result.interval_status = "zero_between_unit_variation"
+        return result
+    result.standard_error = error
+    if not calculate_t_interval:
+        result.interval_status = "statistics_runtime_unavailable"
         return result
     try:
         student_t = import_module("scipy.stats").t
@@ -81,7 +97,7 @@ def _paired_statistics(differences: list[float]) -> PairedGrowthStatistics:
 
 
 def _organism_pair(
-    identity: EcologyIdentityRevision,
+    identity: PairedGrowthRosterIdentity,
     baseline: list[GrowthObservation],
     followup: list[GrowthObservation],
 ) -> PairedGrowthOrganism:
@@ -158,8 +174,34 @@ def paired_growth_contrast(
         raise ConflictError(
             "Selected growth evidence has changed; save a freshly reviewed analysis"
         )
-    selection = analysis.snapshot.selection
-    result = analysis.snapshot.result
+    latest = EcologyIdentityService(session)._latest(project_id)
+    roster = (
+        {
+            key: PairedGrowthRosterIdentity.model_validate(latest[key])
+            for key in analysis.snapshot.result.sampling_identity_revisions
+            if key in latest
+        }
+        if isinstance(analysis.snapshot.result, GrowthResult)
+        else {}
+    )
+    return build_paired_growth_report(
+        analysis.project_id, analysis.id, analysis.snapshot, request, roster
+    )
+
+
+def build_paired_growth_report(
+    project_id: UUID,
+    analysis_id: UUID,
+    snapshot: EcologyAnalysisSnapshot,
+    request: PairedGrowthContrastRequest,
+    identities: Mapping[str, PairedGrowthRosterIdentity],
+    *,
+    calculate_t_interval: bool = True,
+) -> PairedGrowthContrastReport:
+    """Replay the calculation from frozen input evidence, including imported history."""
+
+    selection = snapshot.selection
+    result = snapshot.result
     if not isinstance(selection, GrowthSelection) or not selection.sampling_plan:
         raise ValidationError(
             "Paired growth requires a reviewed growth analysis with a sampling plan"
@@ -170,12 +212,11 @@ def paired_growth_contrast(
     dates = {request.baseline_date, request.followup_date}
     if any(not dates.issubset(unit.dates) for unit in selection.sampling_plan):
         raise ValidationError("Both UTC visit dates must be planned for every frozen cohort unit")
-    latest = EcologyIdentityService(session)._latest(project_id)
     parents: dict[str, str] = {}
     roster = {}
     for unit in selection.sampling_plan:
         for key in unit.organism_keys:
-            identity = latest.get(key)
+            identity = identities.get(key)
             if identity is None or identity.revision != result.sampling_identity_revisions.get(key):
                 raise ConflictError("The reviewed growth roster identity revision changed")
             declared_type = identity.experimental_unit_type
@@ -230,14 +271,14 @@ def paired_growth_contrast(
         )
     physical_unit, method = next(iter(measurement), (None, None))
     values = [unit.difference for unit in included if unit.difference is not None]
-    statistics = _paired_statistics(values)
+    statistics = _paired_statistics(values, calculate_t_interval=calculate_t_interval)
     body = PairedGrowthReportBody(
         **statistics.model_dump(),
-        analysis_id=analysis.id,
-        project_id=analysis.project_id,
-        source_sha256=analysis.content_sha256,
-        source_method_version=analysis.snapshot.method_version,
-        source_reviewed_by=analysis.snapshot.reviewed_by,
+        analysis_id=analysis_id,
+        project_id=project_id,
+        source_sha256=request.source_sha256,
+        source_method_version=snapshot.method_version,
+        source_reviewed_by=snapshot.reviewed_by,
         selected_source_record_ids=sorted(row.calibration_evidence_id for row in selection.sources),
         source_exclusions=result.exclusions,
         design=PairedGrowthDesign.model_validate(

@@ -57,6 +57,18 @@ class PairedGrowthContrastRequest(PairedGrowthDesign):
     source_sha256: Digest
 
 
+class PairedGrowthRosterIdentity(BaseModel):
+    """The identity fields needed to check a reviewed roster and pair its visits."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    organism_key: str
+    revision: int
+    parent_colony_key: str | None
+    experimental_unit_type: str | None
+    experimental_unit_id: str | None
+
+
 class PairedGrowthOrganism(BaseModel):
     organism_id: str
     identity_revision: int
