@@ -38,6 +38,9 @@ def _mesh_summary(vertices: list[list[float]], faces: list[list[int]]) -> dict[s
         calibration_evidence=(
             "Background structural parse in source units; physical calibration not supplied"
         ),
+        # A nominal unit scale cannot establish whether the future calibrated
+        # volume will be representable. Structural receipts carry no volume.
+        require_representable_enclosed_volume=False,
     )
     return {
         "source_kind_resolved": "mesh",

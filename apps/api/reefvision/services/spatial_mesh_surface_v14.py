@@ -138,6 +138,7 @@ def measure_mesh_preview(
     source_label: str | None = None,
     surface_path_vertex_pairs: list[list[int]] | None = None,
     surface_trace_vertex_paths: list[list[int]] | None = None,
+    require_representable_enclosed_volume: bool = True,
 ) -> dict[str, Any]:
     if (
         not 3 <= len(vertices) <= spatial_mesh_obj_v14.MAX_VERTICES
@@ -444,10 +445,11 @@ def measure_mesh_preview(
             except OverflowError:
                 calibrated_volume = float("inf")
             if calibrated_volume == 0:
-                raise ValueError(
-                    "Enclosed mesh volume underflowed numeric precision after calibration"
-                ) from exc
-            if isfinite(calibrated_volume):
+                if require_representable_enclosed_volume:
+                    raise ValueError(
+                        "Enclosed mesh volume underflowed numeric precision after calibration"
+                    ) from exc
+            elif isfinite(calibrated_volume):
                 volume_qc_warnings.add("enclosed_volume_source_unit_numeric_recovery")
         except (ValueError, OverflowError):
             calibrated_volume = float("inf")

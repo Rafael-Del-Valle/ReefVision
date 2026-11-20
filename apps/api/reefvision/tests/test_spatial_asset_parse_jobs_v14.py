@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from fractions import Fraction
+from hashlib import sha256
 from pathlib import Path
 from typing import cast
 
@@ -80,6 +82,52 @@ def test_import_queues_background_structural_parse_without_claiming_calibration(
     rejected = client.get(f"/api/v1/projects/{project_id}/spatial/assets/{asset['id']}")
     assert rejected.status_code == 400, rejected.text
     assert "integrity" in rejected.json()["detail"].lower()
+
+
+def test_structural_mesh_parse_allows_recoverable_source_volume_underflow(
+    client: TestClient,
+) -> None:
+    source = (
+        b"v 0 0 0\nv 1e-110 0 0\nv 0 1e-110 0\nv 0 0 1e-110\nf 1 3 2\nf 1 2 4\nf 1 4 3\nf 2 3 4\n"
+    )
+    project_id = str(create_project(client, "Structural parse with provisional volume")["id"])
+    base = f"/api/v1/projects/{project_id}/spatial"
+    asset = _import(client, project_id, "small-closed.obj", source)
+    assert asset["sha256"] == sha256(source).hexdigest()
+    app = cast(FastAPI, client.app)
+    assert process_spatial_source_parse_job(
+        app.state.settings, app.state.session_factory, asset["parse_job_id"]
+    )
+    asset_url = f"{base}/assets/{asset['id']}"
+    reopened = client.get(asset_url)
+    assert reopened.status_code == 200, reopened.text
+    assert reopened.json()["parse_status"] == "succeeded", reopened.text
+    summary = reopened.json()["parse_summary"]
+    assert summary["vertex_count"] == summary["face_count"] == 4
+    assert summary["calibration_applied"] is False
+    assert summary["calibration_verified"] is False
+    assert "enclosed_volume_zero_or_underflow" in summary["qc_warnings"]
+    assert "enclosed_volume_m3" not in summary
+    assert client.get(f"{asset_url}/content").content == source
+
+    params = {
+        "asset_id": asset["id"],
+        "expected_source_payload_sha256": asset["sha256"],
+        "meters_per_unit": 1.0,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic numeric reference",
+    }
+    rejected = client.post(f"{base}/mesh-preview", json=params)
+    assert rejected.status_code == 400, rejected.text
+    assert "volume underflowed numeric precision after calibration" in rejected.text
+
+    accepted = client.post(f"{base}/mesh-preview", json=params | {"meters_per_unit": 1e6})
+    assert accepted.status_code == 200, accepted.text
+    measurement = accepted.json()
+    assert measurement["enclosed_volume_m3"] == float((Fraction(1e-110) * 10**6) ** 3 / 6)
+    assert "enclosed_volume_source_unit_numeric_recovery" in measurement["qc_warnings"]
+    assert measurement["provenance"]["geometry_sha256"] == summary["geometry_sha256"]
+    assert measurement["provenance"]["spatial_source_asset_sha256"] == asset["sha256"]
 
 
 @pytest.mark.parametrize(
