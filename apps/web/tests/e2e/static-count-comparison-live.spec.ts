@@ -85,7 +85,7 @@ test("runs a registered detector against reviewed counts and reopens the saved f
   });
   expect(dataset.status(), await dataset.text()).toBe(201);
   await page.addInitScript(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.4.0", "true"),
+    localStorage.setItem("reefvision.onboarding.dismissed.1.5.0", "true"),
   );
   const openHub = async () => {
     await page.goto(web!);

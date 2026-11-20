@@ -37,7 +37,7 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
     );
   const json = async (url: string) => (await page.request.get(url)).json();
   await page.addInitScript(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.4.0", "true"),
+    localStorage.setItem("reefvision.onboarding.dismissed.1.5.0", "true"),
   );
   const openProject = async () => {
     await page.goto(web);

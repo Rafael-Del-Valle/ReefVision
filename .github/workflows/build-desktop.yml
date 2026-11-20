@@ -79,12 +79,12 @@ jobs:
       - name: Verify Rust desktop tests
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path .desktop/release-1.4.0/backend, .desktop/release-1.4.0/bundled-models | Out-Null
+          New-Item -ItemType Directory -Force -Path .desktop/release-1.5.0/backend, .desktop/release-1.5.0/bundled-models | Out-Null
           npm --prefix apps/web run ui:build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --locked --manifest-path apps/web/src-tauri/Cargo.toml
 
-      - name: Build weight-free 1.4.0 desktop installer
+      - name: Build weight-free 1.5.0 desktop installer
         shell: pwsh
         run: |
           $LogPath = Join-Path $PWD ".desktop\windows-installer-build.log"
@@ -117,7 +117,7 @@ jobs:
           SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           $folder = 'apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi'
-          $payload = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version '1.4.0' -ExpectedFilename 'ReefVision_1.4.0_x64_en-US.msi' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance
+          $payload = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version '1.5.0' -ExpectedFilename 'ReefVision_1.5.0_x64_en-US.msi' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance
           $parts = [System.Collections.Generic.List[object]]::new()
           $parts.Add([System.Collections.Generic.List[string]]::new())
           $parts[0].Add((Join-Path $folder 'build-provenance.json'))
@@ -140,7 +140,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ReefVision-1.4.0-RC-Installer-Part-1
+          name: ReefVision-1.5.0-RC-Installer-Part-1
           path: ${{ steps.payload.outputs.part1 }}
           if-no-files-found: error
           retention-days: 14
@@ -149,7 +149,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: steps.payload.outputs.part2 != ''
         with:
-          name: ReefVision-1.4.0-RC-Installer-Part-2
+          name: ReefVision-1.5.0-RC-Installer-Part-2
           path: ${{ steps.payload.outputs.part2 }}
           if-no-files-found: error
           retention-days: 14
@@ -158,7 +158,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: steps.payload.outputs.part3 != ''
         with:
-          name: ReefVision-1.4.0-RC-Installer-Part-3
+          name: ReefVision-1.5.0-RC-Installer-Part-3
           path: ${{ steps.payload.outputs.part3 }}
           if-no-files-found: error
           retention-days: 14
@@ -167,14 +167,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: steps.payload.outputs.part4 != ''
         with:
-          name: ReefVision-1.4.0-RC-Installer-Part-4
+          name: ReefVision-1.5.0-RC-Installer-Part-4
           path: ${{ steps.payload.outputs.part4 }}
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
 
   windows-clean-install-acceptance:
-    name: Fresh install, launch, persist and uninstall 1.4.0 on disposable Windows
+    name: Fresh install, launch, persist and uninstall 1.5.0 on disposable Windows
     # The native CDP endpoint is verified on this hosted Windows image.
     runs-on: windows-2022
     needs: build-windows-installer
@@ -189,15 +189,15 @@ jobs:
       - name: Retrieve exact MSI and every external CAB
         uses: actions/download-artifact@v4
         with:
-          pattern: ReefVision-1.4.0-RC-Installer-Part-*
+          pattern: ReefVision-1.5.0-RC-Installer-Part-*
           merge-multiple: true
-          path: ${{ runner.temp }}/reefvision-1-4-0-installer
+          path: ${{ runner.temp }}/reefvision-1-5-0-installer
 
       - name: Verify version, source, MSI Media and payload digests
         shell: pwsh
         run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-4-0-installer'
-          $payload = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version '1.4.0' -ExpectedFilename 'ReefVision_1.4.0_x64_en-US.msi' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-5-0-installer'
+          $payload = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version '1.5.0' -ExpectedFilename 'ReefVision_1.5.0_x64_en-US.msi' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance
           $payload | ConvertTo-Json -Depth 8
 
       - uses: actions/setup-node@v4
@@ -213,8 +213,8 @@ jobs:
       - name: Test isolated MSI installation without developer runtimes on PATH
         shell: pwsh
         run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-4-0-installer'
-          $msi = Join-Path $folder 'ReefVision_1.4.0_x64_en-US.msi'
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-5-0-installer'
+          $msi = Join-Path $folder 'ReefVision_1.5.0_x64_en-US.msi'
           . ./scripts/lib/node-tools.ps1
           $playwrightNode = Find-ReefVisionExecutable -Names 'node.exe'
           if (-not $playwrightNode) { throw 'Packaged WebView2 acceptance requires Node from setup-node.' }
@@ -232,15 +232,15 @@ jobs:
           }
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
-            -ExpectedVersion '1.4.0' -ExpectedSchemaRevision 'b14_condition_0041' `
-            -AcceptanceRoot 'C:\reefvision-1-4-0-disposable-acceptance' `
+            -ExpectedVersion '1.5.0' -ExpectedSchemaRevision 'b14_condition_0041' `
+            -AcceptanceRoot 'C:\reefvision-1-5-0-disposable-acceptance' `
             -SpatialWorkflowNodePath $playwrightNode -HostedStandardUserWebView2 -SkipUpgrade -DisposableTest -KeepArtifacts
 
       - name: Upload isolated Windows acceptance report and MSI logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ReefVision-1.4.0-RC-Windows-Clean-Install-Evidence
+          name: ReefVision-1.5.0-RC-Windows-Clean-Install-Evidence
           path: |
             .artifacts/windows-clean-acceptance-*/report.json
             .artifacts/windows-clean-acceptance-*/*.log
@@ -251,7 +251,7 @@ jobs:
           retention-days: 14
 
   windows-upgrade-acceptance:
-    name: Upgrade 1.0.3 to 1.4.0 and preserve the project on disposable Windows
+    name: Upgrade 1.0.3 to 1.5.0 and preserve the project on disposable Windows
     runs-on: windows-latest
     needs: build-windows-installer
     timeout-minutes: 90
@@ -265,15 +265,15 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          pattern: ReefVision-1.4.0-RC-Installer-Part-*
+          pattern: ReefVision-1.5.0-RC-Installer-Part-*
           merge-multiple: true
-          path: ${{ runner.temp }}/reefvision-1-4-0-installer
+          path: ${{ runner.temp }}/reefvision-1-5-0-installer
 
       - name: Verify candidate and published 1.0.3 upgrade baseline
         shell: pwsh
         run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-4-0-installer'
-          $null = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version '1.4.0' -ExpectedFilename 'ReefVision_1.4.0_x64_en-US.msi' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-5-0-installer'
+          $null = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version '1.5.0' -ExpectedFilename 'ReefVision_1.5.0_x64_en-US.msi' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance
           $previous = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-3-installer'
           New-Item -ItemType Directory -Path $previous -Force | Out-Null
           gh release download v1.0.3 --repo Rafael-Del-Valle/ReefVision --pattern build-provenance.json --dir $previous
@@ -298,7 +298,7 @@ jobs:
       - name: Exercise previous-release upgrade without developer runtimes on PATH
         shell: pwsh
         run: |
-          $msi = Join-Path $env:RUNNER_TEMP 'reefvision-1-4-0-installer\ReefVision_1.4.0_x64_en-US.msi'
+          $msi = Join-Path $env:RUNNER_TEMP 'reefvision-1-5-0-installer\ReefVision_1.5.0_x64_en-US.msi'
           $previousMsi = Join-Path $env:RUNNER_TEMP 'reefvision-1-0-3-installer\ReefVision_1.0.3_x64_en-US.msi'
           $env:PATH = @(
             (Join-Path $env:SystemRoot 'System32'),
@@ -310,15 +310,15 @@ jobs:
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
             -PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance `
-            -ExpectedVersion '1.4.0' -ExpectedSchemaRevision 'b14_condition_0041' `
-            -AcceptanceRoot 'C:\reefvision-1-4-0-upgrade-acceptance' `
+            -ExpectedVersion '1.5.0' -ExpectedSchemaRevision 'b14_condition_0041' `
+            -AcceptanceRoot 'C:\reefvision-1-5-0-upgrade-acceptance' `
             -DisposableTest -KeepArtifacts
 
       - name: Upload isolated Windows upgrade report and MSI logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ReefVision-1.4.0-RC-Windows-Upgrade-Evidence
+          name: ReefVision-1.5.0-RC-Windows-Upgrade-Evidence
           path: |
             .artifacts/windows-clean-acceptance-*/report.json
             .artifacts/windows-clean-acceptance-*/*.log
@@ -364,15 +364,15 @@ jobs:
       - name: Retrieve exact 1.4 MSI and every external CAB
         uses: actions/download-artifact@v4
         with:
-          pattern: ReefVision-1.4.0-RC-Installer-Part-*
+          pattern: ReefVision-1.5.0-RC-Installer-Part-*
           merge-multiple: true
-          path: ${{ runner.temp }}/reefvision-1-4-0-installer
+          path: ${{ runner.temp }}/reefvision-1-5-0-installer
 
       - name: Verify exact-head candidate payload
         shell: pwsh
         run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-4-0-installer'
-          $payload = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version '1.4.0' -ExpectedFilename 'ReefVision_1.4.0_x64_en-US.msi' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-5-0-installer'
+          $payload = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version '1.5.0' -ExpectedFilename 'ReefVision_1.5.0_x64_en-US.msi' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance
           $payload | ConvertTo-Json -Depth 8
 
       - name: Generate and independently verify deterministic lineage fixture
@@ -408,11 +408,11 @@ jobs:
       - name: Exercise installed historical profile, exchange, restore and compatibility
         shell: pwsh
         run: |
-          $candidate = Join-Path $env:RUNNER_TEMP 'reefvision-1-4-0-installer\ReefVision_1.4.0_x64_en-US.msi'
+          $candidate = Join-Path $env:RUNNER_TEMP 'reefvision-1-5-0-installer\ReefVision_1.5.0_x64_en-US.msi'
           $fixtureRoot = Join-Path $env:RUNNER_TEMP 'reefvision-lineage-fixtures'
           $arguments = @{
             InstallerPath = $candidate
-            ExpectedVersion = '1.4.0'
+            ExpectedVersion = '1.5.0'
             ExpectedSchemaRevision = 'b14_condition_0041'
             ExpectedInitialSchemaRevision = '${{ matrix.initial_revision }}'
             AcceptanceRoot = 'C:\reefvision-lineage-${{ matrix.acceptance_slug }}'
@@ -447,7 +447,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ReefVision-1.4.0-Lineage-${{ matrix.profile }}-Evidence
+          name: ReefVision-1.5.0-Lineage-${{ matrix.profile }}-Evidence
           path: |
             .artifacts/windows-clean-acceptance-*/report.json
             .artifacts/windows-clean-acceptance-*/*.log
