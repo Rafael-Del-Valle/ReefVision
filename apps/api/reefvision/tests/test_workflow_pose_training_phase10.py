@@ -1134,6 +1134,17 @@ def test_pose_training_completion_rejects_missing_or_redirected_checkpoints(
 
     prior = tmp_path / "registered-model.pt"
     prior.write_bytes(b"preserve-existing-registered-weights")
+    # A real hard link aliases prior registered-model bytes while lstat()
+    # still reports an ordinary nonempty file. Do not publish this as new.
+    try:
+        os.link(prior, best)
+    except (OSError, NotImplementedError):
+        pass  # Some filesystems do not support hard links.
+    else:
+        with pytest.raises(ValidationError, match="checkpoint is hard-linked"):
+            _require_trusted_pose_checkpoints(output)
+        assert prior.read_bytes() == b"preserve-existing-registered-weights"
+        best.unlink()
     try:
         best.symlink_to(prior)
     except (OSError, NotImplementedError) as exc:
