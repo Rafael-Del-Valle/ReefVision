@@ -424,8 +424,13 @@ def _verify_postlaunch_pose_dataset(
 ) -> None:
     """Reject changed inputs or persisted provenance after GPU training."""
 
-    if not isinstance(persisted_materialization, dict) or persisted_materialization != materialization:
-        raise ValidationError("Pose training materialization provenance changed during GPU training")
+    if (
+        not isinstance(persisted_materialization, dict)
+        or persisted_materialization != materialization
+    ):
+        raise ValidationError(
+            "Pose training materialization provenance changed during GPU training"
+        )
 
     try:
         _verify_prelaunch_pose_dataset(destination, materialization)
