@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from math import ceil
 from pathlib import Path
@@ -119,6 +120,23 @@ class ImageService:
                 commit_staged_image(staging, managed_destination)
                 staging_owned = False
                 uncommitted_original = True
+                # A removable FAT/exFAT volume may fall back from hard-link
+                # publication to a copy. A short or silently corrupted copy
+                # must never be registered with the staged image's checksum.
+                # Verify the actual published bytes before the DB transaction.
+                original_digest = hashlib.sha256()
+                original_size = 0
+                with managed_destination.open("rb") as published:
+                    while block := published.read(1024 * 1024):
+                        original_digest.update(block)
+                        original_size += len(block)
+                if (
+                    original_size != inspected.file_size_bytes
+                    or original_digest.hexdigest() != inspected.sha256
+                ):
+                    raise InvalidImageError(
+                        "Managed camera original checksum or size changed during publication"
+                    )
                 image = ImageAsset(
                     id=image_id,
                     project_id=project_id,

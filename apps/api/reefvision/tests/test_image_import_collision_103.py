@@ -156,6 +156,49 @@ def test_interrupted_fallback_copy_does_not_publish_partial_camera_original(
     assert staged.read_bytes() == original
 
 
+@pytest.mark.parametrize("damage", ["same_size", "truncated"])
+def test_removable_camera_import_rejects_silent_copy_corruption(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    damage: str,
+) -> None:
+    """A successful exFAT copy syscall is not proof of immutable camera bytes."""
+    project = create_project(client, "Removable camera checksum verification")
+    source = image_bytes("JPEG", size=(51, 37))
+
+    def unsupported_hardlink(_source: Path, _target: Path) -> None:
+        raise OSError(errno.EOPNOTSUPP, "Hard links are unsupported on this volume")
+
+    def corrupted_copy(input_file: BinaryIO, output: BinaryIO, *, length: int) -> None:
+        assert length == 1024 * 1024
+        camera_bytes = input_file.read()
+        if damage == "truncated":
+            output.write(camera_bytes[:-1])
+        else:
+            # Keep the byte count unchanged: a length-only check would miss it.
+            output.write(bytes([camera_bytes[0] ^ 1]) + camera_bytes[1:])
+
+    monkeypatch.setattr(image_storage.os, "link", unsupported_hardlink)
+    monkeypatch.setattr(image_storage.shutil, "copyfileobj", corrupted_copy)
+
+    report = import_one(
+        client, project["id"], filename="SONY_REMOVABLE_0103.JPEG", content=source
+    )
+
+    assert report["successful"] == []
+    assert len(report["failed"]) == 1, report
+    assert "checksum or size changed" in report["failed"][0]["detail"]
+    assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 0
+    original_directory = (
+        Path(test_settings.resolved_data_dir)
+        / project["storage_root"]
+        / "images"
+        / "originals"
+    )
+    assert list(original_directory.iterdir()) == []
+
+
 def test_fallback_original_placement_rejects_existing_destination(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
