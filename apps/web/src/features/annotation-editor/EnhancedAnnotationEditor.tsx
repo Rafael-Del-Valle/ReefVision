@@ -62,7 +62,7 @@ export function EnhancedAnnotationEditor({
     launchContext?.initialWorkspace ?? "boxes",
   );
   const [maskInitialTool, setMaskInitialTool] = useState<
-    "polygon" | "fill" | "smart_close" | undefined
+    "select" | "polygon" | "fill" | "smart_close" | undefined
   >(undefined);
   const [activeMaskTool, setActiveMaskTool] = useState<
     "select" | "polygon" | "fill" | "smart_close" | "rotated_box"
@@ -316,6 +316,8 @@ export function EnhancedAnnotationEditor({
   function activateVertexEditMode(mode: VertexEditMode) {
     setVertexEditMode(mode);
     setActiveMaskTool("select");
+    // The selection control may still be mounting after the workspace opens.
+    setMaskInitialTool("select");
     document
       .querySelector<HTMLButtonElement>(
         '[data-testid="activate-mask-select-tool"]',

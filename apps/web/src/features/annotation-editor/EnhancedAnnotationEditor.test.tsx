@@ -10,12 +10,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Project } from "../../api/client";
 
-const { polygonKeyHandler, polygonInsertHandler, vertexPointerHandler } =
-  vi.hoisted(() => ({
-    polygonKeyHandler: vi.fn(),
-    polygonInsertHandler: vi.fn(),
-    vertexPointerHandler: vi.fn(),
-  }));
+const {
+  polygonKeyHandler,
+  polygonInsertHandler,
+  vertexPointerHandler,
+  maskSelectionControlReady,
+} = vi.hoisted(() => ({
+  polygonKeyHandler: vi.fn(),
+  polygonInsertHandler: vi.fn(),
+  vertexPointerHandler: vi.fn(),
+  maskSelectionControlReady: vi.fn(() => true),
+}));
 
 vi.mock("./AnnotationEditor", () => ({
   AnnotationEditor: ({
@@ -63,13 +68,15 @@ vi.mock("./MaskAnnotationWorkspace", () => ({
       <button data-mask-workspace-destination="boxes" onClick={onReturnToBoxes}>
         Boxes
       </button>
-      <button
-        type="button"
-        className="active"
-        data-testid="activate-mask-select-tool"
-      >
-        Select vertices
-      </button>
+      {maskSelectionControlReady() && (
+        <button
+          type="button"
+          className="active"
+          data-testid="activate-mask-select-tool"
+        >
+          Select vertices
+        </button>
+      )}
       <p className="annotation-helper">
         Add polygon vertices, then press Enter or click the first vertex to
         close.
@@ -150,6 +157,7 @@ describe("EnhancedAnnotationEditor", () => {
     polygonKeyHandler.mockClear();
     polygonInsertHandler.mockClear();
     vertexPointerHandler.mockClear();
+    maskSelectionControlReady.mockReturnValue(true);
   });
 
   it("opens Fill object directly and keeps Fill visibly active", () => {
@@ -181,6 +189,21 @@ describe("EnhancedAnnotationEditor", () => {
       "active",
     );
     expect(screen.getByTestId("open-polygon-tool")).not.toHaveClass("active");
+  });
+
+  it("retains Move mode while the mask selection control is still loading", () => {
+    maskSelectionControlReady.mockReturnValue(false);
+    renderEditor();
+
+    fireEvent.click(screen.getByTestId("open-polygon-tool"));
+    expect(screen.getByTestId("mask-initial-tool")).toHaveTextContent(
+      "polygon",
+    );
+    expect(screen.queryByTestId("activate-mask-select-tool")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("move-polygon-nodes"));
+
+    expect(screen.getByTestId("mask-initial-tool")).toHaveTextContent("select");
   });
 
   it("uses the left tool rail to switch annotation workspaces", async () => {
