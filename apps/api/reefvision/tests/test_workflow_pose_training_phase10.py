@@ -1085,7 +1085,16 @@ def test_pose_materialization_rejects_aliased_archive_entries(
             destination=destination,
         )
 
-    assert not (destination / "images" / "train" / "frame_00000001.png").exists()
+    assert not destination.exists()
+    # A corrected frozen export can retry the same managed destination without
+    # deleting partially created scientific data from the rejected archive.
+    corrected = materialize_pose_training_exports(
+        training_content=_pose_export_zip(b"reviewed"),
+        validation_content=None,
+        destination=destination,
+    )
+    assert corrected["training_image_count"] == 1
+    assert (destination / "images" / "train" / "frame_00000001.png").read_bytes() == b"reviewed"
 
 
 @pytest.mark.parametrize("alias", ("images", "labels/train"))
