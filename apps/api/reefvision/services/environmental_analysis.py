@@ -200,7 +200,7 @@ class EnvironmentalAnalysisService:
         )
         source_rows = [
             self.session.get(ScientificRecord, str(identifier))
-            for identifier in request.scientific_record_ids
+            for identifier in sorted(request.scientific_record_ids)
         ]
         if any(row is None for row in source_rows):
             raise ValidationError("Current streamline source record disappeared")
@@ -208,6 +208,7 @@ class EnvironmentalAnalysisService:
             self.science.response(cast(ScientificRecord, row)).model_dump(mode="json")
             for row in source_rows
         ]
+        unassessed = any(record["qc"] == "unassessed" for record in source_snapshot)
         result = self.create_result(
             definition,
             observed_at=preview.observed_at,
@@ -219,8 +220,8 @@ class EnvironmentalAnalysisService:
             },
             source_record_ids=[str(value) for value in request.scientific_record_ids],
             quality_control={
-                "status": "accepted",
-                "flags": [],
+                "status": "unassessed" if unassessed else "accepted",
+                "flags": ["unassessed_current_input"] if unassessed else [],
                 "termination_reasons": [line.termination for line in preview.streamlines],
             },
             uncertainty={

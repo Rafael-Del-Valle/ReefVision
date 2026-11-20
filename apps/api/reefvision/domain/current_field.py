@@ -9,7 +9,7 @@ from bisect import bisect_right
 from dataclasses import dataclass
 from itertools import pairwise
 from math import cos, hypot, isfinite, pi, radians, sin, sqrt
-from typing import Literal
+from typing import Literal, cast
 
 ALGORITHM_VERSION = "wgs84-stationary-bilinear-rk4-v1"
 Termination = Literal[
@@ -24,8 +24,20 @@ Termination = Literal[
 Matrix = tuple[tuple[float | None, ...], ...]
 
 
-def _finite(value: float) -> bool:
-    return not isinstance(value, bool) and isfinite(value)
+def _finite(value: object) -> bool:
+    """Fail closed on malformed numeric input instead of crashing a saved run.
+
+    API and Workflow Builder inputs can include nonnumeric scalars, and even a
+    Python integer can overflow when converted to C double by math.isfinite.
+    Keep booleans invalid; never silently coerce strings into measurements.
+    """
+    if isinstance(value, bool):
+        return False
+    try:
+        # A cast changes only the static type; it must not coerce strings to numbers.
+        return isfinite(cast(float, value))
+    except (TypeError, ValueError, OverflowError):
+        return False
 
 
 def _axis(values: tuple[float, ...], bound: float) -> tuple[float, ...]:
@@ -47,6 +59,25 @@ class CurrentField:
     def __post_init__(self) -> None:
         lat = _axis(self.latitudes, 90)
         lon = _axis(self.longitudes, 180)
+        # The current kernel does not unwrap longitude across the dateline.
+        # A pair at -179 and +179 degrees represents a two-degree local cell,
+        # not a 358-degree interpolation spanning almost the entire Earth.
+        # Fail closed rather than deriving scientifically misleading tracks.
+        ordered_lon = sorted(lon)
+        if any(right - left > 180.0 for left, right in pairwise(ordered_lon)):
+            raise ValueError(
+                "Current longitude gap exceeds 180 degrees; "
+                "antimeridian-spanning grids require regridding before integration"
+            )
+        # An adjacent-gap-only guard misses wide multicolumn grids such as
+        # [-170, 0, 170], which spans 340 degrees with gaps of only 170.
+        # The domain kernel must apply the same scientific extent restriction
+        # as the API service: callers can integrate fields directly.
+        if ordered_lon[-1] - ordered_lon[0] > 180.0:
+            raise ValueError(
+                "Current longitude extent exceeds 180 degrees; "
+                "antimeridian-spanning grids require regridding before integration"
+            )
         matrices = []
         for values in (self.east, self.north):
             rows = tuple(tuple(row) for row in values)

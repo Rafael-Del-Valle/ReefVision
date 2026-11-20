@@ -25,10 +25,16 @@ from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_workflow_computed_metrics import save_and_queue
 
 
-def _current_records(client: TestClient, project_id: str) -> list[str]:
+def _current_records(
+    client: TestClient,
+    project_id: str,
+    *,
+    longitudes: tuple[float, ...] = (-1.0, 1.0),
+    qc: str = "accepted",
+) -> list[str]:
     records = []
     for latitude in (-1.0, 1.0):
-        for longitude in (-1.0, 1.0):
+        for longitude in longitudes:
             for variable, value in (
                 ("current_eastward_velocity", 1.0),
                 ("current_northward_velocity", 0.0),
@@ -47,7 +53,7 @@ def _current_records(client: TestClient, project_id: str) -> list[str]:
                         },
                         "depth_m": 0,
                         "depth_reference": "sea_surface",
-                        "qc": "accepted",
+                        "qc": qc,
                         "provenance": {
                             "source": "synthetic current fixture",
                             "dataset_id": "fixture-v1",
@@ -101,11 +107,13 @@ def _graph(parameters: dict) -> dict:
     }
 
 
+@pytest.mark.parametrize("qc", ["accepted", "unassessed"])
 def test_current_streamline_workflow_executes_with_lineage_and_replays(
     client: TestClient,
+    qc: str,
 ) -> None:
     project = create_project(client, "Current streamline workflow")
-    parameters = _parameters(_current_records(client, project["id"]))
+    parameters = _parameters(_current_records(client, project["id"], qc=qc))
     graph = _graph(parameters)
 
     registry = client.get("/api/v1/workflow-graphs/node-registry")
@@ -139,9 +147,36 @@ def test_current_streamline_workflow_executes_with_lineage_and_replays(
     assert payload["analysis_kind"] == "current_streamline"
     assert payload["payload"]["algorithm_version"] == "wgs84-stationary-bilinear-rk4-v1"
     assert payload["payload"]["streamlines"][0]["termination"] == "max_steps"
+    saved = client.get(
+        f"/api/v1/projects/{project['id']}/environment/analyses/results/{payload['result_id']}"
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["quality_control"]["status"] == qc
+    assert payload["quality_control"] == saved.json()["quality_control"]
     assert payload["workflow_run_id"] == queued["id"]
     assert payload["workflow_node_run_id"] == node["id"]
     assert len(payload["content_sha256"]) == 64
+
+    rerun = client.post(
+        f"/api/v1/projects/{project['id']}/workflow-runs",
+        json={"graph_record_id": queued["workflow_graph_record_id"]},
+    )
+    assert rerun.status_code == 202, rerun.text
+    new_run = rerun.json()
+    assert new_run["id"] != queued["id"]
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(new_run["job_id"])
+    )
+    rerun_detail = client.get(f"/api/v1/workflow-runs/{new_run['id']}")
+    assert rerun_detail.status_code == 200, rerun_detail.text
+    rerun_result = next(
+        item["payload_json"]
+        for item in rerun_detail.json()["artifacts"]
+        if item["data_type"] == "environmental_analysis_result"
+    )
+    assert rerun_result["result_id"] != payload["result_id"]
+    assert rerun_result["payload"] == payload["payload"]
+    assert rerun_result["quality_control"] == payload["quality_control"]
 
     with app.state.session_factory() as session:
         replay = EnvironmentalAnalysisService(session).create_current_streamline(
@@ -152,6 +187,7 @@ def test_current_streamline_workflow_executes_with_lineage_and_replays(
         )
         assert str(replay.result.id) == payload["result_id"]
         assert replay.result.content_sha256 == payload["content_sha256"]
+        assert replay.result.quality_control == saved.json()["quality_control"]
 
         conflicting = {**parameters, "max_steps": 3}
         with pytest.raises(ConflictError, match="replay conflicts"):
@@ -161,6 +197,96 @@ def test_current_streamline_workflow_executes_with_lineage_and_replays(
                 workflow_run_id=queued["id"],
                 workflow_node_run_id=node["id"],
             )
+
+
+def test_current_streamline_input_hash_is_independent_of_record_order(
+    client: TestClient,
+) -> None:
+    """Equivalent paired current grids must have identical source fingerprints.
+
+    Workflow callers may select the same immutable scientific records in a
+    different order. Record order is not a physical property of the grid.
+    The response may preserve requested ID order, but the input digest and
+    numerical streamline must remain stable without rewriting source data.
+    """
+    project = create_project(client, "Order-independent current provenance")
+    record_ids = _current_records(client, project["id"])
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        service = CurrentFieldService(session)
+        original = service.preview(
+            project["id"],
+            CurrentFieldAnalysisRequest.model_validate(_parameters(record_ids)),
+        )
+        reversed_records = service.preview(
+            project["id"],
+            CurrentFieldAnalysisRequest.model_validate(_parameters(record_ids[::-1])),
+        )
+
+    assert original.source_record_ids != reversed_records.source_record_ids
+    assert original.input_sha256 == reversed_records.input_sha256
+    assert original.latitudes == reversed_records.latitudes
+    assert original.longitudes == reversed_records.longitudes
+    assert original.streamlines == reversed_records.streamlines
+    assert original.methodological_notes == reversed_records.methodological_notes
+
+
+def test_current_streamline_rejects_antimeridian_extent_in_saved_graph(
+    client: TestClient,
+) -> None:
+    """A three-column grid can cross 180° without a large adjacent gap.
+
+    Naive adjacent-gap checks accept [-170, 0, 170], causing bilinear
+    interpolation across unmeasured longitudes. Reject the complete extent
+    before generating an executable scientific workflow artifact.
+    """
+    project = create_project(client, "Antimeridian current rejection")
+    record_ids = _current_records(client, project["id"], longitudes=(-170.0, 0.0, 170.0))
+    parameters = _parameters(record_ids)
+    app = cast(FastAPI, client.app)
+    # Failure must leave the original scientific observations and digests untouched.
+    original_source_hashes: dict[str, str] = {}
+    with app.state.session_factory() as session:
+        for record_id in record_ids:
+            source = session.get(ScientificRecord, record_id)
+            assert source is not None
+            original_source_hashes[record_id] = source.content_sha256
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="antimeridian-spanning"),
+    ):
+        CurrentFieldService(session).preview(
+            project["id"], CurrentFieldAnalysisRequest.model_validate(parameters)
+        )
+
+    queued = save_and_queue(client, project["id"], _graph(parameters))
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(queued["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued['id']}").json()
+    assert detail["run"]["status"] == "failed"
+    assert not any(
+        item["data_type"] == "environmental_analysis_result" for item in detail["artifacts"]
+    )
+    # Rejected geographic inputs must not leave persisted definitions or results.
+    with app.state.session_factory() as session:
+        definition_count = session.scalar(
+            select(func.count())
+            .select_from(EnvironmentalAnalysisDefinition)
+            .where(EnvironmentalAnalysisDefinition.project_id == project["id"])
+        )
+        result_count = session.scalar(
+            select(func.count())
+            .select_from(EnvironmentalAnalysisResult)
+            .where(EnvironmentalAnalysisResult.project_id == project["id"])
+        )
+        assert definition_count == 0
+        assert result_count == 0
+        for record_id, original_hash in original_source_hashes.items():
+            source = session.get(ScientificRecord, record_id)
+            assert source is not None
+            assert source.content_sha256 == original_hash
 
 
 def test_failed_current_streamline_workflow_is_atomic(client: TestClient) -> None:

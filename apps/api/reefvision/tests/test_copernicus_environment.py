@@ -97,6 +97,37 @@ def test_copernicus_worker_uses_bounded_pinned_requests_and_preserves_grid_metad
     assert raw["dataset_metadata"]["title"].startswith("SYNTHETIC")
 
 
+@pytest.mark.parametrize("invalid_provider_value", [False, True])
+def test_worker_closes_original_provider_dataset_after_subset_load(
+    monkeypatch, invalid_provider_value
+):
+    """Loading an xarray variable subset must not orphan the provider's close handle."""
+    original = dataset()
+    closed = []
+    original.set_close(lambda: closed.append("provider"))
+    if invalid_provider_value:
+        # This fails *after* selecting and loading the subset, so cleanup must
+        # also work when a remote dataset returns an unusable value.
+        original["uo"].values[0, 0, 0, 0] = np.inf
+
+    def open_dataset(**_kwargs):
+        return original
+
+    monkeypatch.setitem(
+        sys.modules,
+        "copernicusmarine",
+        SimpleNamespace(open_dataset=open_dataset, __version__="synthetic-test"),
+    )
+    payload = request().model_dump(mode="json", exclude={"offline", "refresh"})
+    if invalid_provider_value:
+        with pytest.raises(ValueError, match="Infinite provider value"):
+            read_dataset(payload, "fixture-user", "fixture-password")
+    else:
+        result = read_dataset(payload, "fixture-user", "fixture-password")
+        assert len(result["samples"]) == 4
+    assert closed == ["provider"]
+
+
 def test_modeled_copernicus_samples_refresh_and_reopen_offline(client, test_settings, monkeypatch):
     project = create_project(client)
     raw = raw_fixture(monkeypatch)
@@ -173,6 +204,14 @@ def test_unbounded_or_ambiguous_requests_rejected(patch):
         "non_object_sample",
         "non_object_dataset_metadata",
         "non_object_coordinate_resolution",
+        "zero_time_resolution",
+        "negative_latitude_resolution",
+        "string_time_resolution",
+        "boolean_time_resolution",
+        "nonfinite_longitude_resolution",
+        "unknown_resolution_axis",
+        "missing_grid_variable",
+        "unequal_grid_coverage",
     ],
 )
 def test_invalid_provider_grid_never_persists_scientific_records(
@@ -216,6 +255,24 @@ def test_invalid_provider_grid_never_persists_scientific_records(
         raw["dataset_metadata"] = []
     elif damage == "non_object_coordinate_resolution":
         raw["coordinate_resolution"] = None
+    elif damage == "zero_time_resolution":
+        raw["coordinate_resolution"]["time"] = 0.0
+    elif damage == "negative_latitude_resolution":
+        raw["coordinate_resolution"]["latitude"] = -0.1
+    elif damage == "string_time_resolution":
+        raw["coordinate_resolution"]["time"] = "3600"
+    elif damage == "boolean_time_resolution":
+        raw["coordinate_resolution"]["time"] = True
+    elif damage == "nonfinite_longitude_resolution":
+        raw["coordinate_resolution"]["longitude"] = float("inf")
+    elif damage == "unknown_resolution_axis":
+        raw["coordinate_resolution"]["vertical_datum"] = 1.0
+    elif damage == "missing_grid_variable":
+        raw["samples"] = [sample for sample in raw["samples"] if sample["variable"] != "vo"]
+    elif damage == "unequal_grid_coverage":
+        extra_cell = deepcopy(raw["samples"][0])
+        extra_cell["latitude"] = 32.6
+        raw["samples"].append(extra_cell)
     else:
         raw["dataset_version"] = "different"
     with client.app.state.session_factory() as session, pytest.raises(ValidationError):
@@ -262,6 +319,146 @@ def test_incomplete_grid_refresh_preserves_cached_subset(
     assert offline.json()["fetched_at"] == initial.model_dump(mode="json")["fetched_at"]
     scientific_records = client.get(f"/api/v1/projects/{project['id']}/scientific-records")
     assert scientific_records.json()["total"] == 3
+
+
+def test_null_ocean_value_is_missing_data_not_an_omitted_grid_cell(
+    client, test_settings, monkeypatch
+):
+    """Explicit nulls preserve model-grid coverage without fabricating measurements."""
+    project = create_project(client)
+    raw = raw_fixture(monkeypatch)
+    raw["samples"][0]["value"] = None
+    with client.app.state.session_factory() as session:
+        result = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: deepcopy(raw)
+        ).acquire(project["id"], request())
+    assert result.skipped_missing == 1
+    assert len(result.items) == 3
+    assert "current_eastward_velocity" not in {item.variable for item in result.items}
+    assert all(item.qc == "unassessed" for item in result.items)
+
+
+def test_invalid_copernicus_resolution_refresh_keeps_prior_offline_snapshot(
+    client, test_settings, monkeypatch
+):
+    """Reject misleading provider grid spacing without losing validated cache."""
+    project = create_project(client)
+    original = raw_fixture(monkeypatch)
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    with client.app.state.session_factory() as session:
+        cached = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: deepcopy(original), now=now
+        ).acquire(project["id"], request())
+    corrupted = deepcopy(original)
+    corrupted["coordinate_resolution"]["time"] = 0.0
+    with client.app.state.session_factory() as session, pytest.raises(ValidationError):
+        CopernicusEnvironmentService(
+            session,
+            test_settings,
+            fetch=lambda *_: deepcopy(corrupted),
+            now=now + timedelta(days=2),
+        ).acquire(project["id"], request(refresh=True))
+    with client.app.state.session_factory() as session:
+        offline = CopernicusEnvironmentService(
+            session,
+            test_settings,
+            fetch=lambda *_: pytest.fail("offline must not acquire remote data"),
+            now=now + timedelta(days=2),
+        ).acquire(project["id"], request(offline=True))
+    assert offline.cache_status == "stale_offline"
+    assert [item.id for item in offline.items] == [item.id for item in cached.items]
+
+
+def test_valid_provider_grid_spacing_is_retained_as_unassessed_provenance(
+    client, test_settings, monkeypatch
+):
+    """Synthetic spacing is preserved explicitly, without claiming QC acceptance."""
+    project = create_project(client)
+    raw = raw_fixture(monkeypatch)
+    raw["coordinate_resolution"] = {"time": 3600.0, "longitude": 0.5}
+    with client.app.state.session_factory() as session:
+        result = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: deepcopy(raw)
+        ).acquire(project["id"], request())
+    assert all(item.provenance.temporal_resolution_s == 3600.0 for item in result.items)
+    assert all(item.qc == "unassessed" for item in result.items)
+    assert all(
+        item.provenance.source_metadata["coordinate_resolution"]["longitude"] == 0.5
+        for item in result.items
+    )
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "oversized",
+        "unicode_oversized",
+        "key_amplification",
+        "nonfinite",
+        "recursive",
+        "invalid_unicode_metadata",
+        "invalid_unicode_toolbox",
+        "nontext_toolbox_version",
+    ],
+)
+def test_invalid_provider_provenance_preserves_validated_offline_snapshot(
+    client, test_settings, monkeypatch, damage
+):
+    """Reject amplified or malformed grid metadata before replacing cached science."""
+    project = create_project(client)
+    valid = raw_fixture(monkeypatch)
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    with client.app.state.session_factory() as session:
+        cached = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: deepcopy(valid), now=now
+        ).acquire(project["id"], request())
+
+    damaged = deepcopy(valid)
+    if damage == "oversized":
+        damaged["dataset_metadata"]["vendor_history"] = "x" * 20_000
+    elif damage == "unicode_oversized":
+        # Metadata budget is UTF-8 bytes, not Unicode code points.
+        damaged["dataset_metadata"]["vendor_history"] = "🐙" * 5_000
+    elif damage == "key_amplification":
+        damaged["dataset_metadata"].update({f"vendor_{index:04d}": "x" for index in range(1_500)})
+    elif damage == "invalid_unicode_metadata":
+        # Unpaired surrogate escapes are legal in JSON but cannot form valid UTF-8.
+        damaged["dataset_metadata"]["vendor_history"] = "bad\ud800"
+    elif damage == "invalid_unicode_toolbox":
+        damaged["toolbox_version"] = "version\ud800"
+    elif damage == "nontext_toolbox_version":
+        damaged["toolbox_version"] = {"unverified": "1.2"}
+    elif damage == "nonfinite":
+        damaged["dataset_metadata"]["uncertain_error"] = float("nan")
+    else:
+        recursive = {}
+        recursive["self"] = recursive
+        damaged["dataset_metadata"]["vendor_history"] = recursive
+
+    with (
+        client.app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="Copernicus provider metadata"),
+    ):
+        CopernicusEnvironmentService(
+            session,
+            test_settings,
+            fetch=lambda *_: damaged,
+            now=now + timedelta(days=2),
+        ).acquire(project["id"], request(refresh=True))
+
+    with client.app.state.session_factory() as session:
+        offline = CopernicusEnvironmentService(
+            session,
+            test_settings,
+            fetch=lambda *_: pytest.fail("offline mode must not contact provider"),
+            now=now + timedelta(days=2),
+        ).acquire(project["id"], request(offline=True))
+    assert offline.cache_status == "stale_offline"
+    assert [item.id for item in offline.items] == [item.id for item in cached.items]
+    assert all(
+        item.provenance.source_metadata["dataset"] == valid["dataset_metadata"]
+        for item in offline.items
+    )
 
 
 def test_missing_copernicus_configuration_fails_without_leaking_secrets(client):
