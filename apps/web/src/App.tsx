@@ -110,6 +110,7 @@ type ProjectView =
   | "computed_metrics"
   | "scientific_heatmaps"
   | "ecology"
+  | "research_ecology"
   | "study_design"
   | "monitoring"
   | "reproducibility"
@@ -261,6 +262,12 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Export reproducibility package",
         description:
           "Verify and exchange frozen study, review and model evidence.",
+      },
+      {
+        id: "research_ecology",
+        label: "Organisms & ecology",
+        description:
+          "Review taxa and assess detection from repeated survey visits.",
       },
     ],
   },
@@ -1212,11 +1219,14 @@ function ReefVisionMainApp() {
                 project={selectedProject}
               />
             )}
-            {activeView === "ecology" && (
+            {(activeView === "ecology" ||
+              activeView === "research_ecology") && (
               <EcologyWorkspace
                 key={selectedProject.id}
                 projectId={selectedProject.id}
                 classes={selectedProject.label_classes}
+                onOpenWorkflow={() => setActiveView("workflows")}
+                onOpenReviewerLab={() => setActiveView("reviewer_lab")}
                 initialPoseOrganism={
                   poseOrganismOrigin?.projectId === selectedProject.id
                     ? poseOrganismOrigin.organismKey
