@@ -1949,3 +1949,93 @@ def test_pose_and_behavior_lineage_structure_or_addition(
     assert report["upgrade_authorized"] is False
     assert before.read_bytes() == original_bytes
     assert after.read_bytes() == candidate_bytes
+@pytest.mark.parametrize("aliased_copy", ["baseline", "candidate"])
+def test_database_copy_rejects_symlinked_parent_before_resolve(
+    tmp_path: Path, aliased_copy: str
+) -> None:
+    """Two identical databases are not independent when either path uses an alias."""
+    baseline = tmp_path / "before.sqlite"
+    candidate = tmp_path / "after.sqlite"
+    _seed(baseline)
+    shutil.copyfile(baseline, candidate)
+    private_parent = tmp_path / "private-research-directory"
+    private_parent.mkdir()
+    real_copy = private_parent / "private-scientific-data.sqlite"
+    shutil.copyfile(baseline, real_copy)
+    alias = tmp_path / "external-parent-alias"
+    try:
+        alias.symlink_to(private_parent, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("host does not permit directory symlinks")
+    hidden_copy = alias / real_copy.name
+    assert not hidden_copy.is_symlink()
+    if aliased_copy == "baseline":
+        baseline = hidden_copy
+    else:
+        candidate = hidden_copy
+    old_bytes, new_bytes = baseline.read_bytes(), candidate.read_bytes()
+    code, evidence = _run(baseline, candidate)
+    assert code == 2
+    assert evidence["status"] == "HOLD"
+    assert evidence["problems"] == ["database_copy_symlink_not_allowed"]
+    assert evidence["requires_researcher_approval"] is True
+    assert evidence["upgrade_authorized"] is False
+    assert "private-scientific-data" not in json.dumps(evidence)
+    assert "private-research-directory" not in json.dumps(evidence)
+    assert baseline.read_bytes() == old_bytes
+    assert candidate.read_bytes() == new_bytes
+
+
+@pytest.mark.parametrize("aliased_copy", ["baseline", "candidate"])
+def test_database_copy_rejects_unscanned_external_hardlink(
+    tmp_path: Path, aliased_copy: str
+) -> None:
+    """An unrelated third hardlink can still modify supposedly offline science."""
+    baseline = tmp_path / "before.sqlite"
+    candidate = tmp_path / "after.sqlite"
+    _seed(baseline)
+    shutil.copyfile(baseline, candidate)
+    target = baseline if aliased_copy == "baseline" else candidate
+    outside = tmp_path / "private-external-backup.sqlite"
+    try:
+        outside.hardlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("host does not permit hardlinks")
+    if target.stat().st_nlink < 2:
+        pytest.skip("host does not report hardlink counts")
+    old_bytes, new_bytes = baseline.read_bytes(), candidate.read_bytes()
+    code, evidence = _run(baseline, candidate)
+    assert code == 2
+    assert evidence["status"] == "HOLD"
+    assert evidence["problems"] == ["database_copy_hardlinks_not_independent"]
+    assert evidence["requires_researcher_approval"] is True
+    assert evidence["upgrade_authorized"] is False
+    assert "private-external-backup" not in json.dumps(evidence)
+    assert baseline.read_bytes() == old_bytes
+    assert candidate.read_bytes() == new_bytes
+    assert outside.read_bytes() == target.read_bytes()
+
+
+def test_database_copy_rejects_direct_symlink_and_noncanonical_path(tmp_path: Path) -> None:
+    baseline = tmp_path / "before.sqlite"
+    candidate = tmp_path / "after.sqlite"
+    _seed(baseline)
+    shutil.copyfile(baseline, candidate)
+    alias = tmp_path / "private-link.sqlite"
+    try:
+        alias.symlink_to(candidate)
+    except (OSError, NotImplementedError):
+        pytest.skip("host does not permit file symlinks")
+    code, evidence = _run(baseline, alias)
+    assert code == 2
+    assert evidence["problems"] == ["database_copy_symlink_not_allowed"]
+
+    intermediate = tmp_path / "existing"
+    intermediate.mkdir()
+    noncanonical = intermediate / ".." / "before.sqlite"
+    code, evidence = _run(noncanonical, candidate)
+    assert code == 2
+    assert evidence["status"] == "HOLD"
+    assert evidence["problems"] == ["database_copy_noncanonical_path"]
+    assert evidence["upgrade_authorized"] is False
+

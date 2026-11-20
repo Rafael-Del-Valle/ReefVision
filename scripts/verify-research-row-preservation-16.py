@@ -766,6 +766,30 @@ def _assert_asset_root_ancestry(root: Path) -> None:
             raise ValueError("asset_symlink_not_allowed")
 
 
+
+def _assert_database_copy_isolated(path: Path) -> None:
+    """Require a genuine standalone offline SQLite copy, not an external alias.
+
+    resolve() erases evidence of links in parent directories. Validate the
+    lexical path before resolving it, and reject hardlinks to undisclosed
+    files even when source/candidate paths are distinct.
+    """
+    if ".." in path.parts:
+        raise ValueError("database_copy_noncanonical_path")
+    absolute = path.absolute()
+    for component in (absolute, *absolute.parents):
+        try:
+            if _is_unsafe_asset_link(component):
+                raise ValueError("database_copy_symlink_not_allowed")
+        except FileNotFoundError as exc:
+            raise ValueError("database_copy_missing") from exc
+    info = absolute.lstat()
+    if not stat.S_ISREG(info.st_mode):
+        raise ValueError("database_copy_not_regular_file")
+    if info.st_nlink != 1:
+        raise ValueError("database_copy_hardlinks_not_independent")
+
+
 def _asset_state(info: os.stat_result) -> tuple[int, int, int, int, int, int, int]:
     """Identity and mutation-sensitive metadata for an offline regular file."""
     return (
@@ -1033,6 +1057,8 @@ def verify(
     """Produce only diagnostic digests/counts; never return research row values."""
     if (before_assets is None) != (after_assets is None):
         raise ValueError("asset_roots_must_be_supplied_together")
+    _assert_database_copy_isolated(before)
+    _assert_database_copy_isolated(after)
     before = before.resolve()
     after = after.resolve()
     if before == after or (before.is_file() and after.is_file() and before.samefile(after)):
