@@ -793,6 +793,38 @@ test("renders and selects from a 1500-annotation image", async ({ page }) => {
   expect(center.hit).toBe("annotation-annotation-1");
   await page.mouse.click(center.x, center.y);
   await expect(page.getByRole("heading", { name: "1 selected" })).toBeVisible();
+  const options = page
+    .getByRole("listbox", { name: "Objects" })
+    .getByRole("option");
+  await expect(options).toHaveCount(200);
+  await expect(options.first()).toHaveAttribute("aria-selected", "true");
+  await expect(options.last()).toHaveAttribute("aria-posinset", "200");
+  await expect(options.last()).toHaveAttribute("aria-setsize", "1500");
+
+  const jump = page.getByRole("spinbutton", {
+    name: "Jump to object position",
+  });
+  const jumpButton = page.getByRole("button", {
+    name: "Jump to object",
+    exact: true,
+  });
+  await jump.fill("1501");
+  await expect(jumpButton).toBeDisabled();
+  await jump.fill("1500");
+  await jumpButton.click();
+  await expect(options).toHaveCount(101);
+  await expect(options.first()).toHaveAttribute("aria-selected", "true");
+  await expect(options.nth(1)).toHaveAttribute("aria-posinset", "1401");
+  await expect(options.last()).toHaveAttribute("aria-posinset", "1500");
+  await options.last().press("Enter");
+  await expect(options.last()).toHaveAttribute("aria-selected", "true");
+
+  await page
+    .getByRole("button", { name: "Actual Size (100%)", exact: true })
+    .click();
+  await expect.poll(() => allAnnotations.count()).toBeLessThan(1500);
+  await expect.poll(() => allAnnotations.count()).toBeGreaterThan(0);
+  await expect(options.last()).toHaveAttribute("aria-setsize", "1500");
 });
 
 test("renders the first opened image after a deliberately delayed display response", async ({
