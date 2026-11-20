@@ -138,6 +138,13 @@ from reefvision.db.models.spatial_condition_v14 import (
 )
 from reefvision.db.models.spatial_source_asset_v14 import SpatialSourceAsset
 from reefvision.db.models.study_design import StudyDesignRevision
+from reefvision.db.models.taxonomy import (
+    DetectabilityAssessment,
+    DetectabilityPresenceReview,
+    DetectabilityVisit,
+    TaxonProposal,
+    TaxonReview,
+)
 from reefvision.db.models.temporal_reefpose import (
     TemporalReefPoseDataset,
     TemporalReefPoseFrame,
@@ -178,6 +185,9 @@ __all__ = [
     "CoralGrowthRecord",
     "DatasetVersion",
     "DatasetVersionItem",
+    "DetectabilityAssessment",
+    "DetectabilityPresenceReview",
+    "DetectabilityVisit",
     "EcologyAnalysisRecord",
     "EcologyIdentityAnnotationEvidence",
     "EcologyIdentityCalibrationEvidence",
@@ -260,6 +270,8 @@ __all__ = [
     "SpatialConditionRubric",
     "SpatialSourceAsset",
     "StudyDesignRevision",
+    "TaxonProposal",
+    "TaxonReview",
     "TemporalReefPoseDataset",
     "TemporalReefPoseFrame",
     "TemporalReefPoseRun",
