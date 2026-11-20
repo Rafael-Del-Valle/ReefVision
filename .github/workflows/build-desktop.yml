@@ -329,8 +329,101 @@ jobs:
           include-hidden-files: true
           retention-days: 14
 
+  windows-validated-14-upgrade-acceptance:
+    name: Upgrade validated 1.4.0 to 1.5.0 and preserve the project on disposable Windows
+    runs-on: windows-latest
+    needs: build-windows-installer
+    timeout-minutes: 90
+    env:
+      SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      GH_TOKEN: ${{ github.token }}
+      REEFVISION_1_4_RUN: "44697377337"
+      REEFVISION_1_4_SOURCE: fb2276c87e1c17393200984d804f54b6c0f21dbf
+      REEFVISION_1_4_PROVENANCE_SHA256: 86a17ecd0f6a84e9f4811795210b0ea3389b88eab02a2e87d0d1a7f735a819d0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ReefVision-1.5.0-RC-Installer-Part-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/reefvision-1-5-0-installer
+
+      - name: Verify both exact MSI payloads and their cabinet digests
+        shell: pwsh
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-5-0-installer'
+          $candidate = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version '1.5.0' -ExpectedFilename 'ReefVision_1.5.0_x64_en-US.msi' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance
+          $runJson = gh run view $env:REEFVISION_1_4_RUN --repo Rafael-Del-Valle/ReefVision --json headSha,conclusion,url
+          if ($LASTEXITCODE -ne 0) { throw 'Could not identify the retained 1.4 installer run.' }
+          $run = $runJson | ConvertFrom-Json
+          if ($run.headSha -cne $env:REEFVISION_1_4_SOURCE -or $run.conclusion -ne 'success') {
+            throw 'Retained 1.4 installer run does not match the validated source and conclusion.'
+          }
+          $previous = Join-Path $env:RUNNER_TEMP 'reefvision-1-4-0-installer'
+          New-Item -ItemType Directory -Path $previous | Out-Null
+          foreach ($part in 1..2) {
+            gh run download $env:REEFVISION_1_4_RUN --repo Rafael-Del-Valle/ReefVision --name "ReefVision-1.4.0-RC-Installer-Part-$part" --dir $previous
+            if ($LASTEXITCODE -ne 0) { throw "Could not retrieve the validated 1.4 installer part $part." }
+          }
+          $manifestPath = Join-Path $previous 'build-provenance.json'
+          $digest = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($digest -cne $env:REEFVISION_1_4_PROVENANCE_SHA256) { throw 'Retained 1.4 provenance differs from the pinned digest.' }
+          $baseline = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $previous -Version '1.4.0' -ExpectedFilename 'ReefVision_1.4.0_x64_en-US.msi' -SourceCommit $env:REEFVISION_1_4_SOURCE -RequireProvenance
+          if (@($baseline.media | Where-Object { $_.cabinet -and -not $_.embedded }).Count -ne 6) {
+            throw 'Validated 1.4.0 payload must contain all six external cabinets.'
+          }
+          New-Item -ItemType Directory -Path '.artifacts' -Force | Out-Null
+          [ordered]@{
+            baseline_run_id = [long]$env:REEFVISION_1_4_RUN
+            baseline_run_url = $run.url
+            baseline_source_commit = $env:REEFVISION_1_4_SOURCE
+            baseline_provenance_sha256 = $digest
+            baseline = $baseline
+            candidate_source_commit = $env:SOURCE_COMMIT
+            candidate = $candidate
+          } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath '.artifacts/windows-validated-14-upgrade-payload.json'
+
+      - name: Exercise the validated 1.4 to 1.5 upgrade without developer runtimes on PATH
+        shell: pwsh
+        run: |
+          $msi = Join-Path $env:RUNNER_TEMP 'reefvision-1-5-0-installer\ReefVision_1.5.0_x64_en-US.msi'
+          $previousMsi = Join-Path $env:RUNNER_TEMP 'reefvision-1-4-0-installer\ReefVision_1.4.0_x64_en-US.msi'
+          $env:PATH = @(
+            (Join-Path $env:SystemRoot 'System32'),
+            $env:SystemRoot,
+            (Join-Path $env:SystemRoot 'System32\Wbem'),
+            (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0'),
+            (Join-Path $env:ProgramFiles 'PowerShell\7')
+          ) -join ';'
+          foreach ($cmd in @('python', 'python3', 'node', 'npm', 'rustc', 'cargo')) {
+            if (Get-Command $cmd -ErrorAction SilentlyContinue) { throw "Unexpected developer runtime on isolated PATH: $cmd" }
+          }
+          & ./scripts/acceptance-windows-clean-install.ps1 `
+            -InstallerPath $msi `
+            -PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance `
+            -ExpectedVersion '1.5.0' -ExpectedSchemaRevision 'b15_integrated_0002' `
+            -ExpectedInitialSchemaRevision 'b14_condition_0041' `
+            -AcceptanceRoot 'C:\reefvision-1-5-0-upgrade-validated-1-4' `
+            -DisposableTest -KeepArtifacts
+
+      - name: Upload isolated validated upgrade report, installer digests and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-1.5.0-RC-Windows-Validated-1.4.0-Upgrade-Evidence
+          path: |
+            .artifacts/windows-validated-14-upgrade-payload.json
+            .artifacts/windows-clean-acceptance-*/report.json
+            .artifacts/windows-clean-acceptance-*/*.log
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 14
+
   windows-lineage-acceptance:
-    name: Installed 1.4 lineage — ${{ matrix.profile }}
+    name: Installed 1.5 lineage — ${{ matrix.profile }}
     runs-on: windows-latest
     needs: build-windows-installer
     timeout-minutes: 105
@@ -364,7 +457,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Retrieve exact 1.4 MSI and every external CAB
+      - name: Retrieve exact 1.5 MSI and every external CAB
         uses: actions/download-artifact@v4
         with:
           pattern: ReefVision-1.5.0-RC-Installer-Part-*
