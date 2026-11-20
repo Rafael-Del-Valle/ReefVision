@@ -143,28 +143,26 @@ def test_mesh_shape_ratio_unavailable_in_saved_workflow(
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
-    assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    )
-    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
-    assert detail.status_code == 200, detail.text
-    assert detail.json()["run"]["status"] == "succeeded"
-    artifact = next(
-        item["payload_json"]
-        for item in detail.json()["artifacts"]
-        if item["data_type"] == "mesh_measurement_preview"
-    )
-    assert artifact["surface_area_to_bounding_diagonal_squared_ratio"] is None
-    assert (
-        artifact["axis_aligned_bounding_box_diagonal_m"]
-        == measurement["axis_aligned_bounding_box_diagonal_m"]
-    )
-    assert warning in artifact["qc_warnings"]
-    expected_sha = measurement["provenance"]["geometry_sha256"]
-    assert artifact["provenance"]["geometry_sha256"] == expected_sha
+    artifact_hashes = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        [artifact] = [
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        ]
+        assert artifact["payload_json"] == measurement
+        artifact_hashes.append(artifact["payload_sha256"])
+    assert len(artifact_hashes[0]) == 64
+    assert artifact_hashes[0] == artifact_hashes[1]
 
 
 @pytest.mark.parametrize(
