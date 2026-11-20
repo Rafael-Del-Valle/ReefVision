@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T22:54:08Z`
+Updated: `2026-11-20T23:04:46Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1289,8 +1289,9 @@ Evidence:
 - `browser`: The source browser reopened the same saved schedule after a cold restart, inspected its catch-up job and two ranked images, downloaded the receipt and replayed it twice with the same output digest. A paused schedule stayed empty. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-desktop-restart`)
 - `browser`: From three more projects, selected each saved graph, created a paused schedule, resumed, paused again and opened its actual job and typed output. Verified the sealed recording, two held-out detector inputs and reviewed report. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-purpose-navigation`)
 - `browser`: On the combined 1.7 schema, four independently opened saved schedules completed from Project navigation. The researcher opened each actual job and output. The CPU detector kept 15 pending proposals on two held-out images and excluded four training images. QC retained two ranked items and the report retained one confirmed event in 4.7 s. — `docs/validation/combined-monitoring-3e37524e2.json` (`rv17-durable-schedules-all-purposes-3e37524e2`)
+- `browser`: After a valid scheduled detector lost its copied checkpoint, the original MSI desktop displayed the failed Reviewed model runtime node. One occurrence produced zero inference jobs and zero proposals. A separate desktop process reopened the paused schedule and downloaded the same failure receipt. — `docs/validation/installed-monitoring-3e37524e2.json` (`rv17-schedules-unavailable-checkpoint-3e37524e2`)
 - `windows_installed`: After Windows Installer registered the candidate, the same ordinary account reopened its saved schedule in a new desktop and sidecar process, inspected one coalesced catch-up job and matching replay receipts. The paused control stayed empty. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-registered-restart`)
-- `physical_hardware`: none recorded
+- `physical_hardware`: The official MSI desktop submitted one detector occurrence to the physical RTX 3090. Two held-out images produced 19 pending proposals. Four training images were excluded. The sidecar GPU process, six original images, seven existing annotations and checkpoint were independently checked. — `docs/validation/installed-monitoring-3e37524e2.json` (`rv17-schedules-original-package-cuda-3e37524e2`)
 - `representative_data`: none recorded
 
 ### rv17-monitoring-alerts: Environmental and biological monitoring with reviewed anomaly proposals
