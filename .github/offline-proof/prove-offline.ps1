@@ -23,6 +23,7 @@ $harnessSha = (git -C $PSScriptRoot rev-parse HEAD).Trim()
 . (Join-Path $source 'scripts/lib/windows-clean-acceptance.ps1')
 . (Join-Path $source 'scripts/lib/windows-standard-user-webview2.ps1')
 . (Join-Path $source 'scripts/lib/windows-spatial-webview2-acceptance.ps1')
+. (Join-Path $PSScriptRoot 'firewall-scope.ps1')
 Assert-ReefVisionNoReparseAncestors -Path $Root
 if (-not (Test-ReefVisionAdministrator)) { throw 'The hosted proof needs an elevated runner and a separate ordinary GUI account.' }
 
@@ -48,12 +49,6 @@ New-Item -ItemType Directory -Path $profile | Out-Null
 $token = [guid]::NewGuid().ToString('N')
 Set-Content -LiteralPath (Join-Path $Root '.reefvision-acceptance-run') -Value $token
 Set-Content -LiteralPath (Join-Path $profile '.reefvision-clean-install-acceptance') -Value $token
-
-function Get-ActiveExternalLinks {
-    [Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | Where-Object {
-        $_.NetworkInterfaceType -ne 'Loopback' -and $_.OperationalStatus -eq 'Up'
-    } | Select-Object Id,Name,NetworkInterfaceType,OperationalStatus
-}
 
 function Test-ExternalTcp([Net.IPAddress]$Address) {
     $client = [Net.Sockets.TcpClient]::new($Address.AddressFamily)
@@ -105,39 +100,65 @@ function Read-PersistedReview([string]$Api, $FirstUse) {
 
 $controls = @([Net.Dns]::GetHostAddresses('api.github.com') | Where-Object { Test-ExternalTcp $_ })
 if (-not @($controls | Where-Object AddressFamily -eq 'InterNetwork').Count) { throw 'External TCP positive control failed before isolation.' }
-$active = @(Get-NetAdapter -IncludeHidden | Where-Object { $_.Status -eq 'Up' -and $_.Name -notmatch 'Loopback' })
-if (-not $active.Count -or -not @(Get-ActiveExternalLinks).Count) { throw 'The online runner has no eligible adapters to isolate.' }
+$runnerPrograms = @(Get-HostedRunnerPrograms)
+$policyGroup = "ReefVisionOfflineProof-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
 $record = [ordered]@{
     status='INCOMPLETE'; source_commit=$SourceCommit; expected_version=$Version; expected_schema=$Schema; msi_sha256=$msiHash
     original_build_run_id=$transport.build_run_id; proof_run_id=$env:GITHUB_RUN_ID; test_harness_sha=$harnessSha
-    surface='installed-tauri-webview2'; operating_system='Windows hosted runner'; topology='all operational non-loopback network adapters disconnected'
-    before=[ordered]@{utc=[DateTimeOffset]::UtcNow.ToString('o'); reachable_control_addresses=@($controls | ForEach-Object IPAddressToString); links=@(Get-ActiveExternalLinks); preexisting_product_registrations=0}
+    surface='installed-tauri-webview2'; operating_system='Windows hosted runner'; topology='deny outbound for all programs except authenticated Actions executables TCP 443'
+    before=[ordered]@{utc=[DateTimeOffset]::UtcNow.ToString('o'); reachable_control_addresses=@($controls | ForEach-Object IPAddressToString); preexisting_product_registrations=0}
+    permitted_control_plane=@($runnerPrograms | Select-Object Name,ProcessId,ExecutablePath)
     offline=[ordered]@{}; cleanup=[ordered]@{}
 }
 $report = Join-Path $evidence 'offline-install-report.json'
 $task = "ReefVisionOfflineRestore-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
 $taskRegistered = $false
 $armed = Join-Path $Root 'network-armed'
-$monitor = $null
+$systemProbeTask = "$task-TcpProbe"
+$systemProbeRegistered = $false
+$ordinaryProbe = $null
 $account = $null
 $debugPort = 0
 $oldPath = $env:PATH
 
+function Wait-TcpControls([bool]$ExpectedOnline) {
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(14)
+    $started = [DateTimeOffset]::UtcNow
+    do {
+        $last = [ordered]@{}
+        foreach ($role in 'ordinary','system') {
+            $probeLog = Join-Path $Root "probe-$role/tcp.jsonl"
+            if (-not (Test-Path -LiteralPath $probeLog -PathType Leaf)) { continue }
+            $sample = Get-Content -LiteralPath $probeLog -Tail 1 | ConvertFrom-Json -ErrorAction SilentlyContinue
+            if ($sample -and [DateTimeOffset]$sample.utc -ge $started -and
+                (($ExpectedOnline -and $sample.reachable.Count -eq $controls.Count) -or
+                 (-not $ExpectedOnline -and $sample.reachable.Count -eq 0))) {
+                $last[$role] = $sample
+            }
+        }
+        if ($last.Count -eq 2) { return $last }
+        Start-Sleep -Milliseconds 250
+    } while ([DateTimeOffset]::UtcNow -lt $deadline)
+    throw "The real ordinary-account and SYSTEM TCP control did not establish expected online=$ExpectedOnline."
+}
+
 function Assert-OfflinePhase([string]$Phase) {
-    $links = @(Get-ActiveExternalLinks)
+    $policy = Assert-ProofFirewall $runnerPrograms $policyGroup
     $reachable = @($controls | Where-Object { Test-ExternalTcp $_ })
-    if ($links.Count -or $reachable.Count) { throw "External networking is operational during $Phase." }
-    $record.offline[$Phase] = [ordered]@{utc=[DateTimeOffset]::UtcNow.ToString('o'); active_external_links=0; reachable_external_tcp=0}
+    if ($reachable.Count) { throw "External networking is operational during $Phase." }
+    $probe = Wait-TcpControls $false
+    $record.offline[$Phase] = [ordered]@{utc=[DateTimeOffset]::UtcNow.ToString('o'); host_tcp_reachable=0; effective_policy=$policy; control=$probe}
+    Write-ReefVisionEvidenceReport -Report $record -Path $report
 }
 
 try {
     $recoveryScript = Join-Path $Root 'restore-hosted-network.ps1'
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'restore-hosted-network.ps1') -Destination $recoveryScript
     $state = Join-Path $Root 'network-restore-state.json'
-    $restoreAt = (Get-Date).AddMinutes(4)
+    $restoreAt = (Get-Date).AddMinutes(12)
+    $record.original_policy = Save-OriginalFirewallAndHosts $Root
     [ordered]@{
-        computer=$env:COMPUTERNAME; expires_utc=[DateTimeOffset]::UtcNow.AddMinutes(10).ToString('o')
-        adapters=@($active | ForEach-Object { @{name=$_.Name; guid=[string]$_.InterfaceGuid} })
+        computer=$env:COMPUTERNAME; expires_utc=[DateTimeOffset]::UtcNow.AddMinutes(15).ToString('o')
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $state
     $action = New-ScheduledTaskAction -Execute (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe') `
         -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -State "{1}"' -f $recoveryScript,$state)
@@ -159,32 +180,34 @@ try {
     $record.watchdog_due_utc = $restoreAt.ToUniversalTime().ToString('o')
 
     $account = New-ReefVisionHostedGuiAccount -RunRoot $Root
+    Grant-ReefVisionHostedGuiAccess -Path $Root -Sid $account.sid -Rights 'RX'
+    $ordinaryControl = Join-Path $Root 'probe-ordinary'
+    New-Item -ItemType Directory -Path $ordinaryControl,(Join-Path $Root 'probe-system') | Out-Null
+    Grant-ReefVisionHostedGuiAccess -Path $ordinaryControl -Sid $account.sid -Rights 'M'
+    $probeScript = Join-Path $Root 'firewall-control.ps1'
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'firewall-control.ps1') -Destination $probeScript
+    $probePlan = Join-Path $Root 'firewall-probes.json'
+    @{ordinary_sid=$account.sid.Value; addresses=@($controls | ForEach-Object IPAddressToString); expires_utc=$restoreAt.AddMinutes(1).ToUniversalTime().ToString('o')} |
+        ConvertTo-Json | Set-Content -LiteralPath $probePlan
+    $probeArgs = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -Plan "{1}" -Role' -f $probeScript,$probePlan
+    $systemAction = New-ScheduledTaskAction -Execute $action.Execute -Argument "$probeArgs system"
+    $probeSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
+    Register-ScheduledTask -TaskName $systemProbeTask -Action $systemAction -Principal $principal -Settings $probeSettings | Out-Null
+    $systemProbeRegistered = $true
+    Start-ScheduledTask -TaskName $systemProbeTask
+    $ordinaryProbe = Start-Process -FilePath $action.Execute -ArgumentList "$probeArgs ordinary" -Credential $account.credential `
+        -LoadUserProfile -UseNewEnvironment -PassThru -WindowStyle Hidden
+    $record.before.controls = Wait-TcpControls $true
+
     $env:PATH = @((Join-Path $env:SystemRoot 'System32'), $env:SystemRoot, (Join-Path $env:SystemRoot 'System32/Wbem'),
         (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0'), (Join-Path $env:ProgramFiles 'PowerShell/7')) -join ';'
     foreach ($runtime in 'node','npm','python','python3','rustc','cargo') {
         if (Get-Command $runtime -ErrorAction SilentlyContinue) { throw "Developer runtime on measured PATH: $runtime" }
     }
 
-    $samples = Join-Path $evidence 'offline-links.jsonl'
-    $monitor = Start-Job -ArgumentList $samples -ScriptBlock {
-        param($Destination)
-        while ($true) {
-            $up = @([Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | Where-Object {
-                $_.NetworkInterfaceType -ne 'Loopback' -and $_.OperationalStatus -eq 'Up'
-            })
-            @{utc=[DateTimeOffset]::UtcNow.ToString('o'); external_up=$up.Count} |
-                ConvertTo-Json -Compress | Add-Content -LiteralPath $Destination
-            Start-Sleep -Milliseconds 850
-        }
-    }
-    $sampleReadyBy = [DateTimeOffset]::UtcNow.AddSeconds(8)
-    while (-not (Test-Path -LiteralPath $samples) -and [DateTimeOffset]::UtcNow -lt $sampleReadyBy) { Start-Sleep -Milliseconds 100 }
-    if (-not (Test-Path -LiteralPath $samples)) { throw 'Could not start the independent network link sampler.' }
-    if ((Get-Date) -ge $restoreAt.AddSeconds(-200)) { throw 'Online watchdog preflight left too little time for the measured interval.' }
     Set-Content -LiteralPath $armed -Value $token
-    Disable-NetAdapter -InputObject $active -Confirm:$false
-    $downBy = [DateTimeOffset]::UtcNow.AddSeconds(8)
-    while (@(Get-ActiveExternalLinks).Count -and [DateTimeOffset]::UtcNow -lt $downBy) { Start-Sleep -Milliseconds 100 }
+    $record.control_names = @(Add-RunnerControlNameResolution)
+    Set-ProofFirewall $runnerPrograms $policyGroup
     Assert-OfflinePhase 'before_install'
 
     $msiexec = Join-Path $env:SystemRoot 'System32/msiexec.exe'
@@ -238,22 +261,24 @@ try {
     Assert-OfflinePhase 'after_shell_and_sidecar_restart'
     $end = [DateTimeOffset]::Parse($record.offline.after_shell_and_sidecar_restart.utc)
     $start = [DateTimeOffset]::Parse($record.offline.before_install.utc)
-    Stop-Job -Job $monitor
-    $interval = @(Get-Content -LiteralPath $samples | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object {
-        $observed = [DateTimeOffset]$_.utc
-        $observed -ge $start -and $observed -le $end
-    })
-    if (-not $interval.Count -or @($interval | Where-Object external_up -ne 0).Count -or $end.LocalDateTime -ge $restoreAt) {
-        throw 'The independent link log did not establish an uninterrupted offline interval.'
-    }
-    $last = $start
-    foreach ($sample in ($interval + @(@{utc=$end.ToString('o')}))) {
-        $time = [DateTimeOffset]$sample.utc
-        if (($time - $last).TotalSeconds -gt 5) { throw 'The independent link log has an unobserved gap.' }
-        $last = $time
+    if ($end.LocalDateTime -ge $restoreAt) { throw 'The isolated operations exceeded the scheduled recovery deadline.' }
+    $record.offline_control_counts = [ordered]@{}
+    foreach ($role in 'ordinary','system') {
+        $interval = @(Get-Content -LiteralPath (Join-Path $Root "probe-$role/tcp.jsonl") | ForEach-Object {
+            $_ | ConvertFrom-Json -ErrorAction SilentlyContinue
+        } | Where-Object { [DateTimeOffset]$_.utc -ge $start -and [DateTimeOffset]$_.utc -le $end })
+        if (-not $interval.Count -or @($interval | Where-Object { $_.reachable.Count }).Count) {
+            throw "The $role control established external TCP reachability or no samples during the proof."
+        }
+        $last = $start
+        foreach ($sample in ($interval + @(@{utc=$end.ToString('o')}))) {
+            $time = [DateTimeOffset]$sample.utc
+            if (($time - $last).TotalSeconds -gt 5) { throw "The $role control has an unobserved gap." }
+            $last = $time
+        }
+        $record.offline_control_counts[$role] = $interval.Count
     }
     $record.offline_seconds = ($end - $start).TotalSeconds
-    $record.offline_sample_count = $interval.Count
     $record.status = 'OFFLINE_OPERATIONS_PASSED'
 } catch {
     $record.status = 'FAIL'
@@ -266,14 +291,21 @@ try {
             $onlineBy = [DateTimeOffset]::UtcNow.AddSeconds(40)
             do {
                 $online = @($controls | Where-Object { Test-ExternalTcp $_ })
-                if ($online.Count -eq $controls.Count -and @(Get-ActiveExternalLinks).Count) { break }
+                if ($online.Count -eq $controls.Count -and (Get-ScheduledTask -TaskName $task).State -eq 'Ready') { break }
                 Start-Sleep -Milliseconds 500
             } while ([DateTimeOffset]::UtcNow -lt $onlineBy)
             $record.cleanup.reachable_control_addresses = @($online | ForEach-Object IPAddressToString)
-            $record.cleanup.network_restored = $online.Count -eq $controls.Count -and @(Get-ActiveExternalLinks).Count -gt 0
+            $after = Get-Content -LiteralPath $watchdogLog -Tail 1 | ConvertFrom-Json
+            $record.cleanup.network_restored = $online.Count -eq $controls.Count -and $after.PSObject.Properties['restored'] -and $after.restored
             if (-not $record.cleanup.network_restored) { throw 'The planned watchdog remains registered because the online control has not recovered.' }
+            $hosts = Join-Path $env:SystemRoot 'System32/drivers/etc/hosts'
+            if ((Get-FileHash -LiteralPath $hosts).Hash -cne $record.original_policy.hosts_sha256) { throw 'Original Windows hosts bytes were not restored.' }
+            $record.cleanup.controls = Wait-TcpControls $true
         }
         if ($taskRegistered) { Unregister-ScheduledTask -TaskName $task -Confirm:$false }
+        Set-Content -LiteralPath (Join-Path $Root 'stop-probes') -Value $token
+        if ($ordinaryProbe -and -not $ordinaryProbe.WaitForExit(8000)) { $ordinaryProbe.Kill(); $null=$ordinaryProbe.WaitForExit(8000) }
+        if ($systemProbeRegistered) { Stop-ScheduledTask -TaskName $systemProbeTask; Unregister-ScheduledTask -TaskName $systemProbeTask -Confirm:$false }
         if ($account) { Remove-ReefVisionHostedGuiAccount -Account $account -EvidenceRoot $evidence }
         if ($debugPort) { Wait-ReefVisionWebView2DebugClosure -Port $debugPort }
         if (@(Get-ReefVisionInstalledRegistrations | Where-Object PSChildName -eq $product).Count) {
@@ -289,7 +321,10 @@ try {
         throw
     } finally {
         $env:PATH = $oldPath
-        if ($monitor) { Remove-Job -Job $monitor -Force }
+        foreach ($role in 'ordinary','system') {
+            $log = Join-Path $Root "probe-$role/tcp.jsonl"
+            if (Test-Path -LiteralPath $log -PathType Leaf) { Copy-Item -LiteralPath $log -Destination (Join-Path $evidence "$role-tcp-control.jsonl") }
+        }
         Write-ReefVisionEvidenceReport -Report $record -Path $report
     }
 }

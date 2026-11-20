@@ -64,7 +64,7 @@ jobs:
           npm --prefix source/apps/web ci --no-audit --no-fund
           if ($LASTEXITCODE) { throw 'Could not stage the pinned browser driver.' }
           ./proof/.github/offline-proof/stage-original.ps1 -RepositoryRoot ./source -RunId $env:RV_BUILD_RUN -SourceCommit $env:RV_SOURCE_SHA -Version $env:RV_VERSION -Root $env:RV_PROOF_ROOT
-      - name: Install, launch and reopen reviewed work with the hosted adapters disconnected
+      - name: Install, launch and reopen reviewed work under hosted outbound deny
         shell: pwsh
         env:
           RV_HOSTED_OFFLINE_PROOF: 'original-msi'

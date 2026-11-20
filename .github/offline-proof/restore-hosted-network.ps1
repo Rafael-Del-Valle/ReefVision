@@ -18,14 +18,14 @@ if (-not (Test-Path -LiteralPath $armed -PathType Leaf)) {
     $record | ConvertTo-Json -Compress | Add-Content -LiteralPath (Join-Path $root 'evidence/watchdog.jsonl')
     exit 0
 }
-$record.mode = 'restore_original_up_adapters'
+$record.mode = 'restore_original_firewall_and_hosts'
 try {
-    foreach ($original in $plan.adapters) {
-        $adapter = @(Get-NetAdapter -IncludeHidden | Where-Object { [string]$_.InterfaceGuid -eq $original.guid })
-        if ($adapter.Count -ne 1 -or $adapter[0].Name -cne $original.name) { throw 'Recovery could not identify an original adapter.' }
-        if ($adapter[0].Status -eq 'Disabled') { Enable-NetAdapter -InputObject $adapter[0] -Confirm:$false }
-    }
-    $record.enabled = $true
+    & (Join-Path $env:SystemRoot 'System32/netsh.exe') advfirewall import (Join-Path $root 'original-firewall.wfw')
+    if ($LASTEXITCODE -ne 0) { throw 'Could not restore the original Windows Firewall policy.' }
+    $hosts = Join-Path $env:SystemRoot 'System32/drivers/etc/hosts'
+    Copy-Item -LiteralPath (Join-Path $root 'original-hosts') -Destination $hosts -Force
+    Clear-DnsClientCache
+    $record.restored = $true
 } catch {
     $record.error = $_.Exception.Message
     throw
