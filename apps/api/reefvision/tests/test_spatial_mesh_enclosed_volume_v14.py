@@ -459,7 +459,7 @@ def test_representable_subnormal_volume_replays_saved_graph(
     client: TestClient, reverse_winding: bool
 ) -> None:
     """Keep finite tiny volumes measurable without asserting biological validity."""
-    edge = 1e-100
+    edge = 1e-103
     vertices = [
         [0.0, 0.0, 0.0],
         [edge, 0.0, 0.0],
@@ -468,7 +468,7 @@ def test_representable_subnormal_volume_replays_saved_graph(
     ]
     faces = [list(reversed(face)) for face in TETRA_FACES] if reverse_winding else TETRA_FACES
     expected_volume = float(Fraction(edge) ** 3 / 6)
-    assert expected_volume > 0
+    assert 0 < expected_volume < float.fromhex("0x1.0p-1022")
     assert abs(
         signed_enclosed_volume_mesh_units([tuple(vertex) for vertex in vertices], faces)
     ) == pytest.approx(expected_volume, rel=1e-12, abs=0)
