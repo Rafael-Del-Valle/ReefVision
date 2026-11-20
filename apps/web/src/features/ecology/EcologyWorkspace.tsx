@@ -13,6 +13,7 @@ import { EcologyAnalysisPanel } from "./EcologyAnalysisPanel";
 import { EventSummaryPanel } from "./EventSummaryPanel";
 import { ResearchReportsPanel } from "./ResearchReportsPanel";
 import { StudyDesignPanel } from "./StudyDesignPanel";
+import { TaxonomyWorkspace } from "./TaxonomyWorkspace";
 import {
   PoseOrganismLinksPanel,
   type PoseEvidenceNavigation,
@@ -624,6 +625,8 @@ export function EcologyWorkspace({
   onOpenPoseEvidence,
   classes = [],
   initialPoseOrganism,
+  onOpenWorkflow,
+  onOpenReviewerLab,
 }: {
   projectId: string;
   onOpenVideo?: (videoId: string) => void;
@@ -632,6 +635,8 @@ export function EcologyWorkspace({
     organismKey: string,
   ) => void;
   initialPoseOrganism?: string;
+  onOpenWorkflow?: () => void;
+  onOpenReviewerLab?: () => void;
   classes?: readonly { id: string; name: string }[];
 }) {
   const client = useQueryClient();
@@ -644,6 +649,7 @@ export function EcologyWorkspace({
     | "events"
     | "reports"
     | "study"
+    | "taxonomy"
   >(initialPoseOrganism ? "pose" : "registry");
   const [selected, setSelected] = useState(initialPoseOrganism ?? "");
   const query = useQuery({
@@ -746,8 +752,24 @@ export function EcologyWorkspace({
         >
           Study design
         </button>
+        <button
+          type="button"
+          className="secondary"
+          aria-pressed={view === "taxonomy"}
+          onClick={() => setView("taxonomy")}
+        >
+          Taxonomy and detectability
+        </button>
       </div>
-      {view === "study" ? (
+      {view === "taxonomy" ? (
+        <TaxonomyWorkspace
+          key={projectId}
+          projectId={projectId}
+          identities={query.data?.identities ?? []}
+          onOpenWorkflow={onOpenWorkflow}
+          onOpenReviewerLab={onOpenReviewerLab}
+        />
+      ) : view === "study" ? (
         <StudyDesignPanel
           key={projectId}
           projectId={projectId}
