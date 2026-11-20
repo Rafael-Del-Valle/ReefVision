@@ -476,3 +476,35 @@ def test_camera_duplicate_of_verified_original_remains_a_duplicate(
     assert reupload["failed"] == [], reupload
     assert reupload["successful"] == [], reupload
     assert reupload["duplicates"][0]["duplicate_image_id"] == (first["successful"][0]["image_id"])
+
+@pytest.mark.parametrize("damage", ["shorter", "larger"])
+def test_camera_duplicate_skips_reading_invalid_size_original(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    damage: str,
+) -> None:
+    """A corrupted camera original with the wrong length must not need a full rehash."""
+    project = create_project(client, "Removable camera duplicate short-circuit")
+    source = image_bytes("JPEG", size=(55, 41))
+    first = import_one(client, project["id"], filename="SONY_CARD_0103.JPG", content=source)
+    image_id = first["successful"][0]["image_id"]
+    record = client.get(f"/api/v1/images/{image_id}").json()
+    managed = Path(test_settings.resolved_data_dir) / record["managed_path"]
+    managed.write_bytes(source[:-7] if damage == "shorter" else source + b"corrupt")
+
+    original_open = Path.open
+
+    def reject_damaged_original_read(path: Path, mode: str = "r") -> BinaryIO:
+        if path == managed and mode == "rb":
+            raise AssertionError("Wrong-size original should not be read or hashed")
+        return original_open(path, mode)
+
+    monkeypatch.setattr(Path, "open", reject_damaged_original_read)
+    reupload = import_one(client, project["id"], filename="CANON_RESEND.JPEG", content=source)
+
+    assert reupload["successful"] == [], reupload
+    assert reupload["duplicates"] == [], reupload
+    assert len(reupload["failed"]) == 1, reupload
+    assert "missing or damaged managed original" in reupload["failed"][0]["detail"]
+    assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 1
