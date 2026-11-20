@@ -313,6 +313,8 @@ def preview_project_mesh(
 ) -> dict[str, Any]:
     """Run the same preview engine for inline or immutable project-owned source bytes."""
     if payload.asset_id is None:
+        if payload.anatomical_branch is not None:
+            raise ValidationError("Declared centerline requires a project mesh asset")
         # Inline geometry has no project-owned imported source identity.
         if (
             payload.calibration_review is not None

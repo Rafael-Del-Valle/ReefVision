@@ -13,7 +13,7 @@ from PIL import Image
 from reefvision.db.models import ModelRegistration
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.providers import resolve_torch_device
-from reefvision.ml.sleap_nn_provider import sleap_nn_runtime_status
+from reefvision.ml.sleap_nn_provider import SLEAP_NN_ACTIONABLE_RETIREMENT, SLEAP_NN_PROVIDER_ID
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +57,14 @@ class PoseEvaluationProviderExclusion(ValidationError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
+
+
+def reject_retired_pose_evaluation_provider(provider_name: str) -> None:
+    if provider_name.strip().casefold() == SLEAP_NN_PROVIDER_ID:
+        raise PoseEvaluationProviderExclusion(
+            "provider_runtime_unavailable",
+            SLEAP_NN_ACTIONABLE_RETIREMENT,
+        )
 
 
 class PoseEvaluationRuntime(Protocol):
@@ -285,23 +293,12 @@ def create_pose_evaluation_runtime(
     schema: PoseEvaluationSchema,
     device: str,
 ) -> PoseEvaluationRuntime:
+    reject_retired_pose_evaluation_provider(model.provider_name)
     provider = str(model.provider_name).strip().casefold()
     if provider == "reefpose":
         return _ReefPoseEvaluationRuntime(model, checkpoint_path, schema, device)
     if provider == "ultralytics":
         return _UltralyticsEvaluationRuntime(checkpoint_path, schema, device)
-    if provider == "sleap_nn":
-        status = sleap_nn_runtime_status()
-        if not status["ready"]:
-            raise PoseEvaluationProviderExclusion(
-                "provider_runtime_unavailable",
-                "SLEAP-NN evaluation runtime is unavailable: "
-                + "; ".join(str(issue) for issue in status["issues"]),
-            )
-        raise PoseEvaluationProviderExclusion(
-            "still_frame_unsupported",
-            "SLEAP-NN still-image evaluation is not supported by the validated runtime adapter",
-        )
     raise PoseEvaluationProviderExclusion(
         "unsupported_provider",
         f"Pose evaluation does not support provider {model.provider_name!r}",

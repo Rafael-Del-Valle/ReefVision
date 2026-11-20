@@ -5,6 +5,12 @@ param(
     [string]$ExpectedSchemaRevision = '',
     [string]$PreviousInstallerPath = '',
     [string]$CameraFixturePath = '',
+    [string]$LineageManifestPath = '',
+    [string]$LineageProfile = '',
+    [string]$LineageVerificationPath = '',
+    [string]$ExpectedInitialSchemaRevision = '',
+    [string]$SpatialWorkflowNodePath = '',
+    [switch]$VerifyPreviousInstallerRejectsUpgradedProfile,
     [switch]$PreviousInstallerSupportsIsolatedAcceptance,
     [switch]$DisposableTest,
     [switch]$PlanOnly,
@@ -18,6 +24,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'lib\windows-clean-acceptance.ps1')
+. (Join-Path $PSScriptRoot 'lib\windows-spatial-webview2-acceptance.ps1')
 
 if (-not $DisposableTest -and -not $PlanOnly) {
     throw 'Refusing destructive MSI acceptance. Supply -DisposableTest on a disposable Windows VM/machine, or use -PlanOnly.'
@@ -30,6 +37,25 @@ if ($PreviousInstallerPath) {
     $PreviousInstallerPath = (Resolve-Path -LiteralPath $PreviousInstallerPath).Path
     if ([System.IO.Path]::GetExtension($PreviousInstallerPath) -ine '.msi') { throw 'PreviousInstallerPath must identify an MSI.' }
 }
+$lineageArguments = @(@($LineageManifestPath, $LineageProfile, $LineageVerificationPath) | Where-Object { $_ })
+if ($lineageArguments.Count -notin @(0, 3)) {
+    throw 'Lineage acceptance requires -LineageManifestPath, -LineageProfile, and -LineageVerificationPath together.'
+}
+if ($VerifyPreviousInstallerRejectsUpgradedProfile -and (-not $PreviousInstallerPath -or $SkipUpgrade -or $SkipUninstall)) {
+    throw '-VerifyPreviousInstallerRejectsUpgradedProfile requires an earlier MSI plus enabled upgrade and uninstall steps.'
+}
+$LineageFixture = $null
+if ($lineageArguments.Count -eq 3) {
+    $LineageManifestPath = (Resolve-Path -LiteralPath $LineageManifestPath).Path
+    $LineageVerificationPath = (Resolve-Path -LiteralPath $LineageVerificationPath).Path
+    $LineageFixture = Read-ReefVisionLineageFixture `
+        -ManifestPath $LineageManifestPath `
+        -ProfileName $LineageProfile `
+        -VerificationPath $LineageVerificationPath
+    if ($ExpectedInitialSchemaRevision -and $LineageFixture.revision -ne $ExpectedInitialSchemaRevision) {
+        throw "Lineage revision $($LineageFixture.revision) does not match $ExpectedInitialSchemaRevision."
+    }
+}
 if ($CameraFixturePath) {
     $CameraFixturePath = (Resolve-Path -LiteralPath $CameraFixturePath).Path
     if ([System.IO.Path]::GetExtension($CameraFixturePath) -notin @('.jpg', '.jpeg', '.jpe', '.jfif', '.jfi', '.jif')) {
@@ -37,6 +63,15 @@ if ($CameraFixturePath) {
     }
     if (-not (Test-Path -LiteralPath $CameraFixturePath -PathType Leaf)) {
         throw 'CameraFixturePath must identify an existing file.'
+    }
+}
+if ($SpatialWorkflowNodePath) {
+    if ($PreviousInstallerPath) { throw 'Packaged spatial WebView2 acceptance requires a clean candidate installation.' }
+    $SpatialWorkflowNodePath = (Resolve-Path -LiteralPath $SpatialWorkflowNodePath).Path
+    if ((Split-Path -Leaf $SpatialWorkflowNodePath) -ine 'node.exe' -or
+        -not (Test-Path -LiteralPath $SpatialWorkflowNodePath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $RepositoryRoot 'apps\web\node_modules\@playwright\test\cli.js') -PathType Leaf)) {
+        throw 'Spatial WebView2 acceptance requires the Node executable and repository Playwright dependencies.'
     }
 }
 if ($PreviousInstallerPath -and -not $PreviousInstallerSupportsIsolatedAcceptance) {
@@ -48,6 +83,8 @@ $Token = [guid]::NewGuid().ToString('N').Substring(0, 12)
 $RunRoot = Join-Path $AcceptanceRoot "reefvision-clean-$Token"
 $InstallRoot = Join-Path $RunRoot 'install'
 $DataRoot = Join-Path $RunRoot 'data'
+$RestoreDataRoot = Join-Path $RunRoot 'restore-data'
+$SpatialDataRoot = Join-Path $RunRoot 'spatial-data'
 $EvidenceRoot = Join-Path $RepositoryRoot ".artifacts\windows-clean-acceptance-$Token"
 $ReportPath = Join-Path $EvidenceRoot 'report.json'
 $InstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
@@ -97,6 +134,7 @@ $report = [ordered]@{
     first_launch = New-ReefVisionEvidenceResult
     frontend_backend_connectivity = New-ReefVisionEvidenceResult
     webview2 = New-ReefVisionEvidenceResult
+    spatial_workflow = if ($SpatialWorkflowNodePath) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Packaged spatial WebView2 acceptance not requested' }
     schema_migration = New-ReefVisionEvidenceResult
     model_policy = New-ReefVisionEvidenceResult
     sam2_live = if ($LiveSam2Acceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Real SAM 2.1 packaged runtime acceptance not requested' }
@@ -106,6 +144,12 @@ $report = [ordered]@{
     project_persistence = New-ReefVisionEvidenceResult
     restart = New-ReefVisionEvidenceResult
     project_exchange = New-ReefVisionEvidenceResult
+    lineage_preflight = if ($LineageFixture) { New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Verified $LineageProfile at revision $($LineageFixture.revision); manifest and source hashes matched; verification SHA-256 $($LineageFixture.verification_sha256)." } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Lineage fixture not supplied' }
+    lineage_initial_evidence = if ($LineageFixture) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Lineage fixture not supplied' }
+    lineage_final_evidence = if ($LineageFixture) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Lineage fixture not supplied' }
+    lineage_exchange_roundtrip = if ($LineageFixture) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Lineage fixture not supplied' }
+    lineage_restore = if ($LineageFixture) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Lineage fixture not supplied' }
+    historical_schema_rejection = if ($VerifyPreviousInstallerRejectsUpgradedProfile) { New-ReefVisionEvidenceResult } elseif ($LineageFixture -and -not $PreviousInstallerPath) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'No historical installer supplied for this lineage profile' } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Historical schema rejection not requested' }
     upgrade = if ($SkipUpgrade) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'SkipUpgrade requested' } elseif (-not $PreviousInstallerPath) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'previous installer not supplied' } else { New-ReefVisionEvidenceResult }
     uninstall = if ($SkipUninstall) { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'SkipUninstall requested' } else { New-ReefVisionEvidenceResult }
     data_retention = New-ReefVisionEvidenceResult
@@ -172,12 +216,16 @@ function Wait-BackendPort(
     }
     throw "Backend did not publish its port within $Seconds seconds: $Path"
 }
-function Start-AcceptanceDesktop {
-    $BackendPortPath = Join-Path $DataRoot 'runtime\backend-port.txt'
+function Start-AcceptanceDesktop([string]$ProfileDataRoot = $DataRoot, [int]$WebViewDebugPort = 0) {
+    $BackendPortPath = Join-Path $ProfileDataRoot 'runtime\backend-port.txt'
     Remove-Item -LiteralPath $BackendPortPath -Force -ErrorAction SilentlyContinue
     $isolatedOverrides = @{
         REEFVISION_WINDOWS_ACCEPTANCE = '1'
-        REEFVISION_ACCEPTANCE_DATA_DIR = $DataRoot
+        REEFVISION_ACCEPTANCE_DATA_DIR = $ProfileDataRoot
+        WEBVIEW2_USER_DATA_FOLDER = (Join-Path $ProfileDataRoot 'webview2')
+    }
+    if ($WebViewDebugPort) {
+        $isolatedOverrides['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = "--remote-debugging-address=127.0.0.1 --remote-debugging-port=$WebViewDebugPort"
     }
     if ($LiveSam2Acceptance) {
         # The default clean-install acceptance deliberately forbids network
@@ -196,7 +244,7 @@ function Start-AcceptanceDesktop {
         $isolatedOverrides['OPENBLAS_NUM_THREADS'] = '1'
         $isolatedOverrides['TOKENIZERS_PARALLELISM'] = 'false'
     }
-    return Invoke-ReefVisionIsolatedEnvironment -DataRoot $DataRoot -AdditionalEnvironment $isolatedOverrides -Action {
+    return Invoke-ReefVisionIsolatedEnvironment -DataRoot $ProfileDataRoot -AdditionalEnvironment $isolatedOverrides -Action {
         Start-Process -FilePath (Join-Path $InstallRoot 'ReefVision.exe') -WorkingDirectory $InstallRoot -PassThru -WindowStyle Hidden
     }
 }
@@ -207,6 +255,57 @@ function Stop-AcceptanceDesktop($Process) {
     if ($Process.MainWindowHandle -ne 0) { [ReefVision.ReefVisionAcceptanceNative]::PostMessage($Process.MainWindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null }
     $Process.WaitForExit(15000) | Out-Null
     if (-not $Process.HasExited) { throw 'ReefVision did not close cleanly within 15 seconds.' }
+}
+
+function Assert-HistoricalDesktopRejectsProfile(
+    [string]$ProfileDataRoot,
+    [string]$RejectedRevision,
+    [int]$Seconds = 45
+) {
+    $portPath = Join-Path $ProfileDataRoot 'runtime\backend-port.txt'
+    $backendLogPath = Join-Path $ProfileDataRoot 'logs\backend.log'
+    $desktopProcess = Start-AcceptanceDesktop -ProfileDataRoot $ProfileDataRoot
+    $explicitRejection = $false
+    $revisionPattern = [regex]::Escape($RejectedRevision)
+    $deadline = [DateTime]::UtcNow.AddSeconds($Seconds)
+    try {
+        while ([DateTime]::UtcNow -lt $deadline) {
+            if (Test-Path -LiteralPath $portPath) {
+                $value = (Get-Content -LiteralPath $portPath -Raw).Trim()
+                if ($value -match '^\d+$') {
+                    throw "Historical desktop published backend port $value for a newer database."
+                }
+            }
+            if (Test-Path -LiteralPath $backendLogPath) {
+                $backendLog = Get-Content -LiteralPath $backendLogPath -Raw
+                if ($backendLog -match "(?i)(can't locate revision|no such revision|not a valid upgrade target|database revision .* newer)[^\r\n]*$revisionPattern") {
+                    $explicitRejection = $true
+                    return "backend explicitly rejected migration revision $RejectedRevision"
+                }
+            }
+            $desktopProcess.Refresh()
+            if ($desktopProcess.HasExited) {
+                throw 'Historical desktop exited without publishing a port or an explicit migration-revision rejection.'
+            }
+            Start-Sleep -Milliseconds 250
+        }
+        throw "Historical desktop published no backend port, but no explicit migration-revision rejection appeared within $Seconds seconds."
+    } finally {
+        $desktopProcess.Refresh()
+        if (-not $desktopProcess.HasExited) {
+            if ($explicitRejection) {
+                # The failed startup has no usable application window. End only the
+                # disposable process started for this negative test before restoring.
+                $desktopProcess.Kill()
+                if (-not $desktopProcess.WaitForExit(15000)) {
+                    throw 'Rejected historical desktop remained running after cleanup.'
+                }
+            } else {
+                try { Stop-AcceptanceDesktop $desktopProcess }
+                catch { Write-Warning "Could not close failed historical probe: $($_.Exception.Message)" }
+            }
+        }
+    }
 }
 function Import-AcceptanceImage(
     [string]$Url,
@@ -254,6 +353,151 @@ function Import-AcceptanceAnnotations([string]$Url, [object[]]$Uploads) {
     }
 }
 
+function Get-AcceptanceContentSha256([string]$Url) {
+    Add-Type -AssemblyName System.Net.Http
+    $http = [System.Net.Http.HttpClient]::new()
+    try {
+        $bytes = $http.GetByteArrayAsync($Url).GetAwaiter().GetResult()
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        try { return ([BitConverter]::ToString($sha.ComputeHash([byte[]]$bytes))).Replace('-', '').ToLowerInvariant() }
+        finally { $sha.Dispose() }
+    } finally { $http.Dispose() }
+}
+
+function Get-NormalizedLineageReviewEvidence($Evidence) {
+    return [ordered]@{
+        calibration_operator_id = $Evidence.calibration_operator_id
+        independent_reviewer_id = $Evidence.independent_reviewer_id
+        independent_review_decision = $Evidence.independent_review_decision
+        independent_review_note = $Evidence.independent_review_note
+        reviewed_at_utc = $Evidence.reviewed_at_utc
+        reviewed_geometry_sha256 = $Evidence.reviewed_geometry_sha256
+        reviewed_source_payload_sha256 = $Evidence.reviewed_source_payload_sha256
+        reviewed_meters_per_unit = $Evidence.reviewed_meters_per_unit
+        reviewed_calibration_method = $Evidence.reviewed_calibration_method
+        reviewed_calibration_evidence = $Evidence.reviewed_calibration_evidence
+    }
+}
+
+function Assert-AcceptanceLineageEvidence(
+    [string]$Api,
+    $Fixture,
+    [string]$ProjectId,
+    [switch]$AllowRemappedIds,
+    $Baseline = $null
+) {
+    $project = Invoke-RestMethod "$Api/projects/$ProjectId"
+    if (-not $AllowRemappedIds -and [string]$project.id -cne [string]$Fixture.project_id) {
+        throw 'Lineage project ID changed while opening the historical profile.'
+    }
+    $scientific = @()
+    $assets = @()
+    if (@($Fixture.records | Where-Object kind -eq 'scientific_record').Count -gt 0) {
+        $scientificResponse = Invoke-RestMethod "$Api/projects/$ProjectId/scientific-records?limit=500"
+        $scientific = @($scientificResponse.items)
+    }
+    if (@($Fixture.records | Where-Object kind -in @('spatial_source_asset', 'spatial_calibration_review')).Count -gt 0) {
+        $assets = @(Invoke-RestMethod "$Api/projects/$ProjectId/spatial/assets")
+    }
+    $observed = @()
+    foreach ($record in @($Fixture.records)) {
+        $kind = [string]$record.kind
+        $expectedId = [string]$record.id
+        $expectedHash = [string]$record.sha256
+        if ($kind -eq 'scientific_record') {
+            $matches = @(if ($AllowRemappedIds) {
+                @($scientific | Where-Object { $_.content_sha256 -ceq $expectedHash })
+            } else {
+                @($scientific | Where-Object { [string]$_.id -ceq $expectedId -and $_.content_sha256 -ceq $expectedHash })
+            })
+            if ($matches.Count -ne 1) { throw "Expected one preserved scientific record with SHA-256 $expectedHash; found $($matches.Count)." }
+            $observed += [pscustomobject]@{kind=$kind;original_id=$expectedId;current_id=[string]$matches[0].id;sha256=$expectedHash;evidence=$null;asset_id=$null}
+            continue
+        }
+        if ($kind -eq 'spatial_source_asset') {
+            $matches = @(if ($AllowRemappedIds) {
+                @($assets | Where-Object { $_.sha256 -ceq $expectedHash })
+            } else {
+                @($assets | Where-Object { [string]$_.id -ceq $expectedId -and $_.sha256 -ceq $expectedHash })
+            })
+            if ($matches.Count -ne 1) { throw "Expected one preserved spatial source with SHA-256 $expectedHash; found $($matches.Count)." }
+            $actualContentHash = Get-AcceptanceContentSha256 "$Api/projects/$ProjectId/spatial/assets/$($matches[0].id)/content"
+            if ($actualContentHash -cne $expectedHash) { throw 'Spatial source API content does not match its immutable source hash.' }
+            $observed += [pscustomobject]@{kind=$kind;original_id=$expectedId;current_id=[string]$matches[0].id;sha256=$expectedHash;evidence=$null;asset_id=[string]$matches[0].id}
+            continue
+        }
+        if ($kind -eq 'spatial_calibration_review') {
+            $reviews = @()
+            foreach ($asset in $assets) {
+                $response = Invoke-RestMethod "$Api/projects/$ProjectId/spatial/assets/$($asset.id)/calibration-reviews"
+                foreach ($review in @($response)) {
+                    $reviews += [pscustomobject]@{review=$review;asset_id=[string]$asset.id}
+                }
+            }
+            if ($AllowRemappedIds) {
+                $baselineReview = @($Baseline | Where-Object kind -eq 'spatial_calibration_review')
+                if ($baselineReview.Count -ne 1) { throw 'Lineage exchange comparison requires exactly one baseline calibration review.' }
+                $expectedEvidence = $baselineReview[0].evidence | ConvertTo-Json -Depth 8 -Compress
+                $matches = @($reviews | Where-Object {
+                    $_.review.source_sha256 -ceq $_.review.evidence.reviewed_source_payload_sha256 -and
+                    $_.asset_id -ceq [string]$_.review.spatial_source_asset_id -and
+                    $_.asset_id -ceq [string]$_.review.evidence.reviewed_spatial_source_asset_id -and
+                    ((Get-NormalizedLineageReviewEvidence $_.review.evidence | ConvertTo-Json -Depth 8 -Compress) -ceq $expectedEvidence)
+                })
+            } else {
+                $matches = @($reviews | Where-Object { [string]$_.review.id -ceq $expectedId -and $_.review.evidence_sha256 -ceq $expectedHash })
+            }
+            if ($matches.Count -ne 1) { throw "Expected one preserved calibration review; found $($matches.Count)." }
+            $review = $matches[0].review
+            $normalized = Get-NormalizedLineageReviewEvidence $review.evidence
+            $observed += [pscustomobject]@{kind=$kind;original_id=$expectedId;current_id=[string]$review.id;sha256=[string]$review.evidence_sha256;evidence=$normalized;asset_id=[string]$matches[0].asset_id}
+            continue
+        }
+        throw "Unsupported lineage evidence kind: $kind"
+    }
+    return ,$observed
+}
+
+function Import-AcceptanceExchange([string]$Url, [string]$ArchivePath, [string]$ProjectName) {
+    Add-Type -AssemblyName System.Net.Http
+    $http = [System.Net.Http.HttpClient]::new()
+    $form = [System.Net.Http.MultipartFormDataContent]::new()
+    try {
+        $archiveBytes = [IO.File]::ReadAllBytes($ArchivePath)
+        $file = [System.Net.Http.ByteArrayContent]::new([byte[]]$archiveBytes)
+        $file.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse('application/zip')
+        $form.Add($file, 'file', [IO.Path]::GetFileName($ArchivePath))
+        $form.Add([System.Net.Http.StringContent]::new($ProjectName), 'project_name')
+        $response = $http.PostAsync($Url, $form).GetAwaiter().GetResult()
+        $payload = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+        if (-not $response.IsSuccessStatusCode) { throw "Project Exchange import failed with HTTP $([int]$response.StatusCode): $payload" }
+        return $payload | ConvertFrom-Json
+    } finally {
+        $form.Dispose()
+        $http.Dispose()
+    }
+}
+
+function Export-AcceptanceExchange([string]$Api, [string]$ProjectId, [string]$ArchivePath, [string]$Notes) {
+    $exchange = Invoke-RestMethod "$Api/projects/$ProjectId/exchange-packages" -Method Post -ContentType 'application/json' -Body (@{include_media=$true;include_model_weights=$false;include_generated_artifacts=$true;notes=$Notes} | ConvertTo-Json)
+    $deadline = [DateTime]::UtcNow.AddSeconds(60)
+    do {
+        Start-Sleep -Milliseconds 500
+        $job = Invoke-RestMethod "$Api/jobs/$($exchange.job_id)"
+    } while ($job.status -in @('queued','running') -and [DateTime]::UtcNow -lt $deadline)
+    if ($job.status -ne 'succeeded') { throw "Project Exchange export job ended as $($job.status)." }
+    Invoke-WebRequest "$Api/exchange-packages/$($exchange.package.id)/download" -OutFile $ArchivePath
+    if ((Get-Item $ArchivePath).Length -le 0) { throw 'Project Exchange archive is empty.' }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::OpenRead($ArchivePath)
+    try {
+        if (-not ($zip.Entries | Where-Object FullName -eq 'reefvision-exchange-manifest.json')) {
+            throw 'Project Exchange archive has no reefvision-exchange-manifest.json.'
+        }
+    } finally { $zip.Dispose() }
+    return $exchange
+}
+
 function New-AcceptanceSam2Image {
     param([switch]$YoloFixture)
     # Different imported images need different pixels: the import layer
@@ -291,6 +535,7 @@ if ($PlanOnly) {
     exit 0
 }
 
+$acceptanceAlreadyUninstalled = $false
 try {
     if (-not (Test-ReefVisionAdministrator)) { throw 'Administrator privileges are required. Rerun PowerShell as Administrator on the disposable machine.' }
     $existing = @(Get-ReefVisionInstalledRegistrations)
@@ -298,6 +543,10 @@ try {
     New-Item -ItemType Directory -Path $RunRoot,$DataRoot -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $RunRoot '.reefvision-acceptance-run') -Value $Token
     Set-Content -LiteralPath (Join-Path $DataRoot '.reefvision-clean-install-acceptance') -Value $Token
+    if ($LineageFixture) {
+        $stagedLineage = Copy-ReefVisionLineageProfile -Fixture $LineageFixture -DataRoot $DataRoot
+        $report.lineage_preflight = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Verified and staged $LineageProfile at revision $($LineageFixture.revision); live database SHA-256 $((Get-FileHash -LiteralPath $stagedLineage.database -Algorithm SHA256).Hash.ToLowerInvariant()); backup remained outside the live profile."
+    }
 
     $initialInstaller = if ($PreviousInstallerPath -and -not $SkipUpgrade) { $PreviousInstallerPath } else { $InstallerPath }
     $exitCode = Run-Msi -Action Install -PackageOrProduct $initialInstaller -LogName 'install.log' -TargetRoot $InstallRoot
@@ -314,11 +563,50 @@ try {
     $report.shortcuts = if ($shortcuts.Count) { New-ReefVisionEvidenceResult -Status 'PASS' -Detail ($shortcuts -join '; ') } else { New-ReefVisionEvidenceResult -Status 'FAIL' -Detail 'No ReefVision desktop or Start menu shortcut was found.' }
     if (-not $shortcuts.Count) { throw 'The MSI installed no discoverable ReefVision shortcut.' }
 
+    if ($SpatialWorkflowNodePath) {
+        try {
+            New-Item -ItemType Directory -Path $SpatialDataRoot | Out-Null
+            Set-Content -LiteralPath (Join-Path $SpatialDataRoot '.reefvision-clean-install-acceptance') -Value $Token
+            $debugPort = Get-ReefVisionLoopbackDebugPort
+            $spatialDesktop = Start-AcceptanceDesktop -ProfileDataRoot $SpatialDataRoot -WebViewDebugPort $debugPort
+            try {
+                $spatialPort = Wait-BackendPort -Path (Join-Path $SpatialDataRoot 'runtime\backend-port.txt') -DesktopProcess $spatialDesktop -BackendLogPath (Join-Path $SpatialDataRoot 'logs\backend.log')
+                $spatialApi = "http://127.0.0.1:$spatialPort/api/v1"
+                $null = Assert-AcceptancePackagedBackend -Api $spatialApi -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision
+                $result = Invoke-ReefVisionSpatialWebView2Acceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id
+            } finally {
+                try {
+                    $spatialDesktop.Refresh()
+                    Stop-AcceptanceDesktop $spatialDesktop
+                } catch {
+                    if (-not $spatialDesktop.HasExited) {
+                        $spatialDesktop.Kill($true)
+                        $null = $spatialDesktop.WaitForExit(15000)
+                    }
+                    throw
+                }
+                Wait-ReefVisionWebView2DebugClosure -Port $debugPort
+            }
+            $report.spatial_workflow = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed WebView2 passed $($result.completed_journeys) desktop journeys. Two synthetic originals were reviewed and compared in graph $($result.graph_record_id), runs $($result.first_run_id) and $($result.replay_run_id), with downloaded comparison SHA-256 $($result.artifact.payload_sha256)."
+        } catch {
+            $report.spatial_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
+            throw
+        }
+    }
+
     $desktop = Start-AcceptanceDesktop
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
     $initialVersion = Get-AcceptanceMsiProperty -Path $initialInstaller -Name 'ProductVersion'
-    $initialRevision = if ($initialInstaller -eq $InstallerPath) { $ExpectedSchemaRevision } else { '' }
+    $initialRevision = if ($initialInstaller -eq $InstallerPath) {
+        $ExpectedSchemaRevision
+    } elseif ($ExpectedInitialSchemaRevision) {
+        $ExpectedInitialSchemaRevision
+    } elseif ($LineageFixture) {
+        [string]$LineageFixture.revision
+    } else {
+        ''
+    }
     $migrationPayload = Assert-AcceptancePackagedBackend -Api $api -ExpectedAppVersion $initialVersion -ExpectedRevision $initialRevision
     $report.first_launch = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and packaged backend started; database initialized; API version $initialVersion"
     $report.frontend_backend_connectivity = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Desktop-published loopback API responded.'
@@ -326,6 +614,11 @@ try {
     $report.webview2 = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "WebView2 browser PID $webviewPid started under the desktop."
     if ($initialRevision) {
         $report.schema_migration = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Packaged database reached $($migrationPayload.current_schema_revision)."
+    }
+    $lineageBaseline = $null
+    if ($LineageFixture) {
+        $lineageBaseline = Assert-AcceptanceLineageEvidence -Api $api -Fixture $LineageFixture -ProjectId $LineageFixture.project_id
+        $report.lineage_initial_evidence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed $initialVersion opened project $($LineageFixture.project_id) and preserved $(@($lineageBaseline).Count) declared evidence records from revision $($LineageFixture.revision)."
     }
 
     # Project templates were intentionally reduced to 'blank' in 1.0.
@@ -578,6 +871,10 @@ try {
     $api = "http://127.0.0.1:$port/api/v1"
     $finalMigration = Assert-AcceptancePackagedBackend -Api $api -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision
     $report.schema_migration = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Packaged database reached $($finalMigration.current_schema_revision)."
+    if ($LineageFixture) {
+        $lineageFinal = Assert-AcceptanceLineageEvidence -Api $api -Fixture $LineageFixture -ProjectId $LineageFixture.project_id
+        $report.lineage_final_evidence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Candidate $ProductVersion migrated the historical profile to $($finalMigration.current_schema_revision) without changing project $($LineageFixture.project_id) or its $(@($lineageFinal).Count) declared evidence IDs and hashes."
+    }
     $persisted = Invoke-RestMethod "$api/projects/$projectId"
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
@@ -630,22 +927,64 @@ try {
     $report.restart = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Desktop and backend restarted cleanly.'
     $report.project_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Project $projectId, image $imageId, and annotation $annotationId persisted; pre-restart database SHA-256 $projectChecksum"
 
-    $exchange = Invoke-RestMethod "$api/projects/$projectId/exchange-packages" -Method Post -ContentType 'application/json' -Body (@{include_media=$true;include_model_weights=$false;include_generated_artifacts=$true;notes='clean install acceptance'} | ConvertTo-Json)
-    $jobId = $exchange.job_id
-    $deadline = [DateTime]::UtcNow.AddSeconds(60)
-    do { Start-Sleep -Milliseconds 500; $job = Invoke-RestMethod "$api/jobs/$jobId" } while ($job.status -in @('queued','running') -and [DateTime]::UtcNow -lt $deadline)
-    if ($job.status -ne 'succeeded') { throw "Project Exchange export job ended as $($job.status)." }
     $archive = Join-Path $EvidenceRoot 'project-exchange.reefvision.zip'
-    Invoke-WebRequest "$api/exchange-packages/$($exchange.package.id)/download" -OutFile $archive
-    if ((Get-Item $archive).Length -le 0) { throw 'Project Exchange archive is empty.' }
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $zip = [IO.Compression.ZipFile]::OpenRead($archive); try { if (-not ($zip.Entries | Where-Object FullName -eq 'reefvision-exchange-manifest.json')) { throw 'Project Exchange archive has no reefvision-exchange-manifest.json.' } } finally { $zip.Dispose() }
+    $null = Export-AcceptanceExchange -Api $api -ProjectId $projectId -ArchivePath $archive -Notes 'clean install acceptance'
     $report.project_exchange = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Exported inspectable archive: $archive"
+    if ($LineageFixture) {
+        $lineageArchive = Join-Path $EvidenceRoot "$LineageProfile.reefvision.zip"
+        $null = Export-AcceptanceExchange -Api $api -ProjectId $LineageFixture.project_id -ArchivePath $lineageArchive -Notes "installed lineage acceptance: $LineageProfile"
+        $lineageImport = Import-AcceptanceExchange -Url "$api/exchange-packages/import" -ArchivePath $lineageArchive -ProjectName "Lineage round trip $Token"
+        if ([string]$lineageImport.project_id -ceq [string]$LineageFixture.project_id) {
+            throw 'Project Exchange lineage import reused the source project ID.'
+        }
+        $lineageImported = Assert-AcceptanceLineageEvidence -Api $api -Fixture $LineageFixture -ProjectId $lineageImport.project_id -AllowRemappedIds -Baseline $lineageBaseline
+        $report.lineage_exchange_roundtrip = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Exported $lineageArchive, imported isolated project $($lineageImport.project_id), and preserved $(@($lineageImported).Count) scientific/spatial evidence records with remapped IDs."
+    }
     Stop-AcceptanceDesktop $desktop
 
+    if ($LineageFixture) {
+        New-Item -ItemType Directory -Path $RestoreDataRoot -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $RestoreDataRoot '.reefvision-clean-install-acceptance') -Value $Token
+        $restoredLineage = Copy-ReefVisionLineageProfile -Fixture $LineageFixture -DataRoot $RestoreDataRoot -UseBackup
+        if ($VerifyPreviousInstallerRejectsUpgradedProfile) {
+            $upgradedDatabase = Join-Path $DataRoot 'reefvision.db'
+            $upgradedHashBefore = (Get-FileHash -LiteralPath $upgradedDatabase -Algorithm SHA256).Hash.ToLowerInvariant()
+            $candidateProductCode = Get-AcceptanceMsiProperty -Path $InstallerPath -Name 'ProductCode'
+            Run-Msi -Action Uninstall -PackageOrProduct $candidateProductCode -LogName 'candidate-before-historical-rejection-uninstall.log' | Out-Null
+            Run-Msi -Action Install -PackageOrProduct $PreviousInstallerPath -LogName 'historical-rejection-install.log' -TargetRoot $InstallRoot | Out-Null
+            $rejectionDetail = Assert-HistoricalDesktopRejectsProfile -ProfileDataRoot $DataRoot -RejectedRevision $ExpectedSchemaRevision
+            $upgradedHashAfter = (Get-FileHash -LiteralPath $upgradedDatabase -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($upgradedHashAfter -cne $upgradedHashBefore) {
+                throw 'Historical build changed the upgraded database while rejecting it.'
+            }
+            $report.historical_schema_rejection = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Historical $initialVersion rejected schema $ExpectedSchemaRevision ($rejectionDetail); database SHA-256 remained $upgradedHashAfter."
+
+            $restoreDesktop = Start-AcceptanceDesktop -ProfileDataRoot $RestoreDataRoot
+            $restorePort = Wait-BackendPort -Path (Join-Path $RestoreDataRoot 'runtime\backend-port.txt') -DesktopProcess $restoreDesktop -BackendLogPath (Join-Path $RestoreDataRoot 'logs\backend.log')
+            $restoreApi = "http://127.0.0.1:$restorePort/api/v1"
+            $null = Assert-AcceptancePackagedBackend -Api $restoreApi -ExpectedAppVersion $initialVersion -ExpectedRevision $LineageFixture.revision
+            $restoredEvidence = Assert-AcceptanceLineageEvidence -Api $restoreApi -Fixture $LineageFixture -ProjectId $LineageFixture.project_id
+            Stop-AcceptanceDesktop $restoreDesktop
+            $report.lineage_restore = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Historical $initialVersion opened the separate verified backup at $($LineageFixture.revision) and preserved $(@($restoredEvidence).Count) declared evidence records; live upgraded profile was not replaced."
+            $previousProductCode = Get-AcceptanceMsiProperty -Path $PreviousInstallerPath -Name 'ProductCode'
+            Run-Msi -Action Uninstall -PackageOrProduct $previousProductCode -LogName 'historical-final-uninstall.log' | Out-Null
+            $acceptanceAlreadyUninstalled = $true
+        } else {
+            $restoreDesktop = Start-AcceptanceDesktop -ProfileDataRoot $RestoreDataRoot
+            $restorePort = Wait-BackendPort -Path (Join-Path $RestoreDataRoot 'runtime\backend-port.txt') -DesktopProcess $restoreDesktop -BackendLogPath (Join-Path $RestoreDataRoot 'logs\backend.log')
+            $restoreApi = "http://127.0.0.1:$restorePort/api/v1"
+            $restoreMigration = Assert-AcceptancePackagedBackend -Api $restoreApi -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision
+            $restoredEvidence = Assert-AcceptanceLineageEvidence -Api $restoreApi -Fixture $LineageFixture -ProjectId $LineageFixture.project_id
+            Stop-AcceptanceDesktop $restoreDesktop
+            $report.lineage_restore = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Candidate $ProductVersion opened the separate verified $($LineageFixture.revision) backup, migrated it to $($restoreMigration.current_schema_revision), and preserved $(@($restoredEvidence).Count) declared evidence records; live upgraded profile was not replaced."
+        }
+    }
+
     if (-not $SkipUninstall) {
-        $productCode = Get-AcceptanceMsiProperty -Path $InstallerPath -Name 'ProductCode'
-        Run-Msi -Action Uninstall -PackageOrProduct $productCode -LogName 'uninstall.log' | Out-Null
+        if (-not $acceptanceAlreadyUninstalled) {
+            $productCode = Get-AcceptanceMsiProperty -Path $InstallerPath -Name 'ProductCode'
+            Run-Msi -Action Uninstall -PackageOrProduct $productCode -LogName 'uninstall.log' | Out-Null
+        }
         if (Test-Path (Join-Path $InstallRoot 'ReefVision.exe')) { throw 'ReefVision.exe remains after uninstall.' }
         if (@($shortcutCandidates | Where-Object { Test-Path -LiteralPath $_ }).Count -gt 0) { throw 'A ReefVision shortcut remains after uninstall.' }
         if (@(Get-ReefVisionInstalledRegistrations).Count -gt 0) { throw 'ReefVision uninstall registration remains after uninstall.' }
@@ -666,15 +1005,21 @@ try {
     # The sidecar initially writes backend.log, but FastAPI create_app()
     # switches the rotating logger to api.log. Capture both logs and rotated
     # files: SAM2 stage timings and inference exceptions land in api.log.
-    foreach ($logName in @('backend.log', 'api.log', 'api.log.1', 'api.log.2')) {
-        $sourceLog = Join-Path (Join-Path $DataRoot 'logs') $logName
-        if (Test-Path -LiteralPath $sourceLog -PathType Leaf) {
-            try {
-                $evidenceName = "$logName.tail.log"
-                Get-Content -LiteralPath $sourceLog -Tail 500 -ErrorAction Stop |
-                    Set-Content -LiteralPath (Join-Path $EvidenceRoot $evidenceName) -Encoding utf8 -ErrorAction Stop
-            } catch {
-                Write-Warning "Could not archive $logName tail: $($_.Exception.Message)"
+    foreach ($profileLogs in @(
+        [pscustomobject]@{root=$DataRoot;prefix='live'},
+        [pscustomobject]@{root=$SpatialDataRoot;prefix='spatial'},
+        [pscustomobject]@{root=$RestoreDataRoot;prefix='restore'}
+    )) {
+        foreach ($logName in @('backend.log', 'api.log', 'api.log.1', 'api.log.2')) {
+            $sourceLog = Join-Path (Join-Path $profileLogs.root 'logs') $logName
+            if (Test-Path -LiteralPath $sourceLog -PathType Leaf) {
+                try {
+                    $evidenceName = "$($profileLogs.prefix).$logName.tail.log"
+                    Get-Content -LiteralPath $sourceLog -Tail 500 -ErrorAction Stop |
+                        Set-Content -LiteralPath (Join-Path $EvidenceRoot $evidenceName) -Encoding utf8 -ErrorAction Stop
+                } catch {
+                    Write-Warning "Could not archive $($profileLogs.prefix) $logName tail: $($_.Exception.Message)"
+                }
             }
         }
     }

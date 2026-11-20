@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
 import { MeshArtifactViewer } from "./MeshArtifactViewer";
+import { AnatomicalBranchPanel } from "./AnatomicalBranchPanel";
+import { SpatialConditionReview } from "./SpatialConditionReview";
 import { PointCloudArtifactViewer } from "./PointCloudArtifactViewer";
+import { ProjectSpatialComparison } from "./ProjectSpatialComparison";
 import {
   createSpatialAssetMetadataRevision,
   importProjectSpatialAsset,
@@ -19,6 +22,7 @@ import type {
 
 interface ProjectSpatialAssetPreviewProps {
   projectId: string;
+  onComparisonSaved?: () => void;
 }
 
 function displayParseStatus(
@@ -37,14 +41,20 @@ function displayQcWarning(warning: string): string {
 /** Project changes must never reuse another project's asset selection or preview. */
 export function ProjectSpatialAssetPreview({
   projectId,
+  onComparisonSaved,
 }: ProjectSpatialAssetPreviewProps) {
   return (
-    <ProjectSpatialAssetPreviewSession key={projectId} projectId={projectId} />
+    <ProjectSpatialAssetPreviewSession
+      key={projectId}
+      projectId={projectId}
+      onComparisonSaved={onComparisonSaved}
+    />
   );
 }
 
 function ProjectSpatialAssetPreviewSession({
   projectId,
+  onComparisonSaved,
 }: ProjectSpatialAssetPreviewProps) {
   const [assets, setAssets] = useState<SpatialSourceAsset[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -80,6 +90,14 @@ function ProjectSpatialAssetPreviewSession({
   const requestVersion = useRef(0);
   const listVersion = useRef(0);
   const selected = assets.find((asset) => asset.id === selectedId);
+  const calibration: MeshPreviewCalibration = {
+    meters_per_unit: Number(scale),
+    calibration_method: calibrationMethod,
+    calibration_evidence: evidence,
+    relative_scale_uncertainty:
+      uncertainty.trim() === "" ? null : Number(uncertainty),
+  };
+  const latestMetadata = metadataRevisions.at(-1);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -212,13 +230,7 @@ function ProjectSpatialAssetPreviewSession({
         projectId,
         selected,
         kind,
-        {
-          meters_per_unit: Number(scale),
-          calibration_method: calibrationMethod,
-          calibration_evidence: evidence,
-          relative_scale_uncertainty:
-            uncertainty.trim() === "" ? null : Number(uncertainty),
-        },
+        calibration,
       );
       if (version === requestVersion.current) setArtifact(result);
     } catch (reason) {
@@ -234,6 +246,7 @@ function ProjectSpatialAssetPreviewSession({
 
   async function saveMetadataRevision(): Promise<void> {
     if (!selected) return;
+    const version = ++requestVersion.current;
     setBusy(true);
     setError(null);
     setMetadataSavedRevision(null);
@@ -270,6 +283,7 @@ function ProjectSpatialAssetPreviewSession({
           created_by_identity: "local_user",
         },
       );
+      if (version !== requestVersion.current) return;
       if (
         record.project_id !== projectId ||
         record.spatial_source_asset_id !== selected.id ||
@@ -280,13 +294,14 @@ function ProjectSpatialAssetPreviewSession({
       setMetadataRevisions((previous) => [...previous, record]);
       setMetadataSavedRevision(record.revision);
     } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Unable to save 3D metadata revision.",
-      );
+      if (version === requestVersion.current)
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Unable to save 3D metadata revision.",
+        );
     } finally {
-      setBusy(false);
+      if (version === requestVersion.current) setBusy(false);
     }
   }
 
@@ -601,6 +616,39 @@ function ProjectSpatialAssetPreviewSession({
       )}
       {artifact && kind === "point_cloud" && (
         <PointCloudArtifactViewer artifact={artifact} />
+      )}
+      {selected &&
+        kind === "mesh" &&
+        selected.parse_summary?.source_kind_resolved !== "point_cloud" && (
+          <div className="panel-card">
+            <ProjectSpatialComparison
+              key={selected.id}
+              projectId={projectId}
+              asset={selected}
+              calibration={artifact ? calibration : undefined}
+              onSaved={onComparisonSaved}
+            />
+            <AnatomicalBranchPanel
+              key={`branch-${selected.id}`}
+              projectId={projectId}
+              asset={selected}
+              calibration={calibration}
+            />
+          </div>
+        )}
+      {selected && (
+        <SpatialConditionReview
+          key={selected.id}
+          projectId={projectId}
+          assetId={selected.id}
+          sourceSha256={selected.sha256}
+          metadataRevisionId={
+            latestMetadata?.spatial_source_asset_id === selected.id &&
+            latestMetadata.source_sha256 === selected.sha256
+              ? latestMetadata.id
+              : null
+          }
+        />
       )}
     </section>
   );

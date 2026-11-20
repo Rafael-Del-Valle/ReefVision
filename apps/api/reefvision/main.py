@@ -9,6 +9,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -112,6 +114,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(RequestValidationError)
+    async def handle_invalid_request(request: Request, exc: RequestValidationError) -> JSONResponse:
+        try:
+            return await request_validation_exception_handler(request, exc)
+        except UnicodeEncodeError:
+            # The default handler echoes the input. An unpaired surrogate cannot
+            # be included in a UTF-8 response, even when it arrived escaped in JSON.
+            return JSONResponse(
+                status_code=422,
+                content={"detail": "Request text contains an invalid Unicode character."},
+            )
 
     @app.exception_handler(NotFoundError)
     async def handle_not_found(_: Request, exc: NotFoundError) -> JSONResponse:

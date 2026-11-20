@@ -15,6 +15,7 @@ from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
 from reefvision.db.models import Job, ModelRegistration
 from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.ml.sleap_nn_provider import SLEAP_NN_ACTIONABLE_RETIREMENT, SLEAP_NN_PROVIDER_ID
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.pose_interoperability import (
     PoseInteroperabilityFormat,
@@ -817,6 +818,8 @@ def create_tracking_job(
     model = session.get(ModelRegistration, payload.model_id)
     if model is None or model.project_id != video.project_id:
         raise NotFoundError("Detector model not found in the video project")
+    if model.provider_name.strip().casefold() == SLEAP_NN_PROVIDER_ID:
+        raise ValidationError(SLEAP_NN_ACTIONABLE_RETIREMENT)
     if model.purpose not in {"detector", "segmenter"} or model.task not in {
         "detect",
         "segment",

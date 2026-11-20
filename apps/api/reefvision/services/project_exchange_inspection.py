@@ -235,6 +235,16 @@ def inspect_project_exchange(source: BinaryIO) -> ProjectExchangeInspectionRespo
                 else:
                     try:
                         validate_spatial_exchange_records(project_id, section_rows)
+                        if version == "1.0" and manifest.get("origin") is not None:
+                            from reefvision.services.project_exchange_integrated import (
+                                validate_origin,
+                            )
+                            from reefvision.services.project_exchange_workflows import (
+                                has_spatial_workflow_history,
+                            )
+
+                            if has_spatial_workflow_history(section_rows):
+                                validate_origin(manifest["origin"])
                     except ValidationError as exc:
                         errors.append(str(exc))
             if version == "1.2" and not errors:

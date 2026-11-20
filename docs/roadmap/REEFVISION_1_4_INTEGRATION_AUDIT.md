@@ -44,11 +44,12 @@ force-pushing.
 
 ```text
 b13_temporal_0001 ─┐
-                   ├─ b14_integration_0001 ─ b14_spatial_0040
+                   ├─ b14_integration_0001 ─ b14_spatial_0040 ─ b14_condition_0041
 spatial_0039 ──────┘
 ```
 
-`b14_spatial_0040` is the single current head. It adds append-only units,
+`b14_condition_0041` is the single current head and adds condition rubrics and
+attributed observation revisions. Its parent `b14_spatial_0040` adds append-only units,
 coordinate-frame, affine-transform, calibration, local-review, ancestry,
 source-hash, and integrity-hash metadata. Fresh, validated-1.3, and proven
 legacy-spatial upgrades pass; ambiguous or unknown fingerprints fail before
@@ -86,3 +87,149 @@ draft-1.4 profiles upgraded by a final-candidate installer, including exchange
 and verified pre-upgrade-backup restore. Representative scientific and physical
 hardware evidence is separately blocked; neither omission is hidden by the
 successful broad gates.
+
+## November 19 project comparison checkpoint
+
+The integration branch `codex/reefvision-1.4-spatial-candidate` targets
+the existing 1.4 draft. `9e4adcf62` merged #79 at `bf727f458` with the
+Windows lineage work at `36c80224a`. Both parents contain the validated
+1.3 commit `f44053a90` and 1.2 commit `14eb83eb2`. The single Alembic
+head at this checkpoint was `b14_spatial_0040`. [Candidate draft](https://github.com/Rafael-Del-Valle/ReefVision/pull/90)
+
+| User workflow | Observed result | Remaining acceptance |
+| --- | --- | --- |
+| Home → open project → Video & automation → Workflow builder → import two originals → Compare two acquisitions | Source commit `3e0928fed`. The live API and Chromium withheld change for a disputed synthetic identity. The supported fixture correspondence gave a 0.5 m² difference and a scale-only interval of 0.205–0.805 m². | Independently acquired, calibrated paired scans with identified specimens, survey controls, reviewer authority and prespecified tolerances. |
+| Save comparison workflow → reopen from Home → run saved revision twice → download JSON | Saved graph `02ec61af-c7b6-495e-8a10-a62f474f3ccd` ran under `f0f50780-8d0e-4c47-8857-366361d86223` and `17635288-f4ca-479d-9fd4-290946659fee`. Both exports matched the standalone payload exactly, with SHA-256 `b76761113933607cc9c2cd22430288cb6bdd4886ca65a125d6b778f5b456b11b`. | Repeat this journey from the packaged Windows WebView2 on the integrated candidate. |
+| Draft Windows profile upgrades, Project Exchange and backup recovery | Local tests covering the historical matrix, migration reconciliation, point clouds and inventory passed 74/74. The #89 installer run passed fresh install, published 1.0.3 upgrade and three disposable profile upgrades. The historical 1.3 executable rejected the upgraded DB and preserved its hash. [Installed reports](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396) | Authorized copies of real validated-1.3 and legacy draft-1.4 profiles, with verified backups. Smart App Control enforcement requires a suitable disposable Windows 11 device. |
+| 1.1 environmental refresh → offline reread | The #71 missing-cell repair was reproduced on #79 and integrated from `ab0d2afb5`. Incomplete provider responses retained the cached scientific records. A public NOAA station also passed live acquisition and offline reread as recorded below. | Live Copernicus acquisition requires authorized account access and a suitable product selection. Projective density and repeated-measures decisions remain in the inventory. |
+| Frozen temporal corpus → CUDA training → reviewed comparison | A physical RTX 3090 ran the synthetic three-clip exercise. For 24 coordinates in 12 held-out frames from one group, frame and temporal mean localization errors were 46.243 and 45.861 px. Both missed the one complete reference event. | Representative held-out animal recordings, independent landmarks/events, a compatible registered checkpoint, error criteria and timing/count references. |
+
+All named meshes, study identities, reviews and video clips in these local
+checks are engineering fixtures. The two live spatial tests use a disposable
+API profile and the production React application. Set
+`REEFVISION_GUIDED_TEST_WEB` and `REEFVISION_GUIDED_TEST_API` to the local
+frontend and API and run the two Playwright specs
+`project-spatial-comparison-live.spec.ts` and `spatial-guided-workflow-live.spec.ts`.
+Each comparison export contains its asset IDs, original byte hashes, calibration
+evidence and local review attribution.
+
+### Centerline and condition review
+
+After `1da2769e5` the selected asset also opens **Anatomical branch length**
+and **Condition review**. The centerline tool measures an investigator's
+ordered XYZ polyline in the declared source frame. It stores named endpoints,
+method, operator, scale and optionally a reference and repeatability protocol
+in the saved mesh workflow. An out-of-bounds point was rejected. The
+synthetic three-point trace measured 0.025 m with a scale-only interval of
+0.0225–0.0275 m. Two runs produced the same payload digest.
+
+Condition review freezes the supplied rubric version, labels an observation
+on the selected original and stores attributed decisions and adjudication
+as successor revisions. The project routes under
+`/api/v1/projects/{project_id}/spatial/assets/{asset_id}/condition-observations`
+support the observation ledger and JSON reports. The new Alembic head
+`b14_condition_0041` follows `b14_spatial_0040` and adds the rubric and
+condition revision tables. An upgraded copy of the disposable two-acquisition
+profile retained its originals and saved workflows. The browser recorded a
+disagreement, reopened the project and exported the observation and decision.
+
+Four source-browser journeys, 721 frontend tests, 51 focused migration,
+exchange, backup and spatial tests, and 123 Windows harness assertions passed
+in this integration. A successful run on a field dataset still requires the
+reference material, independent review and tolerances in the respective
+inventory rows. The Windows clean-install job exercises the packaged WebView2
+using a per-process disposable profile and a loopback connection. Its result
+belongs to the SHA identified by the installer provenance.
+
+### Project Exchange and Windows source-shell verification
+
+At `5333e84e9`, an exchanged mesh-comparison run keeps the original project,
+asset identifiers and receipt. Running the imported graph creates a receipt
+for the new local assets. On the fixture, both results measured 0.5 m² and
+the original bytes and scale interval agreed. The desktop test exercised
+**Create exchange ZIP → Inspect safely → Import as new project → Recent runs**
+and downloaded both receipts. Before the fix the ordinary import changed
+the old receipt's asset identifiers. After the fix the original and historical
+payloads both had SHA-256
+`d8d73ab3672b7429f9519063851541ffcc9c60d0236e2a365868137d569c7b68`.
+Replay in the restored project produced
+`05e3f592ef2090ec7bb227641dbc2566a3ee162d87de1711737e20f4c4a994c8`.
+
+At `d54e742d7` imported condition reports must match the frozen rubric,
+observation ledger and saved producing node. Two rubric versions in the
+same project restore successfully. A later metadata revision can mark
+future replay stale while the saved observation still opens. Tests exercised
+two consecutive exchanges for comparison and condition and verified the
+original-to-restored identifiers across both imports.
+
+A source-built Windows Tauri shell at `5f79aad60` executed all four spatial
+journeys in its own WebView2 using a marked disposable profile and a
+restricted PATH. The native suite recorded 4 passes and 0 skips on
+`b14_condition_0041`. Its comparison spec predates the expanded Exchange
+journey. Separately, all four source Chromium journeys including Exchange
+passed against the integrated backend. The full standard CI and all three
+hosted Windows jobs also passed on the incoming #79 head `bf727f458`.
+[Incoming CI](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44660806843)
+and [incoming Windows results](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44660806808).
+
+The 1.1 projected-plane fixture at `646c8ec54` exercised **Computed Metrics
+→ Open verified mask coverage**, a saved graph, a second execution and CSV.
+Two eligible masks over 1.40625 cm² gave 1.422222 masks/cm² in all three
+exports. The clipped target union was 0.9375 cm². A wrong-class mask and an
+out-of-region mask contributed zero to the numerator. Surveyed reference
+area, calibration uncertainty and independent thresholds remain open.
+
+### Public environmental observation
+
+Through **Data & annotation → Environmental Context → Add environmental data**,
+ReefVision acquired 240 six-minute temperature observations from NOAA
+station 8724580, Key West, for June 1, 2024 UTC. The first value was 32.1 °C
+and the last was 31.2 °C, with zero missing values reported. After reopening
+from Home, **Use cached data only (offline)** returned the same 240 records,
+UUIDs, content digests, UTC acquisition time, source metadata and units.
+The ordered list of record UUIDs and content digests in this disposable project
+had SHA-256 `ccf3662f2b4d2f27de5a810ad6087036e9f4af7ad616fc24d520ee23c0b0ad0b`.
+The Copernicus account-based live import still needs configured credentials.
+[NOAA source observations](https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=8724580&begin_date=20240601&end_date=20240601&product=water_temperature&time_zone=gmt&units=metric&format=json&application=ReefVision).
+
+### Ordinary Windows project and reviewed coral
+
+At the default 1440 × 960 window size the dataset checksum pushed **Export
+YOLO dataset** under the inspector. The checksum now wraps. With the inspector
+open, a researcher can import a still and a video, draw a box in original
+pixels, undo and redo it, review and save, reopen from Home, freeze the dataset
+and download the ZIP. The native test checked image/video hashes, the frozen
+manifest, class map, reviewed coordinates and actual download.
+
+At `67f226b3d`, all seven journeys passed in 45.8 seconds in a source-built
+Tauri WebView2 using a disposable 0041 profile and a restricted PATH. The seven
+were ordinary image/video, dataset export with the inspector visible, calibrated
+two-date coral, paired project meshes through Exchange, guided saved-workflow
+replay, declared centerline and condition review. The coral fixture reopened
+with 1.000 mm change over two days and produced a CSV containing its immutable
+result ID and hash. The seven source-browser journeys also passed. Installed
+results must identify the MSI source and every cabinet in its Media table.
+
+### Concurrent source and packaged checkpoint
+
+The refreshed #79 head `0ade9e9d3` includes the valid Unicode OBJ source and
+unpaired-surrogate regressions. The backend stopped at Ruff formatting in
+[run 44668574338](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44668574338).
+Merge `13350b1df` preserves that history. Commit `1a1ac930c` applies the two
+formatting changes reproduced from its job log. Three newly collected OBJ
+checks then exposed a second failure when FastAPI tried to include invalid
+Unicode source text in a UTF-8 validation response. The API now returns a
+readable 422 response and keeps ordinary field errors intact. All five Unicode
+checks subsequently passed, including replay with valid non-BMP source text.
+
+For checkpoint `2194f2e96`, the MSI and all six external cabinets matched their
+build provenance. Administrative extraction on a physical RTX 3090 preserved
+the host's MSI registrations. The frozen sidecar and WebView2 completed four
+spatial journeys and a grouped synthetic ReefPose journey. It trained and
+registered a local checkpoint, refined 12 held-out frames and evaluated on
+CUDA. The clean-install job for this same package stopped before starting MSI
+installation when PowerShell passed multiple Node paths to the test driver.
+The published 1.0.3 and disposable 0038 and 0039 upgrade jobs passed. The
+repair in `3d15cd19e` uses the first absolute driver path and keeps developer
+tools off the application PATH. All 128 clean-install harness assertions passed.
+[Windows run 44667026842](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44667026842).

@@ -182,6 +182,7 @@ describe("PoseEvaluationComparisonPanel", () => {
           models={[
             model("model-r", "reefpose"),
             model("model-u", "ultralytics"),
+            model("model-s", "sleap_nn"),
           ]}
           datasets={[dataset]}
         />
@@ -215,6 +216,9 @@ describe("PoseEvaluationComparisonPanel", () => {
     fireEvent.change(screen.getByLabelText("Held-out evaluation dataset"), {
       target: { value: "dataset-1" },
     });
+    const retired = screen.getByRole("checkbox", { name: /sleap_nn fish/ });
+    expect(retired).toBeDisabled();
+    expect(screen.getByText(/retired.*ReefPose/i)).toBeInTheDocument();
     for (const checkbox of screen.getAllByRole("checkbox"))
       fireEvent.click(checkbox);
     fireEvent.click(screen.getByRole("button", { name: "Start comparison" }));

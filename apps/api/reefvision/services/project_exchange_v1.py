@@ -38,6 +38,8 @@ from reefvision.db.models import (
     SkeletonAnalysisRevision,
     SpatialAssetMetadataRevision,
     SpatialCalibrationReviewRecord,
+    SpatialConditionRevision,
+    SpatialConditionRubric,
     SpatialSourceAsset,
     TrainingDraft,
     VideoAsset,
@@ -77,6 +79,7 @@ from reefvision.services.project_exchange_integrated import (
     has_integrated_records,
     integrated_records,
 )
+from reefvision.services.project_exchange_workflows import is_spatial_workflow_graph
 from reefvision.services.spatial_source_assets_v14 import SpatialSourceAssetService
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
@@ -278,6 +281,18 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                 ),
             }
         )
+
+        for name, condition_model in (
+            ("spatial_condition_rubrics", SpatialConditionRubric),
+            ("spatial_condition_revisions", SpatialConditionRevision),
+        ):
+            rows = list(
+                self.session.scalars(
+                    select(condition_model).where(condition_model.project_id == project.id)
+                )
+            )
+            if rows:
+                sections[name] = rows
 
         pose_schemas = list(
             self.session.scalars(
@@ -736,7 +751,10 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             "existing_projects_must_not_be_overwritten": True,
             "source_ids_are_preserved_in_import_provenance": True,
         }
-        if package.format_version == INTEGRATED_FORMAT_VERSION:
+        if package.format_version == INTEGRATED_FORMAT_VERSION or any(
+            is_spatial_workflow_graph(graph.graph_json)
+            for graph in cast(Sequence[WorkflowGraphRecord], records["workflow_graphs"])
+        ):
             parent = self.session.scalar(
                 select(ProjectExchangePackage)
                 .where(

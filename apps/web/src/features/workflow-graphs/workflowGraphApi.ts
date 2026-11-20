@@ -338,15 +338,22 @@ export function listProjectSpatialAssets(
   );
 }
 
-export function listSpatialAssetMetadataRevisions(
+export async function listSpatialAssetMetadataRevisions(
   projectId: string,
   assetId: string,
   signal?: AbortSignal,
 ): Promise<SpatialAssetMetadataRevision[]> {
-  return request<SpatialAssetMetadataRevision[]>(
-    `/projects/${encodeURIComponent(projectId)}/spatial/assets/${encodeURIComponent(assetId)}/metadata-revisions`,
-    { signal },
-  );
+  const path = `/projects/${encodeURIComponent(projectId)}/spatial/assets/${encodeURIComponent(assetId)}/metadata-revisions`;
+  const revisions: SpatialAssetMetadataRevision[] = [];
+  let page: SpatialAssetMetadataRevision[];
+  do {
+    page = await request<SpatialAssetMetadataRevision[]>(
+      revisions.length ? `${path}?limit=100&offset=${revisions.length}` : path,
+      { signal },
+    );
+    revisions.push(...page);
+  } while (page.length === 100);
+  return revisions;
 }
 
 export function createSpatialAssetMetadataRevision(

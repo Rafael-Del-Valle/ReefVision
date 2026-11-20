@@ -74,7 +74,16 @@ describe("ProjectInferenceInspector", () => {
       requests.push({ url, init });
 
       if (url.includes("/projects/project-1/models?purpose=detector")) {
-        return jsonResponse([model]);
+        return jsonResponse([
+          {
+            ...model,
+            id: "historic-pose",
+            display_name: "Historical SLEAP pose",
+            task: "pose",
+            provider_name: "sleap_nn",
+          },
+          model,
+        ]);
       }
 
       if (
@@ -123,6 +132,9 @@ describe("ProjectInferenceInspector", () => {
       await screen.findByText("1 detector registered"),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Detector model")).toHaveValue("model-best");
+    expect(
+      screen.queryByRole("option", { name: "Historical SLEAP pose" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByLabelText("Confidence threshold")).toHaveValue(0.25);
     expect(screen.getByLabelText("Device")).toHaveValue("cpu");
 

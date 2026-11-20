@@ -15,6 +15,8 @@ from pydantic import (
     model_validator,
 )
 
+from reefvision.schemas.spatial_anatomical_branch_v14 import AnatomicalBranchDeclaration
+
 
 class MeshCalibrationReviewEvidence(BaseModel):
     """Independently attributed calibration QC; never certifies physical scale."""
@@ -111,6 +113,7 @@ class MeshPreviewRequest(BaseModel):
 
     surface_path_vertex_pairs: list[list[StrictInt]] | None = Field(default=None, max_length=16)
     surface_trace_vertex_paths: list[list[StrictInt]] | None = Field(default=None, max_length=16)
+    anatomical_branch: AnatomicalBranchDeclaration | None = None
 
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> MeshPreviewRequest:
@@ -134,6 +137,10 @@ class MeshPreviewRequest(BaseModel):
             raise ValueError("Indexed triangles require vertices and faces")
         if self.expected_source_payload_sha256 is not None and not (supplied_text or self.asset_id):
             raise ValueError("Source SHA-256 binding requires an imported OBJ, PLY, or GLB file")
+        if self.anatomical_branch is not None and (
+            self.expected_source_payload_sha256 is None or self.coordinate_frame_id is None
+        ):
+            raise ValueError("Declared centerline requires source SHA-256 and coordinate frame")
         if self.surface_path_vertex_pairs is not None:
             for pair in self.surface_path_vertex_pairs:
                 if len(pair) != 2 or pair[0] == pair[1] or any(index < 0 for index in pair):

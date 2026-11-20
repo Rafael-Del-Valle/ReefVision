@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import VideoTrack
+from reefvision.domain.errors import ValidationError
 from reefvision.ml.sleap_nn_provider import SLEAP_IO_SUPPORTED_VERSION
 from reefvision.services.pose_interoperability import PoseInteroperabilityService
 from reefvision.tests.test_annotations import create_project
@@ -155,14 +156,12 @@ def _native_or_bundle_bytes(
     manifest = service._bundle_manifest(labels, exchange_format)
 
     if exchange_format == "nwb":
+        # This is also the checksum-bound storage codec shipped before the
+        # standalone service began using it.
+        from reefvision.storage.pose_nwb import write_nwb
+
         output = bundle / "runtime.pose.nwb"
-        service._save_nwb_predictions(
-            sio,
-            labels,
-            output,
-            frame_count=6,
-            fps=10.0,
-        )
+        write_nwb(sio, labels, output)
     elif exchange_format == "coco":
         output = bundle / "runtime.pose.coco.json"
         sio.save_coco(labels, str(output), visibility_encoding="ternary")
@@ -219,6 +218,7 @@ def test_real_sleap_io_round_trip_preserves_reefvision_pose_identity(
         exchange_format,
         content,
         filename,
+        (64, 48),
     )
     imported_schema = service._imported_schema(restored_labels)
     target_video = SimpleNamespace(width_px=64, height_px=48, frame_count=6)
@@ -243,6 +243,42 @@ def test_real_sleap_io_round_trip_preserves_reefvision_pose_identity(
         for observation in imported_tracks[0].keyframes[0].pose_observations or []
     ] == ["bell_center", "tentacle", "tentacle"]
     assert not any("mapped sequentially" in warning for warning in warnings)
+
+
+@pytest.mark.integration
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
+@pytest.mark.filterwarnings("ignore::ResourceWarning")
+def test_historical_standalone_nwb_requires_pose_payload_checksum(tmp_path: Path) -> None:
+    sio = _real_sleap_io()
+    from sleap_io.io.nwb_predictions import write_nwb
+
+    labels = _runtime_labels(tmp_path, sio)
+    bundle = tmp_path / "historical-nwb"
+    bundle.mkdir()
+    output = bundle / "runtime.pose.nwb"
+    # Exact standalone writer and full-video timestamps from the 1.3 and 1.4 APIs.
+    write_nwb(
+        labels,
+        str(output),
+        pose_estimation_metadata={"video_timestamps": np.arange(6, dtype=np.float64) / 10.0},
+    )
+    assert sio.load_nwb(str(output)).labeled_frames
+    service = object.__new__(PoseInteroperabilityService)
+    manifest = service._bundle_manifest(labels, "nwb")
+    assert set(manifest) == {
+        "schema_version",
+        "format",
+        "reefvision_pose_interoperability",
+        "frames",
+    }
+    assert manifest["reefvision_pose_interoperability"]["source_video_sha256"] == "a" * 64
+    service._write_bundle_manifest(bundle, manifest)
+    raw_payload = output.read_bytes()
+    original = service._zip_directory(bundle)
+    for content, filename in ((raw_payload, output.name), (original, "historical.nwb.zip")):
+        with pytest.raises(ValidationError, match=r"checksum binding the NWB pose payload"):
+            service._load_labels("nwb", content, filename)
+    assert output.read_bytes() == raw_payload
 
 
 @pytest.fixture
@@ -282,33 +318,38 @@ def real_service_pose(client: TestClient, tmp_path: Path):
 def test_real_service_export_import_round_trip(
     client: TestClient,
     real_service_pose,
-    tmp_path: Path,
     exchange_format: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project, video, track_id = real_service_pose
+
+    if exchange_format != "nwb":
+
+        def unavailable() -> Any:
+            raise ValidationError("Optional NWB codec unavailable in text-only acceptance")
+
+        monkeypatch.setattr(PoseInteroperabilityService, "_sleap_io", staticmethod(unavailable))
     response = client.get(
         f"/api/v1/videos/{video['id']}/pose-interoperability/export",
         params={"format": exchange_format},
     )
     assert response.status_code == 200, response.text
 
-    if exchange_format == "slp":
-        filename = "runtime.pose.slp"
-        assert not zipfile.is_zipfile(io.BytesIO(response.content))
-    else:
-        filename = f"runtime.{exchange_format}.zip"
-        assert zipfile.is_zipfile(io.BytesIO(response.content))
-        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
-            manifest_names = [
-                name
-                for name in archive.namelist()
-                if name.endswith("reefvision-pose-manifest.json")
-            ]
-            assert len(manifest_names) == 1
-            manifest = json.loads(archive.read(manifest_names[0]))
-            assert manifest["schema_version"] == "reefvision-pose-bundle-0001"
-            assert manifest["format"] == exchange_format
-            assert manifest["frames"][0]["reefvision_frame_index"] == 4
+    filename = f"runtime.{exchange_format}.zip"
+    assert zipfile.is_zipfile(io.BytesIO(response.content))
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        stem = Path(video["original_filename"]).stem
+        expected_native_file = {
+            "nwb": f"{stem}.pose.nwb",
+            "coco": f"{stem}.pose.coco.json",
+            "dlc_csv": f"{stem}.pose.dlc.csv",
+            "ultralytics_pose": "data.yaml",
+        }[exchange_format]
+        assert expected_native_file in archive.namelist()
+        manifest = json.loads(archive.read("reefvision-pose-manifest.json"))
+        assert manifest["schema_version"] == "reefvision-pose-bundle-0001"
+        assert manifest["format"] == exchange_format
+        assert manifest["frames"][0]["reefvision_frame_index"] == 4
 
     with cast(FastAPI, client.app).state.session_factory() as session:
         track = session.get(VideoTrack, track_id)

@@ -967,7 +967,7 @@ class PoseTrainingExportService:
             raise ValidationError(
                 "DeepLabCut CSV training export cannot "
                 "silently flatten multiple individuals in "
-                "the same image. Use SLEAP, COCO, or "
+                "the same image. Use COCO or "
                 "Ultralytics pose for multi-instance data."
             )
 

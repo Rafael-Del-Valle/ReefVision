@@ -36,7 +36,7 @@ function Invoke-ReefVisionIsolatedEnvironment {
         }
     }
     foreach ($Name in $Isolated.Keys) { [void]$Names.Add([string]$Name) }
-    foreach ($Name in @('PYTHONPATH', 'PYTHONHOME', 'TRANSFORMERS_CACHE')) {
+    foreach ($Name in @('PYTHONPATH', 'PYTHONHOME', 'TRANSFORMERS_CACHE', 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS', 'WEBVIEW2_PIPE_FOR_SCRIPT_DEBUGGER')) {
         [void]$Names.Add($Name)
     }
 
@@ -142,6 +142,140 @@ function Assert-ReefVisionSafeAcceptanceRoot {
     }
     Assert-ReefVisionNoReparseAncestors -Path $resolved
     return $resolved
+}
+
+function Resolve-ReefVisionLineageFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$RelativePath,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    if ([System.IO.Path]::IsPathRooted($RelativePath)) {
+        throw "$Label escapes fixture root."
+    }
+    $candidate = Resolve-ReefVisionAcceptancePath (Join-Path $Root $RelativePath)
+    if (-not (Test-ReefVisionPathWithin -Path $candidate -Parent $Root)) {
+        throw "$Label escapes fixture root."
+    }
+    Assert-ReefVisionNoReparseAncestors -Path $candidate
+    if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+        throw "$Label is missing or is not a file."
+    }
+    return $candidate
+}
+
+function Assert-ReefVisionLineageHash {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ExpectedSha256,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    if ($ExpectedSha256 -notmatch '^[0-9a-f]{64}$') {
+        throw "$Label SHA-256 is not a lowercase hexadecimal digest."
+    }
+    $actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actual -cne $ExpectedSha256) { throw "$Label SHA-256 mismatch." }
+}
+
+function Read-ReefVisionLineageFixture {
+    param(
+        [Parameter(Mandatory = $true)][string]$ManifestPath,
+        [Parameter(Mandatory = $true)][string]$ProfileName,
+        [Parameter(Mandatory = $true)][string]$VerificationPath
+    )
+    $manifestFile = (Resolve-Path -LiteralPath $ManifestPath).Path
+    $verificationFile = (Resolve-Path -LiteralPath $VerificationPath).Path
+    $root = Resolve-ReefVisionAcceptancePath (Split-Path -Parent $manifestFile)
+    Assert-ReefVisionNoReparseAncestors -Path $root
+    $manifest = Get-Content -LiteralPath $manifestFile -Raw | ConvertFrom-Json
+    if ($manifest.schema_version -cne 'reefvision-windows-lineage-fixtures-1' -or
+        $manifest.fixture_kind -cne 'synthetic_engineering') {
+        throw 'Unsupported Windows lineage fixture manifest.'
+    }
+    $matches = @($manifest.profiles | Where-Object { $_.name -ceq $ProfileName })
+    if ($matches.Count -ne 1) { throw 'Requested lineage profile is missing or duplicated.' }
+    $profile = $matches[0]
+    $verification = Get-Content -LiteralPath $verificationFile -Raw | ConvertFrom-Json
+    if ($verification.status -cne 'verified' -or $verification.profile -cne $ProfileName -or
+        $verification.revision -cne $profile.revision -or
+        $verification.project_id -cne $profile.project_id) {
+        throw 'Independent lineage verification report does not match the selected profile.'
+    }
+    $manifestRecordIds = @($profile.records | ForEach-Object { [string]$_.id })
+    $verifiedRecordIds = @($verification.record_ids | ForEach-Object { [string]$_ })
+    if ($manifestRecordIds.Count -ne $verifiedRecordIds.Count -or
+        (Compare-Object $manifestRecordIds $verifiedRecordIds)) {
+        throw 'Independent lineage verification record IDs do not match the manifest.'
+    }
+    $database = Resolve-ReefVisionLineageFile -Root $root -RelativePath ([string]$profile.database) -Label 'database path'
+    $backup = Resolve-ReefVisionLineageFile -Root $root -RelativePath ([string]$profile.backup) -Label 'backup path'
+    Assert-ReefVisionLineageHash -Path $database -ExpectedSha256 ([string]$profile.database_sha256) -Label 'database'
+    Assert-ReefVisionLineageHash -Path $backup -ExpectedSha256 ([string]$profile.backup_sha256) -Label 'backup'
+    $profileRoot = Resolve-ReefVisionAcceptancePath (Split-Path -Parent $database)
+    $sourceFiles = @()
+    foreach ($source in @($profile.source_files)) {
+        $sourcePath = Resolve-ReefVisionLineageFile -Root $root -RelativePath ([string]$source.path) -Label 'source file path'
+        Assert-ReefVisionLineageHash -Path $sourcePath -ExpectedSha256 ([string]$source.sha256) -Label 'source file'
+        $managedPath = [System.IO.Path]::GetRelativePath($profileRoot, $sourcePath)
+        if ([System.IO.Path]::IsPathRooted($managedPath) -or $managedPath.StartsWith('..')) {
+            throw 'Source file is outside the selected profile root.'
+        }
+        $sourceFiles += [pscustomobject]@{
+            source_path = $sourcePath
+            managed_path = $managedPath
+            sha256 = [string]$source.sha256
+        }
+    }
+    return [pscustomobject]@{
+        name = [string]$profile.name
+        revision = [string]$profile.revision
+        project_id = [string]$profile.project_id
+        database = $database
+        database_sha256 = [string]$profile.database_sha256
+        backup = $backup
+        backup_sha256 = [string]$profile.backup_sha256
+        records = @($profile.records)
+        record_ids = $manifestRecordIds
+        source_files = $sourceFiles
+        verification_path = $verificationFile
+        verification_sha256 = (Get-FileHash -LiteralPath $verificationFile -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+}
+
+function Copy-ReefVisionLineageProfile {
+    param(
+        [Parameter(Mandatory = $true)]$Fixture,
+        [Parameter(Mandatory = $true)][string]$DataRoot,
+        [switch]$UseBackup
+    )
+    $resolvedRoot = Resolve-ReefVisionAcceptancePath $DataRoot
+    $marker = Join-Path $resolvedRoot '.reefvision-clean-install-acceptance'
+    if (-not (Test-Path -LiteralPath $resolvedRoot -PathType Container) -or
+        -not (Test-Path -LiteralPath $marker -PathType Leaf)) {
+        throw 'Lineage staging requires a marker-gated isolated data root.'
+    }
+    Assert-ReefVisionNoReparseAncestors -Path $resolvedRoot
+    $databaseTarget = Join-Path $resolvedRoot 'reefvision.db'
+    if (Test-Path -LiteralPath $databaseTarget) {
+        throw 'Refusing to overwrite an existing lineage database.'
+    }
+    $databaseSource = if ($UseBackup) { [string]$Fixture.backup } else { [string]$Fixture.database }
+    Copy-Item -LiteralPath $databaseSource -Destination $databaseTarget
+    $copiedSources = @()
+    foreach ($source in @($Fixture.source_files)) {
+        $target = Resolve-ReefVisionAcceptancePath (Join-Path $resolvedRoot ([string]$source.managed_path))
+        if (-not (Test-ReefVisionPathWithin -Path $target -Parent $resolvedRoot)) {
+            throw 'Managed lineage source path escapes the isolated data root.'
+        }
+        $parent = Split-Path -Parent $target
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+        Copy-Item -LiteralPath ([string]$source.source_path) -Destination $target
+        Assert-ReefVisionLineageHash -Path $target -ExpectedSha256 ([string]$source.sha256) -Label 'staged source file'
+        $copiedSources += $target
+    }
+    $expectedDatabaseHash = if ($UseBackup) { [string]$Fixture.backup_sha256 } else { [string]$Fixture.database_sha256 }
+    Assert-ReefVisionLineageHash -Path $databaseTarget -ExpectedSha256 $expectedDatabaseHash -Label 'staged database'
+    return [pscustomobject]@{database=$databaseTarget;source_files=$copiedSources;used_backup=[bool]$UseBackup}
 }
 
 function New-ReefVisionMsiArguments {

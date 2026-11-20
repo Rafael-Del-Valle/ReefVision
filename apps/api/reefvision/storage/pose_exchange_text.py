@@ -8,16 +8,17 @@ explicit re-export instead of silently restoring stale scientific observations.
 from __future__ import annotations
 
 import copy
+import csv
 import hashlib
 import io
 import json
 import math
 import zipfile
-from importlib import import_module
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 from reefvision.domain.errors import ValidationError
+from reefvision.storage import pose_text_records as records
 
 _KEY = "reefvision_pose_interoperability"
 
@@ -183,6 +184,7 @@ def _bbox(points: list[list[float]], width: int, height: int) -> list[float]:
 
 def _write_coco(document: dict[str, Any], root: Path) -> tuple[Path, str]:
     content: dict[str, Any] = {"images": [], "annotations": [], "categories": []}
+    track_ids: dict[str, int] = {}
     for idx, name in enumerate(document["categories"], 1):
         content["categories"].append(
             {
@@ -205,18 +207,22 @@ def _write_coco(document: dict[str, Any], root: Path) -> tuple[Path, str]:
         )
         for instance in frame["instances"]:
             bbox = _bbox(instance["points"], frame["width"], frame["height"])
-            content["annotations"].append(
-                {
-                    "id": len(content["annotations"]) + 1,
-                    "image_id": image_id,
-                    "category_id": document["categories"].index(instance["category"]) + 1,
-                    "keypoints": [v for point in instance["points"] for v in point],
-                    "num_keypoints": sum(p[2] > 0 for p in instance["points"]),
-                    "bbox": bbox,
-                    "area": bbox[2] * bbox[3],
-                    "iscrowd": 0,
-                }
-            )
+            annotation = {
+                "id": len(content["annotations"]) + 1,
+                "image_id": image_id,
+                "category_id": document["categories"].index(instance["category"]) + 1,
+                "keypoints": [v for point in instance["points"] for v in point],
+                "num_keypoints": sum(p[2] > 0 for p in instance["points"]),
+                "bbox": bbox,
+                "area": bbox[2] * bbox[3],
+                "iscrowd": 0,
+            }
+            if instance["track"] is not None:
+                track_id = track_ids.setdefault(instance["track"], len(track_ids) + 1)
+                annotation["attributes"] = {"object_id": track_id}
+            if instance["score"] is not None:
+                annotation["score"] = instance["score"]
+            content["annotations"].append(annotation)
     metadata = _metadata(
         document, "referenced_images_unavailable; source video SHA/frame mapping supplied"
     )
@@ -227,9 +233,7 @@ def _write_coco(document: dict[str, Any], root: Path) -> tuple[Path, str]:
     return output, "application/json"
 
 
-def _write_dlc(document: dict[str, Any], root: Path) -> tuple[Path, str]:
-    pd = import_module("pandas")
-
+def _write_dlc(document: dict[str, Any], root: Path, filename: str) -> tuple[Path, str]:
     identities = list(
         dict.fromkeys(
             instance["track"]
@@ -248,35 +252,39 @@ def _write_dlc(document: dict[str, Any], root: Path) -> tuple[Path, str]:
             instance["dlc_individual"] = name
             if instance["dlc_individual"] not in identities:
                 identities.append(instance["dlc_individual"])
-    columns = pd.MultiIndex.from_product(
-        [["ReefVision"], identities, document["nodes"], ["x", "y", "likelihood"]],
-        names=["scorer", "individuals", "bodyparts", "coords"],
-    )
-    table = pd.DataFrame(
-        float("nan"), columns=columns, index=[f["reference"] for f in document["frames"]]
+    columns = [
+        (identity, node, coord)
+        for identity in identities
+        for node in document["nodes"]
+        for coord in ("x", "y", "likelihood")
+    ]
+    output_csv = io.StringIO(newline="")
+    writer = csv.writer(output_csv, lineterminator="\n")
+    writer.writerows(
+        [
+            ["scorer", *["ReefVision"] * len(columns)],
+            ["individuals", *[identity for identity, _, _ in columns]],
+            ["bodyparts", *[node for _, node, _ in columns]],
+            ["coords", *[coord for _, _, coord in columns]],
+        ]
     )
     for frame in document["frames"]:
+        cells: dict[tuple[str, str, str], float | None] = {}
         for instance in frame["instances"]:
             for idx, node in enumerate(document["nodes"]):
                 x, y, visibility = instance["points"][idx]
-                score = instance["scores"][idx]
-                values = (
-                    [x, y, score if score is not None else float("nan")]
-                    if visibility
-                    else [float("nan"), float("nan"), 0.0]
-                )
-                for coord, value in zip(["x", "y", "likelihood"], values, strict=True):
-                    table.at[
-                        frame["reference"], ("ReefVision", instance["dlc_individual"], node, coord)
-                    ] = value
-    payload = table.to_csv().encode()
+                values = (x, y, instance["scores"][idx]) if visibility else (None, None, 0.0)
+                for coord, value in zip(("x", "y", "likelihood"), values, strict=True):
+                    cells[instance["dlc_individual"], node, coord] = value
+        writer.writerow([frame["reference"], *[cells.get(column) for column in columns]])
+    payload = output_csv.getvalue().encode()
     metadata = _metadata(
         document, "referenced_images_unavailable; source video SHA/frame mapping supplied"
     )
     metadata["artifact_sha256"] = _digest(payload)
     output = root / "pose.dlc.zip"
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr("CollectedData_ReefVision.csv", payload)
+        archive.writestr(_safe(filename), payload)
         archive.writestr("reefvision.json", _json(metadata))
     return output, "application/zip"
 
@@ -347,15 +355,16 @@ def _write_yolo(labels: Any, document: dict[str, Any], root: Path) -> tuple[Path
     return output, "application/zip"
 
 
-def write_text(sio: Any, labels: Any, root: Path, fmt: str) -> tuple[Path, str]:
+def write_text(
+    labels: Any, root: Path, fmt: str, *, dlc_filename: str = "CollectedData_ReefVision.csv"
+) -> tuple[Path, str]:
     """Write a validated text exchange artifact inside the caller-owned directory."""
-    del sio
     document = _collect(labels)
     root.mkdir(parents=True, exist_ok=True)
     if fmt == "coco":
         return _write_coco(document, root)
     if fmt == "dlc_csv":
-        return _write_dlc(document, root)
+        return _write_dlc(document, root, dlc_filename)
     if fmt == "ultralytics_pose":
         return _write_yolo(labels, document, root)
     raise ValidationError("Unsupported text pose format")
@@ -440,6 +449,15 @@ def _read_coco(path: Path) -> dict[str, Any]:
                 ):
                     raise ValidationError("COCO bounding box is outside image bounds")
             extra = copy.deepcopy(base["instances"][len(instances)]) if metadata else {}
+            if metadata is None:
+                attributes = annotation.get("attributes")
+                track_id = attributes.get("object_id") if isinstance(attributes, dict) else None
+                if track_id is None:
+                    track_id = annotation.get("track_id")
+                if type(track_id) in (int, str) and str(track_id).strip():
+                    extra["track"] = f"track_{track_id}"
+                if annotation.get("score") is not None:
+                    extra["score"] = annotation["score"]
             extra.update(points=points, category=category_names[annotation["category_id"]])
             instances.append(extra)
         frames.append(
@@ -459,44 +477,235 @@ def _read_coco(path: Path) -> dict[str, Any]:
     result["warnings"] = [
         "COCO bounding boxes, areas and segmentation are not pose observations; "
         "ReefVision derives pose boxes unless native metadata supplies canonical boxes. "
-        "Unknown external COCO fields, including external tracking extensions, are not imported."
+        "Other external COCO tracking fields are not imported."
     ]
     return result
 
 
-def _read_dlc(files: dict[str, bytes]) -> dict[str, Any]:
-    pd = import_module("pandas")
+def _read_dlc_table(
+    payload: bytes, *, legacy: bool = False
+) -> tuple[list[str], dict[str | None, dict[tuple[str, str], int]], dict[str, list[str]]]:
+    rows = list(csv.reader(io.StringIO(payload.decode("utf-8-sig")), strict=True))
+    if len(rows) < 4 or not rows[0] or not rows[1] or rows[0][0] != "scorer":
+        raise ValidationError("DeepLabCut CSV requires scorer, bodyparts and coords headers")
+    header_count = 4 if rows[1][0] == "individuals" else 3
+    if legacy and all(row[1:3] == ["", ""] for row in rows[:header_count]):
+        headers = [[row[0], *row[3:]] for row in rows[:header_count]]
+        frames = [
+            ["/".join(row[:3]), *row[3:]] if row and any(row) else row
+            for row in rows[header_count:]
+        ]
+        rows = headers + frames
+    scorers, bodyparts, coords = rows[0], rows[header_count - 2], rows[header_count - 1]
+    if (
+        not bodyparts
+        or not coords
+        or bodyparts[0] != "bodyparts"
+        or coords[0] != "coords"
+        or not all(len(row) == len(scorers) for row in rows[:header_count])
+        or len(set(scorers[1:])) != 1
+    ):
+        raise ValidationError("DeepLabCut CSV requires one scorer and consistent headers")
+    columns: dict[str | None, dict[tuple[str, str], int]] = {}
+    for index, (node, coordinate) in enumerate(zip(bodyparts[1:], coords[1:], strict=True), 1):
+        individual = rows[1][index] if header_count == 4 else None
+        keys = columns.setdefault(individual, {})
+        if (
+            not node.strip()
+            or coordinate not in {"x", "y", "likelihood"}
+            or (node, coordinate) in keys
+        ):
+            raise ValidationError("DeepLabCut CSV has invalid or duplicate landmark columns")
+        keys[node, coordinate] = index
+    nodes = _nodes(list(dict.fromkeys(bodyparts[1:])))
+    if any(
+        (node, coordinate) not in keys
+        for keys in columns.values()
+        for node in nodes
+        for coordinate in ("x", "y")
+    ):
+        raise ValidationError("DeepLabCut CSV landmark columns require paired coordinates")
+    images: dict[str, list[str]] = {}
+    for row in rows[header_count:]:
+        if not row or not any(row):
+            continue
+        reference = _safe(row[0].replace("\\", "/") if legacy else row[0])
+        if len(row) != len(scorers) or reference in images:
+            raise ValidationError("DeepLabCut CSV rows have duplicate names or invalid columns")
+        images[reference] = row
+    return nodes, columns, images
 
+
+def _dlc_coordinates(
+    row: list[str], keys: dict[tuple[str, str], int], node: str
+) -> tuple[float, float, float]:
+    def read(column: str) -> float:
+        index = keys.get((node, column))
+        return float(row[index]) if index is not None and row[index].strip() else float("nan")
+
+    x, y, confidence = read("x"), read("y"), read("likelihood")
+    if math.isinf(x) or math.isinf(y) or math.isnan(x) != math.isnan(y):
+        raise ValidationError("DeepLabCut coordinates must be finite pairs or absent pairs")
+    return x, y, confidence
+
+
+def read_legacy_dlc(path: Path, width: int, height: int) -> records.Labels:
+    """Decode historical DLC tables with dimensions from the target video."""
+    try:
+        nodes, columns, images = _read_dlc_table(path.read_bytes(), legacy=True)
+        frames = []
+        for frame_index, (reference, row) in enumerate(images.items()):
+            instances = []
+            for individual, keys in columns.items():
+                values = [_dlc_coordinates(row, keys, node) for node in nodes]
+                if all(math.isnan(x) for x, _, _ in values):
+                    continue
+                instances.append(
+                    {
+                        "track": individual,
+                        "category": "animal",
+                        "points": [
+                            [x, y, 2] if math.isfinite(x) else [0.0, 0.0, 0] for x, y, _ in values
+                        ],
+                        "scores": [
+                            score if math.isfinite(score) else None for _, _, score in values
+                        ],
+                    }
+                )
+            frames.append(
+                {
+                    "frame_idx": frame_index,
+                    "reference": reference,
+                    "width": width,
+                    "height": height,
+                    "instances": instances,
+                }
+            )
+        return _to_labels(
+            {
+                "nodes": nodes,
+                "frames": frames,
+                "categories": ["animal"],
+                "media_contract": "referenced_images_unavailable; dimensions from target video",
+            }
+        )
+    except (OSError, ValueError, IndexError, csv.Error) as exc:
+        raise ValidationError(f"DeepLabCut pose CSV is malformed: {exc}") from exc
+
+
+def _read_dlc(files: dict[str, bytes]) -> dict[str, Any]:
     metadata: dict[str, Any] = json.loads(files["reefvision.json"])
-    payload = files["CollectedData_ReefVision.csv"]
+    csv_files = [payload for name, payload in files.items() if name.casefold().endswith(".csv")]
+    if len(csv_files) != 1:
+        raise ValidationError("DLC ZIP requires exactly one pose CSV")
+    payload = csv_files[0]
     _verify(metadata.get("artifact_sha256"), payload)
-    nodes = _nodes(metadata["nodes"])
-    table = pd.read_csv(io.BytesIO(payload), header=[0, 1, 2, 3], index_col=0)
-    if table.index.has_duplicates or table.columns.has_duplicates:
-        raise ValidationError("Duplicate DLC row or column names")
-    if list(table.index) != [f["reference"] for f in metadata["frames"]]:
-        raise ValidationError("DLC rows do not match source frame references")
+    nodes, columns, images = _read_dlc_table(payload)
+    if nodes != _nodes(metadata["nodes"]) or list(images) != [
+        f["reference"] for f in metadata["frames"]
+    ]:
+        raise ValidationError("DLC rows or landmarks do not match source references")
     for frame in metadata["frames"]:
-        _safe(frame["reference"])
         for instance in frame["instances"]:
             points, scores = [], []
             for idx, node in enumerate(nodes):
-                x, y, confidence = (
-                    float(
-                        table.at[
-                            frame["reference"],
-                            ("ReefVision", instance["dlc_individual"], node, coord),
-                        ]
-                    )
-                    for coord in ["x", "y", "likelihood"]
+                x, y, confidence = _dlc_coordinates(
+                    images[frame["reference"]], columns[instance["dlc_individual"]], node
                 )
                 visibility = instance["visibility"][idx]
-                if visibility == 0 and (math.isfinite(x) or math.isfinite(y)):
+                if visibility == 0 and math.isfinite(x):
                     raise ValidationError("DLC coordinates conflict with missing-point metadata")
                 points.append([x if visibility else 0.0, y if visibility else 0.0, visibility])
                 scores.append(confidence if math.isfinite(confidence) else None)
             instance.update(points=points, scores=scores)
     return metadata
+
+
+def _yolo_instance(
+    line: str, node_count: int, categories: list[str], width: int, height: int, dimensions: int = 3
+) -> dict[str, Any]:
+    values = [float(v) for v in line.split()]
+    if len(values) != 5 + dimensions * node_count or not all(map(math.isfinite, values)):
+        raise ValidationError("Malformed YOLO pose label")
+    class_index = int(values[0])
+    if values[0] != class_index or not 0 <= class_index < len(categories):
+        raise ValidationError("Invalid YOLO class index")
+    if not all(0 <= v <= 1 for v in values[1:5]) or min(values[3:5]) <= 0:
+        raise ValidationError("Invalid normalized YOLO bounding box")
+    points = []
+    for index in range(5, len(values), dimensions):
+        x, y = values[index : index + 2]
+        visibility = values[index + 2] if dimensions == 3 else 2
+        if not 0 <= x <= 1 or not 0 <= y <= 1:
+            raise ValidationError("YOLO keypoint coordinate is not normalized")
+        points.append([x * width, y * height, visibility])
+    return {"points": points, "category": categories[class_index]}
+
+
+def read_legacy_yolo(root: Path) -> records.Labels:
+    """Decode historical ULtralytics training-split images and pose labels."""
+    import yaml
+    from PIL import Image
+
+    try:
+        config = yaml.safe_load((root / "data.yaml").read_bytes())
+        names = config["names"]
+        categories = [names[i] for i in range(len(names))]
+        count, dimensions = config["kpt_shape"]
+        if type(count) is not int or count < 1 or dimensions not in (2, 3):
+            raise ValidationError("Invalid YOLO pose shape")
+        if not categories or any(not isinstance(name, str) or not name for name in categories):
+            raise ValidationError("YOLO class names are required")
+        kpt_names = config.get("kpt_names")
+        nodes = _nodes(
+            config.get("node_names")
+            or (kpt_names.get(0) if isinstance(kpt_names, dict) else kpt_names)
+            or [f"keypoint_{i}" for i in range(count)]
+        )
+        if len(nodes) != count:
+            raise ValidationError("YOLO keypoint names do not match the shape")
+        path = _safe(config.get("path", "."))
+        images = root / path / _safe(config["train"])
+        frames = []
+        for index, image in enumerate(
+            sorted(
+                file
+                for file in images.rglob("*")
+                if file.suffix.casefold() in {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
+            )
+        ):
+            parts = list(image.relative_to(root).parts)
+            image_component = parts.index("images")
+            parts[image_component] = "labels"
+            label = root.joinpath(*parts).with_suffix(".txt")
+            if not label.is_file():
+                raise ValidationError("YOLO pose image is missing its paired label file")
+            with Image.open(image) as pixels:
+                width, height = pixels.size
+            instances = [
+                _yolo_instance(line, count, categories, width, height, dimensions)
+                for line in label.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            frames.append(
+                {
+                    "frame_idx": index,
+                    "reference": image.relative_to(root).as_posix(),
+                    "width": width,
+                    "height": height,
+                    "instances": instances,
+                }
+            )
+        return _to_labels(
+            {
+                "nodes": nodes,
+                "categories": categories,
+                "frames": frames,
+                "media_contract": "historical_paired_image_dataset",
+            }
+        )
+    except (OSError, KeyError, IndexError, TypeError, ValueError, yaml.YAMLError) as exc:
+        raise ValidationError(f"Malformed historical YOLO pose dataset: {exc}") from exc
 
 
 def _read_yolo(files: dict[str, bytes]) -> dict[str, Any]:
@@ -531,31 +740,21 @@ def _read_yolo(files: dict[str, bytes]) -> dict[str, Any]:
         if len(lines) != len(frame["instances"]):
             raise ValidationError("YOLO instance count does not match metadata")
         for line, instance in zip(lines, frame["instances"], strict=True):
-            values = [float(v) for v in line.split()]
-            if len(values) != 5 + 3 * len(nodes) or any(not math.isfinite(v) for v in values):
-                raise ValidationError("Malformed YOLO pose label")
-            class_index = int(values[0])
-            if values[0] != class_index or not 0 <= class_index < len(metadata["categories"]):
-                raise ValidationError("Invalid YOLO class index")
-            if any(not 0 <= v <= 1 for v in values[1:5]) or min(values[3:5]) <= 0:
-                raise ValidationError("Invalid normalized YOLO bounding box")
-            points = []
-            for idx in range(5, len(values), 3):
-                x, y, visibility = values[idx : idx + 3]
-                if not 0 <= x <= 1 or not 0 <= y <= 1:
-                    raise ValidationError("YOLO keypoint coordinate is not normalized")
-                points.append([x * frame["width"], y * frame["height"], visibility])
-            instance.update(points=points, category=metadata["categories"][class_index])
+            instance.update(
+                _yolo_instance(
+                    line, len(nodes), metadata["categories"], frame["width"], frame["height"]
+                )
+            )
     if used != set(files):
         raise ValidationError("YOLO archive contains unpaired images or labels")
     return metadata
 
 
-def _to_labels(sio: Any, document: dict[str, Any]) -> Any:
+def _to_labels(document: dict[str, Any]) -> records.Labels:
     import numpy as np
 
     nodes = _nodes(document["nodes"])
-    skeleton = sio.Skeleton(nodes=nodes, edges=document.get("edges", []))
+    skeleton = records.Skeleton(nodes=nodes, edges=document.get("edges", []))
     frames = document["frames"]
     if not frames:
         raise ValidationError("Pose artifact has no labeled frames")
@@ -563,13 +762,12 @@ def _to_labels(sio: Any, document: dict[str, Any]) -> Any:
     if any(type(i) is not int or i < 0 for i in indices) or len(set(indices)) != len(indices):
         raise ValidationError("Invalid or duplicate source frame index")
     width, height = _dimensions(frames[0]["width"], frames[0]["height"])
-    video = sio.Video(
+    video = records.Video(
         filename=document.get("source_filename") or "unavailable-source-video",
-        backend_metadata={"shape": [max(indices) + 1, height, width, 3]},
-        open_backend=False,
+        shape=(max(indices) + 1, height, width, 3),
     )
     tracks: dict[str, Any] = {}
-    categories = {name: sio.Category(name) for name in document["categories"]}
+    categories = {name: records.Category(name) for name in document["categories"]}
     labeled_frames = []
     for frame in frames:
         if _dimensions(frame["width"], frame["height"]) != (width, height):
@@ -585,23 +783,37 @@ def _to_labels(sio: Any, document: dict[str, Any]) -> Any:
                 if name in seen_tracks:
                     raise ValidationError("Multiple instances share one track in a frame")
                 seen_tracks.add(name)
-                track = tracks.setdefault(name, sio.Track(name))
+                track = tracks.setdefault(name, records.Track(name))
             xy = np.asarray([[x, y] if v else [np.nan, np.nan] for x, y, v in points])
-            scores = [
-                np.nan if v is None else v for v in instance.get("scores", [None] * len(nodes))
-            ]
-            restored = sio.PredictedInstance.from_numpy(
+            scores = instance.get("scores", [None] * len(nodes))
+            restored = records.Instance.from_arrays(
                 xy,
                 skeleton=skeleton,
-                point_scores=np.asarray(scores),
+                visible=np.asarray([p[2] == 2 for p in points]),
+                scores=(
+                    np.asarray([np.nan if score is None else score for score in scores])
+                    if any(score is not None for score in scores)
+                    else None
+                ),
                 score=instance["score"] if instance.get("score") is not None else float("nan"),
                 track=track,
                 category=categories[instance["category"]],
             )
-            restored.points["visible"] = [p[2] == 2 for p in points]
             instances.append(restored)
-        labeled_frames.append(sio.LabeledFrame(video, frame["frame_idx"], instances))
+        labeled_frames.append(records.LabeledFrame(video, frame["frame_idx"], instances))
     provenance = copy.deepcopy(document.get("provenance", {}))
+    source = provenance.get(_KEY)
+    if isinstance(source, dict):
+        source["reefvision_frame_manifest"] = [
+            {
+                "reefvision_frame_index": frame["frame_idx"],
+                "instances": [
+                    {"external_track_name": instance.get("track")}
+                    for instance in frame["instances"]
+                ],
+            }
+            for frame in frames
+        ]
     provenance["reefvision_text_exchange"] = {
         "media_contract": document.get("media_contract"),
         "warnings": ["Source video is a reference only and is not opened during import."]
@@ -622,11 +834,11 @@ def _to_labels(sio: Any, document: dict[str, Any]) -> Any:
     provenance.setdefault("reefvision_warnings", []).extend(
         provenance["reefvision_text_exchange"]["warnings"] + document.get("warnings", [])
     )
-    return sio.Labels(labeled_frames, provenance=provenance)
+    return records.Labels(labeled_frames, [video], [skeleton], provenance)
 
 
-def read_text(sio: Any, path: Path, fmt: str) -> Any:
-    """Parse actual coordinate payloads, validating before constructing SLEAP models."""
+def read_text(path: Path, fmt: str) -> records.Labels:
+    """Parse actual coordinate payloads into native pose records."""
     try:
         if fmt == "coco":
             document = _read_coco(path)
@@ -638,10 +850,12 @@ def read_text(sio: Any, path: Path, fmt: str) -> Any:
                 )
             document = _read_dlc(_archive(path))
         elif fmt == "ultralytics_pose":
-            document = _read_yolo(_archive(path))
+            files = _archive(path)
+            files.pop("reefvision-pose-manifest.json", None)
+            document = _read_yolo(files)
         else:
             raise ValidationError("Unsupported text pose format")
-        return _to_labels(sio, document)
+        return _to_labels(document)
     except ValidationError:
         raise
     except (
@@ -652,6 +866,7 @@ def read_text(sio: Any, path: Path, fmt: str) -> Any:
         OSError,
         AttributeError,
         OverflowError,
+        csv.Error,
     ) as exc:
         raise ValidationError(
             f"Malformed {fmt} pose artifact or missing required metadata: {exc}"

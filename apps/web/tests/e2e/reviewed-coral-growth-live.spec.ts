@@ -1,19 +1,28 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { test } from "./spatialDesktop";
 
 const image = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAFAAAAA8CAIAAAB+RarbAAAAeUlEQVR4nOXOQQEAIBCAMKSZSYxjbVucD5Zg655NicRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjL8D0x6O+gGf/8sEBAAAAABJRU5ErkJggg==",
   "base64",
 );
 
+test.use({
+  spatialWeb:
+    process.env.REEFVISION_BRANCH_PREVIEW_TEST_WEB ??
+    process.env.REEFVISION_GUIDED_TEST_WEB ??
+    "",
+  spatialApi:
+    process.env.REEFVISION_BRANCH_PREVIEW_TEST_API ??
+    process.env.REEFVISION_GUIDED_TEST_API ??
+    "",
+});
+
 test("reviews two dated coral graphs and saves and exports projected branch growth", async ({
-  page,
-}) => {
-  const api = process.env.REEFVISION_BRANCH_PREVIEW_TEST_API;
-  const web = process.env.REEFVISION_BRANCH_PREVIEW_TEST_WEB;
-  test.skip(!api || !web, "Requires an isolated SQLite API and Vite.");
+  desktop: { page, api, web },
+}, info) => {
   const name = `Synthetic dated coral ${randomUUID()}`;
   const all = await page.request.post(`${api}/projects`, { data: { name } });
   expect(all.status(), await all.text()).toBe(201);
@@ -187,13 +196,13 @@ test("reviews two dated coral graphs and saves and exports projected branch grow
     table.getByRole("row").filter({ hasText: "Unique-edge colony total" }),
   ).toContainText("0.500");
   await expect(panel.getByRole("link", { name: "Growth CSV" })).toBeVisible();
-  const csv = await page.request.get(
-    (await panel
-      .getByRole("link", { name: "Growth CSV" })
-      .getAttribute("href"))!,
-  );
-  expect(csv.ok()).toBeTruthy();
-  expect(await csv.text()).toContain("absolute_change");
+  const downloading = page.waitForEvent("download");
+  await panel.getByRole("link", { name: "Growth CSV" }).click();
+  const output = info.outputPath("calibrated-coral-growth.csv");
+  await (await downloading).saveAs(output);
+  const csv = await readFile(output, "utf8");
+  expect(csv).toContain("absolute_change,change_per_day");
+  expect(csv).toContain(project.id);
   if (process.env.REEFVISION_BRANCH_EVIDENCE_DIR) {
     await table.scrollIntoViewIfNeeded();
     await page.screenshot({
@@ -208,4 +217,12 @@ test("reviews two dated coral graphs and saves and exports projected branch grow
   await page.getByRole("tab", { name: "Organisms & ecology" }).click();
   await page.getByRole("button", { name: "Coral branch growth" }).click();
   await expect(page.getByRole("link", { name: "Growth JSON" })).toBeVisible();
+  const saved = await page
+    .getByRole("link", { name: "Growth JSON" })
+    .getAttribute("href");
+  const reopened = await page.request.get(saved!);
+  expect(reopened.ok(), await reopened.text()).toBeTruthy();
+  const growth = await reopened.json();
+  expect(csv).toContain(growth.id);
+  expect(csv).toContain(growth.content_sha256);
 });

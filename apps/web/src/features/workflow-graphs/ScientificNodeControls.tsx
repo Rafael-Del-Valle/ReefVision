@@ -14,6 +14,11 @@ import type {
   StaticSummary,
 } from "../video/staticComparisonApi";
 
+import {
+  listProjectSpatialAssets,
+  type SpatialSourceAsset,
+} from "./workflowGraphApi";
+
 const PAGE = 20;
 const scientificNodes = new Set([
   "scientific_comparison",
@@ -105,6 +110,21 @@ export function scientificConfigurationIssue(
     !string(parameters.analysis_id)
   )
     return "Choose a reviewed ecological result.";
+  if (nodeType === "mesh_longitudinal_comparison") {
+    const registration = object(parameters.registration_evidence);
+    if (Object.keys(registration).length) {
+      const residual = finiteNumber(registration.rms_residual_m, -1);
+      const count = finiteNumber(registration.correspondence_count, 0);
+      if (
+        residual < 0 ||
+        residual > 1_000_000 ||
+        !Number.isInteger(count) ||
+        count < 3 ||
+        count > 1_000_000
+      )
+        return "Enter the measured registration RMS residual and the count of correspondences (at least 3).";
+    }
+  }
   if (nodeType === "image_acquisition_quality") {
     const thresholds = {
       ...defaultAcquisitionThresholds,
@@ -992,29 +1012,52 @@ const savedLabels: Record<string, string> = {
   report: "Saved research figure",
 };
 
-type SpatialAssetChoice = {
-  id: string;
-  project_id: string;
-  original_filename: string;
-  source_format: string;
-  parse_status: string;
-};
+function SpatialTimestamp({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: unknown;
+  onChange: (value: string | null) => void;
+}) {
+  return (
+    <label>
+      {label}
+      <input
+        placeholder="2026-01-15T14:30:00Z"
+        value={string(value)}
+        onChange={(event) => onChange(event.currentTarget.value || null)}
+      />
+    </label>
+  );
+}
 
 function SpatialMeasurementFields({
-  base,
+  projectId,
   kind,
   parameters,
   onChange,
 }: {
-  base: string;
+  projectId: string;
   kind: "mesh" | "point_cloud";
   parameters: Parameters;
   onChange: (value: Parameters) => void;
 }) {
   const assets = useQuery({
-    queryKey: ["guided-science", base, "spatial-assets", kind],
-    queryFn: ({ signal }) =>
-      request<SpatialAssetChoice[]>(`${base}/spatial/assets`, { signal }),
+    queryKey: [
+      "guided-science",
+      `/projects/${projectId}`,
+      "spatial-assets",
+      kind,
+    ],
+    queryFn: ({ signal }) => listProjectSpatialAssets(projectId, signal),
+    refetchInterval: ({ state }) =>
+      state.data?.some((asset) =>
+        ["queued", "running", "cancel_requested"].includes(asset.parse_status),
+      )
+        ? 1000
+        : false,
   });
   const update = (delta: Parameters) =>
     onChange({
@@ -1024,6 +1067,38 @@ function SpatialMeasurementFields({
       calibration_evidence: string(parameters.calibration_evidence),
       ...delta,
     });
+  const isAvailable = (asset: SpatialSourceAsset) =>
+    asset.project_id === projectId &&
+    asset.parse_status === "succeeded" &&
+    asset.parse_summary?.source_kind_resolved === kind &&
+    /^[a-f0-9]{64}$/.test(asset.sha256);
+
+  function chooseSource(assetId: string) {
+    if (assetId === parameters.asset_id) return;
+    const asset = assets.data?.find(
+      (item) => item.id === assetId && isAvailable(item),
+    );
+    if (assetId && !asset) return;
+    update({
+      asset_id: asset?.id ?? null,
+      expected_source_payload_sha256: asset?.sha256 ?? null,
+      source_label: null,
+      calibration_review: null,
+      calibration_review_id: null,
+      ply_text: null,
+      ...(kind === "mesh"
+        ? {
+            obj_text: null,
+            glb_base64: null,
+            vertices: null,
+            faces: null,
+            surface_path_vertex_pairs: null,
+            surface_trace_vertex_paths: null,
+            anatomical_branch: null,
+          }
+        : { points: null, point_index_pairs: null }),
+    });
+  }
   const uncertainty = parameters.relative_scale_uncertainty;
   return (
     <fieldset>
@@ -1048,11 +1123,9 @@ function SpatialMeasurementFields({
               ? "parsed"
               : asset.parse_status.replaceAll("_", " ")
           }`,
-          unavailable:
-            asset.project_id !== base.split("/").at(-1) ||
-            asset.parse_status !== "succeeded",
+          unavailable: !isAvailable(asset),
         }))}
-        onChange={(asset_id) => update({ asset_id })}
+        onChange={chooseSource}
       />
       <label>
         Meters per source unit
@@ -1125,6 +1198,14 @@ function SpatialMeasurementFields({
           </label>
         ),
       )}
+      <SpatialTimestamp
+        label="Acquisition timestamp"
+        value={parameters.observed_at_utc}
+        onChange={(observed_at_utc) => update({ observed_at_utc })}
+      />
+      <p className="annotation-helper">
+        Include Z for UTC or the acquisition time's UTC offset.
+      </p>
       {kind === "point_cloud" && (
         <label className="toggle-row">
           <input
@@ -1165,8 +1246,6 @@ function SpatialLongitudinalFields({
       ...parameters,
       registration_evidence: {
         method: "landmark",
-        rms_residual_m: 0,
-        correspondence_count: 3,
         ...registration,
         ...delta,
       },
@@ -1228,9 +1307,19 @@ function SpatialLongitudinalFields({
             type="number"
             min={0}
             step="any"
-            value={finiteNumber(registration.rms_residual_m, 0)}
+            max={1_000_000}
+            value={
+              typeof registration.rms_residual_m === "number"
+                ? registration.rms_residual_m
+                : ""
+            }
             onChange={(event) =>
-              updateRegistration({ rms_residual_m: event.target.valueAsNumber })
+              updateRegistration({
+                rms_residual_m:
+                  event.currentTarget.value === ""
+                    ? null
+                    : event.currentTarget.valueAsNumber,
+              })
             }
           />
         </label>
@@ -1240,10 +1329,18 @@ function SpatialLongitudinalFields({
             type="number"
             min={3}
             step={1}
-            value={finiteNumber(registration.correspondence_count, 3)}
+            max={1_000_000}
+            value={
+              typeof registration.correspondence_count === "number"
+                ? registration.correspondence_count
+                : ""
+            }
             onChange={(event) =>
               updateRegistration({
-                correspondence_count: event.target.valueAsNumber,
+                correspondence_count:
+                  event.currentTarget.value === ""
+                    ? null
+                    : event.currentTarget.valueAsNumber,
               })
             }
           />
@@ -1312,6 +1409,13 @@ function SpatialLongitudinalFields({
             }
           />
         </label>
+        <SpatialTimestamp
+          label="Registration review timestamp"
+          value={registration.independent_reviewed_at_utc}
+          onChange={(independent_reviewed_at_utc) =>
+            updateRegistration({ independent_reviewed_at_utc })
+          }
+        />
       </fieldset>
       <fieldset>
         <legend>Organism correspondence</legend>
@@ -1407,12 +1511,19 @@ function SpatialLongitudinalFields({
             }
           />
         </label>
+        <SpatialTimestamp
+          label="Correspondence review timestamp"
+          value={correspondence.independent_reviewed_at_utc}
+          onChange={(independent_reviewed_at_utc) =>
+            updateCorrespondence({ independent_reviewed_at_utc })
+          }
+        />
       </fieldset>
       <p className="annotation-helper">
         Supporting review is durable audit evidence in the saved workflow. It
         does not authenticate reviewer authority or turn geometric change into a
         biological condition claim. Use Advanced parameter JSON for exact
-        transforms, source hashes, timestamps, and uncertainty bounds.
+        transforms, source hashes, and uncertainty bounds.
       </p>
     </fieldset>
   );
@@ -1433,7 +1544,7 @@ export function ScientificNodeControls({
   if (nodeType === "mesh_surface_preview" || nodeType === "point_cloud_preview")
     return (
       <SpatialMeasurementFields
-        base={base}
+        projectId={projectId}
         kind={nodeType === "mesh_surface_preview" ? "mesh" : "point_cloud"}
         parameters={parameters}
         onChange={onChange}

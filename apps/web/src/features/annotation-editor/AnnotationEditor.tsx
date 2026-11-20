@@ -414,8 +414,15 @@ export function AnnotationEditor({
     queryKey: ["models", project.id, "detector"],
     queryFn: () => getModels(project.id, "detector"),
   });
+  const deployableModels = useMemo(
+    () =>
+      detectorModels.data?.filter(
+        (model) => model.provider_name !== "sleap_nn",
+      ) ?? [],
+    [detectorModels.data],
+  );
   const activeDetectorModelId =
-    detectorModels.data?.find(
+    deployableModels.find(
       (model) => model.metadata_json.active_for_predictions === true,
     )?.id ?? "";
   const samInstallJobQuery = useQuery({
@@ -472,13 +479,10 @@ export function AnnotationEditor({
   });
 
   useEffect(() => {
-    if (!deployModelId && detectorModels.data?.[0]) {
-      const active = detectorModels.data.find(
-        (model) => model.metadata_json.active_for_predictions === true,
-      );
-      setDeployModelId((active ?? detectorModels.data[0]).id);
+    if (!deployableModels.some((model) => model.id === deployModelId)) {
+      setDeployModelId(activeDetectorModelId || deployableModels[0]?.id || "");
     }
-  }, [deployModelId, detectorModels.data]);
+  }, [activeDetectorModelId, deployModelId, deployableModels]);
 
   useEffect(() => {
     const session = sessionQuery.data;
@@ -2776,23 +2780,25 @@ export function AnnotationEditor({
                 <p className="eyebrow">Project model</p>
                 <h3>Deploy trained model</h3>
               </div>
-              <span>{detectorModels.data?.length ?? 0} available</span>
+              <span>{deployableModels.length} available</span>
             </div>
             <label>
               Trained or imported model
               <select
                 value={deployModelId}
                 onChange={(event) => setDeployModelId(event.target.value)}
-                disabled={!detectorModels.data?.length}
+                disabled={!deployableModels.length}
               >
-                {detectorModels.data?.length ? (
-                  detectorModels.data.map((model) => (
+                {deployableModels.length ? (
+                  deployableModels.map((model) => (
                     <option key={model.id} value={model.id}>
                       {model.display_name}
                     </option>
                   ))
                 ) : (
-                  <option value="">No project models registered</option>
+                  <option value="">
+                    No compatible project models available
+                  </option>
                 )}
               </select>
             </label>
@@ -2823,15 +2829,17 @@ export function AnnotationEditor({
               on this image. Grounding DINO and other prompted, open-vocabulary
               tools remain separate assist workflows.
             </p>
-            {!detectorModels.isPending && detectorModels.data?.length === 0 && (
-              <p className="annotation-helper" role="status">
-                No trained detector is registered for this project. Register a
-                local detector in Model Hub to run image-wide class-aware
-                inference. Use Predict objects in image for class-agnostic SAM
-                proposals. SAM masks do not train a detector from your edits
-                automatically.
-              </p>
-            )}
+            {!detectorModels.isPending &&
+              !detectorModels.isError &&
+              deployableModels.length === 0 && (
+                <p className="annotation-helper" role="status">
+                  No compatible detector is available for this project. Register
+                  a local detector in Model Hub to run image-wide class-aware
+                  inference. Use Predict objects in image for class-agnostic SAM
+                  proposals. SAM masks do not train a detector from your edits
+                  automatically.
+                </p>
+              )}
             {detectorModels.isError && (
               <p className="form-error" role="alert">
                 Could not load registered detectors:{" "}
@@ -2841,7 +2849,7 @@ export function AnnotationEditor({
             <button
               type="button"
               disabled={
-                !deployModelId ||
+                !deployableModels.some((model) => model.id === deployModelId) ||
                 deployModelMutation.isPending ||
                 deployJobQuery.data?.status === "queued" ||
                 deployJobQuery.data?.status === "running"

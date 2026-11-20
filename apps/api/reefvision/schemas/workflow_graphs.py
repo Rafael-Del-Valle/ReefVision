@@ -32,6 +32,7 @@ WorkflowDataType = Literal[
     "mesh_measurement_preview",
     "mesh_longitudinal_comparison",
     "point_cloud_measurement_preview",
+    "spatial_condition_report",
     "longitudinal_analysis",
     "ecology_identity_registry",
     "connected_branch_preview",

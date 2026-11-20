@@ -37,5 +37,14 @@ neutral exports. Old SLP-only source artifacts are retained as source evidence
 but require an external, independently licensed conversion before ReefVision
 can import their pose payload.
 
+Earlier ReefVision standalone NWB ZIP exports recorded the source video's
+SHA-256 and the frame and track mappings in a separate manifest. The NWB
+pose payload itself lacked a checksum binding it to that manifest. Keep
+the original archive and use a current ReefVision build to re-export from
+the source project. If only the archive remains, an independent neutral
+conversion must verify the source frame and track mappings before import.
+NWB files written by the checksum-bound ReefVision storage codec remain
+readable, including files produced before this change.
+
 This decision supersedes older roadmap, phase-plan, and report statements that
 call SLEAP-NN or SLP a supported ReefVision capability.

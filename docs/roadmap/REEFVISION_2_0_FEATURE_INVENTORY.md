@@ -2,17 +2,17 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-16T04:00:00Z`
+Updated: `2026-11-20T03:57:55Z`
 Candidate target: `2.0`
 
 ## Status summary
 
 | Status | Count |
 | --- | ---: |
-| blocked | 12 |
+| blocked | 13 |
 | explicitly_deferred | 4 |
-| in_progress | 33 |
-| verified | 27 |
+| in_progress | 32 |
+| verified | 28 |
 
 ## Features
 
@@ -20,9 +20,9 @@ Candidate target: `2.0`
 | --- | --- | --- | --- |
 | 1.1 | Reviewed annotation and model-source comparison | verified | Research → Comparisons → Annotation sources |
 | 1.1 | Current-field interpolation, streamlines, and trajectory context | verified | Research → Environmental context → Currents |
-| 1.1 | Offline-pinned NOAA/Copernicus and tidal/lunar context | verified | Research → Scientific records → Environmental context |
+| 1.1 | Offline-pinned NOAA/Copernicus and tidal/lunar context | verified | Project → Data & annotation → Environmental Context |
 | 1.1 | Project Exchange, backup, upgrade, and rollback integrity | verified | Project menu → Project Exchange / Backup |
-| 1.1 | Projective density on a declared surveyed reference plane | blocked | Research → Density → Projective reference plane |
+| 1.1 | Projective density on a declared surveyed reference plane | blocked | Project → Data & annotation → Computed Metrics → Open verified mask coverage |
 | 1.1 | Repeated-measures scientific analysis | blocked | Research → Analyses → Repeated measures |
 | 1.1 | Versioned scientific records, provenance, and computed metrics | verified | Open project → Research → Scientific records |
 | 1.1 | Telemetry and geographic measurements with uncertainty | verified | Research → Scientific records → Geographic measurements |
@@ -42,25 +42,26 @@ Candidate target: `2.0`
 | 1.3 | 1.3 temporal/scientific exchange, upgrade, and restore | verified | Project menu → Project Exchange / Backup |
 | 1.3 | Held-out landmark, event, timing, and count agreement reports | verified | Models & AI → Model Hub → ReefPose scientific validation |
 | 1.3 | Publication figures, methods, and provenance records | verified | Research → Reports → Publication outputs |
-| 1.3 | Representative frame-only versus temporal ReefPose comparison | blocked | Synthetic technical results must remain separately labeled. |
+| 1.3 | Representative frame-only versus temporal ReefPose comparison | blocked | On Windows the administratively extracted 2194f2e96 package trained and registered a scratch temporal checkpoint, refined 12 held-out fixture frames and evaluated on a physical RTX 3090. Representative group-aware accuracy still requires independent recordings, labels and thresholds. |
 | 1.3 | Reviewed study, treatment, site, tank, and sampling-unit assignments | verified | Research → Organisms & ecology → Study assignments |
 | 1.3 | Frozen temporal ReefPose datasets and checkpoint training | verified | Models & AI → Training → Temporal ReefPose |
 | 1.3 | Temporal ReefPose refinement and explicit frame review | verified | Video & automation → Video & tracking → Native temporal ReefPose |
 | 1.4 | Reviewed 3D organism matching across acquisitions | blocked | 3D scientific task → Organism correspondence |
-| 1.4 | Anatomical coral branch-length measurement | blocked | 3D scientific task → Measurements → Anatomical branch length |
-| 1.4 | Reviewed biological-condition measurements | blocked | 3D/scientific task → Condition review |
+| 1.4 | Anatomical coral branch-length measurement | blocked | Home → project → Video & automation → Workflow builder → select project mesh → Anatomical branch length |
+| 1.4 | Reviewed biological-condition measurements | blocked | Home → project → Video & automation → Workflow builder → select project original → Condition review |
 | 1.4 | Reviewed extents, dimensions, area, surface paths, and conditional volume | verified | 3D scientific task → Measurements |
 | 1.4 | Validated 1.3 to 1.4 ancestry, migration, exchange, and rollback | blocked | Installed upgrade and Project menu → Backup / Exchange |
 | 1.4 | Reviewed longitudinal 3D change | blocked | 3D scientific task → Longitudinal comparison |
 | 1.4 | Reviewed 3D registration transforms and calibration evidence | blocked | 3D scientific task → Registration review |
 | 1.4 | Representative 3D field validation | blocked | Known synthetic geometry is reported separately. |
+| 1.4 | Windows 11 Smart App Control compatibility | blocked | Keep this check separate from standard hosted Windows acceptance; a green hosted runner does not establish Smart App Control compatibility. |
 | 1.4 | Bounded OBJ/PLY/GLB mesh and point-cloud preview | verified | Open project → Video & automation → Workflow builder → Project-owned 3D originals |
 | 1.4 | Persistent versioned 3D project assets | verified | Open project → Video & automation → Workflow builder → Project-owned 3D originals → Import 3D original |
 | 1.5 | Study setup, treatments, sampling units, exclusions, and statistical plan | in_progress | Research → Study design |
 | 1.5 | Offline field capture and later project reconciliation | in_progress | Project → Field capture |
 | 1.5 | Local model catalog, runtime selection, and prompt-assisted configuration | in_progress | Models & AI → Model Hub |
 | 1.5 | Unified detector, mask, pose, tracking, and event comparison | in_progress | Models & AI → Model comparison |
-| 1.5 | Early local provider and plugin foundations | in_progress | Models & AI → Providers |
+| 1.5 | Early local provider and plugin foundations | verified | Models & AI → Providers |
 | 1.5 | Complete research reproducibility package | in_progress | Research → Export reproducibility package |
 | 1.5 | Reviewer roles, independent queues, adjudication, and agreement | in_progress | Review → Reviewer lab |
 | 1.6 | Safe class management after use | in_progress | Annotate → Classes |
@@ -92,7 +93,7 @@ Candidate target: `2.0`
 | 2.0 | Typed, versioned Workflow Builder with guided forms and human gates | in_progress | Video & automation → Workflow Builder |
 | post-2.0 | Cloud accounts, hosted storage, and real-time collaboration | explicitly_deferred | Local cross-project summaries and offline exchange remain in scope. |
 | post-2.0 | Hyperspectral imagery | explicitly_deferred | Multispectral remains in scope. |
-| post-2.0 | Active SLEAP runtime, provider, and SLP interoperability | explicitly_deferred | BSD sleap-io may remain only for neutral NWB interchange after audit; native ReefPose is the supported pose path. Installed-payload evidence is blocked until a Windows installer built from the final candidate SHA is available for dependency inspection. |
+| post-2.0 | Active SLEAP runtime, provider, and SLP interoperability | explicitly_deferred | BSD sleap-io may remain only for neutral NWB interchange after audit; native ReefPose is the supported pose path. Checkpoint 2194f2e96 passed a digest-bound MSI and six-CAB audit of 19,133 paths and 11,977 nested Python entries. Repeat the payload audit on the final candidate. |
 | post-2.0 | Stereo reconstruction | explicitly_deferred | 3D import, measurement, and matching remain in scope. |
 
 ## Feature evidence
@@ -142,7 +143,7 @@ Evidence:
 - Target: `1.1`
 - Status: `verified`
 - Dependencies: `rv11-scientific-record-foundation`
-- Entry point: Research → Scientific records → Environmental context
+- Entry point: Project → Data & annotation → Environmental Context
 - Workflow Builder: `required`
 
 Acceptance checks:
@@ -152,7 +153,7 @@ Acceptance checks:
 Evidence:
 
 - `source`: Deterministic offline/cache fixtures and provenance tests. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/71` (`rv11-env-src`)
-- `browser`: none recorded
+- `browser`: The normal Environmental Context workspace downloaded 240 temperature observations from NOAA Key West station 8724580 on 2024-06-01 UTC. Offline import after reopening returned the identical records, units, acquisition time, source and content hashes. — `docs/roadmap/REEFVISION_1_4_INTEGRATION_AUDIT.md` (`rv11-noaa-public-cache`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -182,18 +183,19 @@ Evidence:
 - Target: `1.1`
 - Status: `blocked`
 - Dependencies: `rv11-telemetry-geographic-measurements`
-- Entry point: Research → Density → Projective reference plane
+- Entry point: Project → Data & annotation → Computed Metrics → Open verified mask coverage
 - Workflow Builder: `required`
 - Missing input: An approved projective-density method, surveyed reference-plane fixtures with scale/calibration uncertainty, expected density values, and independent reviewer thresholds.
 
 Acceptance checks:
 
 - **blocked** — Compare computed projective density with independently surveyed plane area and propagate calibration/reference uncertainty. (`rv11-projective-density-check`)
+- **verified** — Calculate density over a declared synthetic reference plane, exclude other classes and targets outside the region, then compare the standalone result, two saved graph runs and CSV. (`rv11-projective-density-fixture-check`)
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: A declared homography gives known clipped physical areas and rejects a transform crossing the horizon. — `apps/api/reefvision/tests/test_computed_mask_coverage.py` (`rv11-density-fixture-source`)
+- `browser`: Two eligible masks over 1.40625 cm² give 1.422222 masks/cm² in the normal workspace, saved workflow and CSV. The clipped target union is 0.9375 cm². — `apps/web/tests/e2e/projective-density-live.spec.ts` (`rv11-density-fixture-browser`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -587,7 +589,7 @@ Evidence:
 - Dependencies: `rv13-heldout-agreement`
 - Entry point: Not user-facing
 - Workflow Builder: `not_applicable`
-- Missing input: Representative held-out recordings with independent landmark/event labels, the same compatible upstream ReefPose checkpoint, an operational target GPU environment, and preregistered landmark/event/timing/count thresholds.
+- Missing input: Representative held-out recordings with independent landmark/event labels, the same compatible registered upstream ReefPose checkpoint, and preregistered landmark/event/timing/count thresholds.
 
 Acceptance checks:
 
@@ -673,10 +675,12 @@ Evidence:
 Acceptance checks:
 
 - **blocked** — Review accepted, rejected, disputed, and unresolved specimen correspondences before longitudinal comparison. (`rv14-3d-organism-matching-check`)
+- **verified** — Record provisional identity review against dated project originals. A disputed match withholds change and reopening preserves the supplied decision and both source digests. (`rv14-correspondence-project-replay-check`)
 
 Evidence:
 
 - `source`: Synthetic correspondence tests bind project, specimen, observations, times, original assets, source bytes and parsed geometry; they enforce independent reviewers, chronology, and supporting/disputing/inconclusive outcomes. — `apps/api/reefvision/tests/test_spatial_mesh_reidentification_geometry_binding_v14.py` (`rv14-matching-binding-source`)
+- `browser`: Record provisional identity review against dated project originals. A disputed match withholds change and reopening preserves the supplied decision and both source digests. — `apps/web/tests/e2e/project-spatial-comparison-live.spec.ts` (`rv14-correspondence-project-replay`)
 - `browser`: Workflow Builder exposes observation-pair evidence, method, observer, accepted/rejected/disputed/unresolved outcomes, and separate independent-review attribution. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-matching-guided-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -687,18 +691,19 @@ Evidence:
 - Target: `1.4`
 - Status: `blocked`
 - Dependencies: `rv14-geometric-measurements`
-- Entry point: 3D scientific task → Measurements → Anatomical branch length
+- Entry point: Home → project → Video & automation → Workflow builder → select project mesh → Anatomical branch length
 - Workflow Builder: `required`
 - Missing input: An approved anatomical endpoint/centerline rubric, independently measured reference branches with scale evidence, repeatability study, preregistered error thresholds, and authorized adjudicator.
 
 Acceptance checks:
 
 - **blocked** — Apply a declared endpoint/centerline method and meet independent reference and repeatability thresholds before using the anatomical label. (`rv14-anatomical-branch-length-check`)
+- **verified** — Validate and replay a source-bound investigator-declared centerline, with named endpoints, ordered coordinates, operator, reference length and repeatability evidence. Report provisional length and scale-only uncertainty. (`rv14-centerline-project-engineering-check`)
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Validate and replay a source-bound investigator-declared centerline, with named endpoints, ordered coordinates, operator, reference length and repeatability evidence. Report provisional length and scale-only uncertainty. — `apps/api/reefvision/tests/test_spatial_anatomical_branch_v14.py` (`rv14-centerline-project-source`)
+- `browser`: Validate and replay a source-bound investigator-declared centerline, with named endpoints, ordered coordinates, operator, reference length and repeatability evidence. Report provisional length and scale-only uncertainty. — `apps/web/tests/e2e/anatomical-branch-live.spec.ts` (`rv14-centerline-project-browser`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -708,18 +713,21 @@ Evidence:
 - Target: `1.4`
 - Status: `blocked`
 - Dependencies: `rv14-versioned-spatial-assets`, `rv13-study-assignments`
-- Entry point: 3D/scientific task → Condition review
+- Entry point: Home → project → Video & automation → Workflow builder → select project original → Condition review
 - Workflow Builder: `required`
 - Missing input: An approved biological-condition rubric and observation unit, representative labeled specimens, independent reviewer authority, disagreement/adjudication rule, and preregistered reliability/accuracy thresholds.
 
 Acceptance checks:
 
 - **blocked** — Record condition against a versioned biological rubric with source evidence, independent review, disagreement/adjudication, revision, uncertainty, and export/replay. (`rv14-biological-condition-check`)
+- **verified** — Record an observation under a frozen, investigator-supplied rubric, attribute disagreement and adjudication, reopen the original, and export a report with its revision history and stated uncertainty. (`rv14-condition-project-engineering-check`)
+- **verified** — Restore multiple frozen rubric versions, verify historical workflow reports against the observation ledger and their producing nodes, and preserve original revision identities across two exchanges. (`rv14-condition-exchange-ledger-check`)
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Record an observation under a frozen, investigator-supplied rubric, attribute disagreement and adjudication, reopen the original, and export a report with its revision history and stated uncertainty. — `apps/api/reefvision/tests/test_spatial_condition_v14.py` (`rv14-condition-project-source`)
+- `source`: Restore multiple frozen rubric versions, verify historical workflow reports against the observation ledger and their producing nodes, and preserve original revision identities across two exchanges. — `apps/api/reefvision/tests/test_spatial_condition_v14.py` (`rv14-condition-exchange-ledger`)
+- `browser`: Record an observation under a frozen, investigator-supplied rubric, attribute disagreement and adjudication, reopen the original, and export a report with its revision history and stated uncertainty. — `apps/web/tests/e2e/spatial-condition-live.spec.ts` (`rv14-condition-project-browser`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -758,12 +766,14 @@ Acceptance checks:
 
 - **verified** — Merge validated 1.3 without editing applied migration bodies, disambiguate both supported numeric histories from schema fingerprints, preserve rows and IDs, and reject ambiguous or unknown histories without mutation. (`rv14-lineage-source-check`)
 - **blocked** — Using an installer built from the final candidate SHA, upgrade representative 1.3 and legacy draft-1.4 profiles, exchange the integrated records, and restore a verified pre-upgrade backup. (`rv14-lineage-installed-check`)
+- **verified** — Run the exact candidate installer against deterministic 1.3, legacy 0038, and legacy 0039 fixtures, preserve the seeded evidence, round-trip Project Exchange, and restore verified backups. Confirm that the genuine historical 1.3 installer rejects the upgraded database without changing it. (`rv14-lineage-installed-synthetic-check`)
 
 Evidence:
 
 - `source`: Real ancestry merge, unique Alembic graph, schema-fingerprinted legacy upgrades, ambiguity rejection, backup verification, and downgrade/upgrade regressions. — `docs/roadmap/REEFVISION_1_4_MIGRATION_RECONCILIATION.md` (`rv14-lineage-source`)
 - `browser`: none recorded
-- `windows_installed`: Exact-SHA 1.4.0 Windows acceptance passed a published 1.0.3 upgrade with schema migration, persistence, Project Exchange, uninstall, and data retention. This is partial evidence and does not substitute for representative 1.3 and legacy draft-1.4 profiles. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/43792901192` (`rv14-lineage-win-103`)
+- `windows_installed`: Exact-head source 36c80224a Windows acceptance passed a published 1.0.3 upgrade with schema migration, persistence, Project Exchange, uninstall, and data retention. This is partial evidence and does not substitute for representative 1.3 and legacy draft-1.4 profiles. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-103`)
+- `windows_installed`: Exact-head source 36c80224a passed all three installed synthetic profiles. Verified 1.3 MSI upgrade, 0038 and 0039 profile migration, evidence preservation, exchange round trips, and backup restoration. The historical 1.3 build rejected the upgraded schema and the upgraded database hash remained unchanged. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-synthetic`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -779,10 +789,14 @@ Evidence:
 Acceptance checks:
 
 - **blocked** — Report change only for reviewed correspondence, compatible frames/units, and pinned measurement revisions with propagated uncertainty. (`rv14-longitudinal-3d-change-check`)
+- **verified** — Enter from Home, import two dated project meshes, compare calibrated geometry, review, save, reopen, run the identical revision twice and export the result with matching source and artifact hashes. (`rv14-longitudinal-project-replay-check`)
+- **verified** — Exchange two acquired meshes, reopen the original comparison and its original receipt, then rerun the saved graph under the restored asset identities with identical measured change and original byte hashes. (`rv14-longitudinal-exchange-receipt-check`)
 
 Evidence:
 
 - `source`: Deterministic comparisons enforce observation chronology, source and calibration fingerprints, frame and registration evidence, specimen correspondence, conservative scale-uncertainty intervals, topology QC, and stale review-bundle rejection. — `apps/api/reefvision/tests/test_spatial_mesh_longitudinal_v14.py` (`rv14-longitudinal-source`)
+- `source`: Exchange two acquired meshes, reopen the original comparison and its original receipt, then rerun the saved graph under the restored asset identities with identical measured change and original byte hashes. — `apps/api/reefvision/tests/test_spatial_mesh_workflow_exchange_v14.py` (`rv14-longitudinal-exchange-receipt`)
+- `browser`: Enter from Home, import two dated project meshes, compare calibrated geometry, review, save, reopen, run the identical revision twice and export the result with matching source and artifact hashes. — `apps/web/tests/e2e/project-spatial-comparison-live.spec.ts` (`rv14-longitudinal-project-replay`)
 - `browser`: Saved Workflow Builder graphs provide contextual registration and organism-correspondence controls while preserving exact transforms, hashes, times and uncertainty in the same node's advanced controls. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-longitudinal-guided-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -800,10 +814,12 @@ Evidence:
 Acceptance checks:
 
 - **blocked** — Review transform direction, frame, units, residuals, correspondences, uncertainty, and reject stale or incompatible evidence. (`rv14-registration-transforms-check`)
+- **verified** — Save both dated surveys, their source hashes, measured registration residual, correspondence count and local review in a graph and export the resulting evidence on replay. (`rv14-registration-project-replay-check`)
 
 Evidence:
 
 - `source`: Synthetic registration tests validate rigid source-to-target transforms, residual and correspondence metadata, calibration/source/geometry bindings, review independence and chronology, uncertainty bounds, and stale-evidence rejection. — `apps/api/reefvision/tests/test_spatial_mesh_registration_geometry_binding_v14.py` (`rv14-registration-binding-source`)
+- `browser`: Save both dated surveys, their source hashes, measured registration residual, correspondence count and local review in a graph and export the resulting evidence on replay. — `apps/web/tests/e2e/spatial-guided-workflow-live.spec.ts` (`rv14-registration-project-replay`)
 - `browser`: Workflow Builder exposes frames, method, residual, correspondence count, evidence note, and accepted/rejected/disputed/unresolved review states with separate operator and reviewer attribution. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-registration-guided-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -821,6 +837,27 @@ Evidence:
 Acceptance checks:
 
 - **blocked** — Validate supported formats/sizes, geometry, matching, longitudinal change, branch length, and condition on independently reviewed specimens and installed Windows hardware. (`rv14-representative-spatial-validation-check`)
+
+Evidence:
+
+- `source`: none recorded
+- `browser`: none recorded
+- `windows_installed`: none recorded
+- `physical_hardware`: none recorded
+- `representative_data`: none recorded
+
+### rv14-smart-app-control-compatibility: Windows 11 Smart App Control compatibility
+
+- Target: `1.4`
+- Status: `blocked`
+- Dependencies: None
+- Entry point: Not user-facing
+- Workflow Builder: `not_applicable`
+- Missing input: A suitable disposable Windows 11 device with Smart App Control enforcement enabled and the exact final-candidate installer. This host runs Windows 11 build 26300 with VerifiedAndReputablePolicyState=0 (off), and the only local 1.4 MSI is from an older candidate, so hosted or local standard acceptance cannot exercise enforcement or produce a relevant Code Integrity 3077 event.
+
+Acceptance checks:
+
+- **blocked** — On a suitable disposable Windows 11 device with Smart App Control enforcement enabled, launch the exact final-candidate installer and installed application; if enforcement blocks launch, inspect Code Integrity event 3077 and record the blocked file and signature status. (`rv14-smart-app-control-compatibility-check`)
 
 Evidence:
 
@@ -956,20 +993,20 @@ Evidence:
 ### rv15-provider-foundations: Early local provider and plugin foundations
 
 - Target: `1.5`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv13-temporal-dataset-training`
 - Entry point: Models & AI → Providers
 - Workflow Builder: `required`
 
 Acceptance checks:
 
-- **in_progress** — Discover local provider manifests, expose capabilities/availability, isolate failures, and preserve unavailable provider records without executing unknown code. (`rv15-provider-foundations-check`)
+- **verified** — Discover local provider manifests, expose capabilities/availability, isolate failures, and preserve unavailable provider records without executing unknown code. (`rv15-provider-foundations-check`)
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
-- `windows_installed`: none recorded
+- `source`: Strict inspect-only manifest discovery, API exposure, failure isolation, and metadata-only Workflow Builder snapshots passed the exact-head source gates. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/88` (`rv15-provider-foundations-src`)
+- `browser`: Home → open project → Models & AI → Providers passed component and Playwright acceptance; local manifests remain non-executable and unavailable records remain visible. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/88` (`rv15-provider-foundations-ui`)
+- `windows_installed`: Exact-head clean-install and published-1.0.3 upgrade runs discovered the seeded manifest with its source digest and returned blocked inspect-only preflight from the packaged API. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/43843151701` (`rv15-provider-foundations-win`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1612,7 +1649,7 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: License audit, fail-closed provider/runtime factories, neutral-format schemas, and retirement regressions (64 passed; 5 opt-in NWB integration tests skipped). — `docs/THIRD_PARTY_SLEAP_AUDIT.md` (`scope-sleap-source-retirement`)
+- `source`: Retired models are unavailable to new evaluation, image, video and saved pose workflow jobs while their histories remain readable. Native COCO, DeepLabCut CSV and Ultralytics exchange passed without the optional codec. The pinned optional NWB round trip and historical-file checks ran in the 41-test integration suite. — `docs/THIRD_PARTY_SLEAP_AUDIT.md` (`scope-sleap-source-retirement`)
 - `browser`: none recorded
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded

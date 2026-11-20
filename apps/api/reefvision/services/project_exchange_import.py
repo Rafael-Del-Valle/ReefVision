@@ -71,6 +71,10 @@ from reefvision.services.project_exchange_computed import (
     remap_computed_sections,
     validate_computed_exchange_records,
 )
+from reefvision.services.project_exchange_condition_v14 import (
+    remap_condition_observation,
+    remap_condition_report,
+)
 from reefvision.services.project_exchange_environmental_analysis import (
     ANALYSIS_SECTIONS,
     remap_environmental_analysis_sections,
@@ -114,7 +118,10 @@ from reefvision.services.project_exchange_temporal_reefpose import (
     remap_temporal_exchange_row,
     restore_temporal_links,
 )
-from reefvision.services.project_exchange_workflows import restore_workflow_provenance
+from reefvision.services.project_exchange_workflows import (
+    has_spatial_workflow_history,
+    restore_workflow_provenance,
+)
 from reefvision.services.projects import ProjectService
 from reefvision.services.scientific_data import content_hash
 from reefvision.services.scientific_heatmaps import scientific_heatmap_content_hash
@@ -124,6 +131,7 @@ from reefvision.services.spatial_asset_metadata_revisions_v14 import (
 from reefvision.services.spatial_calibration_review_v14 import (
     canonical_spatial_calibration_review_evidence,
 )
+from reefvision.services.spatial_condition_v14 import condition_content_sha256
 from reefvision.services.spatial_source_assets_v14 import (
     SPATIAL_PARSE_JOB,
     spatial_source_parse_result_content,
@@ -447,6 +455,9 @@ def import_project_exchange(
         validate_environmental_analysis_exchange(old_project_id, section_rows)
         validate_spatial_exchange_records(old_project_id, section_rows)
         _validate_heatmap_artifacts(old_project_id, section_rows)
+        restores_workflow_provenance = bool(integrated) or has_spatial_workflow_history(
+            section_rows
+        )
 
         project: Project | None = None
         try:
@@ -558,7 +569,7 @@ def import_project_exchange(
                         session, section_rows, id_map
                     )
                     digests.update(ecology_digests)
-                if section_name in integrated:
+                if section_name in integrated or section_name == "spatial_condition_revisions":
                     rows = parent_first(rows, model)
                 created: list[Any] = []
                 for row_index, source_row in enumerate(rows):
@@ -690,6 +701,10 @@ def import_project_exchange(
                         values["error_message"] = "Interrupted by project exchange"
 
                     if section_name == "workflow_artifacts":
+                        if values["data_type"] == "spatial_condition_report":
+                            values["payload_json"] = remap_condition_report(
+                                row["payload_json"], id_map
+                            )
                         payload = values["payload_json"]
                         result_id = payload.get("result_id")
                         if values["data_type"] == "scientific_heatmap":
@@ -722,6 +737,17 @@ def import_project_exchange(
                                     "content_sha256": coverage["content_sha256"],
                                 }
                             )
+
+                    if section_name == "spatial_condition_rubrics":
+                        values["rubric_id"] = row["rubric_id"]
+                        values["version"] = row["version"]
+
+                    if section_name == "spatial_condition_revisions":
+                        values["observation_json"] = remap_condition_observation(
+                            row["observation_json"], id_map
+                        )
+                        values["decision_json"] = row.get("decision_json")
+                        values["content_sha256"] = condition_content_sha256(values)
 
                     if section_name == "spatial_calibration_reviews":
                         evidence = MeshCalibrationReviewEvidence.model_validate(
@@ -828,7 +854,7 @@ def import_project_exchange(
                 shutil.copyfileobj(source, target)
 
             manifest_sha256 = canonical_json_sha256(manifest)
-            origin = (manifest.get("origin") or {}) if integrated else {}
+            origin = (manifest.get("origin") or {}) if restores_workflow_provenance else {}
             origin_ids = map_origin_ids(origin, id_map)
             package = ProjectExchangePackage(
                 id=package_id,
@@ -844,7 +870,11 @@ def import_project_exchange(
                     "source_project_name": source_project.get("name"),
                     "id_remapped": True,
                     "id_map": id_map,
-                    **({"digest_map": digests, "origin_id_map": origin_ids} if integrated else {}),
+                    **(
+                        {"digest_map": digests, "origin_id_map": origin_ids}
+                        if restores_workflow_provenance
+                        else {}
+                    ),
                     "copied_media_count": copied_media_count,
                 },
                 completed_at=datetime.now(UTC),
@@ -867,6 +897,7 @@ def import_project_exchange(
                         lock.protocol_sha256 = protocol
                 restore_pose_comparisons(session, project.id, digests)
                 restore_comparison_jobs(session, project.id, section_rows, id_map, digests)
+            if restores_workflow_provenance:
                 restore_workflow_provenance(
                     session, project.id, section_rows, id_map, digests, _remap_json
                 )

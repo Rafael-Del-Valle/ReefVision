@@ -103,12 +103,13 @@ The 1.4 integration begins from draft #79 and the validated 1.3 head
 `f44053a9`. Later version plans are written only after the predecessor has a
 clean, reviewed integration head.
 
-`clean, reviewed` does not mean that a blocked scientific check is silently
-waived. Work may continue on engineering that does not depend on a missing
-external artifact, but the next version is not started and the current version
-is not called complete while one of its feature records remains `blocked` or
-`in_progress`. Older unresolved feature records also remain release blockers
-unless an explicit scope decision defers them.
+On November 19, 2026, the owner authorized later-version engineering after all
+feasible engineering on the current version is complete and the only remaining
+checks require unavailable representative data, independent review, credentials,
+a historical user profile or physical hardware. Record each missing input
+against its feature and advance only work with satisfied technical dependencies.
+Open checks continue to block their acceptance. Feature deferral, scientific
+approval, merge, tag and publication each retain their existing authority.
 
 When sources conflict, the inventory uses this precedence order: the owner's
 current explicit scope decision, an approved specification or decision record,
