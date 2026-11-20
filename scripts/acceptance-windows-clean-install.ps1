@@ -670,7 +670,7 @@ try {
                             -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id `
                             -ExpectedBrowserSid $browserSid -BrowserArtifactsDirectory $browserArtifacts
                         $workspaces | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'workspace-evidence.json')
-                        $report.workspace_workflow = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed WebView2 passed $($workspaces.completed_journeys) class, QC, dense image and manual video journeys."
+                        $report.workspace_workflow = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed WebView2 passed $($workspaces.completed_journeys) journeys covering class changes, QC, dense images, manual video, and editor discard and reload decisions."
                     } catch {
                         $report.workspace_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
                     }
