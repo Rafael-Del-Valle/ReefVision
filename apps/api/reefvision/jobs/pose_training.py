@@ -113,6 +113,31 @@ def _require_empty_pose_gpu_output(output_root: Path) -> None:
         )
 
 
+def _require_trusted_pose_checkpoints(save_dir: Path) -> None:
+    """Never declare a pose run successful with missing or redirected weights."""
+    weights_dir = save_dir / "weights"
+    if weights_dir.is_symlink() or not weights_dir.is_dir():
+        raise ValidationError("Pose training checkpoint directory is missing or redirected")
+    if sys.platform == "win32" and getattr(weights_dir.lstat(), "st_file_attributes", 0) & 0x400:
+        raise ValidationError("Pose training checkpoint directory is a Windows junction")
+
+    found = False
+    for checkpoint in (weights_dir / "best.pt", weights_dir / "last.pt"):
+        try:
+            metadata = checkpoint.lstat()
+        except FileNotFoundError:
+            continue
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_size == 0
+            or (sys.platform == "win32" and getattr(metadata, "st_file_attributes", 0) & 0x400)
+        ):
+            raise ValidationError("Pose training checkpoint is empty or redirected")
+        found = True
+    if not found:
+        raise ValidationError("Pose training produced no usable checkpoints")
+
+
 def _verified_pose_trainer_save_dir(actual: Path, expected: Path) -> Path:
     """Register results only from the exact run directory allocated before training.
 
@@ -1218,6 +1243,7 @@ def process_pose_training_job(
                 results_csv,
                 tuning_enabled=False,
             )
+            _require_trusted_pose_checkpoints(save_dir)
 
             manifest = dict(run.artifact_manifest_json or {})
 
