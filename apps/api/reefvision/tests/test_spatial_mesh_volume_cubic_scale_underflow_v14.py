@@ -427,24 +427,42 @@ def test_cubic_volume_subresolution_scale_qc_standalone_and_saved_graph(
     for field in ("specimen_id", "observation_id", "coordinate_frame_id"):
         assert standalone["provenance"][field] == params[field]
     assert standalone["provenance"]["relative_scale_uncertainty"] == 1e-17
-    assert standalone["provenance"]["calibration_evidence"] == mesh_params[
-        "calibration_evidence"
-    ]
-    alternate_specimen = "synthetic-unverified-other-specimen"
-    alternate_response = client.post(
-        f"{base}/spatial/mesh-preview",
-        json={**params, "specimen_id": alternate_specimen},
-    )
-    assert alternate_response.status_code == 200, alternate_response.text
-    alternate = alternate_response.json()
-    assert alternate["provenance"]["specimen_id"] == alternate_specimen
-    assert alternate["provenance"]["specimen_identity_verified"] is False
-    assert alternate["provenance"]["geometry_sha256"] == standalone["provenance"][
-        "geometry_sha256"
-    ]
-    assert alternate["enclosed_volume_m3"] == standalone["enclosed_volume_m3"]
-    assert alternate["surface_to_enclosed_volume_ratio_per_m"] == ratio
-    assert alternate["qc_warnings"] == standalone["qc_warnings"]
+    assert standalone["provenance"]["calibration_evidence"] == mesh_params["calibration_evidence"]
+    # Caller-supplied identity, observation, and coordinate-frame labels are
+    # audit annotations, not registration or organism correspondence evidence.
+    # Alter each label separately to catch accidental coupling to geometry.
+    for field, alternate_label in (
+        ("specimen_id", "synthetic-unverified-other-specimen"),
+        ("observation_id", "another-unverified-survey"),
+        ("coordinate_frame_id", "another-unregistered-source-frame"),
+    ):
+        alternate_response = client.post(
+            f"{base}/spatial/mesh-preview",
+            json={**params, field: alternate_label},
+        )
+        assert alternate_response.status_code == 200, alternate_response.text
+        alternate = alternate_response.json()
+        assert alternate["provenance"][field] == alternate_label
+        for unchanged_field in ("specimen_id", "observation_id", "coordinate_frame_id"):
+            if unchanged_field != field:
+                assert alternate["provenance"][unchanged_field] == params[unchanged_field]
+        for verified_flag in (
+            "calibration_verified",
+            "specimen_identity_verified",
+            "coordinate_registration_verified",
+        ):
+            assert alternate["provenance"][verified_flag] is False
+        assert alternate["provenance"]["geometry_sha256"] == standalone["provenance"]["geometry_sha256"]
+        for geometry_field in (
+            "surface_area_m2",
+            "enclosed_volume_m3",
+            "surface_to_enclosed_volume_ratio_per_m",
+            "enclosed_volume_scale_interval_m3",
+            "surface_to_enclosed_volume_ratio_scale_interval_per_m",
+            "edge_connected_patch_enclosed_volumes_m3",
+        ):
+            assert alternate[geometry_field] == standalone[geometry_field]
+        assert alternate["qc_warnings"] == standalone["qc_warnings"]
 
     graph = {
         "graph_id": "subresolution-cubic-scale-v14",
