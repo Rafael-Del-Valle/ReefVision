@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T20:54:09Z`
+Updated: `2026-11-20T21:11:56Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1284,6 +1284,7 @@ Evidence:
 - `source`: The production worker completed and paused one acquisition, frozen inference, QC and reviewed report schedule on recorded or generated material. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-four-purposes`)
 - `source`: Completed schedule and receipt remained bound to the same frozen run inputs after two Project Exchange generations. The integrated scheduling tests passed 26 cases. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-transfer`)
 - `browser`: The source browser reopened the same saved schedule after a cold restart, inspected its catch-up job and two ranked images, downloaded the receipt and replayed it twice with the same output digest. A paused schedule stayed empty. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-desktop-restart`)
+- `browser`: From three more projects, selected each saved graph, created a paused schedule, resumed, paused again and opened its actual job and typed output. Verified the sealed recording, two held-out detector inputs and reviewed report. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-purpose-navigation`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
