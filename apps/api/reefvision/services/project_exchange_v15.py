@@ -7,23 +7,25 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import ModelRuntimeSelection
+from reefvision.db.models.reviewer_lab_v15 import ReviewerLabMember
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.model_runtime import RuntimeReceipt
+from reefvision.services.project_exchange_reviewer_lab_v15 import (
+    REVIEWER_LAB_SECTIONS,
+    restore_reviewer_lab_row,
+    validate_reviewer_lab_exchange,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 
 FORMAT_VERSION = "1.5"
 INTEGRATED_FORMATS = {"1.2", FORMAT_VERSION}
-SECTIONS = ("model_runtime_selections",)
+SECTIONS = ("model_runtime_selections", *REVIEWER_LAB_SECTIONS)
 
 
 def has_v15_records(session: Session, project_id: str) -> bool:
-    return (
-        session.scalar(
-            select(ModelRuntimeSelection.id)
-            .where(ModelRuntimeSelection.project_id == project_id)
-            .limit(1)
-        )
-        is not None
+    return any(
+        session.scalar(select(model.id).where(model.project_id == project_id).limit(1)) is not None
+        for model in (ModelRuntimeSelection, ReviewerLabMember)
     )
 
 
@@ -46,6 +48,7 @@ def validate_v15_exchange(
     if not present:
         return
     original_to_local = (origin or {}).get("id_map", {}) if isinstance(origin, dict) else {}
+    validate_reviewer_lab_exchange(sections, project_id=project_id, origin_ids=original_to_local)
     registrations = {row["id"]: row for row in sections.get("models", [])}
     classes = {row["id"] for row in sections.get("label_classes", [])}
     for row in sections.get("model_runtime_selections", []):
@@ -83,6 +86,7 @@ def validate_v15_exchange(
 def restore_v15_row(
     name: str, row: dict[str, Any], values: dict[str, Any], mapping: dict[str, str]
 ) -> None:
+    restore_reviewer_lab_row(name, row, values, mapping)
     if name == "model_runtime_selections":
         receipt = RuntimeReceipt.model_validate(row["snapshot_json"])
         previous = row["source_id_map_json"]

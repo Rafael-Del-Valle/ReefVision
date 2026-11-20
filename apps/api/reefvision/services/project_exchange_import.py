@@ -105,6 +105,10 @@ from reefvision.services.project_exchange_pose import (
     validate_frozen_pose_frames,
 )
 from reefvision.services.project_exchange_reports import remap_report_archive_job
+from reefvision.services.project_exchange_reviewer_lab_v15 import (
+    restore_reviewer_lab_exchange,
+    reviewer_lab_exchange_ids,
+)
 from reefvision.services.project_exchange_scientific import (
     SCIENCE_SECTIONS,
     remap_scientific_sections,
@@ -115,7 +119,11 @@ from reefvision.services.project_exchange_temporal_reefpose import (
     remap_temporal_exchange_row,
     restore_temporal_links,
 )
-from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, restore_v15_row
+from reefvision.services.project_exchange_v15 import (
+    INTEGRATED_FORMATS,
+    restore_v15_row,
+    validate_v15_exchange,
+)
 from reefvision.services.project_exchange_workflows import (
     has_spatial_workflow_history,
     restore_workflow_provenance,
@@ -445,6 +453,9 @@ def import_project_exchange(
         models = {**SECTION_MODELS, **integrated}
         order = [*SECTION_ORDER, *integrated]
         validate_exchange_records(old_project_id, section_rows, models)
+        validate_v15_exchange(
+            inspection.format_version or "", old_project_id, section_rows, manifest.get("origin")
+        )
         validate_frozen_pose_frames(section_rows)
         validate_acquisition_exchange(section_rows)
         validate_computed_exchange_records(old_project_id, section_rows)
@@ -489,6 +500,9 @@ def import_project_exchange(
                     if isinstance(old_id, str) and old_id:
                         id_map[old_id] = str(uuid4())
             id_map.update(heldout_scope_mappings(old_project_id, project.id, section_rows))
+            original_ids = (manifest.get("origin") or {}).get("id_map", {})
+            for subject_id in reviewer_lab_exchange_ids(section_rows, original_ids):
+                id_map.setdefault(subject_id, str(uuid4()))
 
             # Immutable revision-series identifiers are not primary keys, but they
             # still must be remapped when a package is imported more than once.
@@ -899,6 +913,7 @@ def import_project_exchange(
                     session, project.id, section_rows, id_map, digests, _remap_json
                 )
                 package.options_json = {**package.options_json, "digest_map": digests}
+            restore_reviewer_lab_exchange(session, section_rows, id_map)
             session.commit()
             session.refresh(project)
             session.refresh(package)
