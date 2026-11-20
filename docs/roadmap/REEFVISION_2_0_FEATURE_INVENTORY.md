@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T10:22:31Z`
+Updated: `2026-11-20T10:49:44Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -756,6 +756,7 @@ Evidence:
 - `source`: Deterministic mesh fixtures cover calibrated scale exponents, extents, surface area, topology, conditional enclosed volume, uncertainty intervals, paths, numerical integrity, and explicit withhold reasons. — `apps/api/reefvision/tests/test_spatial_mesh_primitives_v14.py` (`rv14-geometric-known-fixtures`)
 - `source`: Calibration review and source bindings reject stale, mismatched, self-reviewed, or altered measurement evidence while preserving unverified status. — `apps/api/reefvision/tests/test_spatial_mesh_calibration_review_v14.py` (`rv14-geometric-review-binding`)
 - `source`: A noncollinear triangle whose area underflows is rejected by the standalone API and saved graph. A representable reference of 5e-201 is reproduced using zero absolute tolerance, and two saved executions retain the same scientific payload digest. — `apps/api/reefvision/tests/test_spatial_mesh_area_underflow_v14.py` (`rv14-mesh-area-representability`)
+- `source`: The previous desktop returned zero for a closed nearly planar tetrahedron with nonzero volume within the floating-point range. Both windings now agree with an independent exact rational oracle, the exactly planar control remains zero, and standalone plus two saved workflow runs preserve the provisional measure and its source. — `apps/api/reefvision/tests/test_spatial_mesh_enclosed_volume_v14.py` (`rv14-geometric-measurements-recover-volume-cancellation`)
 - `browser`: Workflow Builder exposes a project-owned original picker, scale, calibration evidence, uncertainty, specimen/observation/frame context, and an explicit warning that geometric routes are not anatomical branch lengths. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-geometric-guided-ui`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -781,6 +782,7 @@ Evidence:
 
 - `source`: Real ancestry merge, unique Alembic graph, schema-fingerprinted legacy upgrades, ambiguity rejection, backup verification, and downgrade/upgrade regressions. — `docs/roadmap/REEFVISION_1_4_MIGRATION_RECONCILIATION.md` (`rv14-lineage-source`)
 - `source`: Locally built production Windows sidecar 63fd94bfc restored a checksum-authenticated f44053a90 backup. All inventory bytes matched, the exact old executable reopened the recovery and accepted a write, and two unsupported backups returned HTTP 409 before creating a destination. — `docs/roadmap/REEFVISION_1_4_MIGRATION_RECONCILIATION.md#packaged-backup-recovery-on-a-disposable-copy` (`rv14-frozen-restore-real`)
+- `source`: A copied generated 1.4 profile preserved classes, geometry, units, review events, both actual local weights, seven files and both project snapshots through the 1.5 source migrator. The original physical 1.4 app reopened a restored database byte-identical to its backup. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv14-lineage-upgrade-rich-14-to-15-restore`)
 - `browser`: From System status, create a managed backup, verify it, restore into a new folder, then read the independent SQLite copy and compare IDs, annotations, original bytes and inventory digests. The native fixture passed on the 78a02c20c shell with the production-script fixed 63fd94bfc sidecar. — `apps/web/tests/e2e/backup-restore-live.spec.ts` (`rv14-system-restore-ui`)
 - `windows_installed`: Exact-head source 36c80224a Windows acceptance passed a published 1.0.3 upgrade with schema migration, persistence, Project Exchange, uninstall, and data retention. This is partial evidence and does not substitute for representative 1.3 and legacy draft-1.4 profiles. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-103`)
 - `windows_installed`: Exact-head source 36c80224a passed all three installed synthetic profiles. Verified 1.3 MSI upgrade, 0038 and 0039 profile migration, evidence preservation, exchange round trips, and backup restoration. The historical 1.3 build rejected the upgraded schema and the upgraded database hash remained unchanged. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-synthetic`)
@@ -1010,6 +1012,7 @@ Evidence:
 - `source`: A comparison authored by the 8155cc78a application retained its original score through two imports and four saved graph replays. Ambiguous or absent original output evidence kept the history readable and prevented verified package claims. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv15-model-comparison-legacy-input-evidence`)
 - `browser`: Models & AI compared two locally trained detectors on three originals in two frozen groups, exported both formats, reopened the differing original by hash and ran the saved comparison twice. The restored native evidence also covers recorded pose, tracking and event comparisons. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/8155cc78a07081cdecc5bfd780aa713c8615b0d6` (`rv15-model-comparison-paired-disagreement-editor`)
 - `browser`: In Chromium the project Model comparison workspace accepted both independently scored model reports, decoded the correct H.264 originals, and reopened a pose disagreement at frame 2 and an event disagreement in another video at 0.2 seconds. Both tested original hashes matched the frozen reference. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv15-model-comparison-playable-video-seek`)
+- `browser`: A real Chromium project compared two independently scratch-trained CPU segmentation models on six untouched images in two frozen groups. The models returned 12 and 46 polygons and missed all reference instances at the chosen match threshold. The direct report, exports and two saved runs retained the same result. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv15-model-comparison-actual-instance-masks`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
