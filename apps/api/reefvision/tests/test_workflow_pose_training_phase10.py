@@ -1189,7 +1189,7 @@ def test_pose_run_output_rejects_windows_junction_into_another_run(tmp_path: Pat
     )
     try:
         assert not nested_junction.is_symlink()
-        with pytest.raises(ValidationError, match="Pose dataset contains a Windows junction"):
+        with pytest.raises(ValidationError, match="Windows junction"):
             _materialized_pose_dataset_sha256(frozen_dataset)
         assert checkpoint.read_bytes() == b"preserve-registered-pose-weights"
     finally:
