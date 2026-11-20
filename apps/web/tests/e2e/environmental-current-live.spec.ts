@@ -124,6 +124,9 @@ test("reopens offline currents, exports signed vectors, and reloads unassessed e
   const evidence = page.getByRole("article", {
     name: "Saved environmental analysis",
   });
+  await expect(
+    evidence.getByRole("heading", { name: "Current streamlines", exact: true }),
+  ).toBeVisible();
   await expect(evidence).toContainText("Quality control: unassessed");
   await expect(
     evidence.getByRole("link", { name: "Download evidence CSV" }),
