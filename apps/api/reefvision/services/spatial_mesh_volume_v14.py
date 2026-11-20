@@ -7,6 +7,7 @@ biological completeness, or verify calibration.
 
 from __future__ import annotations
 
+from fractions import Fraction
 from math import fsum, isfinite
 
 
@@ -33,4 +34,29 @@ def signed_enclosed_volume_mesh_units(
     volume = fsum(contributions)
     if not isfinite(volume):
         raise ValueError("Enclosed mesh volume overflowed")
+    if volume == 0.0:
+        # A nonzero determinant may be lost to cancellation in binary64 even
+        # when its final signed volume is representable. Re-evaluate only this
+        # ambiguous case using exact values of the imported float coordinates.
+        # This is numeric recovery, not verified calibration or coral volume.
+        origin_exact = tuple(Fraction(value) for value in origin)
+        exact_six_volume = Fraction(0)
+        for a, b, c in faces:
+            u = [Fraction(points[a][axis]) - origin_exact[axis] for axis in range(3)]
+            v = [Fraction(points[b][axis]) - origin_exact[axis] for axis in range(3)]
+            w = [Fraction(points[c][axis]) - origin_exact[axis] for axis in range(3)]
+            exact_six_volume += (
+                u[0] * (v[1] * w[2] - v[2] * w[1])
+                + u[1] * (v[2] * w[0] - v[0] * w[2])
+                + u[2] * (v[0] * w[1] - v[1] * w[0])
+            )
+        if exact_six_volume:
+            try:
+                recovered = float(exact_six_volume / 6)
+            except OverflowError as exc:
+                raise ValueError("Enclosed mesh volume overflowed") from exc
+            if not isfinite(recovered):
+                raise ValueError("Enclosed mesh volume overflowed")
+            if recovered != 0.0:
+                return recovered
     return volume
