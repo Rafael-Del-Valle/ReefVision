@@ -475,6 +475,4 @@ def test_camera_duplicate_of_verified_original_remains_a_duplicate(
     reupload = import_one(client, project["id"], filename="DSC_001.JPEG", content=original)
     assert reupload["failed"] == [], reupload
     assert reupload["successful"] == [], reupload
-    assert reupload["duplicates"][0]["duplicate_image_id"] == (
-        first["successful"][0]["image_id"]
-    )
+    assert reupload["duplicates"][0]["duplicate_image_id"] == (first["successful"][0]["image_id"])
