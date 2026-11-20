@@ -448,6 +448,8 @@ def test_inert_obj_metadata_keeps_standalone_and_workflow_measurements_identical
         item for item in detail["artifacts"] if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["payload_json"] == result
+
+
 @pytest.mark.parametrize(
     "obj_text",
     [
