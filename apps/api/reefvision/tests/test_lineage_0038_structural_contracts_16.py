@@ -173,8 +173,7 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         else "ix_review_queue_item_events_queue_created"
     )
     db.execute(
-        f"CREATE INDEX {queue_name} "
-        "ON review_queue_item_events (review_queue_id, created_at)"
+        f"CREATE INDEX {queue_name} ON review_queue_item_events (review_queue_id, created_at)"
     )
     db.execute(
         "INSERT INTO review_queue_item_events "
