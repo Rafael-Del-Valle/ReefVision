@@ -2,16 +2,16 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T10:08:50Z`
+Updated: `2026-11-20T10:22:31Z`
 Candidate target: `2.0`
 
 ## Status summary
 
 | Status | Count |
 | --- | ---: |
-| blocked | 13 |
+| blocked | 16 |
 | explicitly_deferred | 4 |
-| in_progress | 32 |
+| in_progress | 29 |
 | verified | 28 |
 
 ## Features
@@ -57,13 +57,13 @@ Candidate target: `2.0`
 | 1.4 | Windows 11 Smart App Control compatibility | blocked | Keep this check separate from standard hosted Windows acceptance; a green hosted runner does not establish Smart App Control compatibility. |
 | 1.4 | Bounded OBJ/PLY/GLB mesh and point-cloud preview | verified | Open project → Video & automation → Workflow builder → Project-owned 3D originals |
 | 1.4 | Persistent versioned 3D project assets | verified | Open project → Video & automation → Workflow builder → Project-owned 3D originals → Import 3D original |
-| 1.5 | Study setup, treatments, sampling units, exclusions, and statistical plan | in_progress | Research → Study design |
+| 1.5 | Study setup, treatments, sampling units, exclusions, and statistical plan | blocked | Research → Study design |
 | 1.5 | Offline field capture and later project reconciliation | in_progress | Project → Field capture |
 | 1.5 | Local model catalog, runtime selection, and prompt-assisted configuration | in_progress | Models & AI → Model Hub |
-| 1.5 | Unified detector, mask, pose, tracking, and event comparison | in_progress | Models & AI → Model comparison |
+| 1.5 | Unified detector, mask, pose, tracking, and event comparison | blocked | Models & AI → Model comparison |
 | 1.5 | Early local provider and plugin foundations | verified | Models & AI → Providers |
 | 1.5 | Complete research reproducibility package | in_progress | Research → Export reproducibility package |
-| 1.5 | Reviewer roles, independent queues, adjudication, and agreement | in_progress | Review → Reviewer lab |
+| 1.5 | Reviewer roles, independent queues, adjudication, and agreement | blocked | Review → Reviewer lab |
 | 1.6 | Safe class management after use | in_progress | Annotate → Classes |
 | 1.6 | Class visibility, dense annotation editing, and large-gallery performance | in_progress | Annotate → View controls and gallery |
 | 1.6 | Independent migration-lineage 0038 reconciliation | in_progress | Applied migration IDs are never edited. |
@@ -929,7 +929,7 @@ Evidence:
 ### rv15-experimental-design: Study setup, treatments, sampling units, exclusions, and statistical plan
 
 - Target: `1.5`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv13-study-assignments`, `rv11-repeated-measures-analysis`
 - Entry point: Research → Study design
 - Workflow Builder: `required`
@@ -937,7 +937,7 @@ Evidence:
 
 Acceptance checks:
 
-- **in_progress** — Create and freeze a study design with nesting, repeated measures, exclusions, estimands, and analysis choices before reporting. (`rv15-experimental-design-check`)
+- **blocked** — Create and freeze a study design with nesting, repeated measures, exclusions, estimands, and analysis choices before reporting. (`rv15-experimental-design-check`)
 
 Evidence:
 
@@ -983,6 +983,7 @@ Evidence:
 
 - `source`: Saved selection pins bytes, class map, provider, runtime, device and effective settings. Queued jobs and graph replay reject changed weights. Two imports restored live class/model references. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/886973882c5519c0975ba4e680b4fe910450d2a6` (`rv15-model-catalog-runtime-runtime-pin`)
 - `source`: A marked early 1.5 model-review profile upgraded through the desktop migrator twice. Its record UUIDs, UTC timestamp, original signed snapshot and checkpoint SHA-256 survived. Database foreign-key checks found zero violations. A copy with unprovable source identity rolled back without changes. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/ebce490b1e153fcdaf84c0b4c7c13721b12b7b6f` (`rv15-model-catalog-runtime-early-schema-recovery`)
+- `source`: The earlier original signed runtime selection reopened with its exact digest through two project restorations. A separate current review was required to infer. Remapped project, model and classes were verified before execution. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv15-model-catalog-runtime-legacy-model-review`)
 - `browser`: Direct Model Hub inference and two Detection Inference graph runs matched the source-pixel boxes, labels and scores for all nine CPU and ten CUDA predictions to six decimals on independently trained fixture checkpoints. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/95` (`rv15-model-catalog-runtime-direct-graph-replay`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -991,7 +992,7 @@ Evidence:
 ### rv15-model-comparison: Unified detector, mask, pose, tracking, and event comparison
 
 - Target: `1.5`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv12-human-model-counts`, `rv13-heldout-agreement`, `rv15-model-catalog-runtime`
 - Entry point: Models & AI → Model comparison
 - Workflow Builder: `required`
@@ -999,14 +1000,16 @@ Evidence:
 
 Acceptance checks:
 
-- **in_progress** — Compare compatible models on the same immutable holdout with task-specific metrics, paired differences, exclusions, and disagreement navigation. (`rv15-model-comparison-check`)
+- **blocked** — Compare compatible models on the same immutable holdout with task-specific metrics, paired differences, exclusions, and disagreement navigation. (`rv15-model-comparison-check`)
 
 Evidence:
 
 - `source`: Two distinct CPU-trained checkpoints scored three untouched originals in two frozen groups. Fixture SHA-256 cdae9f6bcbfe7e78f29a547cc69f9e235970206bce9bb1c574035989c493b987. Source tests also cover instance and semantic masks. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/6b762ff4ede777ef9a57ae8e630b6a9c692bfdbf` (`rv15-model-comparison-paired-stills`)
 - `source`: Pose, tracking and event comparisons preserve held-out recording groups, prove checkpoint lineage, reject changed observations and retain comparable outcomes after Exchange. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/fa3f3c4cd0ed6455eeb344a9bae8ca7c6f598bb2` (`rv15-model-comparison-paired-video`)
 - `source`: Two successive native project imports preserved the scored comparisons and original source references across detector, mask, pose, tracking and event tasks. Modified source and mask content were rejected before importing. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/deaf079f12d392f63ed70108c38e35fec6d23247` (`rv15-model-comparison-comparison-project-exchange`)
+- `source`: A comparison authored by the 8155cc78a application retained its original score through two imports and four saved graph replays. Ambiguous or absent original output evidence kept the history readable and prevented verified package claims. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv15-model-comparison-legacy-input-evidence`)
 - `browser`: Models & AI compared two locally trained detectors on three originals in two frozen groups, exported both formats, reopened the differing original by hash and ran the saved comparison twice. The restored native evidence also covers recorded pose, tracking and event comparisons. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/8155cc78a07081cdecc5bfd780aa713c8615b0d6` (`rv15-model-comparison-paired-disagreement-editor`)
+- `browser`: In Chromium the project Model comparison workspace accepted both independently scored model reports, decoded the correct H.264 originals, and reopened a pose disagreement at frame 2 and an event disagreement in another video at 0.2 seconds. Both tested original hashes matched the frozen reference. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv15-model-comparison-playable-video-seek`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1054,7 +1057,7 @@ Evidence:
 ### rv15-reviewer-lab: Reviewer roles, independent queues, adjudication, and agreement
 
 - Target: `1.5`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv13-acquisition-qc`
 - Entry point: Review → Reviewer lab
 - Workflow Builder: `required`
@@ -1062,7 +1065,7 @@ Evidence:
 
 Acceptance checks:
 
-- **in_progress** — Assign blinded reviews, preserve independent decisions, adjudicate disagreement, and export agreement with role/revision provenance. (`rv15-reviewer-lab-check`)
+- **blocked** — Assign blinded reviews, preserve independent decisions, adjudicate disagreement, and export agreement with role/revision provenance. (`rv15-reviewer-lab-check`)
 
 Evidence:
 
