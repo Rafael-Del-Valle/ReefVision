@@ -8,7 +8,6 @@ biological completeness, or verify calibration.
 from __future__ import annotations
 
 from fractions import Fraction
-from math import fsum, isfinite
 
 
 class EnclosedVolumeUnderflowError(ValueError):
@@ -23,50 +22,36 @@ def signed_enclosed_volume_mesh_units(
     points: list[tuple[float, float, float]],
     faces: list[list[int]],
 ) -> float:
-    """Compute a translation-stable oriented tetrahedron sum in source units cubed."""
-    origin = points[faces[0][0]]
-    contributions: list[float] = []
+    """Sum oriented tetrahedra exactly on the imported coordinates' binary grid."""
+    used_vertices = {index for face in faces for index in face}
+    ratios = {
+        index: [coordinate.as_integer_ratio() for coordinate in points[index]]
+        for index in used_vertices
+    }
+    # Binary64 denominators are powers of two. The largest is a common
+    # denominator, so translating or reversing faces cannot lose a residual.
+    denominator = max(divisor for vertex in ratios.values() for _, divisor in vertex)
+    origin = [numerator * (denominator // divisor) for numerator, divisor in ratios[faces[0][0]]]
+    offsets = {
+        index: [
+            numerator * (denominator // divisor) - origin[axis]
+            for axis, (numerator, divisor) in enumerate(vertex)
+        ]
+        for index, vertex in ratios.items()
+    }
+    six_volume = 0
     for a, b, c in faces:
-        u = tuple(points[a][axis] - origin[axis] for axis in range(3))
-        v = tuple(points[b][axis] - origin[axis] for axis in range(3))
-        w = tuple(points[c][axis] - origin[axis] for axis in range(3))
-        cross = (
-            v[1] * w[2] - v[2] * w[1],
-            v[2] * w[0] - v[0] * w[2],
-            v[0] * w[1] - v[1] * w[0],
+        u, v, w = offsets[a], offsets[b], offsets[c]
+        six_volume += (
+            u[0] * (v[1] * w[2] - v[2] * w[1])
+            + u[1] * (v[2] * w[0] - v[0] * w[2])
+            + u[2] * (v[0] * w[1] - v[1] * w[0])
         )
-        contribution = fsum(u[axis] * cross[axis] for axis in range(3)) / 6
-        if not isfinite(contribution):
-            raise ValueError("Enclosed mesh volume overflowed")
-        contributions.append(contribution)
-    volume = fsum(contributions)
-    if not isfinite(volume):
-        raise ValueError("Enclosed mesh volume overflowed")
-    if volume == 0.0:
-        # A nonzero determinant may be lost to cancellation in binary64 even
-        # when its final signed volume is representable. Re-evaluate only this
-        # ambiguous case using exact values of the imported float coordinates.
-        # This is numeric recovery, not verified calibration or coral volume.
-        origin_exact = tuple(Fraction(value) for value in origin)
-        exact_six_volume = Fraction(0)
-        for a, b, c in faces:
-            exact_u = [Fraction(points[a][axis]) - origin_exact[axis] for axis in range(3)]
-            exact_v = [Fraction(points[b][axis]) - origin_exact[axis] for axis in range(3)]
-            exact_w = [Fraction(points[c][axis]) - origin_exact[axis] for axis in range(3)]
-            exact_six_volume += (
-                exact_u[0] * (exact_v[1] * exact_w[2] - exact_v[2] * exact_w[1])
-                + exact_u[1] * (exact_v[2] * exact_w[0] - exact_v[0] * exact_w[2])
-                + exact_u[2] * (exact_v[0] * exact_w[1] - exact_v[1] * exact_w[0])
-            )
-        if exact_six_volume:
-            exact_volume = exact_six_volume / 6
-            try:
-                recovered = float(exact_volume)
-            except OverflowError as exc:
-                raise ValueError("Enclosed mesh volume overflowed") from exc
-            if not isfinite(recovered):
-                raise ValueError("Enclosed mesh volume overflowed")
-            if recovered == 0.0:
-                raise EnclosedVolumeUnderflowError(exact_volume)
-            return recovered
+    exact_volume = Fraction(six_volume, 6 * denominator**3)
+    try:
+        volume = float(exact_volume)
+    except OverflowError as exc:
+        raise ValueError("Enclosed mesh volume overflowed") from exc
+    if volume == 0.0 and exact_volume:
+        raise EnclosedVolumeUnderflowError(exact_volume)
     return volume
