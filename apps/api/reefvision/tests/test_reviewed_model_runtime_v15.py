@@ -7,7 +7,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from reefvision.db.models import Job, ModelRuntimeSelection
+from reefvision.db.models import Job, ModelRuntimeSelection, ProjectExchangePackage
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
 from reefvision.jobs.workflow import process_workflow_run_job
@@ -368,6 +368,17 @@ def test_historical_receipt_keeps_original_digest_and_requires_a_new_execution_r
         assert restored.status_code == 201, restored.text
         row = restored.json()
         alias = row["package"]["options_json"]["id_map"]
+        if copy == 0:
+            # Early Project Exchange persisted only its immediate ID map.
+            with app.state.session_factory() as session:
+                package = session.get(ProjectExchangePackage, row["package"]["id"])
+                assert package is not None
+                package.options_json = {
+                    key: value
+                    for key, value in package.options_json.items()
+                    if key != "origin_id_map"
+                }
+                session.commit()
         selection_id, local_model, image = (
             alias[key] for key in (selection_id, local_model, image)
         )
