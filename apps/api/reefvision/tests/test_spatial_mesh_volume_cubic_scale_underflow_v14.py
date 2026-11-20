@@ -34,7 +34,6 @@ def _params(scale: float) -> dict:
     }
 
 
-
 @pytest.mark.parametrize("reverse_winding", [False, True], ids=["forward", "reversed"])
 @pytest.mark.parametrize(
     "different_apex_height", [False, True], ids=["exact-cancellation", "sub-ulp-residual"]
@@ -58,14 +57,10 @@ def test_volume_sum_across_faces_uses_exact_oracle_when_nearly_cancelling(
     # Two disjoint opposite-oriented closed shells deliberately stress the
     # source-volume numerical helper, not a biologically admissible colony.
     # The mesh measurement service has its own patch/topology QC.
-    faces = CLOSED_FACES + [
-        [a + 4, c + 4, b + 4] for a, b, c in CLOSED_FACES
-    ]
+    faces = CLOSED_FACES + [[a + 4, c + 4, b + 4] for a, b, c in CLOSED_FACES]
     if reverse_winding:
         faces = [[a, c, b] for a, b, c in faces]
-    exact_volume = (
-        Fraction(edge) * Fraction(edge) * (Fraction(edge) - Fraction(second_z)) / 6
-    )
+    exact_volume = Fraction(edge) * Fraction(edge) * (Fraction(edge) - Fraction(second_z)) / 6
     recovered = signed_enclosed_volume_mesh_units(vertices, faces)
     if different_apex_height:
         assert exact_volume > 0
