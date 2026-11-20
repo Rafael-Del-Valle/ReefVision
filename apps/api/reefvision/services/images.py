@@ -66,6 +66,11 @@ def _duplicate_original_verified(settings: Settings, image: ImageAsset) -> bool:
     size = 0
     try:
         original = resolve_managed_project_path(settings, image.managed_path)
+        # Check byte count before streaming a possibly damaged removable-media
+        # original. A grossly oversized file must not stall a duplicate upload
+        # while hashing unrelated bytes; matching sizes still require SHA-256.
+        if original.stat().st_size != image.file_size_bytes:
+            return False
         with original.open("rb") as stored:
             while block := stored.read(1024 * 1024):
                 digest.update(block)
