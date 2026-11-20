@@ -44,10 +44,13 @@ const fixturePng = Buffer.from(
   "base64",
 );
 
+const profileJobTimeoutMs = 120_000;
+
 test("creates, verifies, and restores a backup from System status", async ({
   desktop,
 }, info) => {
-  test.setTimeout(90_000);
+  // Backup and restore each process the entire disposable acceptance profile.
+  test.setTimeout(300_000);
   const { page, api, web, surface } = desktop;
   expect(new URL(api).hostname).toBe("127.0.0.1");
   const version = await json<SystemVersionResponse>(
@@ -126,24 +129,46 @@ test("creates, verifies, and restores a backup from System status", async ({
     }),
     200,
   );
-  const waitForJob = async (id: string) => {
+  const waitForJob = async (id: string, label: string, timeout = 30_000) => {
     let job!: JobRecord;
-    await expect
-      .poll(
-        async () => {
-          job = await json<JobRecord>(
-            await page.request.get(api + "/jobs/" + id),
-            200,
-          );
-          expect(job.error_message).toBeNull();
-          return job.status;
+    const describe = () => {
+      if (!job) return `${label} job ${id} has no recorded status`;
+      const stage = job.result_json?.stage;
+      const status =
+        typeof stage === "string" ? `${job.status} (${stage})` : job.status;
+      return `${label} job ${id}: ${status}, progress ${job.progress_current}/${job.progress_total}${
+        job.error_message ? `, error: ${job.error_message}` : ""
+      }`;
+    };
+    try {
+      await expect
+        .poll(
+          async () => {
+            job = await json<JobRecord>(
+              await page.request.get(api + "/jobs/" + id),
+              200,
+            );
+            return (
+              job.error_message !== null ||
+              ["succeeded", "failed", "cancelled"].includes(job.status)
+            );
+          },
+          { timeout },
+        )
+        .toBe(true);
+    } catch (cause) {
+      throw new Error(
+        `Waiting for ${label.toLowerCase()} job failed: ${describe()}`,
+        {
+          cause,
         },
-        { timeout: 30_000 },
-      )
-      .toBe("succeeded");
+      );
+    }
+    expect(job.status, describe()).toBe("succeeded");
+    expect(job.error_message, describe()).toBeNull();
     return job;
   };
-  await waitForJob(thumbnailJob);
+  await waitForJob(thumbnailJob, "Thumbnail");
   const original =
     project.storage_root + "/images/originals/" + imageId + ".png";
   const liveOriginal = managedPath(profile, original);
@@ -195,7 +220,11 @@ test("creates, verifies, and restores a backup from System status", async ({
     .click();
   const created = await json<BackupCreateResponse>(await creating, 201);
   expect(created.backup.request_json).toMatchObject({ notes: title });
-  const backupJob = await waitForJob(created.job.id);
+  const backupJob = await waitForJob(
+    created.job.id,
+    "Backup",
+    profileJobTimeoutMs,
+  );
   const destinationInput = page.getByRole("textbox", {
     name: "Restore destination for " + created.backup.id,
   });
@@ -232,7 +261,11 @@ test("creates, verifies, and restores a backup from System status", async ({
     destination_path: "recoveries/" + destination,
     verification_status: "valid",
   });
-  const restoreJob = await waitForJob(restored.job.id);
+  const restoreJob = await waitForJob(
+    restored.job.id,
+    "Restore",
+    profileJobTimeoutMs,
+  );
   const jobCard = page
     .getByRole("article")
     .filter({ hasText: "Latest restore job" });
