@@ -57,6 +57,10 @@ def signed_enclosed_volume_mesh_units(
                 raise ValueError("Enclosed mesh volume overflowed") from exc
             if not isfinite(recovered):
                 raise ValueError("Enclosed mesh volume overflowed")
-            if recovered != 0.0:
-                return recovered
+            if recovered == 0.0:
+                # A real source-coordinate volume below binary64's minimum
+                # subnormal cannot be distinguished from an exact zero in
+                # scientific output. Reject rather than publishing false zero.
+                raise ValueError("Enclosed mesh volume underflowed numeric precision")
+            return recovered
     return volume
