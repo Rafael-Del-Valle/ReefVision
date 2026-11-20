@@ -29,6 +29,8 @@ def _create_scientific(db: sqlite3.Connection, variant: str) -> None:
         foreign_key = "REFERENCES images(id) ON DELETE SET NULL"
     if variant == "wrong_onupdate_fk":
         foreign_key = "REFERENCES images(id) ON UPDATE CASCADE ON DELETE RESTRICT"
+    if variant == "deferred_fk":
+        foreign_key += " DEFERRABLE INITIALLY DEFERRED"
     image_column = "image_id VARCHAR(36)"
     if variant == "optional_notnull":
         image_column += " NOT NULL DEFAULT 'PRIVATE_FUTURE_IMAGE'"
@@ -38,7 +40,8 @@ def _create_scientific(db: sqlite3.Connection, variant: str) -> None:
     if variant == "unexpected_check":
         extra += ", CHECK (source_kind = 'instrument')"
     if variant == "comment_decoy":
-        extra += " /* CHECK (source_kind = 'private_future') */"
+        extra += " /* CHECK (source_kind = 'private_future') DEFERRABLE WITHOUT ROWID */"
+    table_options = " WITHOUT ROWID" if variant == "without_rowid" else ""
     db.execute(
         "CREATE TABLE scientific_records ("
         "id VARCHAR(36) NOT NULL PRIMARY KEY, "
@@ -51,7 +54,7 @@ def _create_scientific(db: sqlite3.Connection, variant: str) -> None:
         "track_id VARCHAR(36) REFERENCES video_tracks(id) ON DELETE RESTRICT, "
         "model_run_id VARCHAR(36) REFERENCES jobs(id) ON DELETE RESTRICT, "
         "payload_json JSON NOT NULL, content_sha256 VARCHAR(64) NOT NULL, "
-        f"created_at DATETIME NOT NULL{extra})"
+        f"created_at DATETIME NOT NULL{extra}){table_options}"
     )
     if variant != "missing_index":
         columns = {
@@ -92,6 +95,8 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         fk = "REFERENCES review_queues(id) ON DELETE RESTRICT"
     if variant == "wrong_onupdate_fk":
         fk = "REFERENCES review_queues(id) ON UPDATE CASCADE ON DELETE CASCADE"
+    if variant == "deferred_fk":
+        fk += " DEFERRABLE INITIALLY DEFERRED"
     actor = "actor VARCHAR(100) NOT NULL"
     if variant == "nullable_actor":
         actor = "actor VARCHAR(100)"
@@ -124,10 +129,11 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
     if variant == "extra_check":
         check += ", CHECK (comment IS NOT NULL)"
     if variant == "comment_decoy":
-        check += " /* CHECK (event_type IN ('approve')) */"
+        check += " /* CHECK (event_type IN ('approve')) DEFERRABLE WITHOUT ROWID */"
     unique = ", UNIQUE (review_queue_item_id, client_request_id)"
     if variant == "missing_unique":
         unique = ""
+    table_options = " WITHOUT ROWID" if variant == "without_rowid" else ""
     db.execute(
         "CREATE TABLE review_queue_item_events ("
         "id VARCHAR(36) NOT NULL PRIMARY KEY, "
@@ -137,7 +143,7 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE CASCADE, "
         f"client_request_id VARCHAR(36) NOT NULL, {event_type}, "
         f"{actor}, {comment_column}, assignee VARCHAR(100), "
-        f"created_at DATETIME NOT NULL{unique}{check})"
+        f"created_at DATETIME NOT NULL{unique}{check}){table_options}"
     )
     if variant != "missing_index":
         columns = {
@@ -181,6 +187,8 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         ("scientific", "missing_column"),
         ("scientific", "wrong_fk"),
         ("scientific", "wrong_onupdate_fk"),
+        ("scientific", "deferred_fk"),
+        ("scientific", "without_rowid"),
         ("scientific", "partial_lookup"),
         ("scientific", "nocase_lookup"),
         ("scientific", "desc_lookup"),
@@ -201,6 +209,8 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         ("qc", "optional_notnull"),
         ("qc", "wrong_fk"),
         ("qc", "wrong_onupdate_fk"),
+        ("qc", "deferred_fk"),
+        ("qc", "without_rowid"),
         ("qc", "partial_lookup"),
         ("qc", "nocase_lookup"),
         ("qc", "missing_check"),
@@ -243,9 +253,7 @@ def test_read_only_structural_contract_catches_colliding_0038_shape(
     other = "review_queue_item_events" if family == "scientific" else "scientific_records"
     mismatch_warning = f"lineage_table_contract_mismatch_{target}"
     equivalent = variant in {"valid", "comment_decoy", "triage_0039", "triage_0040"}
-    assert report["structural_contracts"][target] == (
-        "matches" if equivalent else "mismatch"
-    )
+    assert report["structural_contracts"][target] == ("matches" if equivalent else "mismatch")
     assert report["structural_contracts"][other] == "absent"
     assert (mismatch_warning in report["warnings"]) is (not equivalent)
     assert report["upgrade_authorized"] is False
@@ -293,6 +301,10 @@ def test_strict_structural_audit_rejects_forged_scientific_0038(
         ("scientific", "unexpected_trigger"),
         ("qc", "unexpected_trigger"),
         ("scientific", "wrong_onupdate_fk"),
+        ("scientific", "deferred_fk"),
+        ("scientific", "without_rowid"),
+        ("qc", "deferred_fk"),
+        ("qc", "without_rowid"),
         ("scientific", "unexpected_default"),
         ("qc", "optional_notnull"),
         ("scientific", "partial_lookup"),

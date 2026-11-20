@@ -202,7 +202,6 @@ _POST_0037_TABLE_CONTRACTS = {
 }
 
 
-
 def _sqlite_schema_tokens(ddl: str) -> tuple[str, ...] | None:
     """Lex table DDL while preserving SQL literal values and ignoring comments.
 
@@ -266,6 +265,16 @@ def _original_0038_check_contract_matches(table: str, ddl: str) -> bool:
     """
     tokens = _sqlite_schema_tokens(ddl)
     if not tokens:
+        return False
+    # PRAGMA foreign_key_list reports target/action but not whether an FK is
+    # DEFERRABLE. The source 0038 migrations require immediate enforcement;
+    # deferring an observation or review-parent check changes transaction
+    # semantics while the reported FK columns and actions still match.
+    if any(token in {"DEFERRABLE", "INITIALLY", "DEFERRED"} for token in tokens):
+        return False
+    # WITHOUT ROWID changes SQLite primary-key/row storage semantics but can
+    # leave table_xinfo, index_list and foreign_key_list superficially identical.
+    if any(tokens[i : i + 2] == ("WITHOUT", "ROWID") for i in range(len(tokens) - 1)):
         return False
     # These source migrations declare no table-level collation overrides or
     # alternate SQLite constraint conflict actions. Both could silently alter
@@ -346,8 +355,7 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
     # table_xinfo, foreign_key_list and index_list cannot reveal CHECK clauses
     # or nonindexed column collations. Compare only known source constraints.
     ddl_row = db.execute(
-        "SELECT sql FROM sqlite_master WHERE type = 'table' "
-        "AND name = ? COLLATE NOCASE",
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ? COLLATE NOCASE",
         (table,),
     ).fetchone()
     if ddl_row is None or not isinstance(ddl_row[0], str):

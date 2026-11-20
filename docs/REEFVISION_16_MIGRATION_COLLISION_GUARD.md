@@ -209,3 +209,27 @@ result. For release or upgrade acceptance, create and separately verify
 a quiescent, immutable database copy and reconcile the independent
 1.1/1.6 revision-0038 histories. Installed Windows MSI/CAB, GUI,
 rollback and biological-data acceptance still remain mandatory.
+
+
+## 2026-11-20 — SQLite FK enforcement timing and row-storage drift
+
+The opt-in, read-only 0038 lineage inspector now rejects unexpected
+`DEFERRABLE` / `INITIALLY DEFERRED` foreign-key timing and `WITHOUT ROWID`
+table storage on the original scientific observation and QC review-event
+tables. SQLite `PRAGMA foreign_key_list` does not expose FK deferral timing;
+`table_xinfo` and ordinary index checks need not reveal row-storage changes.
+Both could therefore look migration-compatible even when the handling of
+future referenced observations or review records differs from the migrations'
+declared immediate-FK, ordinary-rowid contract. SQL-comment decoys remain
+ignored by the existing token lexer.
+
+Eight new populated SQLite fixture variants exercise both families and both
+drifts in the read-only structural auditor and strict subprocess checks.
+They require explicit mismatch warnings, no private observation text in the
+report, no database-byte changes, and no upgrade authorization. This pass
+also applies the two precise Ruff formatting corrections from
+[CI #44756012326](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44756012326).
+The inspector remains diagnostic only: passing it never authorizes migration.
+The independent 1.1/1.6 0038 collision, genuine Windows installed-GUI/MSI
+upgrade/rollback, representative saved biological Workflow Builder acceptance
+and explicit researcher release approval remain unresolved.
