@@ -252,9 +252,7 @@ def test_offline_noaa_cache_rejects_rehashed_foreign_identity_and_source(
     with (
         client.app.state.session_factory() as session,
         httpx.Client(
-            transport=httpx.MockTransport(
-                lambda _: httpx.Response(200, json=noaa_fixture())
-            )
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=noaa_fixture()))
         ) as http,
     ):
         service = EnvironmentalContextService(session, http=http, now=now)
@@ -292,6 +290,66 @@ def test_offline_noaa_cache_rejects_rehashed_foreign_identity_and_source(
     assert {item["id"] for item in records.json()["items"]} == {
         str(record_id) for record_id in original_ids
     }
+
+
+@pytest.mark.parametrize("alteration", ["missing", "foreign", "duplicate"])
+def test_cache_list_rejects_rehashed_missing_foreign_or_duplicate_record_lineage(
+    client, alteration
+):
+    """A cache checksum cannot make missing, foreign, or repeated evidence valid."""
+    from sqlalchemy import select
+
+    from reefvision.db.models.scientific_record import EnvironmentalCacheEntry
+    from reefvision.domain.errors import ConflictError
+    from reefvision.schemas.environmental_context import NOAAImportRequest
+    from reefvision.services.environmental_context import EnvironmentalContextService
+    from reefvision.services.scientific_data import content_hash
+
+    project = create_project(client, "Cache evidence lineage")
+    other = create_project(client, "Independent field study")
+    other_response = client.post(
+        f"/api/v1/projects/{other['id']}/scientific-records",
+        json={"records": [observation()]},
+    )
+    assert other_response.status_code == 201, other_response.text
+    foreign_id = other_response.json()["items"][0]["id"]
+
+    request = NOAAImportRequest(station_id="8665530", day="2026-04-03")
+    with (
+        client.app.state.session_factory() as session,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=noaa_fixture()))
+        ) as http,
+    ):
+        service = EnvironmentalContextService(
+            session, http=http, now=datetime(2026, 4, 4, tzinfo=UTC)
+        )
+        imported = service.import_noaa(project["id"], request)
+        original_ids = [str(item.id) for item in imported.items]
+        assert len(original_ids) == 2
+        entry = session.scalar(select(EnvironmentalCacheEntry))
+        assert entry is not None
+        cache_key = entry.cache_key
+        tampered = deepcopy(entry.payload_json)
+        if alteration == "missing":
+            tampered["record_ids"] = [original_ids[0], "not-a-record"]
+        elif alteration == "foreign":
+            tampered["record_ids"] = [original_ids[0], foreign_id]
+        else:
+            tampered["record_ids"] = [original_ids[0], original_ids[0]]
+        entry.payload_json = tampered
+        entry.content_sha256 = content_hash(tampered)
+        session.commit()
+
+        message = "duplicate" if alteration == "duplicate" else "missing or foreign"
+        with pytest.raises(ConflictError, match=message):
+            service.cached_dataset(project["id"], cache_key)
+        with pytest.raises(ConflictError, match=message):
+            service.datasets(project["id"])
+
+    records = client.get(f"/api/v1/projects/{project['id']}/scientific-records")
+    assert records.status_code == 200, records.text
+    assert {item["id"] for item in records.json()["items"]} == set(original_ids)
 
 
 def test_environment_lookup_uses_explicit_space_time_depth_and_qc_limits(client):

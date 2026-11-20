@@ -84,12 +84,37 @@ class EnvironmentalContextService:
                 "Environmental cache source identity mismatch; cached values cannot be trusted"
             )
 
+    def _verified_cache_record_ids(self, entry: EnvironmentalCacheEntry) -> list[str]:
+        """Do not advertise or reuse a cache whose observations lost project lineage."""
+        self._verify_cache_integrity(entry)
+        record_ids = entry.payload_json.get("record_ids")
+        if not isinstance(record_ids, list) or any(
+            not isinstance(record_id, str) for record_id in record_ids
+        ):
+            raise ConflictError("Environmental cache has malformed scientific record IDs")
+        if len(set(record_ids)) != len(record_ids):
+            raise ConflictError("Environmental cache has duplicate scientific record IDs")
+        # Chunk the lookup for SQLite's parameter limit and large station downloads.
+        for offset in range(0, len(record_ids), 500):
+            chunk = record_ids[offset : offset + 500]
+            found = self.session.scalars(
+                select(ScientificRecord.id).where(
+                    ScientificRecord.project_id == entry.project_id,
+                    ScientificRecord.id.in_(chunk),
+                )
+            ).all()
+            if len(found) != len(chunk):
+                raise ConflictError(
+                    "Environmental cache refers to missing or foreign scientific records"
+                )
+        return record_ids
+
     def _cache_response(
         self, entry: EnvironmentalCacheEntry, status: str
     ) -> EnvironmentalImportResponse:
-        self._verify_cache_integrity(entry)
+        record_ids = self._verified_cache_record_ids(entry)
         items = []
-        for record_id in entry.payload_json["record_ids"]:
+        for record_id in record_ids:
             row = self.session.get(ScientificRecord, record_id)
             if row is None or row.project_id != entry.project_id:
                 raise ConflictError(
@@ -537,14 +562,14 @@ class EnvironmentalContextService:
         )
         items = []
         for entry in rows:
-            self._verify_cache_integrity(entry)
+            record_ids = self._verified_cache_record_ids(entry)
             identity = entry.payload_json["cache_identity"]
             items.append(
                 EnvironmentalDatasetSummary(
                     cache_key=entry.cache_key,
                     provider=identity.get("provider", "noaa_co_ops"),
                     source_url=entry.source_url,
-                    record_count=len(entry.payload_json["record_ids"]),
+                    record_count=len(record_ids),
                     fetched_at=_utc(entry.fetched_at),
                     expires_at=_utc(entry.expires_at),
                 )
