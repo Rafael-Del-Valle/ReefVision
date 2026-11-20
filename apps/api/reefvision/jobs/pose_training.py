@@ -118,7 +118,7 @@ def _require_trusted_pose_checkpoints(save_dir: Path) -> None:
     weights_dir = save_dir / "weights"
     if weights_dir.is_symlink() or not weights_dir.is_dir():
         raise ValidationError("Pose training checkpoint directory is missing or redirected")
-    if sys.platform == "win32" and getattr(weights_dir.lstat(), "st_file_attributes", 0) & 0x400:
+    if getattr(weights_dir.lstat(), "st_file_attributes", 0) & 0x400:
         raise ValidationError("Pose training checkpoint directory is a Windows junction")
 
     found = False
@@ -130,7 +130,7 @@ def _require_trusted_pose_checkpoints(save_dir: Path) -> None:
         if (
             not stat.S_ISREG(metadata.st_mode)
             or metadata.st_size == 0
-            or (sys.platform == "win32" and getattr(metadata, "st_file_attributes", 0) & 0x400)
+            or getattr(metadata, "st_file_attributes", 0) & 0x400
         ):
             raise ValidationError("Pose training checkpoint is empty or redirected")
         found = True
