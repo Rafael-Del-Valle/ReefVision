@@ -2,14 +2,14 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-16T04:00:00Z`
+Updated: `2026-11-16T20:34:31Z`
 Candidate target: `2.0`
 
 ## Status summary
 
 | Status | Count |
 | --- | ---: |
-| blocked | 12 |
+| blocked | 13 |
 | explicitly_deferred | 4 |
 | in_progress | 33 |
 | verified | 27 |
@@ -54,6 +54,7 @@ Candidate target: `2.0`
 | 1.4 | Reviewed longitudinal 3D change | blocked | 3D scientific task → Longitudinal comparison |
 | 1.4 | Reviewed 3D registration transforms and calibration evidence | blocked | 3D scientific task → Registration review |
 | 1.4 | Representative 3D field validation | blocked | Known synthetic geometry is reported separately. |
+| 1.4 | Windows 11 Smart App Control compatibility | blocked | Keep this check separate from standard hosted Windows acceptance; a green hosted runner does not establish Smart App Control compatibility. |
 | 1.4 | Bounded OBJ/PLY/GLB mesh and point-cloud preview | verified | Open project → Video & automation → Workflow builder → Project-owned 3D originals |
 | 1.4 | Persistent versioned 3D project assets | verified | Open project → Video & automation → Workflow builder → Project-owned 3D originals → Import 3D original |
 | 1.5 | Study setup, treatments, sampling units, exclusions, and statistical plan | in_progress | Research → Study design |
@@ -758,12 +759,14 @@ Acceptance checks:
 
 - **verified** — Merge validated 1.3 without editing applied migration bodies, disambiguate both supported numeric histories from schema fingerprints, preserve rows and IDs, and reject ambiguous or unknown histories without mutation. (`rv14-lineage-source-check`)
 - **blocked** — Using an installer built from the final candidate SHA, upgrade representative 1.3 and legacy draft-1.4 profiles, exchange the integrated records, and restore a verified pre-upgrade backup. (`rv14-lineage-installed-check`)
+- **verified** — Run the exact candidate installer against deterministic 1.3, legacy 0038, and legacy 0039 fixtures, preserve the seeded evidence, round-trip Project Exchange, and restore verified backups. Confirm that the genuine historical 1.3 installer rejects the upgraded database without changing it. (`rv14-lineage-installed-synthetic-check`)
 
 Evidence:
 
 - `source`: Real ancestry merge, unique Alembic graph, schema-fingerprinted legacy upgrades, ambiguity rejection, backup verification, and downgrade/upgrade regressions. — `docs/roadmap/REEFVISION_1_4_MIGRATION_RECONCILIATION.md` (`rv14-lineage-source`)
 - `browser`: none recorded
-- `windows_installed`: Exact-SHA 1.4.0 Windows acceptance passed a published 1.0.3 upgrade with schema migration, persistence, Project Exchange, uninstall, and data retention. This is partial evidence and does not substitute for representative 1.3 and legacy draft-1.4 profiles. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/43792901192` (`rv14-lineage-win-103`)
+- `windows_installed`: Exact-head source 37dad5c0 Windows acceptance passed a published 1.0.3 upgrade with schema migration, persistence, Project Exchange, uninstall, and data retention. This is partial evidence and does not substitute for representative 1.3 and legacy draft-1.4 profiles. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/43911232634` (`rv14-lineage-win-103`)
+- `windows_installed`: Exact-head source 37dad5c0 passed all three installed synthetic profiles. Verified 1.3 MSI upgrade, 0038 and 0039 profile migration, evidence preservation, exchange round trips, and backup restoration. The historical 1.3 build rejected the upgraded schema and the upgraded database hash remained unchanged. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/43911232634` (`rv14-lineage-win-synthetic`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -821,6 +824,27 @@ Evidence:
 Acceptance checks:
 
 - **blocked** — Validate supported formats/sizes, geometry, matching, longitudinal change, branch length, and condition on independently reviewed specimens and installed Windows hardware. (`rv14-representative-spatial-validation-check`)
+
+Evidence:
+
+- `source`: none recorded
+- `browser`: none recorded
+- `windows_installed`: none recorded
+- `physical_hardware`: none recorded
+- `representative_data`: none recorded
+
+### rv14-smart-app-control-compatibility: Windows 11 Smart App Control compatibility
+
+- Target: `1.4`
+- Status: `blocked`
+- Dependencies: None
+- Entry point: Not user-facing
+- Workflow Builder: `not_applicable`
+- Missing input: A suitable disposable Windows 11 device with Smart App Control enforcement enabled and the exact final-candidate installer. This host runs Windows 11 build 26300 with VerifiedAndReputablePolicyState=0 (off), and the only local 1.4 MSI is from an older candidate, so hosted or local standard acceptance cannot exercise enforcement or produce a relevant Code Integrity 3077 event.
+
+Acceptance checks:
+
+- **blocked** — On a suitable disposable Windows 11 device with Smart App Control enforcement enabled, launch the exact final-candidate installer and installed application; if enforcement blocks launch, inspect Code Integrity event 3077 and record the blocked file and signature status. (`rv14-smart-app-control-compatibility-check`)
 
 Evidence:
 
