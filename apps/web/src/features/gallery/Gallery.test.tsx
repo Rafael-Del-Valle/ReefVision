@@ -89,19 +89,17 @@ describe("Gallery pending thumbnail refresh", () => {
     vi.useFakeTimers();
     let offline = false;
     let thumbnail: string | null = null;
-    const reads = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async () =>
-        offline
-          ? jsonResponse({ detail: "Local image service unavailable" }, 503)
-          : jsonResponse({
-              items: [{ ...image, thumbnail_path: thumbnail }],
-              total: 1,
-              page: 1,
-              page_size: 24,
-              pages: 1,
-            }),
-      );
+    const reads = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      offline
+        ? jsonResponse({ detail: "Local image service unavailable" }, 503)
+        : jsonResponse({
+            items: [{ ...image, thumbnail_path: thumbnail }],
+            total: 1,
+            page: 1,
+            page_size: 24,
+            pages: 1,
+          }),
+    );
     const tick = (ms: number) =>
       act(async () => vi.advanceTimersByTimeAsync(ms));
     renderGallery();
