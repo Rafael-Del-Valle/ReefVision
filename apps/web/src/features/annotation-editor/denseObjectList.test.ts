@@ -393,7 +393,11 @@ describe("dense object-browser window", () => {
       selectedBoxes,
       selectedMasks,
     );
-    const selected = selectedDenseObjectRowIds(rows, selectedBoxes, selectedMasks);
+    const selected = selectedDenseObjectRowIds(
+      rows,
+      selectedBoxes,
+      selectedMasks,
+    );
     expect([...selected.annotationIds].sort()).toEqual(["box-2", "same"]);
     expect([...selected.maskIds]).toEqual(["same"]);
     expect(selected.annotationIds.has("mask-1")).toBe(false);
@@ -434,5 +438,4 @@ describe("dense object-browser window", () => {
     expect(selected.annotationIds.size).toBe(0);
     expect(selected.maskIds.size).toBe(0);
   });
-
 });

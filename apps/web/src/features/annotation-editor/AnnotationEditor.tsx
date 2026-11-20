@@ -3924,7 +3924,9 @@ export function AnnotationEditor({
                   const labelClass = labelClassesById.get(
                     annotation.label_class_id,
                   );
-                  const selected = selectedDenseRows.annotationIds.has(annotation.id);
+                  const selected = selectedDenseRows.annotationIds.has(
+                    annotation.id,
+                  );
                   return (
                     <button
                       key={`annotation-${annotation.id}`}
