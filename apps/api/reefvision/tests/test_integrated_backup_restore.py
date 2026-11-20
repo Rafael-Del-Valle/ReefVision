@@ -1,10 +1,12 @@
 """Exercise the verified backup and restore path on the integrated schema."""
 
 import sqlite3
+import sys
 from collections.abc import Iterator
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
+from shutil import copy2, copytree
 
 import pytest
 from fastapi.testclient import TestClient
@@ -23,6 +25,7 @@ from reefvision.schemas.backups import (
     BackupRestoreResponse,
     BackupVerificationResponse,
 )
+from reefvision.services import backups as backup_service
 from reefvision.tests.test_connected_branch_preview_api_1_2 import _save_calibrated_analysis
 from reefvision.tests.test_reviewed_coral_graph_1_2 import post
 
@@ -227,8 +230,13 @@ def test_verified_backup_restores_rows_from_all_integrated_histories(
     assert _scientific_snapshot(restored_db, project_id) == snapshot
 
 
+@pytest.mark.parametrize("frozen", (False, True), ids=("source", "frozen"))
 def test_migrated_backup_restores_a_reviewed_coral_graph(
-    migrated_client: TestClient, test_settings: Settings, tmp_path: Path
+    migrated_client: TestClient,
+    test_settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    frozen: bool,
 ) -> None:
     image_id, source, path = _save_calibrated_analysis(migrated_client)
     project = migrated_client.get(f"/api/v1/images/{image_id}").json()["project_id"]
@@ -258,10 +266,23 @@ def test_migrated_backup_restores_a_reviewed_coral_graph(
         post(migrated_client, "/api/v1/backups", {"notes": "Coral graph backup"})
     )
     assert process_backup_job(test_settings, factory, created.job.id)
-    response = migrated_client.post(
-        f"/api/v1/backups/{created.backup.id}/restore",
-        json={"destination_name": "coral-backup"},
-    )
+    with monkeypatch.context() as runtime:
+        if frozen:
+            api_root = Path(__file__).resolve().parents[2]
+            resources = tmp_path / "_internal"
+            alembic = resources / "alembic"
+            copytree(api_root / "migrations", alembic / "migrations")
+            copy2(api_root / "alembic.ini", alembic / "alembic.ini")
+            runtime.chdir(resources.parent)
+            runtime.setattr(sys, "frozen", True, raising=False)
+            runtime.setattr(sys, "_MEIPASS", str(resources), raising=False)
+            runtime.setattr(
+                backup_service, "__file__", str(resources / "reefvision/services/backups.py")
+            )
+        response = migrated_client.post(
+            f"/api/v1/backups/{created.backup.id}/restore",
+            json={"destination_name": "coral-backup"},
+        )
     assert response.status_code == 200, response.text
     restored = BackupRestoreResponse.model_validate(response.json())
     assert process_restore_job(test_settings, factory, restored.job.id)
