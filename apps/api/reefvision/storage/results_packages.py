@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
+from zipfile import BadZipFile, ZipFile
 
 import yaml
 from openpyxl import Workbook, load_workbook
@@ -60,6 +61,53 @@ def sha256_file(path: Path) -> str:
         while chunk := stream.read(CHUNK_SIZE):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def results_package_checkpoint_paths(root: Path) -> set[Path]:
+    """Identify loose checkpoint copies and their companion Results Package ZIPs."""
+    paths: set[Path] = set()
+    for manifest_path in root.glob("*/manifest.json"):
+        try:
+            with manifest_path.open(encoding="utf-8") as source:
+                manifest = json.load(source)
+        except (OSError, ValueError):
+            continue
+        package = manifest_path.parent
+        for relative in _checkpoint_members(manifest):
+            candidate = (package / relative).resolve()
+            if candidate.is_relative_to(package):
+                paths.add(candidate)
+    for archive_path in root.glob("*.zip"):
+        try:
+            with ZipFile(archive_path) as archive:
+                manifest_member = f"{archive_path.stem}/manifest.json"
+                with archive.open(manifest_member) as source:
+                    manifest = json.load(source)
+                members = set(archive.namelist())
+                if any(
+                    f"{archive_path.stem}/{member}" in members
+                    for member in _checkpoint_members(manifest)
+                ):
+                    paths.add(archive_path)
+        except (BadZipFile, OSError, KeyError, ValueError):
+            continue
+    return paths
+
+
+def _checkpoint_members(manifest: Any) -> list[str]:
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("reefvision_results_package_schema") != PACKAGE_SCHEMA_VERSION
+        or not isinstance(manifest.get("files"), list)
+    ):
+        return []
+    return [
+        entry["relative_path"]
+        for entry in manifest["files"]
+        if isinstance(entry, dict)
+        and entry.get("category") == "checkpoint"
+        and isinstance(entry.get("relative_path"), str)
+    ]
 
 
 def build_results_package(
