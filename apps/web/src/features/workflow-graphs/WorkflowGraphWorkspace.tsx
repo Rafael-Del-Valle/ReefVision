@@ -436,7 +436,10 @@ export function WorkflowGraphWorkspace({
         </p>
       </div>
 
-      <ProjectSpatialAssetPreview projectId={project.id} />
+      <ProjectSpatialAssetPreview
+        projectId={project.id}
+        onComparisonSaved={() => void savedGraphsQuery.refetch()}
+      />
       <LocalMeshPreview projectId={project.id} />
       <LocalPointCloudPreview projectId={project.id} />
 

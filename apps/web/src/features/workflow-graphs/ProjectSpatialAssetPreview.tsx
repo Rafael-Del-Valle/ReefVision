@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { MeshArtifactViewer } from "./MeshArtifactViewer";
 import { PointCloudArtifactViewer } from "./PointCloudArtifactViewer";
+import { ProjectSpatialComparison } from "./ProjectSpatialComparison";
 import {
   createSpatialAssetMetadataRevision,
   importProjectSpatialAsset,
@@ -19,6 +20,7 @@ import type {
 
 interface ProjectSpatialAssetPreviewProps {
   projectId: string;
+  onComparisonSaved?: () => void;
 }
 
 function displayParseStatus(
@@ -37,14 +39,20 @@ function displayQcWarning(warning: string): string {
 /** Project changes must never reuse another project's asset selection or preview. */
 export function ProjectSpatialAssetPreview({
   projectId,
+  onComparisonSaved,
 }: ProjectSpatialAssetPreviewProps) {
   return (
-    <ProjectSpatialAssetPreviewSession key={projectId} projectId={projectId} />
+    <ProjectSpatialAssetPreviewSession
+      key={projectId}
+      projectId={projectId}
+      onComparisonSaved={onComparisonSaved}
+    />
   );
 }
 
 function ProjectSpatialAssetPreviewSession({
   projectId,
+  onComparisonSaved,
 }: ProjectSpatialAssetPreviewProps) {
   const [assets, setAssets] = useState<SpatialSourceAsset[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -602,6 +610,27 @@ function ProjectSpatialAssetPreviewSession({
       {artifact && kind === "point_cloud" && (
         <PointCloudArtifactViewer artifact={artifact} />
       )}
+      {selected &&
+        kind === "mesh" &&
+        selected.parse_summary?.source_kind_resolved !== "point_cloud" && (
+          <ProjectSpatialComparison
+            key={selected.id}
+            projectId={projectId}
+            asset={selected}
+            calibration={
+              artifact
+                ? {
+                    meters_per_unit: Number(scale),
+                    calibration_method: calibrationMethod,
+                    calibration_evidence: evidence,
+                    relative_scale_uncertainty:
+                      uncertainty.trim() === "" ? null : Number(uncertainty),
+                  }
+                : undefined
+            }
+            onSaved={onComparisonSaved}
+          />
+        )}
     </section>
   );
 }
