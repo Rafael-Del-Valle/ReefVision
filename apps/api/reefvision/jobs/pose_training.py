@@ -172,13 +172,6 @@ def _safe_extract_zip(
 ) -> None:
     """Extract an in-memory pose dataset without allowing path traversal."""
 
-    destination.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    root = destination.resolve()
-
     with zipfile.ZipFile(io.BytesIO(content)) as archive:
         # Preflight every entry before extracting any files. Aliases such as
         # ./data.yaml and data.yaml otherwise overwrite the same scientific
@@ -231,6 +224,12 @@ def _safe_extract_zip(
                 raise ValidationError(
                     "Pose training export contains a file-directory archive collision"
                 )
+
+        # Invalid or ambiguous archives must not leave even an empty run
+        # directory behind: that would block a corrected frozen export retry.
+        # Keep the destination absent until every member passes preflight.
+        destination.mkdir(parents=True, exist_ok=True)
+        root = destination.resolve()
 
         for item in archive.infolist():
             normalized = item.filename.replace(
