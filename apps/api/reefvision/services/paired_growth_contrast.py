@@ -212,7 +212,7 @@ def build_paired_growth_report(
     dates = {request.baseline_date, request.followup_date}
     if any(not dates.issubset(unit.dates) for unit in selection.sampling_plan):
         raise ValidationError("Both UTC visit dates must be planned for every frozen cohort unit")
-    parents: dict[str, str] = {}
+    lineage_units: dict[str, str] = {}
     roster = {}
     for unit in selection.sampling_plan:
         for key in unit.organism_keys:
@@ -233,13 +233,17 @@ def build_paired_growth_report(
                 and len(unit.organism_keys) != 1
             ):
                 raise ValidationError("An organism-level unit cannot contain multiple organisms")
-            parent = identity.parent_colony_key
+            # A colony and its fragments use the same lineage key, even when the
+            # colony is enrolled directly and therefore has no parent of its own.
+            lineage = identity.parent_colony_key or identity.organism_key
             if (
-                parent is not None
-                and parents.setdefault(parent, unit.experimental_unit_id)
+                lineage_units.setdefault(lineage, unit.experimental_unit_id)
                 != unit.experimental_unit_id
             ):
-                raise ValidationError("A parent colony spans multiple declared independent units")
+                raise ValidationError(
+                    "A colony lineage spans multiple declared independent units. "
+                    "Review the frozen roster before running the paired contrast."
+                )
             roster[key] = identity
 
     observations: dict[tuple[str, date], list[GrowthObservation]] = defaultdict(list)

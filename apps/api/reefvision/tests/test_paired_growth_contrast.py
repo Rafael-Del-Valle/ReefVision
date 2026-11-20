@@ -410,3 +410,116 @@ def test_paired_statistics_withholds_unsupported_intervals(monkeypatch: pytest.M
     assert one.degrees_of_freedom is None
     assert one.confidence_interval_95 is None
     assert one.interval_status == "insufficient_complete_units"
+
+
+def _cross_unit_colony_study(
+    client: TestClient,
+) -> tuple[str, str, str, dict[str, Any]]:
+    project = create_project(client, "Paired colony and descendant")
+    project_id = project["id"]
+    ecology = f"/api/v1/projects/{project_id}/ecology"
+    plan = []
+    sources = []
+    for key, tank, kind, parent, visits in (
+        ("colony-a", "Tank-A", "colony", None, [(1, 20), (2, 24), (3, 25), (3, 26)]),
+        ("fragment-a", "Tank-B", "fragment", "colony-a", [(1, 21), (2, 37)]),
+    ):
+        registered = client.post(
+            f"{ecology}/organisms",
+            json={
+                "organism_key": key,
+                "experimental_unit_id": tank,
+                "experimental_unit_type": "tank",
+                "kind": kind,
+                "parent_colony_key": parent,
+                "reason": "Reviewed synthetic lineage",
+            },
+        )
+        assert registered.status_code == 201, registered.text
+        sources.extend(_growth_sources(client, project, key, visits))
+        plan.append(
+            {
+                "experimental_unit_id": tank,
+                "organism_keys": [key],
+                "dates": ["2026-11-01", "2026-11-02", "2026-11-03"],
+            }
+        )
+    response = client.post(
+        f"{ecology}/verified-analyses",
+        json={
+            "selection": {
+                "kind": "growth",
+                "metric": "box_width",
+                "sources": sources,
+                "sampling_plan": plan,
+            },
+            "reviewed_by": "Fixture reviewer",
+            "review_note": "Reviewed frozen roster including a duplicate at the third visit.",
+            "confirm_reviewed_selection": True,
+        },
+    )
+    assert response.status_code == 201, response.text
+    analysis = response.json()
+    assert any(
+        row["source"] == "colony-a" and row["reason"] == "duplicate_utc_sampling_date"
+        for row in analysis["snapshot"]["result"]["exclusions"]
+    )
+    return (
+        project_id,
+        ecology,
+        analysis["id"],
+        {
+            "source_sha256": analysis["content_sha256"],
+            "baseline_date": "2026-11-01",
+            "followup_date": "2026-11-02",
+            "experimental_unit_type": "tank",
+            "estimand": "Declared tank contrast across the two selected visits.",
+            "missingness_policy": "complete_unit",
+        },
+    )
+
+
+def _save_cross_unit_colony_graph(
+    client: TestClient, project_id: str, analysis_id: str, design: dict[str, Any]
+) -> str:
+    graph = {
+        "graph_id": "cross-unit-colony-contrast",
+        "name": "Cross-unit colony contrast",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "paired",
+                "node_type": "paired_growth_contrast",
+                "parameters": {"analysis_id": analysis_id, **design},
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "source",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "paired",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    return str(saved.json()["id"])
+
+
+def test_enrolled_colony_and_fragment_do_not_count_as_independent_units(
+    client: TestClient,
+) -> None:
+    project_id, ecology, analysis_id, design = _cross_unit_colony_study(client)
+    url = f"{ecology}/verified-analyses/{analysis_id}"
+    original = client.get(url).json()
+    response = client.post(f"{url}/paired-contrast", json=design)
+    assert response.status_code == 400, response.text
+    assert "colony" in response.json()["detail"].lower()
+    graph_id = _save_cross_unit_colony_graph(client, project_id, analysis_id, design)
+    rejected = _run_graph(client, project_id, graph_id)
+    assert rejected["run"]["status"] == "failed", rejected
+    assert "colony" in rejected["run"]["error_message"].lower()
+    assert not any(row["data_type"] == "paired_growth_contrast" for row in rejected["artifacts"])
+    assert client.get(url).json() == original
