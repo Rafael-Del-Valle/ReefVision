@@ -393,7 +393,10 @@ def test_environment_cache_rejects_unrelated_same_project_record_lineage(client,
         if alteration == "changed_record_key":
             record = session.get(ScientificRecord, original_ids[1])
             assert record is not None
-            record.environmental_cache_key = "unrelated-dataset"
+            changed = deepcopy(record.payload_json)
+            changed["environmental_cache_key"] = "unrelated-dataset"
+            record.payload_json = changed
+            record.content_sha256 = content_hash(changed)
         else:
             assert unrelated_id is not None
             tampered = deepcopy(entry.payload_json)
@@ -409,13 +412,21 @@ def test_environment_cache_rejects_unrelated_same_project_record_lineage(client,
         with pytest.raises(ConflictError, match="another dataset"):
             service.import_noaa(project["id"], request.model_copy(update={"offline": True}))
 
-    # Validation is read-only: even corrupted lineage must not delete evidence.
-    response = client.get(f"/api/v1/projects/{project['id']}/scientific-records")
-    assert response.status_code == 200, response.text
+    # Validation is read-only: even intentionally corrupted lineage must not
+    # delete records or modify their stored checksums.
     expected = set(original_ids)
     if unrelated_id is not None:
         expected.add(unrelated_id)
-    assert {str(item["id"]) for item in response.json()["items"]} == expected
+    with client.app.state.session_factory() as session:
+        stored = session.scalars(
+            select(ScientificRecord).where(ScientificRecord.project_id == project["id"])
+        ).all()
+        assert {row.id for row in stored} == expected
+        assert all(content_hash(row.payload_json) == row.content_sha256 for row in stored)
+    if alteration == "same_project_substitution":
+        response = client.get(f"/api/v1/projects/{project['id']}/scientific-records")
+        assert response.status_code == 200, response.text
+        assert {str(item["id"]) for item in response.json()["items"]} == expected
 
 
 def test_environment_lookup_uses_explicit_space_time_depth_and_qc_limits(client):

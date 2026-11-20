@@ -100,7 +100,8 @@ class EnvironmentalContextService:
             found = self.session.scalars(
                 select(ScientificRecord.id).where(
                     ScientificRecord.project_id == entry.project_id,
-                    ScientificRecord.environmental_cache_key == entry.cache_key,
+                    ScientificRecord.payload_json["environmental_cache_key"].as_string()
+                    == entry.cache_key,
                     ScientificRecord.id.in_(chunk),
                 )
             ).all()
@@ -121,7 +122,7 @@ class EnvironmentalContextService:
             if (
                 row is None
                 or row.project_id != entry.project_id
-                or row.environmental_cache_key != entry.cache_key
+                or row.payload_json.get("environmental_cache_key") != entry.cache_key
             ):
                 raise ConflictError(
                     "Environmental cache refers to missing or foreign scientific records "
