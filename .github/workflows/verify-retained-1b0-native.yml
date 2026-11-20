@@ -27,8 +27,9 @@ jobs:
           New-Item -ItemType Directory .artifacts/retained-native-provenance -Force | Out-Null
           [ordered]@{
             payload_source='1b0f29cff52f3f180073a5637119437be2ab58c2'
-            harness_source='e5c4106ba6d67aad0d0bdc0b1d3f20bcd2d898e9'
-            diagnostic_source=(git rev-parse HEAD)
+            harness_base='e5c4106ba6d67aad0d0bdc0b1d3f20bcd2d898e9'
+            hosted_profile_fix='baf9e527a277757a68e6dc82153e168a2b222635'
+            harness_source=(git rev-parse HEAD)
             source_run=44687304789
             payload=$provenance
           } | ConvertTo-Json -Depth 10 | Set-Content .artifacts/retained-native-provenance/payload.json
