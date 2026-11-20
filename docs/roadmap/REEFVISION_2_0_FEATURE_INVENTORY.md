@@ -216,8 +216,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: Real reviewed organisms, dated original images and calibration records exercise per-unit differences, standard error, degrees of freedom, t interval, stale source rejection and repeatable graph execution. — `apps/api/reefvision/tests/test_paired_growth_contrast.py` (`rv11-paired-reviewed-source`)
-- `browser`: Three complete synthetic tanks with unequal nested organism counts produced differences of 1, 3 and 5 mm. A fourth incomplete tank was excluded. The mean was 3 mm, standard error 1.15470054 mm and 95% interval -1.96827542 to 7.96827542 mm with 2 degrees of freedom. Three JSON downloads and 15 original file hashes matched. — `apps/web/tests/e2e/paired-growth-contrast-live.spec.ts` (`rv11-paired-desktop`)
+- `source`: Reviewed fixture organisms, dates and calibrations exercise per-unit differences, standard error and the t interval. Live analysis and imported receipts reject a colony and its fragments split across independent units. Two Exchange transfers retain the historical report while replays bind to the copied sources. — `apps/api/reefvision/tests/test_paired_growth_contrast.py` (`rv11-paired-reviewed-source`)
+- `browser`: Three complete synthetic tanks with unequal nested organism counts produced differences of 1, 3 and 5 mm. A fourth incomplete tank was excluded. The mean was 3 mm, standard error 1.15470054 mm and 95% interval -1.96827542 to 7.96827542 mm with 2 degrees of freedom. Three JSON downloads and 15 original file hashes matched. Calculate, Download and Save recheck the reviewed source before exposing the result or saving a graph. — `apps/web/tests/e2e/paired-growth-contrast-live.spec.ts` (`rv11-paired-desktop`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -854,7 +854,7 @@ Evidence:
 - Dependencies: None
 - Entry point: Not user-facing
 - Workflow Builder: `not_applicable`
-- Missing input: A suitable disposable Windows 11 device with Smart App Control enforcement enabled and the exact final-candidate installer. This host runs Windows 11 build 26300 with VerifiedAndReputablePolicyState=0 (off), and the only local 1.4 MSI is from an older candidate, so hosted or local standard acceptance cannot exercise enforcement or produce a relevant Code Integrity 3077 event.
+- Missing input: A suitable disposable Windows 11 device with Smart App Control enforcement enabled and the exact final-candidate installer. The available physical host runs Windows 11 build 26300 with VerifiedAndReputablePolicyState=0 (off). Enforcement evidence requires launching the verified MSI and app on an enforcing device and recording the signature and Code Integrity event if blocked.
 
 Acceptance checks:
 

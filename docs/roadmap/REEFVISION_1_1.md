@@ -24,7 +24,12 @@ and confirm how to handle incomplete units. The report includes each matched
 organism and each included or excluded unit. A saved Workflow Builder revision
 repeats the computation against the source digest and exports the same JSON.
 The mean, standard error and 95% paired interval use the number of independent
-units. Scientific acceptance still requires the study-specific protocol,
+units. An enrolled colony and its fragments share a single lineage key. If
+the reviewed roster assigns that lineage to different units, the analysis
+stops. Calculate, Download and Save each recheck the frozen source. Project
+Exchange retains the original receipt and verifies its statistics against its
+frozen source. Replaying the copied workflow binds a new receipt to the copied
+analysis. Scientific acceptance still requires the study-specific protocol,
 reference observations and independent statistical review. [Method reference](https://www.itl.nist.gov/div898/handbook/prc/section3/prc311.htm).
 
 See [scientific API and methods](../SCIENTIFIC_ENVIRONMENTAL_CONTEXT.md) and
