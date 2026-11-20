@@ -8,7 +8,8 @@ from dataclasses import asdict
 from time import perf_counter
 from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select, text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
@@ -18,6 +19,7 @@ from reefvision.db.models.temporal_reefpose import TemporalReefPoseRun
 from reefvision.domain.errors import ReefVisionError, ValidationError
 from reefvision.domain.pose_biological_events import CycleDefinition
 from reefvision.ml.reefpose.errors import ReefPoseCancelledError, ReefPoseError
+from reefvision.repositories.models import ModelRepository
 from reefvision.schemas.temporal_reefpose import (
     TEMPORAL_RUN_ADAPTER,
     TemporalEvaluationCreate,
@@ -32,7 +34,11 @@ from reefvision.services.temporal_reefpose import (
 )
 from reefvision.services.temporal_reefpose_sources import TEMPORAL_METHOD, source_model
 from reefvision.storage.datasets import canonical_json_sha256
-from reefvision.storage.temporal_reefpose import read_temporal_checkpoint, save_temporal_checkpoint
+from reefvision.storage.temporal_reefpose import (
+    discard_temporal_checkpoint,
+    read_temporal_checkpoint,
+    save_temporal_checkpoint,
+)
 
 LOGGER = logging.getLogger(__name__)
 RunProgress = Callable[[int, dict[str, Any]], None]
@@ -77,6 +83,51 @@ def _sequence(source: dict[str, Any]) -> Any:
         identity_revision=f"{identity['run_id']}:{identity['run_revision']}" if identity else None,
         calibration_id=recording["calibration_sha256"],
     )
+
+
+def _register_training_checkpoint(
+    session: Session, settings: Settings, candidate: ModelRegistration
+) -> ModelRegistration:
+    models = ModelRepository(session)
+    keep_candidate = False
+    try:
+        existing = models.find_by_checksum(candidate.project_id, candidate.sha256)
+        if existing is None:
+            try:
+                with session.begin_nested():
+                    models.add(candidate)
+                    session.flush()
+            except IntegrityError:
+                # Another registration may win the project checksum during this insert.
+                existing = models.find_by_checksum(candidate.project_id, candidate.sha256)
+                if existing is None:
+                    raise
+            else:
+                keep_candidate = True
+                return candidate
+
+        keep_candidate = existing.managed_path == candidate.managed_path
+        if (
+            existing.purpose != candidate.purpose
+            or existing.framework != candidate.framework
+            or existing.task != candidate.task
+            or existing.provider_name != candidate.provider_name
+            or existing.provider_version != candidate.provider_version
+            or existing.file_size_bytes != candidate.file_size_bytes
+            or any(
+                existing.metadata_json.get(key) != value
+                for key, value in candidate.metadata_json.items()
+                if key not in {"source_temporal_run_id", "metrics_history"}
+            )
+        ):
+            raise ValidationError(
+                "The temporal checkpoint checksum belongs to an incompatible model registration"
+            )
+        read_temporal_checkpoint(settings, existing.managed_path, existing.sha256)
+        return existing
+    finally:
+        if not keep_candidate:
+            discard_temporal_checkpoint(settings, candidate.managed_path)
 
 
 def _training(
@@ -162,7 +213,12 @@ def _training(
         on_epoch=epoch,
         cancelled=cancelled,
     )
-    if cancelled():
+    # Take the SQLite write lock only after training. It also keeps the registry
+    # savepoint inside the same transaction as the run's final status update.
+    if session.get_bind().dialect.name == "sqlite":
+        session.execute(text("BEGIN IMMEDIATE"))
+    status = session.scalar(select(Job.status).where(Job.id == row.job_id).with_for_update())
+    if status != "running":
         raise ReefPoseCancelledError("Temporal training cancelled")
     checkpoint = {
         key: value for key, value in trained.state.items() if key != "optimizer_state"
@@ -185,7 +241,7 @@ def _training(
         "training_configuration": asdict(training_config),
         "metrics_history": trained.metrics_history,
     }
-    model = ModelRegistration(
+    candidate = ModelRegistration(
         project_id=row.project_id,
         purpose="pose_temporal",
         display_name=f"{configuration.name[:174]} · {row.id[:8]}",
@@ -199,8 +255,7 @@ def _training(
         provider_version="1",
         metadata_json=metadata,
     )
-    session.add(model)
-    session.flush()
+    model = _register_training_checkpoint(session, settings, candidate)
     return {
         "model_id": model.id,
         "checkpoint_sha256": sha256,

@@ -396,6 +396,124 @@ def test_training_retries_from_atomic_epoch_checkpoint(
     assert observed_epochs == [1, 2]
 
 
+def _queue_two_temporal_training_runs(
+    client: TestClient,
+) -> tuple[str, list[dict[str, Any]]]:
+    path, sources = _setup(client)
+    frozen = client.post(f"{path}/datasets", json={"name": "Frozen", "sources": sources})
+    assert frozen.status_code == 201, frozen.text
+    queued = []
+    for name in ("Validation-selected refiner", "Repeat same training with a new label"):
+        response = client.post(
+            f"{path}/runs",
+            json={
+                "kind": "training",
+                "dataset_id": frozen.json()["id"],
+                "name": name,
+                "epochs": 2,
+                "batch_size": 2,
+                "channels": 4,
+                "window_length": 3,
+                "device": "cpu",
+            },
+        )
+        assert response.status_code == 202, response.text
+        queued.append(response.json())
+    return path, queued
+
+
+@pytest.mark.parametrize("existing", ["compatible", "unrelated", "wrong_lineage", "missing_file"])
+def test_repeat_temporal_training_preserves_the_registered_checkpoint(
+    client: TestClient, existing: str
+) -> None:
+    from reefvision.jobs.temporal_reefpose import process_temporal_reefpose_job
+
+    path, (first, repeat) = _queue_two_temporal_training_runs(client)
+    state = client.app.state
+    assert process_temporal_reefpose_job(state.settings, state.session_factory, first["job_id"])
+    first_run = client.get(f"{path}/runs/{first['id']}").json()
+    assert first_run["status"] == "succeeded", first_run
+    result = first_run["result"]
+    with state.session_factory() as session:
+        model = session.get(ModelRegistration, result["model_id"])
+        assert model is not None
+        stored = resolve_managed_project_path(state.settings, model.managed_path)
+        if existing == "unrelated":
+            model.purpose = "pose"
+            model.provider_name = "reefpose"
+            session.commit()
+        elif existing == "wrong_lineage":
+            model.metadata_json = {**model.metadata_json, "training_recording_hashes": ["f" * 64]}
+            session.commit()
+        elif existing == "missing_file":
+            stored.unlink()
+        original_state = model.purpose, model.provider_name, model.display_name, model.metadata_json
+
+    assert process_temporal_reefpose_job(state.settings, state.session_factory, repeat["job_id"])
+    repeated_run = client.get(f"{path}/runs/{repeat['id']}").json()
+    assert repeated_run["id"] != first_run["id"]
+    assert repeated_run["configuration"]["name"] != first_run["configuration"]["name"]
+    if existing == "compatible":
+        assert repeated_run["status"] == "succeeded", repeated_run
+        assert repeated_run["result"] == result
+    else:
+        assert repeated_run["status"] == "failed", repeated_run
+        error = "checkpoint file is unavailable" if existing == "missing_file" else "incompatible"
+        assert error in repeated_run["error"].lower()
+    with state.session_factory() as session:
+        model = session.get(ModelRegistration, result["model_id"])
+        assert model is not None
+        assert (model.purpose, model.provider_name, model.display_name, model.metadata_json) == (
+            original_state
+        )
+        assert model.metadata_json["source_temporal_run_id"] == first_run["id"]
+    assert list(stored.parent.glob("*-temporal.pt")) == (
+        [] if existing == "missing_file" else [stored]
+    )
+    if stored.exists():
+        assert sha256(stored.read_bytes()).hexdigest() == result["checkpoint_sha256"]
+
+
+def test_concurrent_temporal_training_reuses_one_registered_checkpoint(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier, Lock
+
+    from reefvision.jobs.temporal_reefpose import process_temporal_reefpose_job
+    from reefvision.ml.reefpose import temporal
+
+    path, queued = _queue_two_temporal_training_runs(client)
+    state = client.app.state
+    actual = temporal.train_temporal
+    torch_rng = Lock()
+    rendezvous = Barrier(2, timeout=15)
+
+    def train_then_finish_together(*args: Any, **kwargs: Any) -> Any:
+        # The training adapter resets the process RNG. Keep those resets independent
+        # while letting both workers reach the real registration at the same time.
+        with torch_rng:
+            trained = actual(*args, **kwargs)
+        rendezvous.wait()
+        return trained
+
+    def process(run: dict[str, Any]) -> bool:
+        return process_temporal_reefpose_job(state.settings, state.session_factory, run["job_id"])
+
+    monkeypatch.setattr(temporal, "train_temporal", train_then_finish_together)
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        assert all(workers.map(process, queued))
+    runs = [client.get(f"{path}/runs/{row['id']}").json() for row in queued]
+    assert all(run["status"] == "succeeded" for run in runs), runs
+    assert runs[0]["result"] == runs[1]["result"]
+    with state.session_factory() as session:
+        model = session.get(ModelRegistration, runs[0]["result"]["model_id"])
+        assert model is not None
+        assert model.metadata_json["source_temporal_run_id"] in {run["id"] for run in runs}
+        stored = resolve_managed_project_path(state.settings, model.managed_path)
+    assert list(stored.parent.glob("*-temporal.pt")) == [stored]
+
+
 def test_temporal_checkpoint_refinement_review_and_heldout_evaluation(client: TestClient) -> None:
     path, sources = _setup(client)
     dataset = client.post(f"{path}/datasets", json={"name": "Frozen", "sources": sources}).json()
