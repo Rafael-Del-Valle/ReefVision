@@ -186,7 +186,7 @@ def test_windows_lineage_fixtures_upgrade_and_keep_pre_upgrade_backups(
             URL.create("sqlite", database=str(database)).render_as_string().replace("%", "%%"),
         )
         command.upgrade(config, "head")
-        assert _query(database, "SELECT version_num FROM alembic_version") == [("b15_model_0001",)]
+        assert _query(database, "SELECT version_num FROM alembic_version") == [("b15_integrated_0001",)]
         assert _query(database, evidence_query) == expected
         assert _query(backup, "SELECT version_num FROM alembic_version") == [(entry["revision"],)]
         assert hashlib.sha256(backup.read_bytes()).hexdigest() == entry["backup_sha256"]

@@ -502,6 +502,7 @@ def import_project_exchange(
                         "analysis_series_id",
                         "event_series_id",
                         "link_id",
+                        "design_id",
                         "graph_id",
                         "correspondence_id",
                     ):

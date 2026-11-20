@@ -45,6 +45,8 @@ HISTORICAL_ARTIFACT_TYPES = frozenset(
         "connected_branch_preview",
         "coral_branch_growth",
         "mesh_longitudinal_comparison",
+        "study_design_report",
+        "reviewer_lab_agreement_report",
         PAIRED_GROWTH_TYPE,
     }
 )
