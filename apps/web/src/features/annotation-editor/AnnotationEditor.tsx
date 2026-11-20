@@ -2309,6 +2309,7 @@ export function AnnotationEditor({
         return;
       const currentState = stateRef.current;
       if (!currentInteraction || !imageSize) {
+        panPreviousPointRef.current = null;
         setInteraction(null);
         return;
       }
@@ -2524,13 +2525,14 @@ export function AnnotationEditor({
         y: event.clientY - rect.top,
       };
       const direction = event.deltaY > 0 ? 1 / 1.08 : 1.08;
-      setView(
-        zoomAtPoint(
-          currentView,
+      setView((latestView) => {
+        const base = latestView ?? currentView;
+        return zoomAtPoint(
+          base,
           screenPoint,
-          clampScale(currentView.scale * direction),
-        ),
-      );
+          clampScale(base.scale * direction),
+        );
+      });
     },
     [currentView],
   );
