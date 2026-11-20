@@ -11,7 +11,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Project, ProjectImage } from "../../api/client";
-import { Gallery, galleryPendingThumbnailRefetchMs } from "./Gallery";
+import {
+  Gallery,
+  galleryPendingThumbnailPollingDecision,
+  galleryPendingThumbnailRefetchMs,
+} from "./Gallery";
 
 const project: Project = {
   id: "project-1",
@@ -96,6 +100,64 @@ describe("Gallery pending thumbnail refresh", () => {
     expect(galleryPendingThumbnailRefetchMs(pending, 13)).toBe(false);
     expect(galleryPendingThumbnailRefetchMs(complete, 1)).toBe(false);
     expect(galleryPendingThumbnailRefetchMs({ items: [] }, 1)).toBe(false);
+  });
+
+  it("restarts bounded thumbnail polling for later camera imports and new views", () => {
+    const first = { items: [{ id: "camera-1", thumbnail_path: null }] };
+    const second = { items: [{ id: "camera-2", thumbnail_path: null }] };
+    const complete = {
+      items: [{ id: "camera-2", thumbnail_path: "thumbs/camera-2.jpg" }],
+    };
+
+    const initial = galleryPendingThumbnailPollingDecision(
+      first,
+      15,
+      null,
+      "project-a:page-1",
+    );
+    expect(initial.interval).toBe(5000);
+    expect(
+      galleryPendingThumbnailPollingDecision(
+        first,
+        26,
+        initial.state,
+        "project-a:page-1",
+      ).interval,
+    ).toBe(5000);
+    expect(
+      galleryPendingThumbnailPollingDecision(
+        first,
+        27,
+        initial.state,
+        "project-a:page-1",
+      ).interval,
+    ).toBe(false);
+
+    // A new import after 12 previous checks must not inherit exhaustion.
+    const imported = galleryPendingThumbnailPollingDecision(
+      second,
+      28,
+      initial.state,
+      "project-a:page-1",
+    );
+    expect(imported.interval).toBe(5000);
+    // A query-key change must independently rearm pending-thumbnail checks.
+    expect(
+      galleryPendingThumbnailPollingDecision(
+        second,
+        50,
+        imported.state,
+        "project-a:filtered",
+      ).interval,
+    ).toBe(5000);
+    expect(
+      galleryPendingThumbnailPollingDecision(
+        complete,
+        51,
+        imported.state,
+        "project-a:page-1",
+      ),
+    ).toEqual({ interval: false, state: null });
   });
 
   it("recovers a failed thumbnail when the backend regenerates a new version", async () => {

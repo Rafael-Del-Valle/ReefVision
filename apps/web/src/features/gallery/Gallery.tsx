@@ -52,6 +52,42 @@ const statuses: { value: AnnotationStatus | ""; label: string }[] = [
   { value: "excluded", label: "Excluded" },
 ];
 
+// Thumbnail polling is bounded per pending-image set, not by a query's total
+// lifetime successful fetches. A later camera import must get its own chance
+// to generate thumbnails even after an earlier image exhausted the budget.
+interface ThumbnailPollState {
+  signature: string;
+  firstLoad: number;
+}
+
+export function galleryPendingThumbnailPollingDecision(
+  page: { items: Array<{ id: string; thumbnail_path: string | null }> } | undefined,
+  successfulLoads: number,
+  previous: ThumbnailPollState | null,
+  queryKey: string,
+): { interval: number | false; state: ThumbnailPollState | null } {
+  const pendingIds = page?.items
+    .filter((item) => !item.thumbnail_path)
+    .map((item) => item.id);
+  if (!pendingIds?.length) return { interval: false, state: null };
+
+  // Include the query identity: changing project filters, sort, or page
+  // cannot inherit an exhausted budget from a different view.
+  const signature = `${queryKey}:${JSON.stringify(pendingIds)}`;
+  const state =
+    previous?.signature === signature &&
+    successfulLoads >= previous.firstLoad
+      ? previous
+      : { signature, firstLoad: successfulLoads };
+  return {
+    interval: galleryPendingThumbnailRefetchMs(
+      page,
+      successfulLoads - state.firstLoad + 1,
+    ),
+    state,
+  };
+}
+
 const IMAGE_IMPORT_BATCH_SIZE = 10;
 
 function unconfirmedCameraImportMessage(
@@ -564,6 +600,7 @@ function GalleryContent({
   const initialPreference = useRef(readBrowserGalleryPreference(project.id));
   const activeThumbnail = useRef<HTMLButtonElement | null>(null);
   const filmstripRef = useRef<HTMLDivElement | null>(null);
+  const thumbnailPollState = useRef<ThumbnailPollState | null>(null);
   const [page, setPage] = useState(initialPreference.current.page);
   const [pageDraft, setPageDraft] = useState(
     String(initialPreference.current.page),
@@ -609,11 +646,16 @@ function GalleryContent({
 
   const images = useQuery<ImagePage>({
     queryKey: ["images", project.id, page, filters, sortBy],
-    refetchInterval: (query) =>
-      galleryPendingThumbnailRefetchMs(
+    refetchInterval: (query) => {
+      const decision = galleryPendingThumbnailPollingDecision(
         query.state.data,
         query.state.dataUpdateCount,
-      ),
+        thumbnailPollState.current,
+        query.queryHash,
+      );
+      thumbnailPollState.current = decision.state;
+      return decision.interval;
+    },
     queryFn: ({ signal }) =>
       getImages(
         project.id,
