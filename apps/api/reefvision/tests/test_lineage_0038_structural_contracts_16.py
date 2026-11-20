@@ -114,7 +114,9 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         values.append("triage_complete")
     quoted_values = ", ".join(f"'{value}'" for value in values)
     check_name = (
-        "unreviewed_event_vocab" if variant == "renamed_check" else "ck_review_queue_item_event_type"
+        "unreviewed_event_vocab"
+        if variant == "renamed_check"
+        else "ck_review_queue_item_event_type"
     )
     check = (
         f", CONSTRAINT {check_name} CHECK (event_type IN ({quoted_values}))"
