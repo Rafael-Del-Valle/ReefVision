@@ -1,0 +1,451 @@
+{
+  "source_commit": "b846f57e916ef53abc9a2d25ece9927eb9dfb582",
+  "draft": "https://github.com/Rafael-Del-Valle/ReefVision/pull/97",
+  "fixture_basis": "Generated local research and historical profiles. Independent field acceptance remains open.",
+  "windows_installer": {
+    "version": "1.5.0",
+    "workflow": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748544977",
+    "source_clean": true,
+    "files": [
+      {
+        "name": "ReefVision_1.5.0_x64_en-US.msi",
+        "size_bytes": 299215307,
+        "sha256": "893786a369e2a05cadb802be6c3b78986d2910951f377048e91c8e3055bb6c2d"
+      },
+      {
+        "name": "rv1.cab",
+        "size_bytes": 529813485,
+        "sha256": "66de785c8490cfe642bd38ebb203a64af1ffe17c6c1079e64ed75224c5d628bd"
+      },
+      {
+        "name": "rv2.cab",
+        "size_bytes": 497699631,
+        "sha256": "4bf36ba9a44253fde7c597cffc0ca644c40caf3c8aa8f0d8527a2534f6e6b2c7"
+      },
+      {
+        "name": "rv3.cab",
+        "size_bytes": 678644763,
+        "sha256": "dd40ee3d201a784aa7ccbfde606562b860be444d33abdeabba89eecac3280c20"
+      },
+      {
+        "name": "rv4.cab",
+        "size_bytes": 452711061,
+        "sha256": "53c8bc272a5aa6e7178cea187345014842c2d8b3383c72f6c77ab4db8c223b66"
+      },
+      {
+        "name": "rv5.cab",
+        "size_bytes": 514645328,
+        "sha256": "842d615f9ba54b8659efa3d5e4e035c04b92f8ff1c3c836690dee525e0242b98"
+      }
+    ],
+    "provenance_sha256": "152d0f93c35b2bcd9440e569a5d2afba4bd00849935a7c4c3961c83c43e49bbb",
+    "checksum_list_sha256": "8cca0ecf4869d5d3fbc60ed3b279f3b2708bcd8cdd814e8fd7a3644696393c47",
+    "desktop_sha256": "2301ed2f9a257184176a8ac0d81adfa81c868fffbcd7c7a013c1f950919555d6",
+    "sidecar_sha256": "f39656153b3a3be889fd6f4c2d1215bb162e9b8bff8bb04168ad3753bf9a381a",
+    "runtime_distribution": {
+      "distribution_metadata": 57,
+      "entry_point_files": 14,
+      "model_manifest_assets": 0,
+      "model_manifest_provider_assets": 0,
+      "msi_cab_files": 19139,
+      "pyinstaller_outer_entries": 14,
+      "pyinstaller_pyz_archives": 1,
+      "pyinstaller_pyz_entries": 12031,
+      "zip_containers": 1,
+      "zip_members": 155
+    },
+    "findings": [],
+    "smart_app_control": {
+      "windows_build": "26300",
+      "policy_state": 0,
+      "authenticode": [
+        {
+          "file": "ReefVision_1.5.0_x64_en-US.msi",
+          "status": "NotSigned"
+        },
+        {
+          "file": "ReefVision.exe",
+          "status": "NotSigned"
+        },
+        {
+          "file": "reefvision-api.exe",
+          "status": "NotSigned"
+        }
+      ]
+    }
+  },
+  "hosted_install": {
+    "roles": {
+      "clean": {
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748544977/job/136346825319",
+        "conclusion": "success"
+      },
+      "validated-1.4": {
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748544977/job/136346825387",
+        "conclusion": "success"
+      },
+      "published-1.0.3": {
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748544977/job/136346825328",
+        "conclusion": "success"
+      },
+      "validated-1.3": {
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748544977/job/136346825441",
+        "conclusion": "success"
+      },
+      "draft-1.4-0038": {
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748544977/job/136346825611",
+        "conclusion": "success"
+      },
+      "draft-1.4-0039": {
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748544977/job/136346825425",
+        "conclusion": "success"
+      }
+    },
+    "clean_install_stages": {
+      "install": {
+        "status": "PASS"
+      },
+      "shortcuts": {
+        "status": "PASS"
+      },
+      "first_launch": {
+        "status": "PASS"
+      },
+      "frontend_backend_connectivity": {
+        "status": "PASS"
+      },
+      "webview2": {
+        "status": "PASS"
+      },
+      "spatial_workflow": {
+        "status": "PASS"
+      },
+      "research_workflow": {
+        "status": "PASS"
+      },
+      "schema_migration": {
+        "status": "PASS"
+      },
+      "model_policy": {
+        "status": "PASS"
+      },
+      "provider_manifests": {
+        "status": "PASS"
+      },
+      "sam2_live": {
+        "status": "SKIPPED",
+        "reason": "Real SAM 2.1 packaged runtime acceptance not requested"
+      },
+      "external_annotation_imports": {
+        "status": "PASS"
+      },
+      "camera_jpeg": {
+        "status": "SKIPPED",
+        "reason": "Real camera JPEG fixture not supplied"
+      },
+      "confidence_review": {
+        "status": "SKIPPED",
+        "reason": "Real pending prediction review not requested"
+      },
+      "project_persistence": {
+        "status": "PASS"
+      },
+      "restart": {
+        "status": "PASS"
+      },
+      "project_exchange": {
+        "status": "PASS"
+      },
+      "lineage_preflight": {
+        "status": "SKIPPED",
+        "reason": "Lineage fixture not supplied"
+      },
+      "lineage_initial_evidence": {
+        "status": "SKIPPED",
+        "reason": "Lineage fixture not supplied"
+      },
+      "lineage_final_evidence": {
+        "status": "SKIPPED",
+        "reason": "Lineage fixture not supplied"
+      },
+      "lineage_exchange_roundtrip": {
+        "status": "SKIPPED",
+        "reason": "Lineage fixture not supplied"
+      },
+      "lineage_restore": {
+        "status": "SKIPPED",
+        "reason": "Lineage fixture not supplied"
+      },
+      "historical_schema_rejection": {
+        "status": "SKIPPED",
+        "reason": "Historical schema rejection not requested"
+      },
+      "upgrade": {
+        "status": "SKIPPED",
+        "reason": "SkipUpgrade requested"
+      },
+      "uninstall": {
+        "status": "PASS"
+      },
+      "data_retention": {
+        "status": "PASS"
+      }
+    },
+    "research_journeys": {
+      "startTime": "2026-11-20T14:32:47.227Z",
+      "duration": 144476.67,
+      "expected": 6,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "preserved_journeys": {
+      "startTime": "2026-11-20T14:35:12.793Z",
+      "duration": 160198.756,
+      "expected": 10,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "source_suites": {
+    "windows_backend": {
+      "tests": 5455,
+      "failures": 0,
+      "skipped": 12,
+      "errors": 0,
+      "passed": 5443
+    },
+    "rust": 8,
+    "source_browser": {
+      "research": {
+        "startTime": "2026-11-20T14:11:27.132Z",
+        "duration": 111913.171,
+        "expected": 6,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "preserved": {
+        "startTime": "2026-11-20T14:11:26.887Z",
+        "duration": 109139.709,
+        "expected": 10,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    },
+    "source_reefpose_gpu": 3,
+    "keyboard_navigation": {
+      "candidate_source": "b846f57e916ef53abc9a2d25ece9927eb9dfb582",
+      "frontend_ci": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748545496/job/136330084884",
+      "general_hosted_browser": {
+        "passed_on_first_attempt": 14,
+        "passed_on_retry": 1,
+        "skipped": 35,
+        "failing_assertion": "Skip to main content link was inactive after Tab; passed on retry #1."
+      },
+      "local_control": {
+        "scope": "Generated WebView-size browser test of the production bundle with the first React MessageChannel delivery delayed by 200 ms.",
+        "before": {
+          "attempts": 1,
+          "focus_failures": 1,
+          "first_tab": {
+            "link_present": false,
+            "active": "BODY"
+          }
+        },
+        "after": {
+          "attempts": 5,
+          "passes": 5,
+          "retries": 0,
+          "first_tab": {
+            "link_present": true,
+            "active": "BODY"
+          }
+        }
+      },
+      "corrected_test": {
+        "path": "apps/web/tests/e2e/phase12-workbench.spec.ts",
+        "change": "Wait for the skip link to attach before pressing Tab. The keyboard focus, Enter navigation and viewport assertions still run.",
+        "normal_bundle_repeated_passes": 12,
+        "retries": 0,
+        "full_browser": {
+          "passed": 15,
+          "skipped": 35,
+          "failed": 0,
+          "retries": 0
+        },
+        "build": "production",
+        "prettier": "pass"
+      },
+      "installed_hosted_clean": {
+        "research": {
+          "passed": 6,
+          "skipped": 0,
+          "retries": 0
+        },
+        "preserved": {
+          "passed": 10,
+          "skipped": 0,
+          "retries": 0
+        }
+      }
+    },
+    "linux_backend": {
+      "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748545496/job/136330085357",
+      "test_and_tool_summaries": [
+        "1271 files already formatted",
+        "Success: no issues found in 697 source files",
+        "5444 passed, 11 skipped, 1 warning in 2664.38s"
+      ]
+    },
+    "frontend": {
+      "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748545496/job/136330084884",
+      "test_and_tool_summaries": [
+        "Test Files  127 passed (127)",
+        "Tests  737 passed (737)",
+        "14 passed (33.0s)"
+      ]
+    },
+    "scientific": {
+      "html_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748552198/job/136330110496",
+      "test_and_tool_summaries": [
+        "1271 files already formatted",
+        "Success: no issues found in 693 source files",
+        "5437 passed, 18 skipped, 1 warning in 3160.57s",
+        "126 passed, 1 warning in 99.58s"
+      ]
+    }
+  },
+  "physical_recovery": {
+    "consecutive_cycles": [
+      {
+        "restored_files": 398,
+        "verified_bytes": 107233287,
+        "prior_recovery_members_in_backup": 0,
+        "restored_witness_absolute_path_chars": 322
+      },
+      {
+        "restored_files": 400,
+        "verified_bytes": 107250765,
+        "prior_recovery_members_in_backup": 0,
+        "restored_witness_absolute_path_chars": 322
+      }
+    ],
+    "existing_archive": {
+      "restored_files": 794,
+      "verified_nested_recovery_members": 397,
+      "archive_unchanged": true
+    },
+    "worker_exit": {
+      "last_progress_files_before_termination": 33,
+      "restored_manifest_files_reopened": 395,
+      "restored_manifest_bytes": 107232142,
+      "same_job_id": "373bc398-37a5-4f57-af30-93d4937c1fc0",
+      "terminal_status_after_restart": "succeeded",
+      "independent_stage_and_originals_unchanged": true,
+      "same_destination_repeat_http": 409
+    },
+    "local_package_interrupted_cancellation": {
+      "msi_sha256": "ac85ed3b5168e47405a5ac3af6342e4e47cf3c908d7e6fd573529ced26a4af4b",
+      "terminal": "cancelled"
+    }
+  },
+  "physical_model_runtime": {
+    "runtime_selection_sha256": "05b9510efedfc35504759fe25417601c963bf8f05144751aa967c78d484f8e6a",
+    "registered_checkpoint_sha256": "0578ec80d1764c27b3dbebb8ca8e619b279a4c31df066963551d29dec48251ab",
+    "jobs": [
+      {
+        "id": "597eadca-e9b6-4fd1-8dbf-3f1f1241cd6c",
+        "device": "cuda",
+        "status": "succeeded",
+        "runtime_selection_sha256": "05b9510efedfc35504759fe25417601c963bf8f05144751aa967c78d484f8e6a"
+      },
+      {
+        "id": "4e3ff0c3-d584-496a-b27e-dd348e3c73c7",
+        "device": "cuda",
+        "status": "succeeded",
+        "runtime_selection_sha256": "05b9510efedfc35504759fe25417601c963bf8f05144751aa967c78d484f8e6a"
+      },
+      {
+        "id": "f41d89e2-548e-46c1-a346-76d9d2cd1606",
+        "device": "cuda",
+        "status": "succeeded",
+        "runtime_selection_sha256": "05b9510efedfc35504759fe25417601c963bf8f05144751aa967c78d484f8e6a"
+      }
+    ],
+    "saved_runs": [
+      {
+        "id": "5bde3458-877c-4128-bd68-5b3b02387b1c",
+        "child_job_id": "4e3ff0c3-d584-496a-b27e-dd348e3c73c7",
+        "digest": "b0dc4cea1b7b7cfaab2329547230f56107a9ee2c8224f79ff37c508730f52f48",
+        "matched_proposals": 9
+      },
+      {
+        "id": "ec97f1ae-5e56-48a3-b835-21b52ec605d7",
+        "child_job_id": "f41d89e2-548e-46c1-a346-76d9d2cd1606",
+        "digest": "b0dc4cea1b7b7cfaab2329547230f56107a9ee2c8224f79ff37c508730f52f48",
+        "matched_proposals": 9
+      }
+    ],
+    "test": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "elapsed_ms": 32356.632
+    }
+  },
+  "reproducibility_package": {
+    "archive_sha256": "04922aa3a80a1a0c924afdd7b8a17e168670435625a2c2ddc298912e4b360fd9",
+    "proof_sha256": "1227430da4d7be18e30285e087a825b01a4f3d97d4fb438252a7e7554d8fa780",
+    "runs": [
+      {
+        "id": "9bd8c7e8-32ca-4495-b1cd-71d882ca7c1e",
+        "sha256": "60bacecfac281aeaf5aa2efdb6d7595864eabb0400d88054ee59dcf531836e0f"
+      },
+      {
+        "id": "ae819d9f-f088-436a-8120-a04abc15adf6",
+        "sha256": "60bacecfac281aeaf5aa2efdb6d7595864eabb0400d88054ee59dcf531836e0f"
+      },
+      {
+        "id": "4967a31e-6161-448f-a827-b46802dd7dfa",
+        "sha256": "60bacecfac281aeaf5aa2efdb6d7595864eabb0400d88054ee59dcf531836e0f"
+      }
+    ],
+    "reviewer_credential_restored": false,
+    "original_archive_members": 1
+  },
+  "upgrade_and_rollback": {
+    "prior_version": "1.4.0",
+    "managed_project_files": 7,
+    "registered_checkpoint_sha256": [
+      "7ef35e642d8d885e0bc87b33f8ff10e1480eba1db62ef6d2cfcc438d5d12aa9f",
+      "7ef35e642d8d885e0bc87b33f8ff10e1480eba1db62ef6d2cfcc438d5d12aa9f"
+    ],
+    "projects": 2,
+    "foreign_key_violations": 0,
+    "older_app_on_upgraded_copy": {
+      "exit": 1,
+      "listened": false
+    },
+    "rollback": {
+      "candidate_restore_worker_status": "succeeded",
+      "pre_upgrade_backup_db_sha256": "8026d0bff1bf7149452199038080a4c677a9a0bf3eb78c76bdffcf43ff79a8b0",
+      "prior_version_read_and_write": "passed",
+      "restored_db_sha256_before_previous_app": "8026d0bff1bf7149452199038080a4c677a9a0bf3eb78c76bdffcf43ff79a8b0",
+      "restored_schema": "b14_condition_0041",
+      "verified_backup_files": 9
+    }
+  },
+  "next_version_backup": {
+    "projects": 8,
+    "row_fingerprints": 41,
+    "files": 311,
+    "bytes": 89151411,
+    "manifest_sha256": "4cc9a5311deff3f36ec7b319f0bd9b972c1d8d2674cc4db2f05ee2ec18c4fd6e",
+    "database_sha256": "3cc846535f07abcdc5c24f61aa18d781e9e94d8f40489de4243c310d502333d3",
+    "database_byte_equal_after_reopen": true
+  }
+}
