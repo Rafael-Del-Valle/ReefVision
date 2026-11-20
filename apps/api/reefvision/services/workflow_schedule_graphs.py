@@ -22,8 +22,9 @@ from reefvision.db.models import (
 )
 from reefvision.db.models.field_capture import FieldCaptureBatch
 from reefvision.db.models.workflow_schedule import WorkflowSchedule, WorkflowScheduleOccurrence
-from reefvision.domain.errors import ValidationError
+from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.schemas.workflow_graphs import WorkflowGraphPlanResponse, WorkflowPlanStep
+from reefvision.services.acquisition_sources import verify_scheduled_source
 from reefvision.services.ecology_event_summary import EVENT_SUMMARY_JOB
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
@@ -177,7 +178,12 @@ def _source_reference(
             return _reference(node, identifier, analysis.content_sha256)
         case "acquisition_source_capture":
             identifier = _identifier(parameters, "source_id")
-            return _reference(node, identifier, parameters.get("source_sha256"))
+            digest = _digest(parameters.get("source_sha256"), "source")
+            try:
+                source = verify_scheduled_source(session, project_id, identifier, digest)
+            except (NotFoundError, ConflictError) as exc:
+                raise ValidationError(str(exc)) from exc
+            return _reference(node, identifier, source.source_sha256)
         case "monitoring_assessment":
             identifier = _identifier(parameters, "rule_id")
             return _reference(node, identifier, parameters.get("rule_sha256"))

@@ -48,6 +48,7 @@ WorkflowDataType = Literal[
     "research_report_figure",
     "acquisition_quality_result",
     "field_capture_reconciliation",
+    "acquisition_capture_receipt",
     "workflow_schedule_receipt",
     "scientific_comparison_report",
     "ecology_measurement_candidates",

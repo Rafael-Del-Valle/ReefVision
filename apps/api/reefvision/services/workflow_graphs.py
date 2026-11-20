@@ -203,6 +203,8 @@ _ACTIONS: dict[str, str] = {
     "research_publication_figure": "Create or reopen a figure and table with its source.",
     "image_acquisition_quality": "Measure acquisition quality and retain reviewable image flags.",
     "field_capture_reconcile": "Reconcile the sealed field batch and retain its review receipt.",
+    "acquisition_source_capture": "Capture one observation from a pinned acquisition source.",
+    "acquisition_capture_replay": "Read one preserved observation from its acquisition receipt.",
     "workflow_schedule_receipt": "Verify one completed schedule occurrence and its artifacts.",
     "temporal_reefpose_dataset": "Freeze or load a recording-group-split temporal pose dataset.",
     "temporal_reefpose_training": "Train or replay a native temporal pose checkpoint.",
