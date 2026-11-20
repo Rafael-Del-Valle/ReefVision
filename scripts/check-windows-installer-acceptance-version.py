@@ -251,6 +251,19 @@ def _check_split_workflow(workflow: str, version: str) -> list[str]:
                 "Clean-install job is missing installed workspace acceptance",
             )
         )
+    if version == "1.7.0":
+        errors.extend(
+            _missing(
+                clean,
+                (
+                    "-ScheduleWorkflowAcceptance",
+                    ".artifacts/windows-clean-acceptance-*/schedule-restart-evidence.json",
+                    ".artifacts/windows-clean-acceptance-*/schedule-*-playwright.json",
+                    ".artifacts/windows-clean-acceptance-*/schedule-*-playwright/**/schedule-proof.json",
+                ),
+                "Clean-install job is missing the hosted schedule restart acceptance",
+            )
+        )
     for name, job in ((_BUILD_JOB, build), (_CLEAN_JOB, clean), (_UPGRADE_JOB, upgrade)):
         errors.extend(
             _missing(
