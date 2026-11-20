@@ -28,7 +28,8 @@ from create_windows_qc_history_controls import (
     verify_original_api,
 )
 
-CURRENT = "b16_integrated_0001"
+CURRENT_VERSION = "1.7.0"
+CURRENT = "b17_workflows_0001"
 PREVIOUS = "b15_integrated_0002"
 
 
@@ -354,7 +355,7 @@ def exercise(
         )
     with (
         sidecar(candidate, updated, logs, f"{history}-upgrade") as launched,
-        ready(*launched, version="1.6.0", head=CURRENT) as api,
+        ready(*launched, version=CURRENT_VERSION, head=CURRENT) as api,
     ):
         verify_original_api(api, history, ref)
     assert inspect_database(updated / DATABASE, fingerprints) == (CURRENT, fingerprints)
@@ -362,14 +363,14 @@ def exercise(
     upgraded_sha = sha256(updated / DATABASE)
     with (
         sidecar(candidate, updated, logs, f"{history}-reopen") as launched,
-        ready(*launched, version="1.6.0", head=CURRENT) as api,
+        ready(*launched, version=CURRENT_VERSION, head=CURRENT) as api,
     ):
         verify_original_api(api, history, ref)
     assert sha256(updated / DATABASE) == upgraded_sha
 
     with (
         sidecar(candidate, updated, logs, f"{history}-backup-restore", safe=False) as launched,
-        ready(*launched, version="1.6.0", head=CURRENT) as api,
+        ready(*launched, version=CURRENT_VERSION, head=CURRENT) as api,
     ):
         restored, backup = backup_and_restore(api, updated)
     assert media(restored) == baseline[2]
@@ -390,7 +391,7 @@ def exercise(
     )
     with (
         sidecar(candidate, restored, logs, f"{history}-open-recovery") as launched,
-        ready(*launched, version="1.6.0", head=CURRENT) as api,
+        ready(*launched, version=CURRENT_VERSION, head=CURRENT) as api,
     ):
         verify_original_api(api, history, ref)
     assert sha256(restored / DATABASE) == backup["restored_database_sha256"]
