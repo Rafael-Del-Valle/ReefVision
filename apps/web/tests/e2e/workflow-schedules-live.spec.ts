@@ -315,7 +315,10 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
     await page
       .getByLabel("Minimum free storage (bytes)")
       .fill(String(minimumFreeBytes));
-    const date = new Date(Date.now() + offset).toISOString().slice(0, 19);
+    const date = new Date(Date.now() + offset)
+      .toISOString()
+      .slice(0, 19)
+      .replace(/:00$/, "");
     await page.getByLabel("First due (UTC)").fill(date);
     return date;
   }
@@ -538,17 +541,21 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
   await expect(
     page.getByText("review_queue_reference", { exact: true }),
   ).toBeVisible();
+  const queueId = String(artifact.payload_json.queue_id);
+  const queueResponse = page.waitForResponse(
+    (response) =>
+      response.url().split("?")[0] === `${api}/review-queues/${queueId}/items`,
+  );
   await page
     .getByRole("button", { name: "Open generated review queue" })
     .click();
-  await expect(page.getByText("Rank #1", { exact: true })).toBeVisible();
-  await expect(page.getByText("Rank #2", { exact: true })).toBeVisible();
-  const queueId = String(artifact.payload_json.queue_id);
+  const ranks = page.locator(".dashboard-card").filter({
+    has: page.getByRole("heading", { name: "Ranked images", exact: true }),
+  });
+  await expect(ranks.getByText("Rank #1", { exact: true })).toBeVisible();
+  await expect(ranks.getByText("Rank #2", { exact: true })).toBeVisible();
   const ranked = (
-    await checked<{ items: ReviewQueueItem[] }>(
-      await page.request.get(`${api}/review-queues/${queueId}/items`),
-      200,
-    )
+    await checked<{ items: ReviewQueueItem[] }>(await queueResponse, 200)
   ).items;
   expect(ranked.map((item) => item.image_id).sort()).toEqual(
     fixture.images.map(({ id }) => id).sort(),
