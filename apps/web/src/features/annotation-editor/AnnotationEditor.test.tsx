@@ -871,11 +871,15 @@ describe("AnnotationEditor", () => {
       clientX: 150,
       clientY: 150,
     });
-    fireEvent.pointerUp(window, {
+    // jsdom's MouseEvent constructor rejects Infinity. Inject a malformed
+    // restored/synthetic event after constructing a valid pointer event.
+    const malformedRelease = new PointerEvent("pointerup", {
       pointerId: 53,
-      clientX: Infinity,
+      clientX: 200,
       clientY: 200,
     });
+    Object.defineProperty(malformedRelease, "clientX", { value: Infinity });
+    fireEvent(window, malformedRelease);
     expect(within(objects).getAllByRole("option")).toHaveLength(1);
     expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
   });
@@ -3218,7 +3222,8 @@ describe("AnnotationEditor", () => {
       clientX: 145,
       clientY: 185,
     });
-    fireEvent.pointerUp(window);
+    // Release at the initiating point: selection must not move the box.
+    fireEvent.pointerUp(window, { clientX: 145, clientY: 185 });
     await userEvent.click(
       screen.getByRole("button", { name: "SAM box prompt" }),
     );
@@ -3308,7 +3313,8 @@ describe("AnnotationEditor", () => {
       clientX: 145,
       clientY: 185,
     });
-    fireEvent.pointerUp(window);
+    // Release at the initiating point: selection must not move the box.
+    fireEvent.pointerUp(window, { clientX: 145, clientY: 185 });
     await userEvent.click(
       screen.getByRole("button", { name: "SAM box prompt" }),
     );
