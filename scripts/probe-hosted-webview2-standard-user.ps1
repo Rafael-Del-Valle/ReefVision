@@ -181,6 +181,7 @@ try {
         throw 'The exact packaged sidecar did not bind to the designated test profile.'
     }
     $env:REEFVISION_GUIDED_TEST_API = $api
+    $env:REEFVISION_SPATIAL_WEBVIEW2_ARTIFACTS_DIR = $account.browser_artifacts
     try {
         $env:REEFVISION_SPATIAL_WEBVIEW2_ENDPOINT = Wait-ReefVisionWebView2DebugEndpoint -Port $debugPort -DesktopProcessId $desktop.Id -FailureEvidencePath (Join-Path $EvidenceRoot 'spatial-webview2-startup.log') -AttachmentEvidencePath (Join-Path $EvidenceRoot 'spatial-webview2-attached.log') -ExpectedBrowserSid $sid
     } catch {
