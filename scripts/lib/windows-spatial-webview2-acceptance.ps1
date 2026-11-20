@@ -196,6 +196,16 @@ function Wait-ReefVisionWebView2DebugClosure([int]$Port) {
     throw "WebView2 debugging was still listening on port $Port after the acceptance desktop closed."
 }
 
+function Get-ReefVisionInstalledJourneyEvidence([scriptblock]$RunJourney) {
+    try {
+        $result = & $RunJourney
+        $detail = "Installed WebView2 passed $($result.completed_journeys) desktop journeys. Two synthetic originals were reviewed and compared in graph $($result.graph_record_id), runs $($result.first_run_id) and $($result.replay_run_id), with downloaded comparison SHA-256 $($result.artifact.payload_sha256)."
+        return New-ReefVisionEvidenceResult -Status 'PASS' -Detail $detail
+    } catch {
+        return New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
+    }
+}
+
 function Invoke-ReefVisionSpatialWebView2Acceptance {
     param(
         [Parameter(Mandatory = $true)][string]$NodePath,

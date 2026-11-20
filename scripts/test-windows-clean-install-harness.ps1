@@ -17,6 +17,17 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
     $script:passed++
 }
 
+$journeyFailure = Get-ReefVisionInstalledJourneyEvidence { throw 'Fixture WebView2 attach timeout.' }
+Assert-True ($journeyFailure.status -eq 'FAIL') 'A failed installed journey must remain failed while the independent MSI lifecycle checks run.'
+Assert-True ($journeyFailure.detail -eq 'Fixture WebView2 attach timeout.') 'The retained journey failure must identify the original error.'
+$journeySuccess = Get-ReefVisionInstalledJourneyEvidence {
+    [pscustomobject]@{
+        completed_journeys = 8; graph_record_id = 'graph-id'; first_run_id = 'first'; replay_run_id = 'second'
+        artifact = [pscustomobject]@{ payload_sha256 = 'comparison-digest' }
+    }
+}
+Assert-True ($journeySuccess.status -eq 'PASS' -and $journeySuccess.detail.Contains('comparison-digest')) 'Successful journeys must retain the exported result identity.'
+
 $defaultData = Join-Path $env:APPDATA 'org.reefvision.desktop'
 $OldConfig = $env:REEFVISION_CONFIG_DIR
 $HadConfig = Test-Path Env:REEFVISION_CONFIG_DIR
@@ -295,6 +306,9 @@ foreach ($lineageParameter in @(
     Assert-True ($acceptanceParameterNames -contains $lineageParameter) "Installed lineage CLI is missing -$lineageParameter."
 }
 $acceptanceScript = Get-Content -LiteralPath $acceptancePath -Raw
+$retentionCheck = $acceptanceScript.IndexOf('Isolated project data remained after uninstall.')
+$journeyFailureGate = $acceptanceScript.IndexOf('throw $report.spatial_workflow.detail')
+Assert-True ($retentionCheck -ge 0 -and $journeyFailureGate -gt $retentionCheck) 'A failed installed journey must still fail acceptance after uninstall and data retention are recorded.'
 
 # Exercise the actual rejection probe without starting or killing a desktop.
 & {

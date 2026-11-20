@@ -573,7 +573,9 @@ try {
                 $spatialPort = Wait-BackendPort -Path (Join-Path $SpatialDataRoot 'runtime\backend-port.txt') -DesktopProcess $spatialDesktop -BackendLogPath (Join-Path $SpatialDataRoot 'logs\backend.log')
                 $spatialApi = "http://127.0.0.1:$spatialPort/api/v1"
                 $null = Assert-AcceptancePackagedBackend -Api $spatialApi -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision
-                $result = Invoke-ReefVisionSpatialWebView2Acceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id
+                $report.spatial_workflow = Get-ReefVisionInstalledJourneyEvidence {
+                    Invoke-ReefVisionSpatialWebView2Acceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id
+                }
             } finally {
                 try {
                     $spatialDesktop.Refresh()
@@ -587,11 +589,11 @@ try {
                 }
                 Wait-ReefVisionWebView2DebugClosure -Port $debugPort
             }
-            $report.spatial_workflow = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed WebView2 passed $($result.completed_journeys) desktop journeys. Two synthetic originals were reviewed and compared in graph $($result.graph_record_id), runs $($result.first_run_id) and $($result.replay_run_id), with downloaded comparison SHA-256 $($result.artifact.payload_sha256)."
         } catch {
             $report.spatial_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
             throw
         }
+        Save-Report
     }
 
     $desktop = Start-AcceptanceDesktop
@@ -993,6 +995,9 @@ try {
         $report.data_retention = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Isolated project data remained after uninstall.'
     } else {
         $report.data_retention = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'Uninstall was skipped.'
+    }
+    if ($report.spatial_workflow.status -eq 'FAIL') {
+        throw $report.spatial_workflow.detail
     }
 } catch {
     $report.failure_reason = $_.Exception.Message
