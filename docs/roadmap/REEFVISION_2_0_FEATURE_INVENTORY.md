@@ -2,17 +2,17 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T10:49:44Z`
+Updated: `2026-11-20T11:43:51Z`
 Candidate target: `2.0`
 
 ## Status summary
 
 | Status | Count |
 | --- | ---: |
-| blocked | 16 |
+| blocked | 17 |
 | explicitly_deferred | 4 |
-| in_progress | 29 |
-| verified | 28 |
+| in_progress | 26 |
+| verified | 30 |
 
 ## Features
 
@@ -58,11 +58,11 @@ Candidate target: `2.0`
 | 1.4 | Bounded OBJ/PLY/GLB mesh and point-cloud preview | verified | Open project → Video & automation → Workflow builder → Project-owned 3D originals |
 | 1.4 | Persistent versioned 3D project assets | verified | Open project → Video & automation → Workflow builder → Project-owned 3D originals → Import 3D original |
 | 1.5 | Study setup, treatments, sampling units, exclusions, and statistical plan | blocked | Research → Study design |
-| 1.5 | Offline field capture and later project reconciliation | in_progress | Project → Field capture |
-| 1.5 | Local model catalog, runtime selection, and prompt-assisted configuration | in_progress | Models & AI → Model Hub |
+| 1.5 | Offline field capture and later project reconciliation | blocked | Project → Field capture |
+| 1.5 | Local model catalog, runtime selection, and prompt-assisted configuration | verified | Models & AI → Model Hub |
 | 1.5 | Unified detector, mask, pose, tracking, and event comparison | blocked | Models & AI → Model comparison |
 | 1.5 | Early local provider and plugin foundations | verified | Models & AI → Providers |
-| 1.5 | Complete research reproducibility package | in_progress | Research → Export reproducibility package |
+| 1.5 | Complete research reproducibility package | verified | Research → Export reproducibility package |
 | 1.5 | Reviewer roles, independent queues, adjudication, and agreement | blocked | Review → Reviewer lab |
 | 1.6 | Safe class management after use | in_progress | Annotate → Classes |
 | 1.6 | Class visibility, dense annotation editing, and large-gallery performance | in_progress | Annotate → View controls and gallery |
@@ -759,7 +759,7 @@ Evidence:
 - `source`: The previous desktop returned zero for a closed nearly planar tetrahedron with nonzero volume within the floating-point range. Both windings now agree with an independent exact rational oracle, the exactly planar control remains zero, and standalone plus two saved workflow runs preserve the provisional measure and its source. — `apps/api/reefvision/tests/test_spatial_mesh_enclosed_volume_v14.py` (`rv14-geometric-measurements-recover-volume-cancellation`)
 - `browser`: Workflow Builder exposes a project-owned original picker, scale, calibration evidence, uncertainty, specimen/observation/frame context, and an explicit warning that geometric routes are not anatomical branch lengths. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-geometric-guided-ui`)
 - `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `physical_hardware`: In the packaged 1.5 WebView2, both OBJ windings and a double-precision PLY yielded 3.7007434154171883e-9 cubic metres at fixture scale. The planar control withheld the value. An actual reopen reproduced all four artifact checksums. Physical receipt SHA-256 91cc3210fe28a508a20cea48fb60ffdb988648389071357938184997870c54b7. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv14-physical-volume-3c8e2d070`)
 - `representative_data`: none recorded
 
 ### rv14-lineage-upgrade: Validated 1.3 to 1.4 ancestry, migration, exchange, and rollback
@@ -791,6 +791,7 @@ Evidence:
 - `windows_installed`: On a disposable profile, the official 1b0f29cff sidecar migrated the accepted 1.3 fixture, exchanged its reviewed data and model hash, and returned HTTP 200 for managed restore. The original 1.3 binary preserved the upgraded database on refusal and wrote successfully after recovery. All five authenticated backup entries were rehashed. — `docs/REEFVISION_1.4.0_REPORT.md#official-windows-build-and-recovery-at-1b0f29cff` (`rv14-official-f440-rich-restore`)
 - `windows_installed`: The official 1b0f29cff six-CAB MSI passed ten GUI journeys and all fourteen exercised install, restart, Exchange, uninstall and retention stages using its ordinary Windows profile. Byte-verified native downloads succeeded with the default inspector open. The four predecessor upgrades passed separately. Representative prior-user profiles remain open. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44693974894` (`rv14-ordinary-profile-installed-ten`)
 - `windows_installed`: Official 1.4 MSI plus six cabinets. Clean install, backup recovery and four supported upgrades passed on disposable generated profiles. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44697377337` (`rv14-lineage-upgrade-msi-fb2276c87`)
+- `windows_installed`: The 1.5 MSI passed clean installation, upgrades from published 1.0.3 and validated 1.4 and 1.3, and both historical 1.4 draft schema fixtures. A separately restored verified backup reopened in the older application. A generated two-project fixture on the physical host preserved both checkpoints and all seven project files. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547` (`rv14-windows-lineage-3c8e2d070`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -882,7 +883,7 @@ Evidence:
 - `source`: none recorded
 - `browser`: none recorded
 - `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `physical_hardware`: Windows 11 build 26300 reported VerifiedAndReputablePolicyState 0, off. The exact MSI c6e92040617eb055c4ee62afcca86af709ebe73d02602165d474e1259582e05e, desktop executable and sidecar were unsigned. Enforcement acceptance requires a machine with that policy enabled. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv14-policy-3c8e2d070`)
 - `representative_data`: none recorded
 
 ### rv14-spatial-preview: Bounded OBJ/PLY/GLB mesh and point-cloud preview
@@ -945,41 +946,43 @@ Evidence:
 
 - `source`: 15 integrated source tests covered freeze, original-growth recomputation, two successive Exchange copies, new revisions and tamper rejection. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/2e22871795784f528c9ef27511d7cd93f9d01afb` (`rv15-experimental-design-design-exchange`)
 - `browser`: Fixture roster and calibrated two-visit analysis frozen, reopened, exported and replayed twice. Receipt SHA-256 20a008c011cd3987e63588134af72e125867746f31a23a1f605e4b5a57aa0577. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/95` (`rv15-experimental-design-design-replay`)
-- `windows_installed`: none recorded
+- `windows_installed`: Standard-user WebView2 on the clean Windows install from 3c8e2d070. The researcher froze a prospective roster, bound reviewed measures, reopened it and obtained matching saved runs. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547/job/136258835916` (`rv15-experimental-design-installed-3c8e2d070`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
 ### rv15-field-capture: Offline field capture and later project reconciliation
 
 - Target: `1.5`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv14-versioned-spatial-assets`, `rv13-acquisition-qc`
 - Entry point: Project → Field capture
 - Workflow Builder: `required`
+- Missing input: Authorized original field image/video and companion field log with a documented device clock or unknown clock state, source identity, duplicate and conflict for independent comparison. Use Data & annotation → Field capture.
 
 Acceptance checks:
 
-- **in_progress** — Capture media/metadata offline, preserve clocks/source hashes, reconcile duplicates, and retain conflicts for review. (`rv15-field-capture-check`)
+- **verified** — Capture media/metadata offline, preserve clocks/source hashes, reconcile duplicates, and retain conflicts for review. (`rv15-field-capture-check`)
+- **blocked** — Reconcile an authorized real offline acquisition batch against its independent field log and clock basis. (`rv15-field-capture-field-acceptance`)
 
 Evidence:
 
 - `source`: PNG/MP4 bytes, known and unknown clocks, reviewed conflicts, canonical media and the original report checksum survived two project copies. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/d3ef97c768e41c9c6b910da90af0fea6308cce3a` (`rv15-field-capture-field-exchange`)
 - `browser`: Project Field capture imported, reconciled and replayed a transferred batch twice. Receipt SHA-256 17280d51612a426c43902079c0e72db3637514765d87b31b05b83c8012ee341b. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/95` (`rv15-field-capture-field-replay`)
-- `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `windows_installed`: Standard-user WebView2 on the clean Windows install from 3c8e2d070. The researcher imported offline PNG/MP4 fixtures, retained clock uncertainty and a conflict decision, then replayed the reconciled batch twice. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547/job/136258835916` (`rv15-field-capture-installed-3c8e2d070`)
+- `physical_hardware`: The physical Windows desktop preserved the generated field batch after restore and replay, with signed report SHA-256 b83b00e9035c7dbdc4a98b0325ada2d8082d6d2daf2358c059a690e43f3f15ed. Official MSI SHA-256 c6e92040617eb055c4ee62afcca86af709ebe73d02602165d474e1259582e05e. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv15-field-capture-physical-3c8e2d070`)
 - `representative_data`: none recorded
 
 ### rv15-model-catalog-runtime: Local model catalog, runtime selection, and prompt-assisted configuration
 
 - Target: `1.5`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv15-provider-foundations`
 - Entry point: Models & AI → Model Hub
 - Workflow Builder: `required`
 
 Acceptance checks:
 
-- **in_progress** — Select explicit local models/runtimes, retain hashes and compatibility, and treat generated configuration as reviewable input. (`rv15-model-catalog-runtime-check`)
+- **verified** — Select explicit local models/runtimes, retain hashes and compatibility, and treat generated configuration as reviewable input. (`rv15-model-catalog-runtime-check`)
 
 Evidence:
 
@@ -987,8 +990,8 @@ Evidence:
 - `source`: A marked early 1.5 model-review profile upgraded through the desktop migrator twice. Its record UUIDs, UTC timestamp, original signed snapshot and checkpoint SHA-256 survived. Database foreign-key checks found zero violations. A copy with unprovable source identity rolled back without changes. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/ebce490b1e153fcdaf84c0b4c7c13721b12b7b6f` (`rv15-model-catalog-runtime-early-schema-recovery`)
 - `source`: The earlier original signed runtime selection reopened with its exact digest through two project restorations. A separate current review was required to infer. Remapped project, model and classes were verified before execution. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv15-model-catalog-runtime-legacy-model-review`)
 - `browser`: Direct Model Hub inference and two Detection Inference graph runs matched the source-pixel boxes, labels and scores for all nine CPU and ten CUDA predictions to six decimals on independently trained fixture checkpoints. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/95` (`rv15-model-catalog-runtime-direct-graph-replay`)
-- `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `windows_installed`: Standard-user WebView2 on the clean Windows install from 3c8e2d070. The researcher inspected and approved a local runtime configuration, ran direct inference and repeated the selection in a saved graph. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547/job/136258835916` (`rv15-model-catalog-runtime-installed-3c8e2d070`)
+- `physical_hardware`: Packaged CUDA on the physical RTX 3090. Direct inference and two saved runs agreed on 9 proposals, with SHA-256 4428cc1865bc9b57380597ea920b021630cd0640dbca579c5db107d58b31e812. Official MSI SHA-256 c6e92040617eb055c4ee62afcca86af709ebe73d02602165d474e1259582e05e. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv15-model-catalog-runtime-physical-3c8e2d070`)
 - `representative_data`: none recorded
 
 ### rv15-model-comparison: Unified detector, mask, pose, tracking, and event comparison
@@ -1013,7 +1016,7 @@ Evidence:
 - `browser`: Models & AI compared two locally trained detectors on three originals in two frozen groups, exported both formats, reopened the differing original by hash and ran the saved comparison twice. The restored native evidence also covers recorded pose, tracking and event comparisons. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/8155cc78a07081cdecc5bfd780aa713c8615b0d6` (`rv15-model-comparison-paired-disagreement-editor`)
 - `browser`: In Chromium the project Model comparison workspace accepted both independently scored model reports, decoded the correct H.264 originals, and reopened a pose disagreement at frame 2 and an event disagreement in another video at 0.2 seconds. Both tested original hashes matched the frozen reference. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv15-model-comparison-playable-video-seek`)
 - `browser`: A real Chromium project compared two independently scratch-trained CPU segmentation models on six untouched images in two frozen groups. The models returned 12 and 46 polygons and missed all reference instances at the chosen match threshold. The direct report, exports and two saved runs retained the same result. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv15-model-comparison-actual-instance-masks`)
-- `windows_installed`: none recorded
+- `windows_installed`: Standard-user WebView2 on the clean Windows install from 3c8e2d070. The researcher opened an original from the paired-group disagreement report, exported the results and repeated the saved comparison. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547/job/136258835916` (`rv15-model-comparison-installed-3c8e2d070`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1040,20 +1043,20 @@ Evidence:
 ### rv15-reproducibility-package: Complete research reproducibility package
 
 - Target: `1.5`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv15-experimental-design`, `rv15-reviewer-lab`, `rv15-model-comparison`
 - Entry point: Research → Export reproducibility package
 - Workflow Builder: `required`
 
 Acceptance checks:
 
-- **in_progress** — Export methods, study/review/model identities, immutable inputs, environments, exclusions, results, and verification manifests; reject tampering on import. (`rv15-reproducibility-package-check`)
+- **verified** — Export methods, study/review/model identities, immutable inputs, environments, exclusions, results, and verification manifests; reject tampering on import. (`rv15-reproducibility-package-check`)
 
 Evidence:
 
 - `source`: Research export combines the frozen design, sealed independent review, paired model comparison, model hashes, methods, environment and exclusions with a native project archive. Tests cover repeated restore, weights and media omissions, aliased field originals, and rejection of inconsistent reports before import. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/d126bff406518811490c4abdb177aa73d45c2c15` (`rv15-reproducibility-package-offline-research-archive`)
 - `browser`: Six ordinary project journeys completed. The 64,711-byte Research ZIP contained none of the omitted checkpoint bytes in any of its 112 native archive members. Two original saved graph runs and a third after import returned the same payload SHA-256 fdfcb169edd1a8e6c67aaddcbb979e01470286afd53a07e2b8901bca62e9d84a. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/74645f2dff3e369f9d05152e0b7841e0afc65f8d` (`rv15-reproducibility-package-download-inspect-reopen`)
-- `windows_installed`: none recorded
+- `windows_installed`: Standard-user WebView2 on the clean Windows install from 3c8e2d070. The downloaded Research package bound design, role-attributed reviews and model results. Two saved runs and a restored run reproduced the proof. A shared original occupied one native archive member. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547/job/136258835916` (`rv15-reproducibility-package-installed-3c8e2d070`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1074,7 +1077,7 @@ Evidence:
 
 - `source`: Separate reviewer roles submitted independent decisions, followed by attributed adjudication and an immutable agreement report. — `https://github.com/Rafael-Del-Valle/ReefVision/commit/ac87ce0aca0766686af72be34be6c3d71ee196ef` (`rv15-reviewer-lab-blinded-ledger`)
 - `browser`: Two blinded fixture roles agreed on one of two images. Cohen's kappa was zero. Two saved replays preserved the sealed result. Receipt SHA-256 71f638f5ed0ddbf28c99b3292d55a8f8fc1b065c55b5fc6b54c4d59ce809f0ed. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/95` (`rv15-reviewer-lab-role-replay`)
-- `windows_installed`: none recorded
+- `windows_installed`: Standard-user WebView2 on the clean Windows install from 3c8e2d070. The reviewer workspace retained independent signed decisions and adjudication, then reopened its agreement report. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547/job/136258835916` (`rv15-reviewer-lab-installed-3c8e2d070`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
