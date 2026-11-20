@@ -554,7 +554,7 @@ export function ReviewQueueDashboard({
   );
 
   return (
-    <section className="dashboard-panel">
+    <section className="dashboard-panel review-queue-dashboard">
       <div className="section-heading">
         <div>
           <p className="eyebrow">Guided review</p>

@@ -791,22 +791,22 @@ textarea {
   margin-top: 1rem;
 }
 
-.quality-control-dashboard {
-  container: quality-control / inline-size;
+:is(.quality-control-dashboard, .review-queue-dashboard) {
+  container: review-dashboard / inline-size;
 }
 
 .quality-control-dashboard .scientific-table-scroll {
   overflow-x: auto;
 }
 
-@container quality-control (max-width: 43rem) {
-  .quality-control-dashboard .dashboard-layout {
+@container review-dashboard (max-width: 43rem) {
+  :is(.quality-control-dashboard, .review-queue-dashboard) .dashboard-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-@container quality-control (max-width: 30rem) {
-  .quality-control-dashboard .dashboard-row {
+@container review-dashboard (max-width: 30rem) {
+  :is(.quality-control-dashboard, .review-queue-dashboard) .dashboard-row {
     grid-template-columns: minmax(0, 1fr);
   }
 }

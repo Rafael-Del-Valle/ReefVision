@@ -18,6 +18,35 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
     $script:passed++
 }
 
+& {
+    $script:backupAttempts = 0
+    $script:unrelatedConflict = $false
+    function Invoke-RestMethod {
+        param($Uri, $Method, $ContentType, $Body, [switch]$NoProxy, $TimeoutSec,
+            [switch]$SkipHttpErrorCheck, $StatusCodeVariable)
+        if ($Method -ne 'Post' -or $Uri -ne 'http://127.0.0.1:12345/api/v1/backups') {
+            throw 'Unexpected fixture request.'
+        }
+        $script:backupAttempts++
+        if ($script:backupAttempts -eq 1) {
+            Set-Variable -Scope 1 -Name $StatusCodeVariable -Value 409
+            $detail = if ($script:unrelatedConflict) { 'Different conflict' } else {
+                'Backups require an idle background queue; wait for current jobs to finish first'
+            }
+            return [pscustomobject]@{detail=$detail}
+        }
+        Set-Variable -Scope 1 -Name $StatusCodeVariable -Value 201
+        return [pscustomobject]@{job=[pscustomobject]@{id='only-created-job'}}
+    }
+
+    $created = New-ReefVisionAcceptanceBackup -Api 'http://127.0.0.1:12345/api/v1'
+    Assert-True ($created.job.id -ceq 'only-created-job' -and $script:backupAttempts -eq 2) 'Upgrade must wait for the predecessor background queue before snapshotting it.'
+    $script:backupAttempts = 0
+    $script:unrelatedConflict = $true
+    Assert-Throws { New-ReefVisionAcceptanceBackup -Api 'http://127.0.0.1:12345/api/v1' } 'Another backup conflict must be reported immediately.'
+    Assert-True ($script:backupAttempts -eq 1) 'Only the explicit idle-queue conflict is retryable.'
+}
+
 $journeyFailure = Get-ReefVisionInstalledJourneyEvidence { throw 'Fixture WebView2 attach timeout.' }
 Assert-True ($journeyFailure.status -eq 'FAIL') 'A failed installed journey must remain failed while the independent MSI lifecycle checks run.'
 Assert-True ($journeyFailure.detail -eq 'Fixture WebView2 attach timeout.') 'The retained journey failure must identify the original error.'

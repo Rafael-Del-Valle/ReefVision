@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T15:39:10Z`
+Updated: `2026-11-20T16:25:25Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -609,6 +609,7 @@ Evidence:
 - `physical_hardware`: Two source CUDA studies used frozen, disjoint animal and recording declarations. The five-group study scored all 240 coordinates, seven complete reference events and 120 common frames. The two-group study retained the unsupported anatomical frames and unavailable event timing. — `docs/REEFVISION_1_3_HELDOUT_AGREEMENT.md#five-held-out-synthetic-recordings` (`rv13-declared-disjoint-cuda`)
 - `physical_hardware`: The 92e355b6a packaged RTX 3090 worker trained from scratch and scored 240 of 240 landmark positions and 120 of 120 shared anatomical frames on five separately generated held-out recording/animal groups. Mean errors were 5.575 and 4.006 px. Of seven complete reference events, frame missed seven with 15 extra. Temporal missed four with 18 extra. Independent animal labels and field acceptance remain open. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/92#issuecomment-7032104053` (`rv13-packaged-frozen-five`)
 - `physical_hardware`: Engineering evidence on five independent generated groups in the official 1.5 package. All 240 coordinates were scored. Mean frame-only and refined errors were 5.575 and 4.006 px. Against seven synthetic events, frame-only missed seven and added fifteen. The refined model missed four and added eighteen. Representative independent labels and thresholds remain open. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv13-representative-temporal-comparison-physical-3c8e2d070`)
+- `physical_hardware`: The native RTX 3090 fixture used separate development and held-out groups. Across five test recordings, 120 frames and 240 coordinates, frame-only and temporal mean errors were 5.575 and 4.006 source pixels. Matched events rose from 0 to 3 of seven, missed events fell from 7 to 4 and extra events rose from 15 to 18. Independent field acceptance remains open. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv13-representative-temporal-comparison-physical-83b0`)
 - `representative_data`: none recorded
 
 ### rv13-study-assignments: Reviewed study, treatment, site, tank, and sampling-unit assignments
@@ -1123,7 +1124,7 @@ Evidence:
 - `source`: Thirty-five backend checks cover class use, archived classes, reassignment and protected historical records. — `docs/validation/research-workflows-1-6.json` (`rv16-class-safe-writes`)
 - `browser`: Classes retained the frozen manifest and exported YOLO mapping after a reviewed reassignment and reopen. Polygon and image-level references prevented deletion. — `docs/validation/research-workflows-1-6.json` (`rv16-class-frozen-export`)
 - `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `physical_hardware`: In native Classes, confirmed reassignment advanced the live annotation from revision 2 to 3. Mask and image-classification references remained protected. The frozen dataset manifest and YOLO mapping survived reopening. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-class-management-physical-83b0`)
 - `representative_data`: none recorded
 
 ### rv16-class-visibility-dense-editing: Class visibility, dense annotation editing, and large-gallery performance
@@ -1143,7 +1144,7 @@ Evidence:
 - `source`: 175 video tests exercised draft and persisted editing. A source-built WebView2 journey preserved a hidden mask and untouched keyframe and rejected a stale revision. — `docs/validation/research-workflows-1-6.json` (`rv16-video-edits-source`)
 - `browser`: On 5,000 decoded fixture images, 24 cards appeared in 106.6 ms and the first thumbnail in 143.1 ms. The 1,500-box editor supported selection, hide, solo, undo, redo and reopen. — `docs/validation/research-workflows-1-6.json` (`rv16-gallery-canvas`)
 - `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `physical_hardware`: Physical WebView2 opened 24 of 5,000 gallery images in 75.8 ms. The focused image and filmstrip decoded in 207.9 ms. A new annotation survived save and reopen with 1,500 prior boxes and 750 hidden boxes preserved. The separate image, mask and video editing trials produced explicit 409 conflicts and preserved drafts on Cancel. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-class-visibility-dense-editing-physical-83b0`)
 - `representative_data`: none recorded
 
 ### rv16-lineage-reconciliation: Independent migration-lineage 0038 reconciliation
@@ -1163,7 +1164,7 @@ Evidence:
 - `source`: Six populated profiles from original scientific, QC and 1.5 software retained all original columns, rows, file hashes and foreign keys across migration and two opens. Seventy migration, backup and compatibility tests passed. — `docs/validation/research-workflows-1-6.json` (`rv16-independent-0038-families`)
 - `browser`: none recorded
 - `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `physical_hardware`: Both 0038 database histories and QC revisions 0039 through 0041 retained all prior table fingerprints, ID bindings and managed files. Five verified backup restorations rehashed 42 files. The older native readers reopened the backups. A mixed profile refused startup byte-identically. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-lineage-reconciliation-physical-83b0`)
 - `representative_data`: none recorded
 
 ### rv16-onboarding-installer: First-run onboarding and Windows usability acceptance
@@ -1183,7 +1184,7 @@ Evidence:
 - `source`: none recorded
 - `browser`: At 960 by 640 CSS pixels and 150% scale, a new researcher used the keyboard to create a project, imported an original, annotated, undid and redid, reviewed, reopened and downloaded YOLO. No external HTTP attempts were recorded. — `docs/validation/research-workflows-1-6.json` (`rv16-first-use-compact`)
 - `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `physical_hardware`: The native packaged first launch at 960 by 640 CSS pixels and emulated 150% scaling preserved keyboard focus and dismissal. The researcher imported image and video, edited, undid and redid, reviewed, exported YOLO and reopened. The browser attempted zero external HTTP requests. A separate eight-project 1.5 backup reopened with all 303 project files. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-onboarding-installer-physical-83b0`)
 - `representative_data`: none recorded
 
 ### rv16-qc-queues-bulk-retry: Prioritized QC queues, reviewer assignment, bulk actions, and idempotent retry
@@ -1203,7 +1204,7 @@ Evidence:
 - `source`: Seven Project Exchange tests verified stable retry identity, source ownership, damaged data refusal, and two saved frozen QC runs in each of two generations of imported projects. — `docs/validation/research-workflows-1-6.json` (`rv16-frozen-qc-exchange`)
 - `browser`: The ordinary Review workspace froze evidence, assigned and annotated items, bulk-started reviews and replayed the guided graph twice. A retry in a new backend process changed zero records. — `docs/validation/research-workflows-1-6.json` (`rv16-frozen-qc-review`)
 - `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `physical_hardware`: The packaged native Review workspace froze a ranked queue, assigned items and confirmed completion. Two saved runs executed. ZIP exchange preserved five ledger events, a keyed bulk request and two original images; a reopened graph completed in the restored project. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-qc-queues-bulk-retry-physical-83b0`)
 - `representative_data`: none recorded
 
 ### rv17-cross-project-monitoring: Local cross-project monitoring summaries

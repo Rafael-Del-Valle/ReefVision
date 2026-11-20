@@ -186,11 +186,64 @@ test("coordinates frozen QC review and reopens two saved workflow runs", async (
   const recordedNote = coordination
     .getByRole("listitem")
     .filter({ hasText: note });
-  const openRankOne = () =>
-    getRankedArticle(1)
-      .getByRole("button", { name: "Comments & assignments" })
-      .click();
-  await openRankOne();
+  const rankOneAction = getRankedArticle(1).getByRole("button", {
+    name: "Comments & assignments",
+    exact: true,
+  });
+  const openRankOne = () => rankOneAction.click();
+  // Keep the inspector present at an intermediate desktop width, where the
+  // review workspace receives much less width than the window.
+  const device = await page.context().newCDPSession(page);
+  try {
+    for (const viewport of [
+      { width: 1440, columns: 2 },
+      { width: 1056, columns: 1 },
+    ]) {
+      await device.send("Emulation.setDeviceMetricsOverride", {
+        width: viewport.width,
+        height: 760,
+        deviceScaleFactor: 1,
+        mobile: false,
+      });
+      await expect(
+        page.getByRole("complementary", { name: "Workspace inspector" }),
+      ).toBeVisible();
+      await rankOneAction.evaluate((button) =>
+        button.scrollIntoView({ block: "center", inline: "nearest" }),
+      );
+      const position = await rankOneAction.evaluate((button) => {
+        const bounds = button.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          bounds.x + bounds.width / 2,
+          bounds.y + bounds.height / 2,
+        );
+        return {
+          width: window.innerWidth,
+          columns: getComputedStyle(
+            button.closest(".dashboard-layout")!,
+          ).gridTemplateColumns.split(" ").length,
+          buttonRight: bounds.right,
+          stageRight: button
+            .closest(".rv-workbench-stage")!
+            .getBoundingClientRect().right,
+          clickedElement:
+            hit?.closest("aside, header")?.className ?? hit?.tagName,
+          pointerReachesAction: button.contains(hit),
+        };
+      });
+      expect(position.width).toBe(viewport.width);
+      expect(position.pointerReachesAction, JSON.stringify(position)).toBe(
+        true,
+      );
+      expect(position.columns).toBe(viewport.columns);
+      expect(position.buttonRight).toBeLessThanOrEqual(position.stageRight);
+    }
+    await openRankOne();
+    await expect(coordination).toBeVisible();
+  } finally {
+    await device.send("Emulation.clearDeviceMetricsOverride");
+    await device.detach();
+  }
   await coordination.getByLabel("Your local reviewer label").fill(reviewer);
   await coordination.getByLabel("Reviewer to assign").fill(assignee);
   await coordination

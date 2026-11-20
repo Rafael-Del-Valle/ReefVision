@@ -323,6 +323,26 @@ function Wait-ReefVisionAcceptanceJob {
     throw "$Operation job $JobId did not complete before the acceptance deadline."
 }
 
+function New-ReefVisionAcceptanceBackup {
+    param([Parameter(Mandatory)][string]$Api)
+
+    # Imports and their background work can finish at different times on the
+    # installed predecessor. Its idle-queue conflict guarantees no job was created.
+    $deadline = [DateTime]::UtcNow.AddMinutes(3)
+    do {
+        $response = Invoke-RestMethod -Uri "$Api/backups" -Method Post -ContentType 'application/json' `
+            -Body '{"notes":"Disposable pre-upgrade rollback witness"}' -NoProxy -TimeoutSec 10 `
+            -SkipHttpErrorCheck -StatusCodeVariable statusCode
+        if ($statusCode -eq 201) { return $response }
+        $detail = if ($response -and $response.PSObject.Properties['detail']) { [string]$response.detail } else { [string]$response }
+        if ($statusCode -ne 409 -or $detail -cne 'Backups require an idle background queue; wait for current jobs to finish first') {
+            throw "Pre-upgrade backup request returned HTTP $statusCode. $detail"
+        }
+        Start-Sleep -Milliseconds 300
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw 'The installed predecessor still has background work after three minutes. No pre-upgrade backup was created.'
+}
+
 function New-ReefVisionAcceptancePreUpgradeRecovery {
     param(
         [Parameter(Mandatory)][string]$Api,
@@ -339,8 +359,7 @@ function New-ReefVisionAcceptancePreUpgradeRecovery {
         $version.current_schema_revision -ne $InitialRevision -or $version.safe_mode) {
         throw 'The predecessor API does not own the expected disposable pre-upgrade profile.'
     }
-    $created = Invoke-RestMethod -Uri "$Api/backups" -Method Post -ContentType 'application/json' `
-        -Body '{"notes":"Disposable pre-upgrade rollback witness"}' -NoProxy -TimeoutSec 10
+    $created = New-ReefVisionAcceptanceBackup -Api $Api
     $backupJob = Wait-ReefVisionAcceptanceJob -Api $Api -JobId $created.job.id -Operation 'Pre-upgrade backup'
     $verify = Invoke-RestMethod -Uri "$Api/backups/$($created.backup.id)/verify" -Method Post -NoProxy -TimeoutSec 60
     if ($verify.status -ne 'valid' -or -not $verify.completion_marker_present -or
