@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from json import dumps
 from typing import cast
 
 import pytest
@@ -447,3 +448,50 @@ def test_inert_obj_metadata_keeps_standalone_and_workflow_measurements_identical
         item for item in detail["artifacts"] if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["payload_json"] == result
+@pytest.mark.parametrize(
+    "obj_text",
+    [
+        "# source has malformed \ud800 scalar\n" + OBJ,
+        "o coral-\udfff\n" + OBJ,
+        OBJ + "# trailing malformed \ud800\n",
+    ],
+)
+def test_unpaired_obj_unicode_surrogates_fail_closed(
+    client: TestClient, obj_text: str
+) -> None:
+    """Escaped invalid UTF-16 cannot become immutable UTF-8 mesh source bytes."""
+    with pytest.raises(ValueError, match="unpaired Unicode surrogate"):
+        parse_obj_triangles(obj_text)
+
+    project_id = str(create_project(client, "Malformed OBJ Unicode source")["id"])
+    # Ensure the invalid JSON string reaches the API as an escaped scalar.
+    # Depending on JSON-schema validation it can fail before or during OBJ parsing.
+    response = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-preview",
+        content=dumps({**PARAMS, "obj_text": obj_text}, ensure_ascii=True),
+        headers={"content-type": "application/json"},
+    )
+    assert response.status_code in (400, 422), response.text
+
+
+def test_obj_non_bmp_unicode_comment_remains_supported_in_saved_graph(
+    client: TestClient,
+) -> None:
+    """Valid Unicode labels remain inert; source identity stays provisional."""
+    obj_text = "# deepwater coral \U0001F419\n" + OBJ
+    assert parse_obj_triangles(obj_text) == parse_obj_triangles(OBJ)
+    project_id = str(create_project(client, "OBJ non-BMP metadata")["id"])
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-preview",
+        json={**PARAMS, "obj_text": obj_text},
+    )
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["provenance"]["calibration_verified"] is False
+    assert expected["provenance"]["specimen_identity_verified"] is False
+    detail = _run_saved(client, project_id, obj_text)
+    assert detail["run"]["status"] == "succeeded"
+    artifact = next(
+        item for item in detail["artifacts"] if item["data_type"] == "mesh_measurement_preview"
+    )
+    assert artifact["payload_json"] == expected
