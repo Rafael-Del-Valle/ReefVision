@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import IO, Any
 
 from PIL import ExifTags, Image, UnidentifiedImageError
 
@@ -90,7 +90,9 @@ def ensure_supported_extension(filename: str) -> None:
         raise UnsupportedImageError("Supported image types are JPEG, PNG, TIFF, WebP, BMP, and GIF")
 
 
-def stream_to_staging(source: BinaryIO, destination: Path) -> tuple[str, int]:
+def stream_to_staging(
+    source: IO[bytes], destination: Path, *, max_bytes: int | None = None
+) -> tuple[str, int]:
     """Write a staged file completely, fsync it, and return checksum and byte count."""
 
     digest = hashlib.sha256()
@@ -101,9 +103,11 @@ def stream_to_staging(source: BinaryIO, destination: Path) -> tuple[str, int]:
         with destination.open("xb") as output:
             created = True
             while chunk := source.read(1024 * 1024):
+                total += len(chunk)
+                if max_bytes is not None and total > max_bytes:
+                    raise ValidationError("Source exceeds the allowed byte bound")
                 output.write(chunk)
                 digest.update(chunk)
-                total += len(chunk)
             output.flush()
             os.fsync(output.fileno())
     except Exception:

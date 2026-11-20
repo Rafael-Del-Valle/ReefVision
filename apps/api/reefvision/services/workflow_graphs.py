@@ -199,6 +199,7 @@ _ACTIONS: dict[str, str] = {
     "scientific_comparison": "Calculate or replay agreement on frozen held-out evidence.",
     "research_publication_figure": "Create or reopen a figure and table with its source.",
     "image_acquisition_quality": "Measure acquisition quality and retain reviewable image flags.",
+    "field_capture_reconcile": "Reconcile the sealed field batch and retain its review receipt.",
     "temporal_reefpose_dataset": "Freeze or load a recording-group-split temporal pose dataset.",
     "temporal_reefpose_training": "Train or replay a native temporal pose checkpoint.",
     "temporal_reefpose_inference": "Refine video pose observations for explicit review.",

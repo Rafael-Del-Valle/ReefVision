@@ -32,6 +32,7 @@ import { ClassificationWorkspace } from "./features/classification/Classificatio
 import { ComputedMetricsPanel } from "./features/computed-metrics/ComputedMetricsPanel";
 import { DatasetVersionsPanel } from "./features/dataset-versions/DatasetVersionsPanel";
 import { EnvironmentalContextPanel } from "./features/environmental-context/EnvironmentalContextPanel";
+import { FieldCaptureWorkspace } from "./features/field-capture/FieldCaptureWorkspace";
 import { Gallery } from "./features/gallery/Gallery";
 import { ScientificHeatmapsPanel } from "./features/scientific-heatmaps/ScientificHeatmapsPanel";
 import { InteroperabilityWorkspace } from "./features/interoperability/InteroperabilityWorkspace";
@@ -90,6 +91,7 @@ interface AnnotationLaunchState {
 
 type ProjectView =
   | "gallery"
+  | "field_capture"
   | "versions"
   | "interoperability"
   | "environmental_context"
@@ -130,6 +132,12 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Images & annotation",
         description:
           "Browse imagery, run inference, and open the annotation editor.",
+      },
+      {
+        id: "field_capture",
+        label: "Field capture",
+        description:
+          "Collect local originals and reconcile portable field batches.",
       },
       {
         id: "versions",
@@ -996,6 +1004,14 @@ function ReefVisionMainApp() {
             )}
             {activeView === "versions" && (
               <DatasetVersionsPanel project={selectedProject} />
+            )}
+            {activeView === "field_capture" && (
+              <FieldCaptureWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+                onOpenQC={() => setActiveView("quality_control")}
+                onOpenWorkflow={() => setActiveView("workflows")}
+              />
             )}
             {activeView === "interoperability" && (
               <InteroperabilityWorkspace project={selectedProject} />

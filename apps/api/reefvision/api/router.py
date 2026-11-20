@@ -33,6 +33,7 @@ from reefvision.api.routes.ecology_identity import router as ecology_identity_ro
 from reefvision.api.routes.ecology_pose_links import router as ecology_pose_links_router
 from reefvision.api.routes.environmental_analysis import router as environmental_analysis_router
 from reefvision.api.routes.environmental_context import router as environmental_context_router
+from reefvision.api.routes.field_capture import router as field_capture_router
 from reefvision.api.routes.geographic_movement_analytics import (
     router as geographic_movement_analytics_router,
 )
@@ -105,6 +106,7 @@ install_workflow_v1_extensions()
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(environmental_analysis_router)
 api_router.include_router(environmental_context_router)
+api_router.include_router(field_capture_router)
 api_router.include_router(lunar_context_router)
 api_router.include_router(scientific_data_router)
 api_router.include_router(scientific_heatmaps_router)
