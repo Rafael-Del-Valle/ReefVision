@@ -3,8 +3,10 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import * as api from "../../api/client";
+import * as workflowApi from "./workflowGraphApi";
 import {
   hasScientificNodeControls,
+  scientificConfigurationIssue,
   ScientificNodeControls,
 } from "./ScientificNodeControls";
 
@@ -78,19 +80,38 @@ it("uses the standalone acquisition contract and validates clipping bands", asyn
 });
 
 it("configures a project-owned mesh measurement from the guided workspace", async () => {
-  vi.spyOn(api, "request").mockResolvedValue([
-    {
-      id: "mesh-asset",
-      project_id: "local-study",
-      original_filename: "colony.obj",
-      source_format: "obj",
-      parse_status: "succeeded",
-    },
-  ] as never);
+  const hash = "a".repeat(64);
+  const asset = {
+    id: "mesh-asset",
+    project_id: "local-study",
+    original_filename: "colony.obj",
+    source_format: "obj",
+    sha256: hash,
+    parse_status: "succeeded",
+    parse_summary: { source_kind_resolved: "mesh" },
+  };
+  vi.spyOn(workflowApi, "listProjectSpatialAssets")
+    .mockResolvedValueOnce([
+      { ...asset, parse_status: "queued", parse_summary: null },
+    ] as never)
+    .mockResolvedValue([asset] as never);
 
   expect(hasScientificNodeControls("mesh_surface_preview")).toBe(true);
-  renderControls("mesh_surface_preview");
-  await screen.findByRole("option", { name: "colony.obj · OBJ · parsed" });
+  renderControls("mesh_surface_preview", {
+    obj_text: "v 0 0 0",
+    expected_source_payload_sha256: "b".repeat(64),
+    calibration_review: { independent_reviewer_id: "original-reviewer" },
+    surface_path_vertex_pairs: [[0, 1]],
+  });
+  const pending = await screen.findByRole("option", {
+    name: "colony.obj · OBJ · queued (unavailable)",
+  });
+  expect(pending).toBeDisabled();
+  await screen.findByRole(
+    "option",
+    { name: "colony.obj · OBJ · parsed" },
+    { timeout: 2500 },
+  );
   fireEvent.change(screen.getByLabelText("Project 3D original"), {
     target: { value: "mesh-asset" },
   });
@@ -101,19 +122,35 @@ it("configures a project-owned mesh measurement from the guided workspace", asyn
     target: { value: "Scale bar measured in the source reconstruction" },
   });
 
-  expect(screen.getByRole("status").textContent).toContain(
-    '"asset_id":"mesh-asset"',
-  );
+  expect(
+    JSON.parse(screen.getByRole("status").textContent ?? "{}"),
+  ).toMatchObject({
+    asset_id: "mesh-asset",
+    expected_source_payload_sha256: hash,
+    obj_text: null,
+    calibration_review: null,
+    calibration_review_id: null,
+    surface_path_vertex_pairs: null,
+  });
   expect(screen.getByRole("status").textContent).toContain(
     '"meters_per_unit":0.001',
+  );
+  const timestamp = "2026-01-01T11:34:56.123456-05:00";
+  fireEvent.change(screen.getByLabelText("Acquisition timestamp"), {
+    target: { value: timestamp },
+  });
+  expect(screen.getByRole("status")).toHaveTextContent(
+    `"observed_at_utc":"${timestamp}"`,
   );
   expect(screen.getByText(/Surface routes are geometric paths/)).toBeVisible();
 });
 
 it("keeps point-cloud measurements distinct from surface and branch claims", async () => {
-  vi.spyOn(api, "request").mockResolvedValue([
+  vi.spyOn(workflowApi, "listProjectSpatialAssets").mockResolvedValue([
     {
       id: "cloud-asset",
+      sha256: "c".repeat(64),
+      parse_summary: { source_kind_resolved: "point_cloud" },
       project_id: "local-study",
       original_filename: "survey.ply",
       source_format: "ply",
@@ -167,4 +204,28 @@ it("guides registration and correspondence review for longitudinal comparison", 
   expect(
     screen.getByText(/Supporting review is durable audit evidence/),
   ).toBeVisible();
+});
+
+it("requires measured registration diagnostics and preserves explicit zero residual", () => {
+  renderControls("mesh_longitudinal_comparison");
+  fireEvent.change(screen.getByLabelText("Registration source frame"), {
+    target: { value: "earlier-frame" },
+  });
+  const saved = () =>
+    JSON.parse(screen.getByRole("status").textContent ?? "{}");
+  expect(saved().registration_evidence.rms_residual_m).toBeUndefined();
+  expect(saved().registration_evidence.correspondence_count).toBeUndefined();
+  expect(
+    scientificConfigurationIssue("mesh_longitudinal_comparison", saved()),
+  ).toMatch(/residual.*correspondences/);
+  fireEvent.change(screen.getByLabelText("RMS residual (meters)"), {
+    target: { value: "0" },
+  });
+  fireEvent.change(screen.getByLabelText("Correspondence count"), {
+    target: { value: "3" },
+  });
+  expect(saved().registration_evidence.rms_residual_m).toBe(0);
+  expect(
+    scientificConfigurationIssue("mesh_longitudinal_comparison", saved()),
+  ).toBeUndefined();
 });
