@@ -283,8 +283,12 @@ def test_nonzero_volume_lost_to_float_cancellation_replays_saved_graph(
     assert inward == pytest.approx(expected_volume, rel=1e-12, abs=0)
     # Exactly planar, nondegenerate coordinates must not invent an enclosed volume.
     assert signed_enclosed_volume_mesh_units(
-        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0),
-         (0.0, 1.0, 0.0), (1.0, 1.0, 0.0)],
+        [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (1.0, 1.0, 0.0),
+        ],
         expected_faces,
     ) == 0.0
 
