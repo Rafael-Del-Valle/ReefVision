@@ -703,6 +703,23 @@ def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
     _verify_prelaunch_pose_dataset(destination, materialization)
     _verify_postlaunch_pose_dataset(destination, materialization, materialization)
 
+    # A hard link outside the frozen run leaves the original hash and name
+    # unchanged but permits external writes to scientist-reviewed frames.
+    training_frame = destination / "images" / "train" / "frame_00000001.png"
+    external_alias = tmp_path / "outside-frozen-run.png"
+    try:
+        os.link(training_frame, external_alias)
+    except (OSError, NotImplementedError):
+        pass  # Only this subcase is unsupported on filesystems without hard links.
+    else:
+        try:
+            with pytest.raises(ValidationError, match="hard-linked file"):
+                _verify_prelaunch_pose_dataset(destination, materialization)
+        finally:
+            external_alias.unlink()
+        _verify_prelaunch_pose_dataset(destination, materialization)
+        assert training_frame.read_bytes() == b"reviewed-training"
+
     # The GPU worker must also reject changed persisted provenance even
     # when the frozen training and validation bytes are untouched.
     altered_provenance = {**materialization, "validation_mode": "none"}

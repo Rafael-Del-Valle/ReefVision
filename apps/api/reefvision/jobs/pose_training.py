@@ -401,6 +401,12 @@ def _materialized_pose_dataset_files(destination: Path) -> list[dict[str, str]]:
             raise ValidationError(
                 "Materialized pose training dataset contains an unsupported filesystem entry"
             )
+        # A link outside the frozen run can mutate the same inode without
+        # changing this relative path. Saved science inputs must be independent.
+        if member.stat().st_nlink > 1:
+            raise ValidationError(
+                "Materialized pose training dataset contains a hard-linked file"
+            )
         with member.open("rb") as stream:
             digest = hashlib.file_digest(stream, "sha256").hexdigest()
         files.append(
