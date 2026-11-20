@@ -283,7 +283,14 @@ def _original_0038_check_contract_matches(table: str, ddl: str) -> bool:
     # a missing constraint or a second constraint suppressing valid events.
     histories = (
         ("comment", "assign", "unassign"),
-        ("comment", "assign", "unassign", "triage_start", "triage_skip", "triage_return"),
+        (
+            "comment",
+            "assign",
+            "unassign",
+            "triage_start",
+            "triage_skip",
+            "triage_return",
+        ),
         (
             "comment",
             "assign",
@@ -294,7 +301,15 @@ def _original_0038_check_contract_matches(table: str, ddl: str) -> bool:
             "triage_complete",
         ),
     )
-    start = ("CONSTRAINT", "CK_REVIEW_QUEUE_ITEM_EVENT_TYPE", "CHECK", "(", "EVENT_TYPE", "IN", "(")
+    start = (
+        "CONSTRAINT",
+        "CK_REVIEW_QUEUE_ITEM_EVENT_TYPE",
+        "CHECK",
+        "(",
+        "EVENT_TYPE",
+        "IN",
+        "(",
+    )
     for history in histories:
         values: list[str] = []
         for event in history:
@@ -331,7 +346,8 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
     # table_xinfo, foreign_key_list and index_list cannot reveal CHECK clauses
     # or nonindexed column collations. Compare only known source constraints.
     ddl_row = db.execute(
-        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ? COLLATE NOCASE",
+        "SELECT sql FROM sqlite_master WHERE type = 'table' "
+        "AND name = ? COLLATE NOCASE",
         (table,),
     ).fetchone()
     if ddl_row is None or not isinstance(ddl_row[0], str):
