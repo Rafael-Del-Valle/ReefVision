@@ -102,6 +102,7 @@ describe("pose architecture training workflow", () => {
         payload = {
           run: {
             id: "run-1",
+            project_id: "project-1",
             status: "succeeded",
             result_json: {},
           },
