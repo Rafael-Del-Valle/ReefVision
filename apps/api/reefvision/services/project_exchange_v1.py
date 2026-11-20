@@ -95,6 +95,9 @@ from reefvision.services.project_exchange_paired_models_v15 import paired_compar
 from reefvision.services.project_exchange_qc_v16 import FORMAT as QC_FORMAT
 from reefvision.services.project_exchange_qc_v16 import SECTIONS as QC_SECTIONS
 from reefvision.services.project_exchange_qc_v16 import has_qc_history, is_qc_graph
+from reefvision.services.project_exchange_schedules import FORMAT as SCHEDULE_FORMAT
+from reefvision.services.project_exchange_schedules import SECTIONS as SCHEDULE_SECTIONS
+from reefvision.services.project_exchange_schedules import has_schedules
 from reefvision.services.project_exchange_v15 import FORMAT_VERSION as RESEARCH_FORMAT_VERSION
 from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, has_v15_records
 from reefvision.services.project_exchange_workflows import is_spatial_workflow_graph
@@ -166,6 +169,8 @@ class ProjectExchangeV1Service(ProjectExchangeService):
     """Project exchange service with executable-workflow provenance included."""
 
     def _format_version(self, project_id: str) -> str:
+        if has_schedules(self.session, project_id):
+            return SCHEDULE_FORMAT
         if has_qc_history(self.session, project_id):
             return QC_FORMAT
         if has_v15_records(self.session, project_id) or has_field_capture_batches(
@@ -582,6 +587,9 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         )
 
         integrated = integrated_records(self.session, project.id)
+        if not any(integrated.get(name) for name in SCHEDULE_SECTIONS):
+            for name in SCHEDULE_SECTIONS:
+                integrated.pop(name, None)
         with_qc = any(integrated.get(name) for name in QC_SECTIONS) or any(
             is_qc_graph(graph.graph_json)
             for graph in cast(Sequence[WorkflowGraphRecord], sections.get("workflow_graphs", []))

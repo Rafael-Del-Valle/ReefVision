@@ -31,6 +31,7 @@ from reefvision.services.workflow_review_queue_integrity import (
 from reefvision.storage.datasets import canonical_json_sha256
 
 FORMAT = "1.6"
+QC_FORMATS = {FORMAT, "1.7"}
 EVENTS = "review_queue_item_events"
 BULK = "review_queue_bulk_requests"
 SECTIONS = (EVENTS, BULK)
@@ -104,9 +105,11 @@ def validate_qc_exchange(version: str, project: str, rows: Rows) -> None:
         present = any(rows.get(s) for s in SECTIONS) or any(
             is_qc_graph(row["graph_json"]) for row in rows.get("workflow_graphs", ())
         )
-        if version != FORMAT:
+        if version not in QC_FORMATS:
             if present:
                 raise ValidationError("QC audit records require Project Exchange 1.6")
+            return
+        if not present and version != FORMAT:
             return
         if not present or not all(s in rows for s in SECTIONS):
             raise ValidationError("Project Exchange 1.6 is missing the QC history inventory")

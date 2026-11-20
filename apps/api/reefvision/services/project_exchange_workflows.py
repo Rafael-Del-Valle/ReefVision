@@ -31,6 +31,7 @@ from reefvision.services.project_exchange_paired_growth import (
     remap_paired_growth_parameters,
 )
 from reefvision.services.project_exchange_paired_models_v15 import remap_paired_models_parameters
+from reefvision.services.project_exchange_schedules import restore_schedule_pins
 from reefvision.services.project_exchange_study_v15 import remap_study_parameters
 from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
@@ -55,6 +56,7 @@ HISTORICAL_ARTIFACT_TYPES = frozenset(
         "study_design_report",
         "paired_model_report",
         "research_reproducibility_proof",
+        "workflow_schedule_receipt",
         PAIRED_GROWTH_TYPE,
         REVIEWER_LAB_TYPE,
     }
@@ -205,6 +207,7 @@ def restore_workflow_provenance(
         graph.graph_sha256 = canonical_json_sha256(graph_payload)
         digest_map[original["graph_sha256"]] = graph.graph_sha256
 
+    restore_schedule_pins(session, sections, id_map, digest_map)
     runs = session.scalars(select(WorkflowRun).where(WorkflowRun.project_id == project_id)).all()
     for run in runs:
         graph = session.get(WorkflowGraphRecord, run.workflow_graph_record_id)

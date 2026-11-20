@@ -34,6 +34,7 @@ import { scientificConfigurationIssue } from "./ScientificNodeControls";
 interface WorkflowGraphWorkspaceProps {
   project: Project;
   initialPoseArchitecture?: string | null;
+  initialRunId?: string | null;
   initialGraph?: Record<string, unknown>;
   onOpenScience?: (
     view: "ecology" | "models" | "quality_control" | "video",
@@ -271,6 +272,7 @@ function safeParseGraph(value: string): Record<string, unknown> | null {
 export function WorkflowGraphWorkspace({
   project,
   initialPoseArchitecture,
+  initialRunId,
   initialGraph,
   onOpenScience,
   onOpenReviewQueue,
@@ -286,7 +288,9 @@ export function WorkflowGraphWorkspace({
       2,
     ),
   );
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(
+    initialRunId ?? null,
+  );
   const [selectedTemplateId, setSelectedTemplateId] = useState(
     workflowTemplates[0]?.id ?? "",
   );
@@ -327,8 +331,13 @@ export function WorkflowGraphWorkspace({
     refetchInterval: 2000,
   });
   const runDetailQuery = useQuery({
-    queryKey: ["workflow-run", selectedRunId],
-    queryFn: ({ signal }) => getWorkflowRunDetail(selectedRunId ?? "", signal),
+    queryKey: ["workflow-run", project.id, selectedRunId],
+    queryFn: async ({ signal }) => {
+      const detail = await getWorkflowRunDetail(selectedRunId ?? "", signal);
+      if (detail.run.project_id !== project.id)
+        throw new Error("This run belongs to another project.");
+      return detail;
+    },
     enabled: selectedRunId !== null,
     refetchInterval: 1500,
   });

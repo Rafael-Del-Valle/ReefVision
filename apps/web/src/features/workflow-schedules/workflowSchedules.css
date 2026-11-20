@@ -1,0 +1,18 @@
+.schedule-workspace .schedule-hash,
+.schedule-workspace .schedule-identifiers dd {
+  overflow-wrap: anywhere;
+}
+
+.schedule-workspace .schedule-identifiers {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.25rem 0.75rem;
+}
+
+.schedule-workspace .schedule-identifiers dd {
+  margin: 0;
+}
+
+.schedule-workspace .dashboard-row > div {
+  min-width: 0;
+}

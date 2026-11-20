@@ -29,7 +29,7 @@ from reefvision.services import backups as backup_service
 from reefvision.tests.test_connected_branch_preview_api_1_2 import _save_calibrated_analysis
 from reefvision.tests.test_reviewed_coral_graph_1_2 import post
 
-_INTEGRATED_HEAD = "b16_integrated_0001"
+_INTEGRATED_HEAD = "b17_workflows_0001"
 
 
 @pytest.fixture

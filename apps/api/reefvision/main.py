@@ -22,6 +22,7 @@ from reefvision.config import Settings, get_settings
 from reefvision.db.session import create_database_engine, create_session_factory
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.jobs.worker import thumbnail_worker_loop
+from reefvision.jobs.workflow_schedules import workflow_schedule_loop
 from reefvision.logging_utils import configure_rotating_json_logging, default_api_log_path
 from reefvision.ml.assist_runtime import AssistRuntime
 from reefvision.ml.catalog_expansion import apply_catalog_expansion_runtime_patches
@@ -99,9 +100,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         stop_event = asyncio.Event()
         worker_task: asyncio.Task[None] | None = None
+        schedule_task: asyncio.Task[None] | None = None
         if active_settings.background_worker_enabled:
             worker_task = asyncio.create_task(
                 thumbnail_worker_loop(
+                    active_settings, application.state.session_factory, stop_event
+                )
+            )
+            schedule_task = asyncio.create_task(
+                workflow_schedule_loop(
                     active_settings, application.state.session_factory, stop_event
                 )
             )
@@ -109,8 +116,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             stop_event.set()
-            if worker_task is not None:
-                await worker_task
+            if worker_task is not None and schedule_task is not None:
+                await asyncio.gather(worker_task, schedule_task)
             engine.dispose()
             LOGGER.info(
                 "ReefVision API stopped",

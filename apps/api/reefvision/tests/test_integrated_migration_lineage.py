@@ -22,7 +22,7 @@ from reefvision.storage.datasets import canonical_json_sha256
 
 _API_ROOT = Path(__file__).resolve().parents[2]
 _VERSIONS = _API_ROOT / "migrations" / "versions"
-_INTEGRATED_HEAD = "b16_integrated_0001"
+_INTEGRATED_HEAD = "b17_workflows_0001"
 _POSE_MIGRATIONS = (
     "0038_pose_anatomy_definitions.py",
     "0039_pose_evaluation_runs.py",
@@ -63,6 +63,31 @@ def _create_project(engine: Engine) -> None:
             "'projects/reef-survey', 'bbox', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
             (_PROJECT_ID,),
         )
+
+
+def test_schedule_migration_preserves_the_existing_project(migration_db: MigrationDatabase) -> None:
+    _, config, engine = migration_db
+    command.upgrade(config, "b16_integrated_0001")
+    _create_project(engine)
+    previous_tables = set(inspect(engine).get_table_names())
+    schedule_tables = {"workflow_schedules", "workflow_schedule_occurrences"}
+    with engine.connect() as connection:
+        old_project = connection.exec_driver_sql("SELECT * FROM projects").one()
+    command.upgrade(config, "b17_workflows_0001")
+    schema = inspect(engine)
+    assert set(schema.get_table_names()) == previous_tables | schedule_tables
+    occurrence_keys = schema.get_unique_constraints("workflow_schedule_occurrences")
+    assert {tuple(key["column_names"]) for key in occurrence_keys} >= {
+        ("schedule_id", "scheduled_at"),
+        ("workflow_run_id",),
+    }
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT * FROM projects").one() == old_project
+        assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+    command.downgrade(config, "b16_integrated_0001")
+    assert set(inspect(engine).get_table_names()) == previous_tables
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT * FROM projects").one() == old_project
 
 
 def _create_standalone_reefpose_db(config: Config, engine: Engine, revision: str) -> None:

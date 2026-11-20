@@ -42,6 +42,7 @@ from reefvision.services.workflow_reproducibility_v15 import execute_reproducibi
 from reefvision.services.workflow_research_reports import execute_research_report
 from reefvision.services.workflow_review import WorkflowReviewRequired
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
+from reefvision.services.workflow_schedule_receipt import execute_schedule_receipt
 from reefvision.services.workflow_study_design import execute_reviewed_study_design
 from reefvision.services.workflow_vlm import VlmClassDefinition, run_vlm_detection
 from reefvision.storage.projects import resolve_managed_project_path
@@ -71,6 +72,7 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "research_publication_figure",
     "image_acquisition_quality",
     "field_capture_reconcile",
+    "workflow_schedule_receipt",
     "ecology_measurement_csv_export",
     "ecology_population_csv_export",
     "ecology_paired_count_comparison",
@@ -1160,6 +1162,7 @@ _ADAPTERS = {
     "paired_model_comparison": execute_paired_models,
     "research_reproducibility_package": execute_reproducibility,
     "field_capture_reconcile": execute_field_capture_reconcile,
+    "workflow_schedule_receipt": execute_schedule_receipt,
     "ecology_event_summary": execute_event_summary,
     "research_publication_figure": execute_research_report,
     "image_acquisition_quality": execute_acquisition_quality,

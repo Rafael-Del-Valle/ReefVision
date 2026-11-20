@@ -34,6 +34,7 @@ from reefvision.services.workflow_research_reports import research_report_node
 from reefvision.services.workflow_results_packages import (
     register_results_package_workflow_adapter,
 )
+from reefvision.services.workflow_schedule_receipt import schedule_receipt_node
 from reefvision.services.workflow_scientific_comparison import register_scientific_comparison_nodes
 from reefvision.services.workflow_study_design import reviewed_study_design_node
 from reefvision.services.workflow_temporal_reefpose import register_temporal_reefpose_nodes
@@ -941,6 +942,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
     registry["paired_model_comparison"] = paired_models_node()
     registry["research_reproducibility_package"] = reproducibility_node()
     registry["field_capture_reconcile"] = field_capture_reconcile_node()
+    registry["workflow_schedule_receipt"] = schedule_receipt_node()
     registry["ecology_event_summary"] = event_summary_workflow_node()
     registry["research_publication_figure"] = research_report_node()
     registry["image_acquisition_quality"] = acquisition_quality_node()

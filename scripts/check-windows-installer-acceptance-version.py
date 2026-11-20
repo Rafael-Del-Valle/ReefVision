@@ -17,6 +17,7 @@ _CLEAN_JOB = "windows-clean-install-acceptance"
 _UPGRADE_JOB = "windows-upgrade-acceptance"
 _VALIDATED_14_UPGRADE_JOB = "windows-validated-14-upgrade-acceptance"
 _VALIDATED_15_UPGRADE_JOB = "windows-validated-15-upgrade-acceptance"
+_VALIDATED_16_UPGRADE_JOB = "windows-validated-16-upgrade-acceptance"
 _BASELINE_VERSION = "1.0.3"
 _BASELINE_REPOSITORY = "Rafael-Del-Valle/ReefVision"
 _BASELINE_COMMIT = "e94dad6a3bece7b776bf45776bc5d06cfbc2c0dc"
@@ -34,6 +35,7 @@ class _ValidatedBaseline(NamedTuple):
     manifest_sha256: str
     revision: str
     cabinets: int
+    msi_sha256: str | None = None
 
 
 _VALIDATED_BASELINES = {
@@ -53,13 +55,27 @@ _VALIDATED_BASELINES = {
         "b15_integrated_0002",
         5,
     ),
+    _VALIDATED_16_UPGRADE_JOB: _ValidatedBaseline(
+        "1.6.0",
+        "44798678615",
+        "3a9ce1622e4f9e230e2ee14432ee7d2f32510870",
+        "d4e53ebfebdf8201526fa7f58acd31392eceba6cdee12b5145e55313452ffb3c",
+        "b16_integrated_0001",
+        5,
+        "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be",
+    ),
 }
 
 _VALIDATED_UPGRADE_JOBS = {
     "1.5.0": (_VALIDATED_14_UPGRADE_JOB,),
     "1.6.0": (_VALIDATED_14_UPGRADE_JOB, _VALIDATED_15_UPGRADE_JOB),
+    "1.7.0": (_VALIDATED_14_UPGRADE_JOB, _VALIDATED_15_UPGRADE_JOB, _VALIDATED_16_UPGRADE_JOB),
 }
-_CANDIDATE_REVISION = {"1.5.0": "b15_integrated_0002", "1.6.0": "b16_integrated_0001"}
+_CANDIDATE_REVISION = {
+    "1.5.0": "b15_integrated_0002",
+    "1.6.0": "b16_integrated_0001",
+    "1.7.0": "b17_workflows_0001",
+}
 
 
 def _job(workflow: str, name: str) -> str:
@@ -145,7 +161,7 @@ def _check_validated_upgrade(
         ),
         f"{name} is missing the verified {previous.version} to {version} upgrade contract",
     )
-    if name == _VALIDATED_15_UPGRADE_JOB:
+    if name in (_VALIDATED_15_UPGRADE_JOB, _VALIDATED_16_UPGRADE_JOB):
         errors.extend(
             _missing(
                 job,
@@ -153,6 +169,24 @@ def _check_validated_upgrade(
                 f"{name} requires an independent predecessor rollback check",
             )
         )
+    if previous.msi_sha256 is not None:
+        msi_check = f"$baselineMsiSha -cne $env:{env}_MSI_SHA256"
+        errors.extend(
+            _missing(
+                job,
+                (
+                    f"{env}_MSI_SHA256: {previous.msi_sha256}",
+                    "$baselineMsiSha = ($baseline.files | Where-Object name -CEQ "
+                    f"'ReefVision_{previous.version}_x64_en-US.msi').sha256",
+                    msi_check,
+                ),
+                f"{name} requires the pinned original MSI digest",
+            )
+        )
+        if not errors and not job.index(verified_previous) < job.index(msi_check) < job.index(
+            harness
+        ):
+            errors.append(f"{name} must check the pinned original MSI digest before installation")
     if not errors and not (
         job.index(verified_candidate) < job.index(harness)
         and job.index(digest_check) < job.index(verified_previous) < job.index(harness)
@@ -194,7 +228,7 @@ def _check_split_workflow(workflow: str, version: str) -> list[str]:
     errors = _check_preflight_order(build, f"- name: Build weight-free {version} desktop installer")
     for name in _VALIDATED_UPGRADE_JOBS.get(version, ()):
         errors.extend(_check_validated_upgrade(workflow, name, version, verified_candidate))
-    if version == "1.6.0":
+    if version in ("1.6.0", "1.7.0"):
         errors.extend(
             _missing(
                 clean,
@@ -215,6 +249,19 @@ def _check_split_workflow(workflow: str, version: str) -> list[str]:
                     ".artifacts/windows-clean-acceptance-*/workspace-playwright.json",
                 ),
                 "Clean-install job is missing installed workspace acceptance",
+            )
+        )
+    if version == "1.7.0":
+        errors.extend(
+            _missing(
+                clean,
+                (
+                    "-ScheduleWorkflowAcceptance",
+                    ".artifacts/windows-clean-acceptance-*/schedule-restart-evidence.json",
+                    ".artifacts/windows-clean-acceptance-*/schedule-*-playwright.json",
+                    ".artifacts/windows-clean-acceptance-*/schedule-*-playwright/**/schedule-proof.json",
+                ),
+                "Clean-install job is missing the hosted schedule restart acceptance",
             )
         )
     for name, job in ((_BUILD_JOB, build), (_CLEAN_JOB, clean), (_UPGRADE_JOB, upgrade)):
