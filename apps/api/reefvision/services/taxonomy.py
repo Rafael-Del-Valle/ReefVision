@@ -1,6 +1,6 @@
 """Bind local taxonomic decisions and independent visits to immutable result receipts."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from functools import cached_property
 from typing import TypeVar
 from uuid import UUID
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from reefvision.config import Settings
 from reefvision.db.models.image import ImageAsset
 from reefvision.db.models.project import Project, utc_now
+from reefvision.db.models.project_exchange_package import ProjectExchangePackage
 from reefvision.db.models.taxonomy import (
     DetectabilityAssessment,
     DetectabilityPresenceReview,
@@ -22,7 +23,7 @@ from reefvision.db.models.taxonomy import (
     TaxonReview,
 )
 from reefvision.db.models.video_asset import VideoAsset
-from reefvision.domain.detectability import calculate_detectability
+from reefvision.domain.detectability import calculate_detectability, survey_visit_exclusion
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.schemas.ecology_identity import EcologyIdentityRegistryResponse, EcologyIdentityRow
 from reefvision.schemas.reviewer_lab_v15 import ReviewerLabRole
@@ -82,6 +83,24 @@ def taxonomy_identity_pin(identity: EcologyIdentityRow) -> IdentityPin:
     )
 
 
+def taxonomy_identity_matches(
+    current: EcologyIdentityRow, pin: IdentityPin, origin_ids: Mapping[str, str]
+) -> bool:
+    """Check the immutable original pin against its local project and identity bindings."""
+    pin_id = str(pin.id)
+    if origin_ids.get(pin_id, pin_id) != current.id:
+        return False
+    original_projects = {
+        current.project_id,
+        *(old for old, live in origin_ids.items() if live == current.project_id),
+    }
+    return any(
+        taxonomy_identity_pin(current.model_copy(update={"id": pin_id, "project_id": project_id}))
+        == pin
+        for project_id in original_projects
+    )
+
+
 def _actor(role: ReviewerLabRole) -> LocalAttribution:
     return LocalAttribution.model_validate(
         {
@@ -120,18 +139,46 @@ class TaxonomyService:
     def registry(self) -> EcologyIdentityRegistryResponse:
         return EcologyIdentityService(self.session).registry(self.project_id)
 
+    @cached_property
+    def origin_ids(self) -> dict[str, str]:
+        imported = self.session.scalar(
+            select(ProjectExchangePackage)
+            .where(
+                ProjectExchangePackage.project_id == self.project_id,
+                ProjectExchangePackage.direction == "import",
+                ProjectExchangePackage.status == "complete",
+            )
+            .order_by(ProjectExchangePackage.created_at.desc(), ProjectExchangePackage.id.desc())
+            .limit(1)
+        )
+        if imported is None:
+            return {}
+        options = imported.options_json or {}
+        origin = options.get("origin_id_map") or options.get("id_map", {})
+        if not isinstance(origin, dict):
+            return {}
+        return {
+            old: local
+            for old, local in origin.items()
+            if isinstance(old, str) and isinstance(local, str)
+        }
+
+    def _live_id(self, identifier: object) -> str:
+        value = str(identifier)
+        return self.origin_ids.get(value, value)
+
     def _row(self, model: type[_Record], row_id: str) -> _Record:
         row = self.session.get(model, row_id)
         if row is None or row.project_id != self.project_id:
             raise NotFoundError("Taxonomy or detectability record not found in this project")
         return row
 
-    def _source(self, source: TaxonomySource) -> None:
+    def verify_source(self, source: TaxonomySource) -> str:
         asset: ImageAsset | VideoAsset | None
         if source.kind == "image":
-            asset = self.session.get(ImageAsset, str(source.id))
+            asset = self.session.get(ImageAsset, self._live_id(source.id))
         else:
-            asset = self.session.get(VideoAsset, str(source.id))
+            asset = self.session.get(VideoAsset, self._live_id(source.id))
         if asset is None or asset.project_id != self.project_id:
             raise NotFoundError("Survey source is unavailable in this project")
         if asset.sha256 != source.sha256:
@@ -142,6 +189,7 @@ class TaxonomyService:
             raise ConflictError("The original survey source is missing or unreadable") from exc
         if actual != source.sha256:
             raise ConflictError("The original survey bytes differ from their pinned checksum")
+        return asset.id
 
     def _commit(self, row: TaxonomyRecord) -> None:
         self.session.add(row)
@@ -227,6 +275,11 @@ class TaxonomyService:
         self, row: TaxonProposal, review: TaxonReviewRead | None
     ) -> TaxonProposalRead:
         snapshot = read_taxonomy_snapshot(row, TaxonProposalSnapshot)
+        if (
+            self._live_id(snapshot.identity.id) != row.identity_revision_id
+            or self._live_id(snapshot.author.role_revision_id) != row.author_role_revision_id
+        ):
+            raise ConflictError("Taxonomy proposal no longer matches its local identity or author")
         if review and review.review.target_sha256 != row.content_sha256:
             raise ConflictError("Taxonomy decision no longer matches its proposal")
         return TaxonProposalRead.model_validate(
@@ -284,7 +337,7 @@ class TaxonomyService:
         )
         if not identity:
             raise ConflictError("Choose a current registered organism revision in this project")
-        self._source(body.source)
+        self.verify_source(body.source)
         snapshot = TaxonProposalSnapshot(
             **body.model_dump(),
             author=_actor(author),
@@ -320,7 +373,7 @@ class TaxonomyService:
         proposal = self.get_proposal(proposal_id)
         if body.expected_revision != proposal.review_revision:
             raise ConflictError("This proposal has a newer decision. Reopen its review history.")
-        if str(proposal.proposal.author.member_id) == actor.member_id:
+        if self._live_id(proposal.proposal.author.member_id) == actor.member_id:
             raise ConflictError(
                 "The author cannot independently review their own taxonomy proposal"
             )
@@ -333,14 +386,13 @@ class TaxonomyService:
                 ),
                 None,
             )
-            if (
-                not current_identity
-                or taxonomy_identity_pin(current_identity) != proposal.proposal.identity
+            if not current_identity or not taxonomy_identity_matches(
+                current_identity, proposal.proposal.identity, self.origin_ids
             ):
                 raise ConflictError(
                     "The registered organism changed. Submit a proposal for the current revision."
                 )
-            self._source(proposal.proposal.source)
+            self.verify_source(proposal.proposal.source)
             self._assert_one_confirmed_taxon(proposal)
         snapshot = TaxonReviewSnapshot(
             **body.model_dump(),
@@ -362,7 +414,7 @@ class TaxonomyService:
         others = self.session.scalars(
             select(TaxonProposal).where(
                 TaxonProposal.project_id == self.project_id,
-                TaxonProposal.identity_revision_id == str(proposal.proposal.identity.id),
+                TaxonProposal.identity_revision_id == self._live_id(proposal.proposal.identity.id),
                 TaxonProposal.id != str(proposal.id),
             )
         )
@@ -386,7 +438,7 @@ class TaxonomyService:
         self._mutable_project()
         proposal = self.get_proposal(str(body.proposal_id))
         if body.source:
-            self._source(body.source)
+            self.verify_source(body.source)
         snapshot = DetectabilityVisitSnapshot(
             **body.model_dump(),
             identity=proposal.proposal.identity,
@@ -428,12 +480,12 @@ class TaxonomyService:
             raise ConflictError(
                 "This visit has a newer presence decision. Reopen its review history."
             )
-        if str(visit.visit.observer.member_id) == actor.member_id:
+        if self._live_id(visit.visit.observer.member_id) == actor.member_id:
             raise ConflictError(
                 "The visit author cannot independently confirm presence for their own visit"
             )
         if body.source is not None:
-            self._source(body.source)
+            self.verify_source(body.source)
             if visit.visit.source and visit.visit.source.sha256 == body.source.sha256:
                 raise ConflictError(
                     "Known presence requires reference bytes separate from the observed visit"
@@ -484,7 +536,7 @@ class TaxonomyService:
             raise ValidationError(
                 "Choose a shorter survey window. Each assessment supports at most 500 visits."
             )
-        current = {row.organism_key: taxonomy_identity_pin(row) for row in self.registry.identities}
+        current = {row.organism_key: row for row in self.registry.identities}
         shared_parents = set(self.registry.cross_unit_shared_parent_colony_keys)
         shared_identities = {
             row.organism_key
@@ -545,27 +597,22 @@ class TaxonomyService:
         visit: DetectabilityVisitSnapshot,
         proposal: TaxonProposalRead,
         presence: PresenceReviewRead | None,
-        current: dict[str, IdentityPin],
+        current: dict[str, EcologyIdentityRow],
         shared_identities: set[str],
         checks: dict[tuple[str, str, str], bool],
     ) -> str | None:
-        if visit.outcome in ("unobserved", "unknown"):
-            return visit.outcome
-        if visit.effort_seconds < request.minimum_effort_seconds:
-            return "insufficient_observation_effort"
-        if proposal.state != "confirmed":
-            return "taxonomy_not_confirmed"
+        exclusion = survey_visit_exclusion(request, visit, proposal, presence)
+        if exclusion is not None:
+            return exclusion
+        assert presence is not None
         identity = visit.identity
-        if current.get(identity.organism_key) != identity:
+        live_identity = current.get(identity.organism_key)
+        if live_identity is None or not taxonomy_identity_matches(
+            live_identity, identity, self.origin_ids
+        ):
             return "organism_revision_changed"
-        if identity.experimental_unit_id is None or identity.experimental_unit_type is None:
-            return "independent_unit_not_declared"
-        if identity.experimental_unit_type.casefold() != request.unit_type.casefold():
-            return "independent_unit_type_mismatch"
         if identity.organism_key in shared_identities:
             return "shared_parent_across_units"
-        if presence is None or presence.review.decision != "confirmed":
-            return "independent_presence_not_confirmed"
         sources = (visit.source, presence.review.source, proposal.proposal.source)
         for source in sources:
             if source is None:
@@ -573,7 +620,7 @@ class TaxonomyService:
             key = (source.kind, str(source.id), source.sha256)
             if key not in checks:
                 try:
-                    self._source(source)
+                    self.verify_source(source)
                     checks[key] = True
                 except (ConflictError, NotFoundError):
                     checks[key] = False

@@ -2,7 +2,7 @@
 
 from collections import Counter, defaultdict
 from collections.abc import Iterable
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from math import log, sqrt
 from statistics import fmean
 
@@ -11,8 +11,11 @@ from reefvision.schemas.taxonomy import (
     DetectabilityGroup,
     DetectabilityRequest,
     DetectabilityResult,
+    DetectabilityVisitSnapshot,
     DetectionInterval,
     ExcludedVisit,
+    PresenceReviewRead,
+    TaxonProposalRead,
 )
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -25,6 +28,29 @@ ASSUMPTIONS = [
     "The interval applies to the mean expected detection across the represented units under "
     "their sampling conditions. It does not establish representativeness, occupancy, or survival.",
 ]
+
+
+def survey_visit_exclusion(
+    request: DetectabilityRequest,
+    visit: DetectabilityVisitSnapshot,
+    proposal: TaxonProposalRead,
+    presence: PresenceReviewRead | None,
+) -> str | None:
+    """Check eligibility from the same frozen fields in live and portable results."""
+    if visit.outcome in ("unobserved", "unknown"):
+        return visit.outcome
+    if visit.effort_seconds < request.minimum_effort_seconds:
+        return "insufficient_observation_effort"
+    if proposal.state != "confirmed":
+        return "taxonomy_not_confirmed"
+    unit_type = visit.identity.experimental_unit_type
+    if visit.identity.experimental_unit_id is None or unit_type is None:
+        return "independent_unit_not_declared"
+    if unit_type.casefold() != request.unit_type.casefold():
+        return "independent_unit_type_mismatch"
+    if presence is None or presence.review.decision != "confirmed":
+        return "independent_presence_not_confirmed"
+    return None
 
 
 def _digest_sources(record: AssessmentVisit) -> Iterable[str]:
@@ -43,10 +69,12 @@ def _overlapping(indices: list[int], records: list[AssessmentVisit]) -> set[int]
     overlaps: set[int] = set()
     last_index: int | None = None
     latest_end = None
+    epoch = datetime(1970, 1, 1, tzinfo=UTC)
     for index in indices:
         visit = records[index].visit
-        end = visit.started_at + timedelta(seconds=visit.effort_seconds)
-        if latest_end is not None and last_index is not None and visit.started_at < latest_end:
+        start = visit.started_at - epoch
+        end = start + timedelta(seconds=visit.effort_seconds)
+        if latest_end is not None and last_index is not None and start < latest_end:
             overlaps.update((last_index, index))
         if latest_end is None or end > latest_end:
             latest_end = end

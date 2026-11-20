@@ -280,10 +280,12 @@ function AssessmentResult({
                 {row.presence_review?.review.reviewer.name ?? "Pending"}.
               </p>
               <SourceEvidence
+                projectId={assessment.project_id}
                 label="Observation source"
                 source={row.visit.source}
               />
               <SourceEvidence
+                projectId={assessment.project_id}
                 label="Known-presence reference"
                 source={row.presence_review?.review.source}
               />

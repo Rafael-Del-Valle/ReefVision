@@ -188,3 +188,13 @@ export function detectabilityExportUrl(projectId: string, id: string) {
     route(projectId, `assessments/${encodeURIComponent(id)}/export`)
   );
 }
+
+export function taxonomyOriginalUrl(projectId: string, source: TaxonomySource) {
+  return (
+    getApiBaseUrl() +
+    route(
+      projectId,
+      `source/${source.kind}/${encodeURIComponent(source.id)}?sha256=${source.sha256}`,
+    )
+  );
+}
