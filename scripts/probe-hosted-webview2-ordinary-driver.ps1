@@ -2,12 +2,19 @@ param([Parameter(Mandatory)][string]$ContextFile)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 $context = Get-Content -LiteralPath $ContextFile -Raw | ConvertFrom-Json
+$stage = Join-Path $context.output 'ordinary-driver-stage.txt'
+Set-Content -LiteralPath $stage -Value 'entered'
+$driverTemp = Join-Path $context.output 'driver-temp'
+New-Item -ItemType Directory -Path $driverTemp | Out-Null
+$env:TEMP = $driverTemp
+$env:TMP = $driverTemp
 $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
 if ($identity.User.Value -ne $context.user_sid -or
     ([System.Security.Principal.WindowsPrincipal]::new($identity)).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw 'The diagnostic driver did not run as the ordinary browser account.'
 }
 . (Join-Path $PSScriptRoot 'windows-standard-user-webview2.ps1')
+Set-Content -LiteralPath $stage -Value 'verified-ordinary-user'
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -24,6 +31,7 @@ public static class ReefVisionOrdinaryKnownFolder {
 }
 '@
 $downloads = [ReefVisionOrdinaryKnownFolder]::Downloads()
+Set-Content -LiteralPath $stage -Value 'resolved-downloads'
 $knownFolderExists = Test-Path -LiteralPath $downloads -PathType Container
 $knownFolderWritable = $false
 if ($knownFolderExists) {
@@ -53,6 +61,7 @@ try {
     dedicated_browser_artifacts=$context.browser_artifacts
     dedicated_browser_artifacts_writable=$artifactsWritable
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $context.output 'ordinary-driver-identity.json')
+Set-Content -LiteralPath $stage -Value 'starting-playwright'
 $env:REEFVISION_GUIDED_TEST_API=$context.api
 $env:REEFVISION_SPATIAL_WEBVIEW2_ENDPOINT=$context.endpoint
 $env:REEFVISION_SPATIAL_WEBVIEW2_ARTIFACTS_DIR=$context.browser_artifacts

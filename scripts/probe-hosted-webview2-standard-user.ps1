@@ -263,7 +263,17 @@ try {
     foreach ($name in 'ordinary-project-playwright.json','ordinary-driver-identity.json','ordinary-2d-webview2.json','probe-native-viewport.json','probe-download-network.json') {
         Get-ChildItem -LiteralPath $driverOutput -File -Recurse -Filter $name | Copy-Item -Destination $EvidenceRoot
     }
-    $ordinaryIdentity=Get-Content -LiteralPath (Join-Path $EvidenceRoot 'ordinary-driver-identity.json') -Raw | ConvertFrom-Json
+    $identityPath=Join-Path $EvidenceRoot 'ordinary-driver-identity.json'
+    if (-not (Test-Path -LiteralPath $identityPath -PathType Leaf)) {
+        # This happens before starting Node, so no browser messages are present.
+        Write-Probe 'ordinary-driver-startup-failure.json' @{
+            exit_code=$ordinaryDriver.ExitCode
+            stage=@(Get-Content -LiteralPath (Join-Path $driverOutput 'ordinary-driver-stage.txt') -ErrorAction SilentlyContinue)
+            error=@(Get-Content -LiteralPath $protocolLog -Tail 20 -ErrorAction SilentlyContinue)
+        }
+        throw 'The ordinary driver exited before reporting its process identity.'
+    }
+    $ordinaryIdentity=Get-Content -LiteralPath $identityPath -Raw | ConvertFrom-Json
     if ($ordinaryIdentity.integrity -ne 8192 -or $ordinaryIdentity.user_sid -ne $sid) { throw 'Driver and app did not run as the same ordinary Windows user.' }
     if ($ordinaryDriver.ExitCode -ne 0) { throw 'The same-ordinary-account WebView2 download journey failed.' }
     $stats = (Get-Content -LiteralPath (Join-Path $EvidenceRoot 'ordinary-project-playwright.json') -Raw | ConvertFrom-Json).stats
