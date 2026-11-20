@@ -71,6 +71,10 @@ from reefvision.services.project_exchange_computed import (
     remap_computed_sections,
     validate_computed_exchange_records,
 )
+from reefvision.services.project_exchange_condition_v14 import (
+    remap_condition_observation,
+    remap_condition_report,
+)
 from reefvision.services.project_exchange_environmental_analysis import (
     ANALYSIS_SECTIONS,
     remap_environmental_analysis_sections,
@@ -124,6 +128,7 @@ from reefvision.services.spatial_asset_metadata_revisions_v14 import (
 from reefvision.services.spatial_calibration_review_v14 import (
     canonical_spatial_calibration_review_evidence,
 )
+from reefvision.services.spatial_condition_v14 import condition_content_sha256
 from reefvision.services.spatial_source_assets_v14 import (
     SPATIAL_PARSE_JOB,
     spatial_source_parse_result_content,
@@ -558,7 +563,7 @@ def import_project_exchange(
                         session, section_rows, id_map
                     )
                     digests.update(ecology_digests)
-                if section_name in integrated:
+                if section_name in integrated or section_name == "spatial_condition_revisions":
                     rows = parent_first(rows, model)
                 created: list[Any] = []
                 for row_index, source_row in enumerate(rows):
@@ -690,6 +695,10 @@ def import_project_exchange(
                         values["error_message"] = "Interrupted by project exchange"
 
                     if section_name == "workflow_artifacts":
+                        if values["data_type"] == "spatial_condition_report":
+                            values["payload_json"] = remap_condition_report(
+                                row["payload_json"], id_map
+                            )
                         payload = values["payload_json"]
                         result_id = payload.get("result_id")
                         if values["data_type"] == "scientific_heatmap":
@@ -722,6 +731,17 @@ def import_project_exchange(
                                     "content_sha256": coverage["content_sha256"],
                                 }
                             )
+
+                    if section_name == "spatial_condition_rubrics":
+                        values["rubric_id"] = row["rubric_id"]
+                        values["version"] = row["version"]
+
+                    if section_name == "spatial_condition_revisions":
+                        values["observation_json"] = remap_condition_observation(
+                            row["observation_json"], id_map
+                        )
+                        values["decision_json"] = row.get("decision_json")
+                        values["content_sha256"] = condition_content_sha256(values)
 
                     if section_name == "spatial_calibration_reviews":
                         evidence = MeshCalibrationReviewEvidence.model_validate(
