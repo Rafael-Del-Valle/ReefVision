@@ -175,3 +175,29 @@ translation, extreme image-edge constraints, object immutability and an
 empty-selection case. Exact-head frontend/Vitest/Playwright and installed
 Windows GUI acceptance remain required; an independent Node/V8 reproduction
 is not a substitute for repository CI.
+
+## Fail-closed group translation for malformed imported geometry (Track D)
+
+Imported or restored annotations can contain nonfinite, inverted or off-image
+coordinates despite the normal editor's input checks. Previously one such
+selected box made the group movement limit `NaN`, so dragging the selection
+produced nonfinite coordinates for otherwise valid biological observations.
+The display and commit paths both use the same translation helper.
+
+Group translation now refuses the entire move and returns the original
+selection unchanged when any selected box has invalid bounds, when the image
+size is not positive/finite or when pointer displacement is nonfinite.
+It never discards or repairs an imported scientific observation, reassigns a
+class, or silently moves only the healthy subset. Valid groups retain the
+existing bounded collective movement and 200,000-object streaming behavior.
+The UI still needs explicit invalid-selection feedback in a future usability
+pass; refusing corruption is not the same as explaining the blocked gesture.
+
+Three Vitest regressions cover five corrupt imported geometries, a late
+invalid member of a 20,000-coral group, invalid image dimensions and pointer
+deltas, source-record identity and the existing valid 200,000-object case.
+This is an annotation-editor integrity guard, not a new biological analysis:
+existing typed standalone and saved executable Workflow Builder QC, immutable
+provenance, human approval and retries are unaffected. Exact-head CI,
+representative source data, installed Windows GUI and MSI upgrade/rollback
+remain independent 1.6 release gates.

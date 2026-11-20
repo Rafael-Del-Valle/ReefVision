@@ -115,6 +115,20 @@ export function translateAnnotations(
 ): EditorAnnotation[] {
   if (annotations.length === 0) return [];
 
+  // Refuse an invalid imported selection as a whole. Otherwise one NaN
+  // coordinate poisons the group clamp and rewrites *every* selected box
+  // with nonfinite geometry, including previously valid observations.
+  if (
+    !Number.isFinite(imageSize.width) ||
+    !Number.isFinite(imageSize.height) ||
+    imageSize.width <= 0 ||
+    imageSize.height <= 0 ||
+    !Number.isFinite(delta.x) ||
+    !Number.isFinite(delta.y)
+  ) {
+    return annotations;
+  }
+
   // One pass avoids spreading large coral selections into Math.max/min
   // (which overflows the JavaScript argument stack on dense images).
   let maxLeft = -Infinity;
@@ -122,6 +136,21 @@ export function translateAnnotations(
   let maxRight = Infinity;
   let maxDown = Infinity;
   for (const item of annotations) {
+    if (
+      item == null ||
+      !Number.isFinite(item.x_min) ||
+      !Number.isFinite(item.x_max) ||
+      !Number.isFinite(item.y_min) ||
+      !Number.isFinite(item.y_max) ||
+      item.x_min < 0 ||
+      item.y_min < 0 ||
+      item.x_min > item.x_max ||
+      item.y_min > item.y_max ||
+      item.x_max > imageSize.width ||
+      item.y_max > imageSize.height
+    ) {
+      return annotations;
+    }
     maxLeft = Math.max(maxLeft, -item.x_min);
     maxUp = Math.max(maxUp, -item.y_min);
     maxRight = Math.min(maxRight, imageSize.width - item.x_max);

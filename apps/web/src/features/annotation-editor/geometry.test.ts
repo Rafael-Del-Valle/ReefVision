@@ -108,6 +108,90 @@ describe("annotation editor geometry", () => {
     expect(moved[123_456].label_class_id).toBe("swiftia");
   });
 
+  it("refuses a whole group move when any imported box has impossible geometry", () => {
+    const valid = {
+      id: "valid-swiftia",
+      label_class_id: "swiftia",
+      x_min: 5,
+      y_min: 6,
+      x_max: 15,
+      y_max: 16,
+    };
+    for (const malformed of [
+      { ...valid, id: "nan-coordinate", x_min: Number.NaN },
+      { ...valid, id: "infinite-coordinate", y_max: Infinity },
+      { ...valid, id: "inverted-box", x_min: 16 },
+      { ...valid, id: "off-image", x_max: 101 },
+      { ...valid, id: "negative-coordinate", y_min: -1 },
+    ]) {
+      const selection = [valid, malformed];
+      expect(
+        translateAnnotations(
+          selection,
+          { x: 30, y: -30 },
+          { width: 100, height: 100 },
+        ),
+      ).toBe(selection);
+      expect(valid.x_min).toBe(5);
+    }
+  });
+
+  it("keeps dense valid records intact when the last selected box is corrupt", () => {
+    const selection = Array.from({ length: 20_000 }, (_, index) => ({
+      id: `coral-${index}`,
+      label_class_id: "swiftia",
+      x_min: 10 + (index % 100),
+      y_min: 10 + Math.floor(index / 100),
+      x_max: 12 + (index % 100),
+      y_max: 12 + Math.floor(index / 100),
+    }));
+    const original = selection[0];
+    selection[selection.length - 1] = {
+      ...selection[selection.length - 1],
+      x_min: Number.NaN,
+    };
+    expect(
+      translateAnnotations(
+        selection,
+        { x: 40, y: 40 },
+        { width: 200, height: 300 },
+      ),
+    ).toBe(selection);
+    expect(selection[0]).toBe(original);
+    expect(selection[0].x_min).toBe(10);
+  });
+
+  it("rejects invalid image dimensions or pointer deltas before changing coordinates", () => {
+    const selection = [
+      {
+        id: "source-coral",
+        label_class_id: "swiftia",
+        x_min: 10,
+        y_min: 20,
+        x_max: 15,
+        y_max: 25,
+      },
+    ];
+    for (const imageSize of [
+      { width: 0, height: 100 },
+      { width: 100, height: Infinity },
+      { width: Number.NaN, height: 100 },
+    ]) {
+      expect(
+        translateAnnotations(selection, { x: 10, y: 20 }, imageSize),
+      ).toBe(selection);
+    }
+    for (const delta of [
+      { x: Number.NaN, y: 0 },
+      { x: 10, y: Infinity },
+    ]) {
+      expect(
+        translateAnnotations(selection, delta, { width: 100, height: 100 }),
+      ).toBe(selection);
+    }
+    expect(selection[0].x_min).toBe(10);
+  });
+
   it("returns an empty selection without attempting geometry reduction", () => {
     expect(
       translateAnnotations(
