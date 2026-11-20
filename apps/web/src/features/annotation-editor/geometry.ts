@@ -176,6 +176,36 @@ export function resizeAnnotation(
   imageSize: ImageSize,
   minimumSize = 1,
 ): EditorAnnotation {
+  // Restored/imported observations may bypass the drawing-time constraints.
+  // Refuse malformed source geometry or pointer input rather than storing
+  // nonfinite, inverted, or out-of-image biological measurements.
+  if (
+    !Number.isFinite(imageSize.width) ||
+    !Number.isFinite(imageSize.height) ||
+    imageSize.width <= 0 ||
+    imageSize.height <= 0 ||
+    !Number.isFinite(point.x) ||
+    !Number.isFinite(point.y) ||
+    !Number.isFinite(minimumSize) ||
+    minimumSize <= 0 ||
+    minimumSize > imageSize.width ||
+    minimumSize > imageSize.height ||
+    !Number.isFinite(annotation.x_min) ||
+    !Number.isFinite(annotation.x_max) ||
+    !Number.isFinite(annotation.y_min) ||
+    !Number.isFinite(annotation.y_max) ||
+    annotation.x_min < 0 ||
+    annotation.y_min < 0 ||
+    annotation.x_max > imageSize.width ||
+    annotation.y_max > imageSize.height ||
+    annotation.x_min >= annotation.x_max ||
+    annotation.y_min >= annotation.y_max ||
+    annotation.x_max - annotation.x_min < minimumSize ||
+    annotation.y_max - annotation.y_min < minimumSize
+  ) {
+    return annotation;
+  }
+
   let { x_min, y_min, x_max, y_max } = annotation;
 
   if (handle === "nw" || handle === "sw") {

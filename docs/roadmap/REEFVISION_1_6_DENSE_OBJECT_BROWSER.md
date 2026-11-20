@@ -201,3 +201,27 @@ existing typed standalone and saved executable Workflow Builder QC, immutable
 provenance, human approval and retries are unaffected. Exact-head CI,
 representative source data, installed Windows GUI and MSI upgrade/rollback
 remain independent 1.6 release gates.
+
+## Fail-closed single-object resizing with imported geometry (Track D)
+
+The earlier editor safety check protected **group translation**, but resizing a
+single historical box still accepted nonfinite pointer coordinates or malformed
+source bounds, potentially writing `NaN`/inverted annotation geometry. The
+shared preview/commit resize helper now refuses corrupt imported boxes, invalid
+image sizes, nonfinite pointers, and impossible minimum dimensions. It preserves
+the original scientific observation and its identity without silently repairing
+or deleting geometry. A subsequent valid drag still uses the existing clamped
+source-pixel resize contract; the source record remains immutable. These checks
+also refuse degenerate boxes below the requested minimum size.
+
+Three Vitest regressions cover corrupted imported geometry, impossible event or
+canvas input, and valid recovery after an invalid attempt. The preceding
+[exact-head CI #44676388267](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44676388267)
+failed frontend Prettier before TypeScript/Vitest; its precise formatting
+diagnostic in `geometry.test.ts` is also corrected in this increment.
+
+This is editor state/geometry integrity, not an analysis node. The existing
+standalone and saved typed QC Workflow Builder operations, provenance, retries,
+review gates, and source datasets remain unchanged. Full exact-head CI and
+installed-Windows dense-image/resize usability plus MSI upgrade/rollback remain
+required independent acceptance evidence.

@@ -177,9 +177,9 @@ describe("annotation editor geometry", () => {
       { width: 100, height: Infinity },
       { width: Number.NaN, height: 100 },
     ]) {
-      expect(
-        translateAnnotations(selection, { x: 10, y: 20 }, imageSize),
-      ).toBe(selection);
+      expect(translateAnnotations(selection, { x: 10, y: 20 }, imageSize)).toBe(
+        selection,
+      );
     }
     for (const delta of [
       { x: Number.NaN, y: 0 },
@@ -225,6 +225,106 @@ describe("annotation editor geometry", () => {
       x_max: 100,
       y_max: 120,
     });
+  });
+
+  it("refuses malformed single-object resize without modifying the imported observation", () => {
+    const valid = {
+      id: "deep-coral",
+      label_class_id: "swiftia",
+      x_min: 10,
+      y_min: 20,
+      x_max: 30,
+      y_max: 40,
+    };
+    const imageSize = { width: 100, height: 100 };
+    for (const imported of [
+      { ...valid, x_min: Number.NaN },
+      { ...valid, y_max: Infinity },
+      { ...valid, x_min: -1 },
+      { ...valid, x_max: 110 },
+      { ...valid, x_min: 31 },
+      { ...valid, y_min: 40 },
+      { ...valid, x_max: 10.5 },
+    ]) {
+      expect(
+        resizeAnnotation(imported, "se", { x: 50, y: 60 }, imageSize),
+      ).toBe(imported);
+    }
+    expect(valid.x_min).toBe(10);
+    expect(valid.label_class_id).toBe("swiftia");
+  });
+
+  it("refuses impossible resize pointers, canvas dimensions and minimum sizes", () => {
+    const annotation = {
+      id: "original-measurement",
+      label_class_id: "swiftia",
+      x_min: 10,
+      y_min: 20,
+      x_max: 30,
+      y_max: 40,
+    };
+    for (const point of [
+      { x: Number.NaN, y: 50 },
+      { x: 50, y: Infinity },
+    ]) {
+      expect(
+        resizeAnnotation(annotation, "se", point, { width: 100, height: 100 }),
+      ).toBe(annotation);
+    }
+    for (const size of [
+      { width: 0, height: 100 },
+      { width: Infinity, height: 100 },
+      { width: 100, height: Number.NaN },
+      { width: 25, height: 100 },
+    ]) {
+      expect(
+        resizeAnnotation(annotation, "se", { x: 50, y: 50 }, size),
+      ).toBe(annotation);
+    }
+    for (const minimumSize of [0, -1, Infinity, Number.NaN, 101, 21]) {
+      expect(
+        resizeAnnotation(
+          annotation,
+          "se",
+          { x: 50, y: 50 },
+          { width: 100, height: 100 },
+          minimumSize,
+        ),
+      ).toBe(annotation);
+    }
+    expect(annotation.x_max).toBe(30);
+  });
+
+  it("resumes bounded resizing after invalid pointer input without changing source identity", () => {
+    const annotation = {
+      id: "source-coral",
+      label_class_id: "swiftia",
+      x_min: 10,
+      y_min: 10,
+      x_max: 20,
+      y_max: 20,
+    };
+    expect(
+      resizeAnnotation(
+        annotation,
+        "se",
+        { x: Number.NaN, y: 200 },
+        { width: 100, height: 100 },
+      ),
+    ).toBe(annotation);
+    expect(
+      resizeAnnotation(
+        annotation,
+        "se",
+        { x: 200, y: -10 },
+        { width: 100, height: 100 },
+      ),
+    ).toEqual({
+      ...annotation,
+      x_max: 100,
+      y_max: 11,
+    });
+    expect(annotation.x_max).toBe(20);
   });
 
   it("fits and zooms the viewport around the cursor", () => {
