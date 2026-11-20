@@ -324,7 +324,7 @@ class WorkflowGraphService:
                 self._issue(
                     "error",
                     "model_scope_mismatch",
-                    "Registered model does not belong to this project",
+                    "The selected model is unavailable in this project",
                     node_id=node_id,
                 )
             )
@@ -755,6 +755,32 @@ class WorkflowGraphService:
             referenced_dataset_version_ids=sorted(referenced_dataset_ids),
             referenced_video_ids=sorted(referenced_video_ids),
         )
+
+    def execution_validation_message(
+        self,
+        graph: WorkflowGraphRequest,
+        plan: WorkflowGraphPlanResponse,
+        *,
+        prefix: str,
+    ) -> str:
+        """Summarize the first planner error using only graph-local context."""
+        issue = next((issue for issue in plan.issues if issue.severity == "error"), None)
+        if issue is None:
+            return prefix
+
+        location = ""
+        if issue.node_id is not None:
+            node = next((node for node in graph.nodes if node.node_id == issue.node_id), None)
+            definition = self.registry.get(node.node_type) if node else None
+            location = (
+                f"{definition.display_name} ({issue.node_id})"
+                if definition
+                else f"Node {issue.node_id}"
+            )
+        elif issue.edge_id is not None:
+            location = f"Edge {issue.edge_id}"
+        detail = f"{location} — {issue.message}" if location else issue.message
+        return f"{prefix}. {detail}"
 
     def plan(
         self,
