@@ -160,6 +160,58 @@ describe("Gallery pending thumbnail refresh", () => {
     ).toEqual({ interval: false, state: null });
   });
 
+  it("stops failed background image-page polling without losing explicit retry", () => {
+    const pending = { items: [{ id: "camera-1", thumbnail_path: null }] };
+    const initial = galleryPendingThumbnailPollingDecision(
+      pending,
+      7,
+      null,
+      "project-a:page-1",
+    );
+    expect(initial.interval).toBe(5000);
+
+    // React Query retains the last successful page after a background error;
+    // dataUpdateCount stops advancing, so polling it alone could run forever.
+    expect(
+      galleryPendingThumbnailPollingDecision(
+        pending,
+        7,
+        initial.state,
+        "project-a:page-1",
+        true,
+      ),
+    ).toEqual({ interval: false, state: initial.state });
+
+    expect(
+      galleryPendingThumbnailPollingDecision(
+        undefined,
+        0,
+        null,
+        "project-a:page-1",
+        true,
+      ),
+    ).toEqual({ interval: false, state: null });
+
+    // The explicit Retry/Refresh can recover after the server returns,
+    // continuing the existing scientific image's bounded polling budget.
+    const recovered = galleryPendingThumbnailPollingDecision(
+      pending,
+      8,
+      initial.state,
+      "project-a:page-1",
+    );
+    expect(recovered.interval).toBe(5000);
+    expect(recovered.state).toEqual(initial.state);
+    expect(
+      galleryPendingThumbnailPollingDecision(
+        pending,
+        19,
+        recovered.state,
+        "project-a:page-1",
+      ).interval,
+    ).toBe(false);
+  });
+
   it("recovers a failed thumbnail when the backend regenerates a new version", async () => {
     let requests = 0;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {

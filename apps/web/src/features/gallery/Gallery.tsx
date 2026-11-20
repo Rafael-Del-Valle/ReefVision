@@ -66,7 +66,12 @@ export function galleryPendingThumbnailPollingDecision(
   successfulLoads: number,
   previous: ThumbnailPollState | null,
   queryKey: string,
+  hasFetchError = false,
 ): { interval: number | false; state: ThumbnailPollState | null } {
+  // A failed background page refresh must not request the same offline
+  // server forever while thumbnails are pending. Preserve the current
+  // budget so an explicit Retry/Refresh can resume normal bounded polling.
+  if (hasFetchError) return { interval: false, state: previous };
   const pendingIds = page?.items
     .filter((item) => !item.thumbnail_path)
     .map((item) => item.id);
@@ -652,6 +657,7 @@ function GalleryContent({
         query.state.dataUpdateCount,
         thumbnailPollState.current,
         query.queryHash,
+        query.state.error !== null,
       );
       thumbnailPollState.current = decision.state;
       return decision.interval;
