@@ -6,7 +6,12 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from reefvision.db.models import WorkflowGraphRecord, WorkflowSchedule, WorkflowScheduleOccurrence
+from reefvision.db.models import (
+    WorkflowGraphRecord,
+    WorkflowRun,
+    WorkflowSchedule,
+    WorkflowScheduleOccurrence,
+)
 from reefvision.domain.errors import ValidationError
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -91,6 +96,7 @@ def validate_schedule_exchange(version: str, project_id: str, rows: Rows) -> Non
                     or run["project_id"] != project_id
                     or run["workflow_graph_record_id"] != schedule["workflow_graph_record_id"]
                     or run["graph_sha256"] != schedule["graph_sha256"]
+                    or run["input_json"] != schedule["inputs_json"]
                 ):
                     raise ValidationError("The schedule occurrence refers to a different execution")
                 used_runs.add(run_id)
@@ -137,3 +143,8 @@ def restore_schedule_pins(
             raise ValidationError("The imported occurrence lost its schedule")
         occurrence.graph_sha256 = schedule.graph_sha256
         occurrence.inputs_sha256 = schedule.inputs_sha256
+        if occurrence.workflow_run_id is not None:
+            run = session.get(WorkflowRun, occurrence.workflow_run_id)
+            if run is None or run.workflow_graph_record_id != schedule.workflow_graph_record_id:
+                raise ValidationError("The imported occurrence lost its execution")
+            run.input_json = dict(schedule.inputs_json)

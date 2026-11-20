@@ -10,7 +10,14 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.config import Settings
-from reefvision.db.models import DatasetVersion, WorkflowSchedule, WorkflowScheduleOccurrence
+from reefvision.db.models import (
+    DatasetVersion,
+    WorkflowRun,
+    WorkflowSchedule,
+    WorkflowScheduleOccurrence,
+)
+from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.jobs.workflow_schedules import dispatch_due_schedules
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_dataset_versions import create_version
 from reefvision.tests.test_paired_growth_contrast import _run_graph
@@ -23,7 +30,6 @@ from reefvision.tests.test_scientific_project_exchange import (
 )
 from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
     _frozen_graph,
-    _run_frozen_graph,
     _study,
 )
 
@@ -38,48 +44,28 @@ def test_exchange_preserves_scheduled_qc_and_disarms_the_copy(
     )
     assert saved.is_success, saved.text
     graph = saved.json()
-    run, _ = _run_frozen_graph(client, project, graph["id"])
     factory = cast(FastAPI, client.app).state.session_factory
-    with factory() as session:
-        dataset = session.get(DatasetVersion, version)
-        assert dataset is not None
-        inputs = {
-            "references": [
-                {
-                    "node_id": "version",
-                    "kind": "dataset_version_source",
-                    "id": version,
-                    "sha256": dataset.manifest_sha256,
-                    "split": None,
-                }
-            ]
-        }
-        schedule = WorkflowSchedule(
-            project_id=project,
-            name=version,
-            purpose="qc",
-            workflow_graph_record_id=graph["id"],
-            graph_sha256=graph["graph_sha256"],
-            inputs_json=inputs,
-            inputs_sha256=canonical_json_sha256(inputs),
-            interval_seconds=60,
-            next_due_at=datetime(2026, 5, 8, 10, 1, tzinfo=UTC),
-        )
-        session.add(schedule)
-        session.flush()
-        occurrence = WorkflowScheduleOccurrence(
-            project_id=project,
-            schedule_id=schedule.id,
-            scheduled_at=datetime(2026, 5, 8, 10, tzinfo=UTC),
-            graph_sha256=schedule.graph_sha256,
-            inputs_sha256=schedule.inputs_sha256,
-            status="queued",
-            workflow_run_id=run,
-            missed_intervals=2,
-        )
-        session.add(occurrence)
-        session.commit()
-        schedule_id, occurrence_id = schedule.id, occurrence.id
+    schedules_url = f"/api/v1/projects/{project}/workflow-schedules"
+    created = client.post(
+        schedules_url,
+        json={
+            "name": version,
+            "purpose": "qc",
+            "workflow_graph_record_id": graph["id"],
+            "interval_seconds": 60,
+            "next_due_at": "2026-05-08T10:00:00Z",
+        },
+    )
+    assert created.is_success, created.text
+    schedule_id = created.json()["id"]
+    assert (
+        dispatch_due_schedules(test_settings, factory, now=datetime(2026, 5, 8, 10, 2, tzinfo=UTC))
+        == 1
+    )
+    [dispatched] = client.get(f"{schedules_url}/{schedule_id}/occurrences").json()["items"]
+    occurrence_id, run = dispatched["id"], dispatched["workflow_run_id"]
+    assert dispatched["missed_intervals"] == 2
+    assert process_workflow_run_job(test_settings, factory, dispatched["job_id"])
     endpoint = f"/api/v1/projects/{project}/workflow-schedule-occurrences/{occurrence_id}/receipt"
     response = client.get(endpoint)
     assert response.is_success, response.text
@@ -130,10 +116,20 @@ def test_exchange_preserves_scheduled_qc_and_disarms_the_copy(
     def damage(_, sections):
         sections["workflow_schedule_occurrences"][0]["inputs_sha256"] = "a" * 64
 
+    def reassign_input(_, sections):
+        record = sections["workflow_schedules"][0]
+        record["inputs_json"]["references"][0]["id"] = project
+        record["inputs_sha256"] = canonical_json_sha256(record["inputs_json"])
+        sections["workflow_schedule_occurrences"][0]["inputs_sha256"] = record["inputs_sha256"]
+        next(r for r in sections["workflow_runs"] if r["id"] == run)["input_json"] = record[
+            "inputs_json"
+        ]
+
     counts = database_counts(client)
-    refused = import_archive(client, rewrite(raw, damage))
-    assert refused.status_code == 400, refused.text
-    assert database_counts(client) == counts
+    for corrupt in (damage, reassign_input):
+        refused = import_archive(client, rewrite(raw, corrupt))
+        assert refused.status_code == 400, refused.text
+        assert database_counts(client) == counts
     for _ in range(2):
         restored = import_archive(client, raw)
         assert restored.is_success, restored.text
@@ -154,6 +150,8 @@ def test_exchange_preserves_scheduled_qc_and_disarms_the_copy(
             )
             [pin] = copied.inputs_json["references"]
             assert pin["id"] == dataset.id and pin["sha256"] == dataset.manifest_sha256
+            copied_run = session.get(WorkflowRun, origin[run])
+            assert copied_run is not None and copied_run.input_json == copied.inputs_json
         detail = _run_graph(client, origin[project], origin[receipt_graph_id])
         assert detail["run"]["status"] == "succeeded", detail
         [artifact] = [

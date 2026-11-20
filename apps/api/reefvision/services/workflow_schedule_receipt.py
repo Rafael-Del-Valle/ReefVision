@@ -94,7 +94,12 @@ def schedule_receipt(session: Session, project: str, occurrence_id: str) -> Veri
     artifacts: list[ScheduleArtifactReference] = []
     if occurrence.workflow_run_id is not None:
         run = session.get(WorkflowRun, occurrence.workflow_run_id)
-        if run is None or run.project_id != project or run.workflow_graph_record_id != graph.id:
+        if (
+            run is None
+            or run.project_id != project
+            or run.workflow_graph_record_id != graph.id
+            or run.input_json != schedule.inputs_json
+        ):
             raise ConflictError("The occurrence lost its linked workflow execution")
         status, detail, job_id = run.status, run.error_message, run.job_id
         if status not in {"succeeded", "failed", "cancelled"}:

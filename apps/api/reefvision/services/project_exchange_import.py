@@ -127,7 +127,6 @@ from reefvision.services.project_exchange_reviewer_lab_v15 import (
     reviewer_lab_exchange_ids,
 )
 from reefvision.services.project_exchange_schedules import (
-    restore_schedule_pins,
     restore_schedule_row,
     schedule_dataset_ids,
     validate_schedule_exchange,
@@ -996,7 +995,6 @@ def import_project_exchange(
                 restore_workflow_provenance(
                     session, project.id, section_rows, id_map, digests, _remap_json
                 )
-                restore_schedule_pins(session, section_rows, id_map, digests)
                 package.options_json = {**package.options_json, "digest_map": digests}
             restore_reviewer_lab_exchange(session, section_rows, id_map)
             session.commit()
