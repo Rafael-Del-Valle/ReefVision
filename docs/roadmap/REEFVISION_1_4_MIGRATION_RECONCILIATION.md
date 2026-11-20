@@ -97,3 +97,34 @@ The 1.3 installer rejected the upgraded schema and preserved the database
 digest. Repeat the matrix on the integrated candidate. Real prior-user profiles
 with verified backups still require owner-authorized copies.
 [Windows lineage acceptance](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396)
+## Packaged backup recovery on a disposable copy
+
+The accepted 1.3.0 installer at `f44053a90` contains a frozen sidecar with
+SHA-256 `05ca83d6cb1b2d931ecf775235f1e70a8bea859ba6182026fe8c6ac21ae74746`.
+A fixture created through that sidecar included an original image, a reviewed
+box and mask, two stable class IDs and indices, a 0.25 mm/px calibration,
+an image-linked observation of 68 °F and a registered local scratch checkpoint.
+Migration on the archived 1.4 build `78a02c20c` preserved the original
+records. Project Exchange 1.1 remapped their IDs and preserved the media,
+checkpoint and model-to-class relationship. The 1.3 executable declined to
+open the upgraded database and left its bytes intact.
+
+Both original Windows packages could verify the 1.3 backup. Their Restore
+action returned HTTP 500 while locating bundled Alembic revisions. A
+production-script frozen Windows sidecar at `63fd94bfc` used the shared
+desktop Alembic resource resolver. Restore returned HTTP 200 and its job
+succeeded. The recovered database and all five backup inventory files
+matched their checksums. The exact 1.3 executable reopened a separate copy
+of that recovery and accepted a new write. The upgraded database SHA-256
+stayed `34b000428fff3429f9d736997eca7f662b9d04d29ababf383898fd06d1c51b92`
+after the old reader exited with code 1. Two checksum-valid fixture backups
+with an unknown schema or future application version both returned HTTP 409
+and created no recovery directory.
+
+Use a verified backup made before the upgrade and a separate recovery
+directory. Keep the original upgraded profile and backup intact. The
+completion marker authenticates the manifest. Verify each inventory entry's
+size and SHA-256, including the database snapshot and original media. Open
+the recovered copy with the matching previous executable and compare record
+IDs, units, class indices, review history and file hashes before writing.
+Representative historical profiles remain an owner acceptance input.

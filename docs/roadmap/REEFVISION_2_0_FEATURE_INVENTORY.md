@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T04:16:00Z`
+Updated: `2026-11-20T05:18:00Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -11,8 +11,8 @@ Candidate target: `2.0`
 | --- | ---: |
 | blocked | 13 |
 | explicitly_deferred | 4 |
-| in_progress | 33 |
-| verified | 27 |
+| in_progress | 32 |
+| verified | 28 |
 
 ## Features
 
@@ -40,9 +40,9 @@ Candidate target: `2.0`
 | 1.3 | Acquisition-quality review and exclusions | verified | Review → Acquisition QC |
 | 1.3 | Reviewed biological event summaries | verified | Research → Organisms & ecology → Event summaries |
 | 1.3 | 1.3 temporal/scientific exchange, upgrade, and restore | verified | Project menu → Project Exchange / Backup |
-| 1.3 | Held-out landmark, event, timing, and count agreement reports | in_progress | Models & AI → Model Hub → ReefPose scientific validation |
+| 1.3 | Held-out landmark, event, timing, and count agreement reports | verified | Models & AI → Model Hub → ReefPose scientific validation |
 | 1.3 | Publication figures, methods, and provenance records | verified | Research → Reports → Publication outputs |
-| 1.3 | Representative frame-only versus temporal ReefPose comparison | blocked | The model and data lineage required for the engineering held-out label is tracked in rv13-heldout-agreement. Representative group-aware accuracy also requires independent recordings, labels and thresholds. |
+| 1.3 | Representative frame-only versus temporal ReefPose comparison | blocked | The separate prespecified five-group source fixture measured mean landmark errors of 5.575 and 4.006 px. Frame and temporal count errors were +8 and +14. The two-group fixture with 24 of 48 coordinates and no common anatomical pair frames is retained. Field accuracy remains open. |
 | 1.3 | Reviewed study, treatment, site, tank, and sampling-unit assignments | verified | Research → Organisms & ecology → Study assignments |
 | 1.3 | Frozen temporal ReefPose datasets and checkpoint training | verified | Models & AI → Training → Temporal ReefPose |
 | 1.3 | Temporal ReefPose refinement and explicit frame review | verified | Video & automation → Video & tracking → Native temporal ReefPose |
@@ -546,7 +546,7 @@ Evidence:
 ### rv13-heldout-agreement: Held-out landmark, event, timing, and count agreement reports
 
 - Target: `1.3`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv13-temporal-refinement-review`, `rv13-event-summaries`
 - Entry point: Models & AI → Model Hub → ReefPose scientific validation
 - Workflow Builder: `required`
@@ -554,12 +554,13 @@ Evidence:
 Acceptance checks:
 
 - **verified** — Publish paired landmark error, event precision/recall, timing/count error, exclusions, and checkpoint/reference provenance. (`rv13-heldout-agreement-check`)
-- **in_progress** — Carry declared independent animal and recording groups from the normal frame training workflow into an immutable checkpoint lineage. A shared group or unknown historical source must remain visible in the evaluation status. (`rv13-audited-frame-training-groups`)
+- **verified** — Carry declared independent animal and recording groups from the normal frame training workflow into an immutable checkpoint lineage. A shared group or unknown historical source must remain visible in the evaluation status. (`rv13-audited-frame-training-groups`)
 
 Evidence:
 
 - `source`: Deterministic scoring, pairing, report-hash, and stale-source tests. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/87` (`rv13-agreement-src`)
-- `browser`: none recorded
+- `source`: Scratch-train and register a native frame model through a saved graph, freeze reviewed temporal sequences and rerun the same paired metrics. Disjoint declared groups qualify as held out. Shared recordings and shared animals are exposed. Missing declarations keep the report exploratory. — `scripts/verify_reefpose_temporal_lineage_live.py` (`rv13-audited-frame-group-fixture`)
+- `browser`: Open a project and select Video & tracking, enter the recording and animal IDs on a source track, verify the pose, freeze supervised training data, then select reviewed identities and partitions for four temporal sequences. — `apps/web/tests/e2e/reefpose-lineage-grouping-live.spec.ts` (`rv13-audited-frame-group-browser`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -603,6 +604,7 @@ Evidence:
 - `browser`: none recorded
 - `windows_installed`: none recorded
 - `physical_hardware`: RTX 3090 native WebView2 fixture on packaged 78a02c20c exercised training, registration, refinement, review and comparison on 12 common frames. Frame and temporal scored 24 coordinates apiece and both missed the one complete event. The report recorded exploratory lineage. — `docs/REEFVISION_1.4.0_REPORT.md#packaged-reefpose-comparison-on-the-rtx-3090` (`rv13-packaged-exploratory-rtx`)
+- `physical_hardware`: Two source CUDA studies used frozen, disjoint animal and recording declarations. The five-group study scored all 240 coordinates, seven complete reference events and 120 common frames. The two-group study retained the unsupported anatomical frames and unavailable event timing. — `docs/REEFVISION_1_3_HELDOUT_AGREEMENT.md#five-held-out-synthetic-recordings` (`rv13-declared-disjoint-cuda`)
 - `representative_data`: none recorded
 
 ### rv13-study-assignments: Reviewed study, treatment, site, tank, and sampling-unit assignments
@@ -769,10 +771,12 @@ Acceptance checks:
 - **verified** — Merge validated 1.3 without editing applied migration bodies, disambiguate both supported numeric histories from schema fingerprints, preserve rows and IDs, and reject ambiguous or unknown histories without mutation. (`rv14-lineage-source-check`)
 - **blocked** — Using an installer built from the final candidate SHA, upgrade representative 1.3 and legacy draft-1.4 profiles, exchange the integrated records, and restore a verified pre-upgrade backup. (`rv14-lineage-installed-check`)
 - **verified** — Run the exact candidate installer against deterministic 1.3, legacy 0038, and legacy 0039 fixtures, preserve the seeded evidence, round-trip Project Exchange, and restore verified backups. Confirm that the genuine historical 1.3 installer rejects the upgraded database without changing it. (`rv14-lineage-installed-synthetic-check`)
+- **verified** — Restore a verified backup created by the accepted 1.3 executable through the production frozen 1.4 sidecar. Reopen a separate copy with the old executable and reject checksum-valid backups with unknown or future schemas. (`rv14-packaged-restore-resources`)
 
 Evidence:
 
 - `source`: Real ancestry merge, unique Alembic graph, schema-fingerprinted legacy upgrades, ambiguity rejection, backup verification, and downgrade/upgrade regressions. — `docs/roadmap/REEFVISION_1_4_MIGRATION_RECONCILIATION.md` (`rv14-lineage-source`)
+- `source`: Locally built production Windows sidecar 63fd94bfc restored a checksum-authenticated f44053a90 backup. All inventory bytes matched, the exact old executable reopened the recovery and accepted a write, and two unsupported backups returned HTTP 409 before creating a destination. — `docs/roadmap/REEFVISION_1_4_MIGRATION_RECONCILIATION.md#packaged-backup-recovery-on-a-disposable-copy` (`rv14-frozen-restore-real`)
 - `browser`: none recorded
 - `windows_installed`: Exact-head source 36c80224a Windows acceptance passed a published 1.0.3 upgrade with schema migration, persistence, Project Exchange, uninstall, and data retention. This is partial evidence and does not substitute for representative 1.3 and legacy draft-1.4 profiles. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-103`)
 - `windows_installed`: Exact-head source 36c80224a passed all three installed synthetic profiles. Verified 1.3 MSI upgrade, 0038 and 0039 profile migration, evidence preservation, exchange round trips, and backup restoration. The historical 1.3 build rejected the upgraded schema and the upgraded database hash remained unchanged. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-synthetic`)
