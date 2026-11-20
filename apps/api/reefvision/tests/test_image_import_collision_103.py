@@ -336,3 +336,49 @@ def test_camera_jpeg_exif_time_qc_preserves_original_bytes(
         assert inspected.capture_timestamp is not None
         assert inspected.capture_timestamp.isoformat() == expected_utc
         assert "capture_time_warning" not in inspected.metadata
+def test_committed_camera_import_does_not_require_a_second_database_refresh(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed post-commit refresh must not reclassify a durable JPEG as failed."""
+    from sqlalchemy.orm import Session
+
+    from reefvision.db.models import ImageAsset, Job
+
+    project = create_project(client, "Committed camera import response integrity")
+    source = image_bytes("JPEG", size=(47, 31))
+    original_refresh = Session.refresh
+
+    def reject_import_refresh(
+        session: Session, instance: object, *args: object, **kwargs: object
+    ) -> None:
+        if isinstance(instance, (ImageAsset, Job)):
+            raise OSError("Simulated database read outage after image commit")
+        original_refresh(session, instance, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "refresh", reject_import_refresh)
+    try:
+        report = import_one(
+            client, project["id"], filename="SONY_DSC_0103.JPG", content=source
+        )
+    finally:
+        monkeypatch.setattr(Session, "refresh", original_refresh)
+
+    assert len(report["successful"]) == 1, report
+    assert report["failed"] == [], report
+    entry = report["successful"][0]
+    assert entry["filename"] == "SONY_DSC_0103.JPG"
+    assert entry["thumbnail_job_id"]
+    original = client.get(f"/api/v1/images/{entry['image_id']}/content")
+    assert original.status_code == 200
+    assert original.content == source
+    job = client.get(f"/api/v1/jobs/{entry['thumbnail_job_id']}")
+    assert job.status_code == 200
+    assert job.json()["status"] == "queued"
+    assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 1
+
+    duplicate = import_one(
+        client, project["id"], filename="camera-resend.JPEG", content=source
+    )
+    assert duplicate["successful"] == []
+    assert duplicate["duplicates"][0]["duplicate_image_id"] == entry["image_id"]

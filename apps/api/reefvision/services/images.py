@@ -146,19 +146,23 @@ class ImageService:
                 )
                 self.images.add(image)
                 self.jobs.add(job)
+                # Materialize the queued job's generated primary key before
+                # committing. The response must not depend on refreshing ORM
+                # objects after a durable scientific image has been committed.
+                self.session.flush()
+                thumbnail_job_id = job.id
                 self.session.commit()
-                # A successful database commit makes the managed original
-                # durable, even if a subsequent response refresh fails.
+                # The original and its thumbnail job are now durable. If a
+                # follow-up database read fails, do not falsely report this
+                # camera import as failed or invite an unnecessary retry.
                 uncommitted_original = False
-                self.session.refresh(image)
-                self.session.refresh(job)
                 report["successful"].append(
                     ImportItemResponse(
                         filename=filename,
                         relative_path=relative_path,
                         status="successful",
-                        image_id=image.id,
-                        thumbnail_job_id=job.id,
+                        image_id=image_id,
+                        thumbnail_job_id=thumbnail_job_id,
                     )
                 )
             except UnsupportedImageError as exc:
