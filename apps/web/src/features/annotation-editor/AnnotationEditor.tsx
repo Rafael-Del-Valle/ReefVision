@@ -2261,7 +2261,10 @@ export function AnnotationEditor({
       const currentInteraction = interactionRef.current;
       const activeView = viewRef.current;
       const svg = svgRef.current;
-      if (!currentInteraction || event.pointerId !== currentInteraction.pointerId) {
+      if (
+        !currentInteraction ||
+        event.pointerId !== currentInteraction.pointerId
+      ) {
         return;
       }
       if (currentInteraction.type === "panning") {
@@ -2299,7 +2302,11 @@ export function AnnotationEditor({
 
     const handlePointerUp = (event: PointerEvent) => {
       const currentInteraction = interactionRef.current;
-      if (currentInteraction && event.pointerId !== currentInteraction.pointerId) return;
+      if (
+        currentInteraction &&
+        event.pointerId !== currentInteraction.pointerId
+      )
+        return;
       const currentState = stateRef.current;
       if (!currentInteraction || !imageSize) {
         setInteraction(null);
@@ -2367,7 +2374,11 @@ export function AnnotationEditor({
     };
 
     const handlePointerCancel = (event: PointerEvent) => {
-      if (interactionRef.current && event.pointerId !== interactionRef.current.pointerId) return;
+      if (
+        interactionRef.current &&
+        event.pointerId !== interactionRef.current.pointerId
+      )
+        return;
       interactionRef.current = null;
       panPreviousPointRef.current = null;
       setInteraction(null);
