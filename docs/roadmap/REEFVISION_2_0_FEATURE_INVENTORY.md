@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T21:11:56Z`
+Updated: `2026-11-20T21:41:39Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -11,8 +11,8 @@ Candidate target: `2.0`
 | --- | ---: |
 | blocked | 17 |
 | explicitly_deferred | 4 |
-| in_progress | 21 |
-| verified | 35 |
+| in_progress | 20 |
+| verified | 36 |
 
 ## Features
 
@@ -71,7 +71,7 @@ Candidate target: `2.0`
 | 1.6 | Prioritized QC queues, reviewer assignment, bulk actions, and idempotent retry | verified | Review → QC queues |
 | 1.7 | Local cross-project monitoring summaries | in_progress | Research → Monitoring → Project summaries |
 | 1.7 | Recorded, simulated, and physical acquisition sources | in_progress | Project → Acquisition sources |
-| 1.7 | Durable recurring acquisition, inference, QC, and report schedules | in_progress | Video & automation → Schedules |
+| 1.7 | Durable recurring acquisition, inference, QC, and report schedules | verified | Video & automation → Schedules |
 | 1.7 | Environmental and biological monitoring with reviewed anomaly proposals | in_progress | Research → Monitoring |
 | 1.8 | Bioacoustics import, annotation, review, and aligned analysis | in_progress | Project assets → Import audio → Review |
 | 1.8 | Domain-shift and group-aware performance comparison | in_progress | Models & AI → Model comparison → Domain shift |
@@ -1269,14 +1269,14 @@ Evidence:
 ### rv17-durable-schedules: Durable recurring acquisition, inference, QC, and report schedules
 
 - Target: `1.7`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv16-qc-queues-bulk-retry`
 - Entry point: Video & automation → Schedules
 - Workflow Builder: `required`
 
 Acceptance checks:
 
-- **in_progress** — Persist schedules, recover after restart, deduplicate runs, cancel safely, and surface storage/delay/failure state. (`rv17-durable-schedules-check`)
+- **verified** — Persist schedules, recover after restart, deduplicate runs, cancel safely, and surface storage/delay/failure state. (`rv17-durable-schedules-check`)
 
 Evidence:
 
@@ -1285,7 +1285,7 @@ Evidence:
 - `source`: Completed schedule and receipt remained bound to the same frozen run inputs after two Project Exchange generations. The integrated scheduling tests passed 26 cases. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-transfer`)
 - `browser`: The source browser reopened the same saved schedule after a cold restart, inspected its catch-up job and two ranked images, downloaded the receipt and replayed it twice with the same output digest. A paused schedule stayed empty. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-desktop-restart`)
 - `browser`: From three more projects, selected each saved graph, created a paused schedule, resumed, paused again and opened its actual job and typed output. Verified the sealed recording, two held-out detector inputs and reviewed report. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-purpose-navigation`)
-- `windows_installed`: none recorded
+- `windows_installed`: After Windows Installer registered the candidate, the same ordinary account reopened its saved schedule in a new desktop and sidecar process, inspected one coalesced catch-up job and matching replay receipts. The paused control stayed empty. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-registered-restart`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
