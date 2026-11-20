@@ -79,7 +79,9 @@ export function galleryPendingThumbnailPollingDecision(
 
   // Include the query identity: changing project filters, sort, or page
   // cannot inherit an exhausted budget from a different view.
-  const signature = `${queryKey}:${JSON.stringify(pendingIds)}`;
+  // An image-page reorder is not a new set of pending camera images.
+  // Keep polling bounded without changing the server-provided image order.
+  const signature = JSON.stringify([queryKey, [...pendingIds].sort()]);
   const state =
     previous?.signature === signature && successfulLoads >= previous.firstLoad
       ? previous

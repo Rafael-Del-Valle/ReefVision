@@ -160,6 +160,39 @@ describe("Gallery pending thumbnail refresh", () => {
     ).toEqual({ interval: false, state: null });
   });
 
+  it("does not restart thumbnail polling when the same pending images reorder", () => {
+    const pending = {
+      items: [
+        { id: "camera-2", thumbnail_path: null },
+        { id: "camera-1", thumbnail_path: null },
+      ],
+    };
+    const reordered = { items: [...pending.items].reverse() };
+    const initial = galleryPendingThumbnailPollingDecision(
+      pending,
+      5,
+      null,
+      "project-a:page-1",
+    );
+    expect(initial.interval).toBe(5000);
+
+    // A metadata refresh can reorder the same camera observations.
+    // After 12 checks, it must not silently grant another polling window.
+    expect(
+      galleryPendingThumbnailPollingDecision(
+        reordered,
+        17,
+        initial.state,
+        "project-a:page-1",
+      ),
+    ).toEqual({ interval: false, state: initial.state });
+    // Signature canonicalization must never mutate the server's order.
+    expect(pending.items.map((item) => item.id)).toEqual([
+      "camera-2",
+      "camera-1",
+    ]);
+  });
+
   it("stops failed background image-page polling without losing explicit retry", () => {
     const pending = { items: [{ id: "camera-1", thumbnail_path: null }] };
     const initial = galleryPendingThumbnailPollingDecision(
