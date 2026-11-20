@@ -250,9 +250,11 @@ function Format-SafeText {
   # different loss (0.2 + OSC/CSI/bidi/backspace + 5 -> 0.25). Refuse the
   # rendered field instead of inventing numeric evidence; the persisted job
   # history and raw training log remain unchanged.
-  $token = '[A-Za-z0-9._/+%=-]'
   $terminalEdit = '(?:\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)|[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)|(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]|\p{Cf}|\x08)'
-  if ([regex]::IsMatch($text, "(?<=$token)$terminalEdit(?=$token)")) {
+  # Check numeric digit joins and interrupted ASCII metric labels, without
+  # discarding unrelated safe losses separated from later prose by bidi text.
+  $splicedMetric = "(?<=[0-9])$terminalEdit(?=[0-9])|(?<=[A-Za-z_])$terminalEdit(?=[A-Za-z_/])"
+  if ([regex]::IsMatch($text, $splicedMetric)) {
     return '[terminal-edited field omitted]'
   }
   $text = [regex]::Replace($text, '\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', '')
