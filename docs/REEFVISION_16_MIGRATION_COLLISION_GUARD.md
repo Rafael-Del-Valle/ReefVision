@@ -251,8 +251,8 @@ The QC request-identity uniqueness must come from the original table constraint
 pinned because they are generated and can change during legitimate table
 recreation. As before, separately added nonunique indexes are allowed.
 
-Seven regression cases (four direct structural checks and four strict
-subprocess cases, with one shared fixture) distinguish a renamed scientific
+Eight parameterized regression executions (four direct structural checks and
+four strict subprocess checks, using the same four drift variants) distinguish a renamed scientific
 index, both renamed QC chronology indexes and manual UNIQUE replacement. Each
 constructs populated offline SQLite research/review evidence, requires
 mismatch/refusal, preserves the original file bytes and redacts the private
