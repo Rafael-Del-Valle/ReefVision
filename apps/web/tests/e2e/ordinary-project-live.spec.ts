@@ -24,7 +24,7 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
   });
   expect(category.status()).toBe(201);
   const label = await category.json();
-  const basename = "field-still-fixture.png";
+  const fixtureFilename = "field-still-fixture.png";
   const image = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAFAAAAA8CAIAAAB+RarbAAAAeUlEQVR4nOXOQQEAIBCAMKSZSYxjbVucD5Zg655NicRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjMRIjL8D0x6O+gGf/8sEBAAAAABJRU5ErkJggg==",
     "base64",
@@ -48,9 +48,11 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
   };
   await openProject();
   const importing = post(`${root}/imports/images`);
-  await page
-    .getByLabel("Import files", { exact: true })
-    .setInputFiles({ name: basename, mimeType: "image/png", buffer: image });
+  await page.getByLabel("Import files", { exact: true }).setInputFiles({
+    name: fixtureFilename,
+    mimeType: "image/png",
+    buffer: image,
+  });
   const imported = await importing;
   expect(imported.status(), await imported.text()).toBe(200);
   const images = await imported.json();
@@ -58,7 +60,7 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
   const imageId = images.successful[0].image_id;
   const annotate = () =>
     page
-      .getByRole("article", { name: new RegExp(basename) })
+      .getByRole("article", { name: new RegExp(fixtureFilename) })
       .getByRole("button", { name: "Annotate" })
       .click();
   await annotate();
