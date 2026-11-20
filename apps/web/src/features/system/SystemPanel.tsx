@@ -88,6 +88,8 @@ function JobStatusCard({
       ? job.result_json.stage
       : job.status;
   const canCancel = ACTIVE_JOB_STATUSES.has(job.status) && onCancel;
+  const destination = job.result_json?.destination_path;
+  const receiptFilename = job.result_json?.restore_receipt_filename;
 
   return (
     <article className="system-job-card">
@@ -101,6 +103,14 @@ function JobStatusCard({
       <p>
         Progress {job.progress_current} / {job.progress_total}
       </p>
+      {job.job_type === "restore" &&
+        job.status === "succeeded" &&
+        typeof destination === "string" &&
+        typeof receiptFilename === "string" && (
+          <p>
+            Restore receipt <code>{destination + "/" + receiptFilename}</code>
+          </p>
+        )}
       {job.error_message && <p className="form-error">{job.error_message}</p>}
       {canCancel && (
         <button

@@ -15,9 +15,84 @@ from fastapi.testclient import TestClient
 from reefvision.config import Settings
 from reefvision.db.session import create_database_engine, create_session_factory
 from reefvision.jobs import restores
+from reefvision.jobs.backups import process_backup_job
 from reefvision.jobs.worker import recover_interrupted_jobs
+from reefvision.main import create_app
 
 from .test_backups import create_completed_backup
+
+
+def test_backup_of_reopened_recovery_preserves_each_generation_after_restart(
+    client: TestClient, test_settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, first_backup = create_completed_backup(client, test_settings)
+    first = (
+        client.post(
+            f"/api/v1/backups/{first_backup['id']}/restore", json={"destination_name": "first"}
+        )
+        .raise_for_status()
+        .json()
+    )
+    assert restores.process_restore_job(
+        test_settings, cast(FastAPI, client.app).state.session_factory, first["job"]["id"]
+    )
+    profile = test_settings.resolved_data_dir / first["destination_path"]
+    settings = test_settings.model_copy(
+        update={
+            "data_dir": profile,
+            "database_url": f"sqlite:///{(profile / 'test.db').as_posix()}",
+        }
+    )
+    app = create_app(settings)
+    factory = app.state.session_factory
+    with TestClient(app) as reopened:
+        created = reopened.post("/api/v1/backups", json={}).raise_for_status().json()
+        assert process_backup_job(settings, factory, created["job"]["id"])
+        backup = created["backup"]
+        route = f"/api/v1/backups/{backup['id']}"
+        assert reopened.post(route + "/verify").raise_for_status().json()["status"] == "valid"
+        restore = (
+            reopened.post(route + "/restore", json={"destination_name": "second"})
+            .raise_for_status()
+            .json()
+        )
+        job_id = restore["job"]["id"]
+        target = profile / restore["destination_path"]
+
+        # Stop after the atomic directory publication and before the database commit.
+        class WorkerExit(BaseException):
+            pass
+
+        def stop_after_publication(*_args: Any, **_kwargs: Any) -> None:
+            raise WorkerExit()
+
+        with monkeypatch.context() as patch:
+            patch.setattr(restores, "_finalize_success", stop_after_publication)
+            with pytest.raises(WorkerExit):
+                restores.process_restore_job(settings, factory, job_id)
+        reopened.post(f"/api/v1/jobs/{job_id}/cancel").raise_for_status()
+        recover_interrupted_jobs(factory, settings)
+        assert restores.process_restore_job(settings, factory, job_id)
+        result = reopened.get(f"/api/v1/jobs/{job_id}").raise_for_status().json()
+        assert result["status"] == "succeeded"
+
+        # All archived paths, including both previous restore documents, keep their bytes.
+        manifest = json.loads((profile / backup["manifest_path"]).read_bytes())
+        assert {"data/restore-receipt.json", "data/restored-from-backup-complete.json"} <= {
+            row["path"] for row in manifest["file_inventory"]
+        }
+        for row in manifest["file_inventory"]:
+            member = row["path"].split("/", 1)[1]
+            assert restores.hash_file(target / member) == (row["sha256"], row["size_bytes"])
+        receipt = target / result["result_json"]["restore_receipt_filename"]
+        marker = target / result["result_json"]["completion_marker_filename"]
+        assert json.loads(receipt.read_bytes())["restore_job_id"] == job_id
+        assert marker.read_bytes() == (profile / backup["completion_marker_path"]).read_bytes()
+        assert (
+            json.loads((target / "restore-receipt.json").read_bytes())["restore_job_id"]
+            == first["job"]["id"]
+        )
+    app.state.engine.dispose()
 
 
 def _stop_child(data_dir: Path, database_url: str, job_id: str, published: bool) -> None:

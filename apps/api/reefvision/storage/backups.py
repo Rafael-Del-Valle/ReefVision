@@ -10,6 +10,7 @@ import shutil
 import sqlite3
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 from uuid import UUID
@@ -137,9 +138,55 @@ def discard_restore_staging(settings: Settings, job_id: str) -> None:
         shutil.rmtree(workspace)
 
 
+def restore_metadata_filenames(
+    inventory: list[dict[str, Any]], database_filename: str
+) -> tuple[str, str]:
+    """Choose a pair outside the archived profile's top-level names, including directories."""
+    occupied = {database_filename.casefold()}
+    for entry in inventory:
+        parts = PurePosixPath(entry["path"]).parts
+        if len(parts) >= 2 and parts[0] == "data":
+            occupied.add(parts[1].casefold())
+    generation = 1
+    while True:
+        suffix = "" if generation == 1 else f"-{generation}"
+        receipt = f"restore-receipt{suffix}.json"
+        marker = f"restored-from-backup-complete{suffix}.json"
+        if receipt not in occupied and marker not in occupied:
+            return receipt, marker
+        generation += 1
+
+
+def write_restore_metadata(
+    staging: Path,
+    receipt_filename: str,
+    marker_filename: str,
+    *,
+    job_id: str,
+    request: dict[str, Any],
+    completion_source: Path,
+) -> None:
+    receipt = {
+        "restore_job_id": job_id,
+        "backup_id": request["backup_id"],
+        "source_backup_path": request["backup_path"],
+        "restored_destination": request["destination_path"],
+        "restored_at": datetime.now(UTC).isoformat(),
+    }
+    with backup_io_path(staging / receipt_filename).open("x", encoding="utf-8") as target:
+        json.dump(receipt, target, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    with (
+        backup_io_path(completion_source).open("rb") as source,
+        backup_io_path(staging / marker_filename).open("xb") as target_marker,
+    ):
+        shutil.copyfileobj(source, target_marker)
+
+
 def has_restore_job_receipt(destination: Path, job_id: str, request: dict[str, Any]) -> bool:
     try:
-        path = backup_member_path(destination, "restore-receipt.json")
+        path = backup_member_path(
+            destination, request.get("restore_receipt_filename", "restore-receipt.json")
+        )
         receipt = json.loads(backup_io_path(path).read_text(encoding="utf-8"))
     except (FileNotFoundError, NotADirectoryError, UnicodeError, json.JSONDecodeError):
         return False
