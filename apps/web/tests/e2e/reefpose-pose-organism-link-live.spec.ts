@@ -138,7 +138,7 @@ test("confirms, opens, corrects and unlinks a scoped organism pose identity", as
 
   await page.addInitScript(() =>
     window.localStorage.setItem(
-      "reefvision.onboarding.dismissed.1.5.0",
+      "reefvision.onboarding.dismissed.1.6.0",
       "true",
     ),
   );

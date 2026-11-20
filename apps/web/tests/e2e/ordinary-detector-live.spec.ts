@@ -97,7 +97,7 @@ test("runs the ordinary local detector from grouped stills through reviewed resu
   );
   const get = async <T>(url: string) => json<T>(await page.request.get(url));
   await page.addInitScript(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.5.0", "true"),
+    localStorage.setItem("reefvision.onboarding.dismissed.1.6.0", "true"),
   );
   const openProject = async () => {
     await page.goto(web);
