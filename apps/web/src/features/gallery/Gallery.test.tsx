@@ -2694,7 +2694,12 @@ describe("Gallery", () => {
     expect(filmstrip.scrollLeft).toBe(800);
   });
 
-  it.each(["constructor", "observe-strip", "observe-thumbnail", "disconnect"] as const)(
+  it.each([
+    "constructor",
+    "observe-strip",
+    "observe-thumbnail",
+    "disconnect",
+  ] as const)(
     "keeps filmstrip focus and scrolling usable when WebView2 observer %s throws",
     async (failure) => {
       class BrokenResizeObserver {
