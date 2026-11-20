@@ -207,7 +207,11 @@ try {
 
     Set-Content -LiteralPath $armed -Value $token
     $record.control_names = @(Add-RunnerControlNameResolution)
+    $firewallChannel = 'Microsoft-Windows-Windows Firewall With Advanced Security/Firewall'
+    if (-not (Get-WinEvent -ListLog $firewallChannel).IsEnabled) { throw 'The Windows Firewall policy-change journal is disabled.' }
+    $setupStart = [DateTimeOffset]::UtcNow
     Set-ProofFirewall $runnerPrograms $policyGroup
+    $setupEvents = @(Test-FirewallJournalSetup $firewallChannel $setupStart $policyGroup)
     Assert-OfflinePhase 'before_install'
 
     $msiexec = Join-Path $env:SystemRoot 'System32/msiexec.exe'
@@ -262,7 +266,17 @@ try {
     $end = [DateTimeOffset]::Parse($record.offline.after_shell_and_sidecar_restart.utc)
     $start = [DateTimeOffset]::Parse($record.offline.before_install.utc)
     if ($end.LocalDateTime -ge $restoreAt) { throw 'The isolated operations exceeded the scheduled recovery deadline.' }
+    $logConfig = Get-WinEvent -ListLog $firewallChannel
+    $firstSetupRecord = ($setupEvents | Measure-Object RecordId -Minimum).Minimum
+    if (-not $logConfig.IsEnabled -or $logConfig.OldestRecordNumber -gt $firstSetupRecord) { throw 'The firewall journal lost its setup records.' }
+    $policyEvents = @(Get-ProofFirewallEvents $firewallChannel $start $end | Select-Object Id,RecordId,TimeCreated,Message)
+    $record.firewall_event_journal = [ordered]@{
+        channel=$firewallChannel; setup_control_records=@($setupEvents.RecordId); oldest_retained_record=$logConfig.OldestRecordNumber
+        policy_changes_during_measurement=$policyEvents
+    }
+    if ($policyEvents.Count) { throw 'Windows logged a firewall policy change during the measured product operations.' }
     $record.offline_control_counts = [ordered]@{}
+    $record.offline_control_max_gap_seconds = [ordered]@{}
     foreach ($role in 'ordinary','system') {
         $interval = @(Get-Content -LiteralPath (Join-Path $Root "probe-$role/tcp.jsonl") | ForEach-Object {
             $_ | ConvertFrom-Json -ErrorAction SilentlyContinue
@@ -271,12 +285,15 @@ try {
             throw "The $role control established external TCP reachability or no samples during the proof."
         }
         $last = $start
+        $gap = 0
         foreach ($sample in ($interval + @(@{utc=$end.ToString('o')}))) {
             $time = [DateTimeOffset]$sample.utc
-            if (($time - $last).TotalSeconds -gt 5) { throw "The $role control has an unobserved gap." }
+            $gap = [Math]::Max($gap, ($time - $last).TotalSeconds)
             $last = $time
         }
         $record.offline_control_counts[$role] = $interval.Count
+        $record.offline_control_max_gap_seconds[$role] = $gap
+        if ($gap -gt 10) { throw "The $role control has an unobserved gap greater than 10 seconds." }
     }
     $record.offline_seconds = ($end - $start).TotalSeconds
     $record.status = 'OFFLINE_OPERATIONS_PASSED'

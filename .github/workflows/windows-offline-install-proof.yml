@@ -35,10 +35,6 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 60
     env:
-      RV_BUILD_RUN: ${{ inputs.build_run || '44768324452' }}
-      RV_SOURCE_SHA: ${{ inputs.source_sha || '83b0a98b278b98e779842538f811b2c6f5b6b4c8' }}
-      RV_VERSION: ${{ inputs.version || '1.6.0' }}
-      RV_SCHEMA: ${{ inputs.schema || 'b16_integrated_0001' }}
       RV_PROOF_ROOT: C:/rv-offline-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
@@ -46,9 +42,29 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: proof
           persist-credentials: false
+      - name: Pin the original installer and first-use source
+        id: pin
+        shell: pwsh
+        env:
+          DISPATCH_BUILD_RUN: ${{ inputs.build_run }}
+          DISPATCH_SOURCE_SHA: ${{ inputs.source_sha }}
+          DISPATCH_VERSION: ${{ inputs.version }}
+          DISPATCH_SCHEMA: ${{ inputs.schema }}
+        run: |
+          $candidate = Get-Content ./proof/.github/offline-proof/candidate.json -Raw | ConvertFrom-Json
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
+            $candidate = [pscustomobject]@{build_run=$env:DISPATCH_BUILD_RUN; source_sha=$env:DISPATCH_SOURCE_SHA; version=$env:DISPATCH_VERSION; schema=$env:DISPATCH_SCHEMA}
+          }
+          if ($candidate.build_run -notmatch '^\d+$' -or $candidate.source_sha -cnotmatch '^[a-f0-9]{40}$' -or
+              $candidate.version -notmatch '^\d+\.\d+\.\d+$' -or $candidate.schema -notmatch '^[a-zA-Z0-9_]+$') {
+            throw 'Invalid proof candidate manifest.'
+          }
+          "source_sha=$($candidate.source_sha)" >> $env:GITHUB_OUTPUT
+          @("RV_BUILD_RUN=$($candidate.build_run)", "RV_SOURCE_SHA=$($candidate.source_sha)",
+            "RV_VERSION=$($candidate.version)", "RV_SCHEMA=$($candidate.schema)") >> $env:GITHUB_ENV
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.RV_SOURCE_SHA }}
+          ref: ${{ steps.pin.outputs.source_sha }}
           path: source
           persist-credentials: false
       - uses: actions/setup-node@v4

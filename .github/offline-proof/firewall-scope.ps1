@@ -71,3 +71,28 @@ function Assert-ProofFirewall($Programs, [string]$Group) {
     if (-not $connections.Count) { throw 'Neither actual Actions process retained an external TLS control connection.' }
     return [ordered]@{profiles=3; default_outbound='Block'; allow_rules=@($rules.Name); github_tls_connections=$connections.Count}
 }
+
+function Get-ProofFirewallEvents([string]$Channel, [DateTimeOffset]$Start, [DateTimeOffset]$End) {
+    try {
+        Get-WinEvent -FilterHashtable @{
+            LogName=$Channel; StartTime=$Start.LocalDateTime; EndTime=$End.LocalDateTime
+        } -ErrorAction Stop | Where-Object { $_.Id -ge 2000 -and $_.Id -le 2105 -and $_.Id -ne 2011 }
+    } catch {
+        if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound,*') { throw }
+    }
+}
+
+function Test-FirewallJournalSetup([string]$Channel, [DateTimeOffset]$Start, [string]$Group) {
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(8)
+    do {
+        $events = @(Get-ProofFirewallEvents $Channel $Start ([DateTimeOffset]::UtcNow))
+        $rules = @(foreach ($event in ($events | Where-Object Id -in @(2004,2071,2097))) {
+            $xml = [xml]$event.ToXml()
+            $ruleName = ($xml.Event.EventData.Data | Where-Object Name -eq 'RuleName').'#text'
+            if ($ruleName -in @("$Group Runner.Listener.exe", "$Group Runner.Worker.exe")) { $event }
+        })
+        if ($rules.Count -eq 2) { return $rules }
+        Start-Sleep -Milliseconds 250
+    } while ([DateTimeOffset]::UtcNow -lt $deadline)
+    throw 'The firewall event journal did not record both deliberate setup rule additions.'
+}
