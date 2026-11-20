@@ -52,7 +52,16 @@ def signed_enclosed_volume_mesh_units(
     volume = fsum(contributions)
     if not isfinite(volume):
         raise ValueError("Enclosed mesh volume overflowed")
-    if volume == 0.0 or cancellation_risk:
+    # Per-face determinants can be well-conditioned while the sum across
+    # faces is not. In that case the rounded nonzero residual may still be
+    # wrong: recover from the original source coordinates, not the rounded
+    # individual face volumes. This is numeric QC, not biological validation.
+    contribution_magnitude = fsum(abs(term) for term in contributions)
+    aggregate_cancellation_risk = (
+        contribution_magnitude > 0
+        and abs(volume) <= roundoff_guard * contribution_magnitude
+    )
+    if volume == 0.0 or cancellation_risk or aggregate_cancellation_risk:
         # An exact zero or ill-conditioned nonzero determinant may be due to
         # floating-point cancellation. Re-evaluate the ambiguous source-float
         # arithmetic before publishing a signed enclosed volume.
