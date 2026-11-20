@@ -61,7 +61,6 @@ OBJ = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
         "original_filename_empty",
         "original_filename_control",
         "original_filename_bidi",
-        "original_filename_surrogate",
     ],
 )
 def test_corrupt_imported_source_metadata_fails_standalone_and_saved_workflow(
@@ -124,8 +123,6 @@ def test_corrupt_imported_source_metadata_fails_standalone_and_saved_workflow(
             record.original_filename = f"coral\\nrelabelled.{filename.rsplit('.', 1)[-1]}"
         elif corrupt_field == "original_filename_bidi":
             record.original_filename = f"coral\u202erelabelled.{filename.rsplit('.', 1)[-1]}"
-        elif corrupt_field == "original_filename_surrogate":
-            record.original_filename = f"coral\ud800relabeled.{filename.rsplit('.', 1)[-1]}"
         else:
             record.original_filename = ""
         session.commit()
@@ -151,10 +148,25 @@ def test_corrupt_imported_source_metadata_fails_standalone_and_saved_workflow(
     assert not any(item["data_type"] == artifact_type for item in detail.json()["artifacts"])
 
 
-def test_surrogate_filename_rejected_before_import_or_replay() -> None:
-    """Unpaired UTF-16 surrogates are not valid portable source identities."""
-    from reefvision.services.spatial_source_assets_v14 import _safe_original_filename
+def test_surrogate_filename_fails_before_original_bytes_are_persisted(
+    client: TestClient,
+) -> None:
+    """SQLite cannot store lone surrogates; validate before any storage attempt."""
+    from io import BytesIO
 
-    assert not _safe_original_filename("coral\ud800.obj")
-    assert not _safe_original_filename("coral\udfff.ply")
+    from reefvision.domain.errors import ValidationError as DomainValidationError
+    from reefvision.services.spatial_source_assets_v14 import (
+        SpatialSourceAssetService,
+        _safe_original_filename,
+    )
+
+    project_id = str(create_project(client, "Reject non-scalar filenames")["id"])
+    app = cast(FastAPI, client.app)
+    for filename in ("coral\ud800.obj", "coral\udfff.ply"):
+        assert not _safe_original_filename(filename)
+        with app.state.session_factory() as session:
+            service = SpatialSourceAssetService(session, app.state.settings)
+            with pytest.raises(DomainValidationError, match="safe original"):
+                service.import_source(project_id, filename, BytesIO(OBJ))
     assert _safe_original_filename("coral_🐠.obj")
+    assert client.get(f"/api/v1/projects/{project_id}/spatial/assets").json() == []
