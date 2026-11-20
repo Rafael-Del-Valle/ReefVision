@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T03:07:14Z`
+Updated: `2026-11-20T03:57:55Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -20,7 +20,7 @@ Candidate target: `2.0`
 | --- | --- | --- | --- |
 | 1.1 | Reviewed annotation and model-source comparison | verified | Research → Comparisons → Annotation sources |
 | 1.1 | Current-field interpolation, streamlines, and trajectory context | verified | Research → Environmental context → Currents |
-| 1.1 | Offline-pinned NOAA/Copernicus and tidal/lunar context | verified | Research → Scientific records → Environmental context |
+| 1.1 | Offline-pinned NOAA/Copernicus and tidal/lunar context | verified | Project → Data & annotation → Environmental Context |
 | 1.1 | Project Exchange, backup, upgrade, and rollback integrity | verified | Project menu → Project Exchange / Backup |
 | 1.1 | Projective density on a declared surveyed reference plane | blocked | Project → Data & annotation → Computed Metrics → Open verified mask coverage |
 | 1.1 | Repeated-measures scientific analysis | blocked | Research → Analyses → Repeated measures |
@@ -42,7 +42,7 @@ Candidate target: `2.0`
 | 1.3 | 1.3 temporal/scientific exchange, upgrade, and restore | verified | Project menu → Project Exchange / Backup |
 | 1.3 | Held-out landmark, event, timing, and count agreement reports | verified | Models & AI → Model Hub → ReefPose scientific validation |
 | 1.3 | Publication figures, methods, and provenance records | verified | Research → Reports → Publication outputs |
-| 1.3 | Representative frame-only versus temporal ReefPose comparison | blocked | Synthetic technical results must remain separately labeled. |
+| 1.3 | Representative frame-only versus temporal ReefPose comparison | blocked | On Windows the administratively extracted 2194f2e96 package trained and registered a scratch temporal checkpoint, refined 12 held-out fixture frames and evaluated on a physical RTX 3090. Representative group-aware accuracy still requires independent recordings, labels and thresholds. |
 | 1.3 | Reviewed study, treatment, site, tank, and sampling-unit assignments | verified | Research → Organisms & ecology → Study assignments |
 | 1.3 | Frozen temporal ReefPose datasets and checkpoint training | verified | Models & AI → Training → Temporal ReefPose |
 | 1.3 | Temporal ReefPose refinement and explicit frame review | verified | Video & automation → Video & tracking → Native temporal ReefPose |
@@ -93,7 +93,7 @@ Candidate target: `2.0`
 | 2.0 | Typed, versioned Workflow Builder with guided forms and human gates | in_progress | Video & automation → Workflow Builder |
 | post-2.0 | Cloud accounts, hosted storage, and real-time collaboration | explicitly_deferred | Local cross-project summaries and offline exchange remain in scope. |
 | post-2.0 | Hyperspectral imagery | explicitly_deferred | Multispectral remains in scope. |
-| post-2.0 | Active SLEAP runtime, provider, and SLP interoperability | explicitly_deferred | BSD sleap-io may remain only for neutral NWB interchange after audit; native ReefPose is the supported pose path. Installed-payload evidence is blocked until a Windows installer built from the final candidate SHA is available for dependency inspection. |
+| post-2.0 | Active SLEAP runtime, provider, and SLP interoperability | explicitly_deferred | BSD sleap-io may remain only for neutral NWB interchange after audit; native ReefPose is the supported pose path. Checkpoint 2194f2e96 passed a digest-bound MSI and six-CAB audit of 19,133 paths and 11,977 nested Python entries. Repeat the payload audit on the final candidate. |
 | post-2.0 | Stereo reconstruction | explicitly_deferred | 3D import, measurement, and matching remain in scope. |
 
 ## Feature evidence
@@ -143,7 +143,7 @@ Evidence:
 - Target: `1.1`
 - Status: `verified`
 - Dependencies: `rv11-scientific-record-foundation`
-- Entry point: Research → Scientific records → Environmental context
+- Entry point: Project → Data & annotation → Environmental Context
 - Workflow Builder: `required`
 
 Acceptance checks:
@@ -153,7 +153,7 @@ Acceptance checks:
 Evidence:
 
 - `source`: Deterministic offline/cache fixtures and provenance tests. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/71` (`rv11-env-src`)
-- `browser`: none recorded
+- `browser`: The normal Environmental Context workspace downloaded 240 temperature observations from NOAA Key West station 8724580 on 2024-06-01 UTC. Offline import after reopening returned the identical records, units, acquisition time, source and content hashes. — `docs/roadmap/REEFVISION_1_4_INTEGRATION_AUDIT.md` (`rv11-noaa-public-cache`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1649,7 +1649,7 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: License audit, fail-closed provider/runtime factories, neutral-format schemas, and retirement regressions (64 passed; 5 opt-in NWB integration tests skipped). — `docs/THIRD_PARTY_SLEAP_AUDIT.md` (`scope-sleap-source-retirement`)
+- `source`: Retired models are unavailable to new evaluation, image, video and saved pose workflow jobs while their histories remain readable. Native COCO, DeepLabCut CSV and Ultralytics exchange passed without the optional codec. The pinned optional NWB round trip and historical-file checks ran in the 41-test integration suite. — `docs/THIRD_PARTY_SLEAP_AUDIT.md` (`scope-sleap-source-retirement`)
 - `browser`: none recorded
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded

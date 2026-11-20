@@ -2088,8 +2088,9 @@ export function VideoTrackingWorkspace({
               <p className="annotation-helper">
                 Import or export canonical pose data through neutral formats.
                 ReefVision-exported files must match the target video checksum.
-                External files without ReefVision provenance require explicit
-                confirmation that frame indices correspond to this video.
+                For external text files, confirm that the frame indices match
+                this video. NWB requires the optional interchange codec and a
+                checksum that binds the pose data to its frame mapping.
               </p>
             </div>
             {selectedTrack && selectedTrackPoseSchema && (

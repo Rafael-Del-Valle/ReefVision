@@ -30,7 +30,31 @@ that environment; therefore the supported MSI does not intentionally include
 `sleap-io`, `sleap-nn`, SLP fixtures, SLEAP weights, or SLEAP executables.
 Exact installer contents must still be rechecked for every release artifact.
 
+The November 19 integration closed dispatch paths that previously accepted
+historical SLEAP-NN model IDs for pose comparison, image inference and video
+tracking. The API and saved Pose Inference graphs now reject new work with
+the retirement reason. An old queued image-inference job reaches a terminal
+failure before opening its checkpoint. The model registration and completed
+results remain available for historical inspection.
+
+COCO, DeepLabCut CSV and Ultralytics pose exchange use ReefVision's native
+readers and writers. All three exported and imported with the optional codec
+unavailable. The pinned 0.9.2 codec ran the neutral NWB round trip. Earlier
+standalone NWB archives need the original project for an audited re-export
+or independent verification of the pose frame mapping during neutral
+conversion. Existing checksum-bound NWB files continue to open.
+[Compatibility decision](decisions/0010-sleap-supported-build-retirement.md).
+
 ## Supported-build verification boundary
+
+An archive audit of Windows checkpoint `2194f2e96` verified the MSI, six
+external cabinets and provenance by SHA-256. Its 19,133 installed paths and
+11,977 nested Python module entries contained the application-owned historical
+descriptor. The auditor found zero targeted SLEAP vendor runtimes, command-line
+entries, SLP samples or SLEAP model bundles. The MSI SHA-256 was
+`ff3c21d5be96552e4ab0ca876f517def36f6e5d3f5e4b10f18bb7be1d8c0d08d`.
+Each later candidate requires an audit of its own bits.
+[Windows package build](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44667026842).
 
 - Provider catalog: historical descriptor only; `registerable=false`, no
   execution runtimes, no CPU/GPU/tracking capabilities.
