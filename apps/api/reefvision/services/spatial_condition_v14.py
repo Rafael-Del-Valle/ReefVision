@@ -57,6 +57,17 @@ def condition_revision_sha256(row: SpatialConditionRevision) -> str:
     return condition_content_sha256({name: getattr(row, name) for name in CONDITION_CONTENT_FIELDS})
 
 
+def condition_resolved_label(
+    observation: ConditionObservation, decision: ConditionDecision | None
+) -> str | None:
+    if decision is not None:
+        if decision.decision == "agree":
+            return observation.label
+        if decision.decision == "adjudicated":
+            return decision.label
+    return None
+
+
 def condition_next_phase(
     previous: ConditionRevision,
     decision: ConditionDecision,
@@ -174,13 +185,7 @@ class SpatialConditionService:
                     "phase": row.phase,
                     "observation": observation,
                     "decision": decision,
-                    "resolved_label": (
-                        observation.label
-                        if decision and decision.decision == "agree"
-                        else decision.label
-                        if decision and decision.decision == "adjudicated"
-                        else None
-                    ),
+                    "resolved_label": condition_resolved_label(observation, decision),
                     "stale_source_metadata": observed_metadata_id != latest_metadata_id,
                     "content_sha256": row.content_sha256,
                     "created_at": row.created_at.replace(tzinfo=UTC)

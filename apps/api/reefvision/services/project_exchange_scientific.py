@@ -47,20 +47,20 @@ def _validate_exchange_records(
                 raise ValidationError(f"Unsupported exchange section: {name}")
             continue
         by_section[name] = {}
+        primary_keys = tuple(column.name for column in models[name].__table__.primary_key)
         for row in rows:
-            primary_key = next(iter(models[name].__table__.primary_key)).name
-            identifier = row.get(primary_key)
-            if primary_key != "id":
-                if (
-                    not isinstance(identifier, str)
-                    or not identifier
-                    or identifier in by_section[name]
-                ):
+            if primary_keys != ("id",):
+                key_parts = tuple(row.get(column) for column in primary_keys)
+                if any(not isinstance(value, str) or not value for value in key_parts):
                     raise ValidationError(f"Missing or duplicate exchange identifier in {name}")
-                by_section[name][identifier] = row
+                lookup_id = str(key_parts[0]) if len(key_parts) == 1 else repr(key_parts)
+                if lookup_id in by_section[name]:
+                    raise ValidationError(f"Missing or duplicate exchange identifier in {name}")
+                by_section[name][lookup_id] = row
                 if "project_id" in row and row["project_id"] != project_id:
                     raise ValidationError(f"Foreign project reference in {name}")
                 continue
+            identifier = row.get("id")
             if not isinstance(identifier, str) or not identifier or identifier in seen:
                 raise ValidationError(f"Missing or duplicate exchange identifier in {name}")
             seen.add(identifier)
