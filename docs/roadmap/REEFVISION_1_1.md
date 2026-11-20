@@ -17,6 +17,16 @@ GPU acceptance still need a versioned 1.1 candidate.
 | 6 Computed metrics | Scalar, reviewed-count and mask-union metrics. Saved polygon ROI geometry and opt-in reference-plane area now work through standalone, saved workflow, CSV and exchange. Chromium exercised save, reload and export. | Surveyed plane accuracy, covariance propagation, and broader study-unit metadata across metrics. |
 | 7 Event/environment analysis | Lunar/tidal context, event windows and lagged joins. Explicit missing matches and researcher-declared study assignments now persist through saved workflow and exchange. | Field event alignment, scientific timebase validation and repeated-measures analysis for an explicit study design. |
 
+Under **Organisms & ecology → Reviewed analyses**, a saved calibrated growth
+analysis with a sampling plan now offers **Repeated measures**. Select two UTC
+visits shared by every planned unit, declare the estimand and independent unit,
+and confirm how to handle incomplete units. The report includes each matched
+organism and each included or excluded unit. A saved Workflow Builder revision
+repeats the computation against the source digest and exports the same JSON.
+The mean, standard error and 95% paired interval use the number of independent
+units. Scientific acceptance still requires the study-specific protocol,
+reference observations and independent statistical review. [Method reference](https://www.itl.nist.gov/div898/handbook/prc/section3/prc311.htm).
+
 See [scientific API and methods](../SCIENTIFIC_ENVIRONMENTAL_CONTEXT.md) and
 [draft PR #71](https://github.com/Rafael-Del-Valle/ReefVision/pull/71) for the
 commit-level verification record.

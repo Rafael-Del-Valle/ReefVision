@@ -98,6 +98,7 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
             'anatomical-branch-live.spec.ts',
             'spatial-condition-live.spec.ts',
             'reviewed-coral-growth-live.spec.ts',
+            'paired-growth-contrast-live.spec.ts',
             'dataset-export-layout-live.spec.ts',
             'ordinary-project-live.spec.ts'
         )

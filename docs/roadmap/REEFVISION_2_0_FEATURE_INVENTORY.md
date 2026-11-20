@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T03:57:55Z`
+Updated: `2026-11-20T04:16:00Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -23,7 +23,7 @@ Candidate target: `2.0`
 | 1.1 | Offline-pinned NOAA/Copernicus and tidal/lunar context | verified | Project → Data & annotation → Environmental Context |
 | 1.1 | Project Exchange, backup, upgrade, and rollback integrity | verified | Project menu → Project Exchange / Backup |
 | 1.1 | Projective density on a declared surveyed reference plane | blocked | Project → Data & annotation → Computed Metrics → Open verified mask coverage |
-| 1.1 | Repeated-measures scientific analysis | blocked | Research → Analyses → Repeated measures |
+| 1.1 | Repeated-measures scientific analysis | blocked | Organisms & ecology → Reviewed analyses → saved growth analysis → Repeated measures |
 | 1.1 | Versioned scientific records, provenance, and computed metrics | verified | Open project → Research → Scientific records |
 | 1.1 | Telemetry and geographic measurements with uncertainty | verified | Research → Scientific records → Geographic measurements |
 | 1.1 | Standalone and saved Workflow Builder parity for 1.1 science | verified | Video & automation → Workflow Builder |
@@ -205,18 +205,19 @@ Evidence:
 - Target: `1.1`
 - Status: `blocked`
 - Dependencies: `rv11-scientific-record-foundation`
-- Entry point: Research → Analyses → Repeated measures
+- Entry point: Organisms & ecology → Reviewed analyses → saved growth analysis → Repeated measures
 - Workflow Builder: `required`
 - Missing input: An approved repeated-measures study design, unit/nesting and missingness rules, representative repeated observations, preregistered estimand, and independent statistical review thresholds.
 
 Acceptance checks:
 
 - **blocked** — Analyze declared independent units and repeated observations without treating images or organisms as independent replicates. (`rv11-repeated-measures-analysis-check`)
+- **verified** — Compute a declared two-visit comparison for complete independent units on frozen calibrated observations. Preserve missingness, nesting, design and source hashes in the same desktop and saved-workflow result. (`rv11-paired-two-visit-engineering`)
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Real reviewed organisms, dated original images and calibration records exercise per-unit differences, standard error, degrees of freedom, t interval, stale source rejection and repeatable graph execution. — `apps/api/reefvision/tests/test_paired_growth_contrast.py` (`rv11-paired-reviewed-source`)
+- `browser`: Three complete synthetic tanks with unequal nested organism counts produced differences of 1, 3 and 5 mm. A fourth incomplete tank was excluded. The mean was 3 mm, standard error 1.15470054 mm and 95% interval -1.96827542 to 7.96827542 mm with 2 degrees of freedom. Three JSON downloads and 15 original file hashes matched. — `apps/web/tests/e2e/paired-growth-contrast-live.spec.ts` (`rv11-paired-desktop`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
