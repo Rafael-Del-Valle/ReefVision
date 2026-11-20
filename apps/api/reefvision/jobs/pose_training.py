@@ -351,8 +351,12 @@ def _materialized_pose_dataset_files(destination: Path) -> list[dict[str, str]]:
                 raise ValidationError("Pose dataset member disappeared") from exc
             if attributes & 0x400:
                 raise ValidationError("Pose dataset contains a Windows junction")
-        if not member.is_file():
+        if member.is_dir():
             continue
+        if not member.is_file():
+            raise ValidationError(
+                "Materialized pose training dataset contains an unsupported filesystem entry"
+            )
         with member.open("rb") as stream:
             digest = hashlib.file_digest(stream, "sha256").hexdigest()
         files.append(

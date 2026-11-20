@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
 import shutil
 import stat
 import subprocess
@@ -583,6 +584,31 @@ def test_pose_materialized_fingerprint_uses_portable_path_order(tmp_path: Path) 
     (root / "Z_review" / "pose.png").write_bytes(b"altered-pose")
     with pytest.raises(ValidationError, match="changed before GPU training"):
         _verify_prelaunch_pose_dataset(root, {"materialized_dataset_sha256": legacy_windows})
+
+
+@pytest.mark.skipif(
+    not hasattr(os, "mkfifo"), reason="Real filesystem FIFOs require POSIX"
+)
+def test_pose_materialized_dataset_rejects_unhashed_filesystem_member(tmp_path: Path) -> None:
+    # The frozen hash must not ignore a later non-file member in the training
+    # tree: a real FIFO was previously silently omitted by is_file().
+    root = tmp_path / "frozen-pose-input"
+    root.mkdir()
+    reviewed = root / "reviewed.png"
+    reviewed.write_bytes(b"scientist-reviewed-frames")
+    sealed_sha = _materialized_pose_dataset_sha256(root)
+
+    os.mkfifo(root / "unreviewed-input")
+
+    with pytest.raises(ValidationError, match="unsupported filesystem entry"):
+        _verify_prelaunch_pose_dataset(
+            root,
+            {
+                "materialized_dataset_sha256": sealed_sha,
+                "materialized_dataset_fingerprint_algorithm": "relative-posix-path-v1",
+            },
+        )
+    assert reviewed.read_bytes() == b"scientist-reviewed-frames"
 
 
 @pytest.mark.parametrize("blocked_area", ("dataset", "validation_stage"))
