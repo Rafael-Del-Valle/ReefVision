@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import struct
+import tempfile
 import zlib
 from dataclasses import dataclass
 from io import BytesIO
@@ -17,7 +19,7 @@ from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.schemas.image_adjustments_v18 import PhotometricParameters
 from reefvision.storage.images import (
     _replace_rendition,
-    _unique_rendition_temporary,
+    cleanup_owned_import_path,
     original_bytes_match,
 )
 from reefvision.storage.projects import resolve_managed_project_path
@@ -180,10 +182,26 @@ def verify_cached_rendition(path: Path, digest: str) -> bool:
 def publish_adjusted_rendition(path: Path, rendition: AdjustmentRendition) -> None:
     if verify_cached_rendition(path, rendition.rendition_sha256):
         return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = _unique_rendition_temporary(path)
+    temporary: Path | None = None
     try:
-        temporary.write_bytes(rendition.png)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # The 64-character output digest fits deeper Windows profiles when the
+        # unique staging file does not repeat the entire final filename.
+        with tempfile.NamedTemporaryFile(
+            dir=path.parent,
+            prefix=".adj-",
+            suffix=".part",
+            delete=False,
+        ) as staging:
+            temporary = Path(staging.name)
+            staging.write(rendition.png)
+            staging.flush()
+            os.fsync(staging.fileno())
         _replace_rendition(temporary, path)
+    except OSError as exc:
+        raise ConflictError(
+            "The adjusted rendition could not be published in project storage"
+        ) from exc
     finally:
-        temporary.unlink(missing_ok=True)
+        if temporary is not None:
+            cleanup_owned_import_path(temporary)
