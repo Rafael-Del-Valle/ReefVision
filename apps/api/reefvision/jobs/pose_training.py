@@ -342,6 +342,15 @@ def _materialized_pose_dataset_files(destination: Path) -> list[dict[str, str]]:
     for member in members:
         if member.is_symlink():
             raise ValidationError("Materialized pose training dataset contains a symbolic link")
+        if sys.platform == "win32":
+            # NTFS junctions can redirect a reviewed frame directory without
+            # appearing as a symlink. Never fingerprint a redirected dataset.
+            try:
+                attributes = getattr(member.lstat(), "st_file_attributes", 0)
+            except (FileNotFoundError, NotADirectoryError) as exc:
+                raise ValidationError("Materialized pose training dataset member disappeared") from exc
+            if attributes & 0x400:
+                raise ValidationError("Materialized pose training dataset contains a Windows junction")
         if not member.is_file():
             continue
         with member.open("rb") as stream:
