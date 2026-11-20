@@ -13,8 +13,11 @@ if (($Role -eq 'system' -and $sid -cne 'S-1-5-18') -or ($Role -eq 'ordinary' -an
     throw 'Firewall control is running as an unexpected Windows principal.'
 }
 $destination = Join-Path $root "probe-$Role/tcp.jsonl"
+$clock = [Diagnostics.Stopwatch]::StartNew()
+$previousSampleEnd = $null
 while (-not (Test-Path -LiteralPath (Join-Path $root 'stop-probes')) -and
     [DateTimeOffset]::UtcNow -lt [DateTimeOffset]$config.expires_utc) {
+    $sampleStart = $clock.Elapsed.TotalMilliseconds
     $online = @(foreach ($item in $config.addresses) {
         $address = [Net.IPAddress]::Parse($item)
         $client = [Net.Sockets.TcpClient]::new($address.AddressFamily)
@@ -22,7 +25,13 @@ while (-not (Test-Path -LiteralPath (Join-Path $root 'stop-probes')) -and
             if ($client.ConnectAsync($address,443).Wait(1200) -and $client.Connected) { $item }
         } catch { $null = $_ } finally { $client.Dispose() }
     })
-    @{utc=[DateTimeOffset]::UtcNow.ToString('o'); pid=$PID; sid=$sid; reachable=$online} | ConvertTo-Json -Compress |
+    $sampleEnd = $clock.Elapsed.TotalMilliseconds
+    @{
+        utc=[DateTimeOffset]::UtcNow.ToString('o'); pid=$PID; sid=$sid; reachable=$online
+        tcp_probe_ms=$sampleEnd-$sampleStart
+        collector_idle_ms=if ($null -ne $previousSampleEnd) { $sampleStart-$previousSampleEnd } else { $null }
+    } | ConvertTo-Json -Compress |
         Add-Content -LiteralPath $destination
-    Start-Sleep -Milliseconds 900
+    $previousSampleEnd = $sampleEnd
+    Start-Sleep -Milliseconds 350
 }

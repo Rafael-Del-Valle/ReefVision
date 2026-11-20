@@ -291,7 +291,7 @@ try {
             throw "The $role control established external TCP reachability or no samples during the proof."
         }
         $last = $start
-        $gap = 0
+        $gap = 0.0
         foreach ($sample in ($interval + @(@{utc=$end.ToString('o')}))) {
             $time = [DateTimeOffset]$sample.utc
             $gap = [Math]::Max($gap, ($time - $last).TotalSeconds)
