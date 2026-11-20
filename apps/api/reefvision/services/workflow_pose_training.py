@@ -1411,6 +1411,13 @@ def create_pose_workflow_training_result(
         settings=settings,
     )
 
+    # The Windows pose worker launches PyTorch DataLoader workers=0 regardless
+    # of the submitted setting. Freeze the effective configuration so a saved
+    # workflow and experiment cannot claim that parallel loaders were used.
+    requested_workers = training_config["workers"]
+    if sys.platform == "win32":
+        training_config["workers"] = 0
+
     epochs = training_config["epochs"]
 
     if epochs < 1:
@@ -1543,6 +1550,12 @@ def create_pose_workflow_training_result(
     resource_limits = dict(resource_limits)
 
     warning_list: list[str] = []
+
+    if sys.platform == "win32" and requested_workers != 0:
+        warning_list.append(
+            "Windows pose training uses workers=0; the saved training "
+            "configuration records this effective setting."
+        )
 
     if validation_dataset is None:
         warning_list.append(
