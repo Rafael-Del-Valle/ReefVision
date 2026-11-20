@@ -100,12 +100,14 @@ class EnvironmentalContextService:
             found = self.session.scalars(
                 select(ScientificRecord.id).where(
                     ScientificRecord.project_id == entry.project_id,
+                    ScientificRecord.environmental_cache_key == entry.cache_key,
                     ScientificRecord.id.in_(chunk),
                 )
             ).all()
             if len(found) != len(chunk):
                 raise ConflictError(
-                    "Environmental cache refers to missing or foreign scientific records"
+                    "Environmental cache refers to missing or foreign scientific records "
+                    "or records from another dataset"
                 )
         return record_ids
 
@@ -116,9 +118,14 @@ class EnvironmentalContextService:
         items = []
         for record_id in record_ids:
             row = self.session.get(ScientificRecord, record_id)
-            if row is None or row.project_id != entry.project_id:
+            if (
+                row is None
+                or row.project_id != entry.project_id
+                or row.environmental_cache_key != entry.cache_key
+            ):
                 raise ConflictError(
-                    "Environmental cache refers to missing or foreign scientific records"
+                    "Environmental cache refers to missing or foreign scientific records "
+                    "or records from another dataset"
                 )
             items.append(self.science.response(row))
         return EnvironmentalImportResponse(
