@@ -58,6 +58,7 @@ import { WorkflowGraphWorkspace } from "./features/workflow-graphs/WorkflowGraph
 import { WorkflowSchedulesWorkspace } from "./features/workflow-schedules/WorkflowSchedulesWorkspace";
 import { AcquisitionSourcesWorkspace } from "./features/acquisition-sources/AcquisitionSourcesWorkspace";
 import { MonitoringWorkspace } from "./features/monitoring/MonitoringWorkspace";
+import { ProjectAssetsWorkspace } from "./features/project-assets/ProjectAssetsWorkspace";
 import {
   EmptyState,
   ErrorState,
@@ -103,6 +104,7 @@ interface AnnotationLaunchState {
 type ProjectView =
   | "gallery"
   | "field_capture"
+  | "project_assets"
   | "acquisition_sources"
   | "versions"
   | "interoperability"
@@ -156,6 +158,12 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Field capture",
         description:
           "Collect local originals and reconcile portable field batches.",
+      },
+      {
+        id: "project_assets",
+        label: "Project assets",
+        description:
+          "Import and review audio recordings and multispectral acquisitions.",
       },
       {
         id: "versions",
@@ -1198,6 +1206,13 @@ function ReefVisionMainApp() {
                 key={selectedProject.id}
                 projectId={selectedProject.id}
                 onOpenQC={() => setActiveView("quality_control")}
+                onOpenWorkflow={() => setActiveView("workflows")}
+              />
+            )}
+            {activeView === "project_assets" && (
+              <ProjectAssetsWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
                 onOpenWorkflow={() => setActiveView("workflows")}
               />
             )}

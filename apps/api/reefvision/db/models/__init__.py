@@ -72,6 +72,11 @@ from reefvision.db.models.monitoring import (
     MonitoringProjectSummary,
     MonitoringRule,
 )
+from reefvision.db.models.multispectral import (
+    SpectralAcquisition,
+    SpectralBandBinding,
+    SpectralIndex,
+)
 from reefvision.db.models.pose_active_learning import (
     PoseActiveLearningCandidate,
     PoseActiveLearningRound,
@@ -283,6 +288,9 @@ __all__ = [
     "SpatialConditionRevision",
     "SpatialConditionRubric",
     "SpatialSourceAsset",
+    "SpectralAcquisition",
+    "SpectralBandBinding",
+    "SpectralIndex",
     "StudyDesignRevision",
     "TaxonProposal",
     "TaxonReview",

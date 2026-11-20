@@ -29,7 +29,7 @@ from create_windows_qc_history_controls import (
 )
 
 CURRENT_VERSION = "1.8.0"
-CURRENT = "b18_integrated_0001"
+CURRENT = "b18_spectral_0002"
 PREVIOUS = "b15_integrated_0002"
 
 

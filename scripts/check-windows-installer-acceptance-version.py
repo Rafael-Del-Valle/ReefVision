@@ -88,7 +88,7 @@ _CANDIDATE_REVISION = {
     "1.5.0": "b15_integrated_0002",
     "1.6.0": "b16_integrated_0001",
     "1.7.0": "b17_monitor_0003",
-    "1.8.0": "b18_integrated_0001",
+    "1.8.0": "b18_spectral_0002",
 }
 
 

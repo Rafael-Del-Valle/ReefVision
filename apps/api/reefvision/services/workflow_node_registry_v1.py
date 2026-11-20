@@ -23,6 +23,7 @@ from reefvision.services.workflow_metric_depth_3d import (
 )
 from reefvision.services.workflow_monitoring import monitoring_assessment_node
 from reefvision.services.workflow_monitoring_summary import monitoring_summary_node
+from reefvision.services.workflow_multispectral import multispectral_node
 from reefvision.services.workflow_node_registry import (
     workflow_node_registry as base_workflow_node_registry,
 )
@@ -954,6 +955,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
     registry["acquisition_capture_replay"] = acquisition_replay_node()
     registry["monitoring_assessment"] = monitoring_assessment_node()
     registry["monitoring_project_summary"] = monitoring_summary_node()
+    registry["multispectral_index"] = multispectral_node()
     registry["detectability_assessment"] = detectability_node()
     registry["workflow_schedule_receipt"] = schedule_receipt_node()
     registry["bioacoustic_report"] = audio_report_node()

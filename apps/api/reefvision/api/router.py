@@ -58,6 +58,7 @@ from reefvision.api.routes.model_runtime import router as model_runtime_router
 from reefvision.api.routes.models import router as models_router
 from reefvision.api.routes.monitoring import router as monitoring_router
 from reefvision.api.routes.monitoring_summaries import router as monitoring_summaries_router
+from reefvision.api.routes.multispectral import router as multispectral_router
 from reefvision.api.routes.paired_models_v15 import router as paired_models_router
 from reefvision.api.routes.pose_active_learning import router as pose_active_learning_router
 from reefvision.api.routes.pose_biological_measurement import (
@@ -153,6 +154,7 @@ api_router.include_router(class_operations_router)
 api_router.include_router(class_visibility_router)
 api_router.include_router(images_router)
 api_router.include_router(image_adjustments_router)
+api_router.include_router(multispectral_router)
 api_router.include_router(annotation_imports_router)
 api_router.include_router(annotations_router)
 api_router.include_router(annotation_aggregates_router)

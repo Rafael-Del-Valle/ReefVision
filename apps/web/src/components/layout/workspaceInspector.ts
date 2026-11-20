@@ -3,6 +3,7 @@ import type { WorkspacePresetId } from "./workspacePresets";
 export type WorkspaceInspectorView =
   | "gallery"
   | "field_capture"
+  | "project_assets"
   | "acquisition_sources"
   | "versions"
   | "interoperability"
@@ -53,6 +54,7 @@ export interface WorkspacePresetInspectorGuidance {
 export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "gallery",
   "field_capture",
+  "project_assets",
   "acquisition_sources",
   "versions",
   "interoperability",
@@ -164,6 +166,20 @@ const WORKSPACE_INSPECTORS: Record<
         label: "Organisms & ecology",
         target: "ecology",
         description: "Review assignments and calibrated growth evidence.",
+      },
+    ],
+  },
+  project_assets: {
+    title: "Project assets",
+    summary: "Review source recordings, sampling clocks and spectral bands.",
+    boundary: "review",
+    recordPolicy:
+      "Reports preserve the original sample clock, calibration and source checksums.",
+    actions: [
+      {
+        label: "Workflow builder",
+        target: "workflows",
+        description: "Run a saved asset analysis.",
       },
     ],
   },

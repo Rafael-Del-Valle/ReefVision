@@ -1,0 +1,42 @@
+.project-asset-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-block: 0.5rem 1rem;
+}
+
+.project-asset-tabs [aria-selected="true"] {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
+.multispectral-workspace,
+.multispectral-workspace form {
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.multispectral-workspace fieldset {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: 0.65rem;
+}
+
+.multispectral-workspace label,
+.multispectral-workspace code {
+  overflow-wrap: anywhere;
+}
+
+.multispectral-workspace label > :is(input:not([type="checkbox"]), select) {
+  display: block;
+  width: 100%;
+}
+
+.spectral-composite-preview {
+  max-width: 100%;
+  max-height: 36rem;
+  object-fit: contain;
+  image-rendering: pixelated;
+}

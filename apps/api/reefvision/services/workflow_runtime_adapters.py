@@ -42,6 +42,7 @@ from reefvision.services.workflow_ecology_event_summary import execute_event_sum
 from reefvision.services.workflow_field_capture import execute_field_capture_reconcile
 from reefvision.services.workflow_monitoring import execute_monitoring_assessment
 from reefvision.services.workflow_monitoring_summary import execute_monitoring_summary
+from reefvision.services.workflow_multispectral import execute_multispectral
 from reefvision.services.workflow_paired_growth_contrast import execute_paired_growth_contrast
 from reefvision.services.workflow_paired_models_v15 import execute_paired_models
 from reefvision.services.workflow_prompt_assist import create_prompt_assist_mask_proposals
@@ -87,6 +88,7 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "detectability_assessment",
     "workflow_schedule_receipt",
     "bioacoustic_report",
+    "multispectral_index",
     "ecology_measurement_csv_export",
     "ecology_population_csv_export",
     "ecology_paired_count_comparison",
@@ -1183,6 +1185,7 @@ _ADAPTERS = {
     "detectability_assessment": execute_detectability,
     "workflow_schedule_receipt": execute_schedule_receipt,
     "bioacoustic_report": execute_audio_report,
+    "multispectral_index": execute_multispectral,
     "ecology_event_summary": execute_event_summary,
     "research_publication_figure": execute_research_report,
     "image_acquisition_quality": execute_acquisition_quality,

@@ -54,6 +54,7 @@ WorkflowDataType = Literal[
     "detectability_assessment",
     "workflow_schedule_receipt",
     "bioacoustic_report",
+    "multispectral_index",
     "scientific_comparison_report",
     "ecology_measurement_candidates",
     "ecology_measurement_csv",
