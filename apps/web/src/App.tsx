@@ -52,6 +52,7 @@ import type {
   VideoWorkspaceContext,
 } from "./features/video/videoWorkspaceBridge";
 import { WorkflowGraphWorkspace } from "./features/workflow-graphs/WorkflowGraphWorkspace";
+import { WorkflowSchedulesWorkspace } from "./features/workflow-schedules/WorkflowSchedulesWorkspace";
 import {
   EmptyState,
   ErrorState,
@@ -117,6 +118,7 @@ type ProjectView =
   | "reviewer_lab"
   | "advanced_providers"
   | "workflows"
+  | "workflow_schedules"
   | "system";
 
 const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.6.0";
@@ -292,6 +294,12 @@ const PROJECT_NAV_GROUPS: Array<{
         description:
           "Visually connect typed analysis nodes, validate, save, and run.",
       },
+      {
+        id: "workflow_schedules",
+        label: "Schedules",
+        description:
+          "Run saved workflows on a local schedule and review their results.",
+      },
     ],
   },
 ];
@@ -306,6 +314,7 @@ function ReefVisionMainApp() {
   const [showImport, setShowImport] = useState(false);
   const [researchGraph, setResearchGraph] =
     useState<WorkflowGraphRecord | null>(null);
+  const [scheduledRunId, setScheduledRunId] = useState<string | null>(null);
   const [editorLaunch, setEditorLaunch] =
     useState<AnnotationLaunchState | null>(null);
   const [trainingCatalogModelId, setTrainingCatalogModelId] = useState<
@@ -469,6 +478,7 @@ function ReefVisionMainApp() {
     setInferenceSelectedImageIds([]);
     setFocusedGalleryImageId(null);
     setSelectedReviewQueueId(null);
+    setScheduledRunId(null);
     setWorkflowQueue(null);
     setVideoWorkspaceContext(null);
     setVideoWorkspaceCommand(null);
@@ -484,6 +494,10 @@ function ReefVisionMainApp() {
       workspacePreset((saved ?? "annotation") as WorkspacePresetId).id,
     );
   }, [selectedProjectId]);
+
+  useEffect(() => {
+    if (activeView !== "workflows") setScheduledRunId(null);
+  }, [activeView]);
 
   const handleInferenceSelectionChange = useCallback((imageIds: string[]) => {
     setInferenceSelectedImageIds(imageIds);
@@ -1211,11 +1225,24 @@ function ReefVisionMainApp() {
             {activeView === "advanced_providers" && (
               <AdvancedProviderWorkspace project={selectedProject} />
             )}
+            {activeView === "workflow_schedules" && (
+              <WorkflowSchedulesWorkspace
+                projectId={selectedProject.id}
+                onOpenWorkflowRun={(runId, graph) => {
+                  setResearchGraph(
+                    graph?.project_id === selectedProject.id ? graph : null,
+                  );
+                  setScheduledRunId(runId);
+                  setActiveView("workflows");
+                }}
+              />
+            )}
             {activeView === "workflows" && (
               <WorkflowGraphWorkspace
                 key={selectedProject.id}
                 project={selectedProject}
                 initialPoseArchitecture={poseArchitecture}
+                initialRunId={scheduledRunId}
                 initialGraph={
                   researchGraph?.project_id === selectedProject.id
                     ? researchGraph.graph_json

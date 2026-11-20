@@ -22,7 +22,8 @@ export type WorkspaceInspectorView =
   | "review_queue"
   | "reviewer_lab"
   | "advanced_providers"
-  | "workflows";
+  | "workflows"
+  | "workflow_schedules";
 
 export type WorkspaceEvidenceBoundary =
   "mixed" | "provisional" | "review" | "record";
@@ -69,6 +70,7 @@ export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "reviewer_lab",
   "advanced_providers",
   "workflows",
+  "workflow_schedules",
 ];
 
 const WORKSPACE_INSPECTORS: Record<
@@ -496,6 +498,21 @@ const WORKSPACE_INSPECTORS: Record<
         label: "Workflow builder",
         target: "workflows",
         description: "Compose repeatable video and pose analysis workflows.",
+      },
+    ],
+  },
+  workflow_schedules: {
+    title: "Workflow schedules",
+    summary:
+      "Inspect due times, missed intervals and the results of each local run.",
+    boundary: "record",
+    recordPolicy:
+      "Each occurrence retains the saved graph revision, inputs and run identity.",
+    actions: [
+      {
+        label: "Workflow builder",
+        target: "workflows",
+        description: "Create or revise a workflow to schedule.",
       },
     ],
   },

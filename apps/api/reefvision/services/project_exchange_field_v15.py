@@ -34,7 +34,7 @@ from reefvision.storage.field_capture import FieldCaptureStorage, field_media_ki
 from reefvision.storage.projects import resolve_managed_project_path
 
 FIELD_EXCHANGE_FORMAT = "1.5"
-FIELD_EXCHANGE_FORMATS = {FIELD_EXCHANGE_FORMAT, "1.6"}
+FIELD_EXCHANGE_FORMATS = {FIELD_EXCHANGE_FORMAT, "1.6", "1.7"}
 FIELD_MEDIA_KIND = "field_source"
 FIELD_NODE = "field_capture_reconcile"
 FIELD_DATA_TYPE = "field_capture_reconciliation"

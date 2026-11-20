@@ -55,6 +55,7 @@ HISTORICAL_ARTIFACT_TYPES = frozenset(
         "study_design_report",
         "paired_model_report",
         "research_reproducibility_proof",
+        "workflow_schedule_receipt",
         PAIRED_GROWTH_TYPE,
         REVIEWER_LAB_TYPE,
     }

@@ -114,8 +114,8 @@ from reefvision.services.project_exchange_pose import (
     restore_pose_reports,
     validate_frozen_pose_frames,
 )
-from reefvision.services.project_exchange_qc_v16 import FORMAT as QC_FORMAT
 from reefvision.services.project_exchange_qc_v16 import (
+    QC_FORMATS,
     frozen_qc_dataset_ids,
     remap_event_requests,
     restore_qc_row,
@@ -125,6 +125,12 @@ from reefvision.services.project_exchange_reports import remap_report_archive_jo
 from reefvision.services.project_exchange_reviewer_lab_v15 import (
     restore_reviewer_lab_exchange,
     reviewer_lab_exchange_ids,
+)
+from reefvision.services.project_exchange_schedules import (
+    restore_schedule_pins,
+    restore_schedule_row,
+    schedule_dataset_ids,
+    validate_schedule_exchange,
 )
 from reefvision.services.project_exchange_scientific import (
     SCIENCE_SECTIONS,
@@ -475,6 +481,7 @@ def import_project_exchange(
             inspection.format_version or "", old_project_id, section_rows, manifest.get("origin")
         )
         validate_qc_exchange(inspection.format_version or "", old_project_id, section_rows)
+        validate_schedule_exchange(inspection.format_version or "", old_project_id, section_rows)
         validate_frozen_pose_frames(section_rows)
         validate_acquisition_exchange(section_rows)
         validate_computed_exchange_records(old_project_id, section_rows)
@@ -528,7 +535,7 @@ def import_project_exchange(
                         id_map[old_id] = str(uuid4())
             qc_requests = (
                 remap_event_requests(section_rows, id_map)
-                if inspection.format_version == QC_FORMAT
+                if inspection.format_version in QC_FORMATS
                 else {}
             )
             id_map.update(heldout_scope_mappings(old_project_id, project.id, section_rows))
@@ -690,7 +697,8 @@ def import_project_exchange(
                         remap_temporal_exchange_row(
                             section_name, row, values, id_map, digests, track_digests
                         )
-                    if inspection.format_version == QC_FORMAT:
+                    restore_schedule_row(section_name, row, values)
+                    if inspection.format_version in QC_FORMATS:
                         restore_qc_row(section_name, row, values, id_map, qc_requests)
                     if integrated and section_name == "video_tracks":
                         track_digests[row["id"]] = (
@@ -976,8 +984,10 @@ def import_project_exchange(
                     digests,
                     source_storage_root=source_storage_root,
                     linked_dataset_ids=(
-                        frozenset(frozen_qc_dataset_ids(section_rows))
-                        if inspection.format_version == QC_FORMAT
+                        frozenset(
+                            frozen_qc_dataset_ids(section_rows) | schedule_dataset_ids(section_rows)
+                        )
+                        if inspection.format_version in QC_FORMATS
                         else frozenset()
                     ),
                 )
@@ -986,6 +996,7 @@ def import_project_exchange(
                 restore_workflow_provenance(
                     session, project.id, section_rows, id_map, digests, _remap_json
                 )
+                restore_schedule_pins(session, section_rows, id_map, digests)
                 package.options_json = {**package.options_json, "digest_map": digests}
             restore_reviewer_lab_exchange(session, section_rows, id_map)
             session.commit()
