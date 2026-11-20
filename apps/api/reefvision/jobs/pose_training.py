@@ -419,8 +419,13 @@ def _verify_prelaunch_pose_dataset(
     raise ValidationError("Materialized pose training dataset changed before GPU training")
 
 
-def _verify_postlaunch_pose_dataset(destination: Path, materialization: object) -> None:
-    """Fail a completed run if its reviewed frames or labels changed during training."""
+def _verify_postlaunch_pose_dataset(
+    destination: Path, materialization: object, persisted_materialization: object
+) -> None:
+    """Reject changed inputs or persisted provenance after GPU training."""
+
+    if not isinstance(persisted_materialization, dict) or persisted_materialization != materialization:
+        raise ValidationError("Pose training materialization provenance changed during GPU training")
 
     try:
         _verify_prelaunch_pose_dataset(destination, materialization)
@@ -1244,7 +1249,9 @@ def process_pose_training_job(
                 # A training process (or another local process) can alter
                 # frozen inputs after preflight. Never register a successful
                 # experiment against bytes that were not the reviewed input.
-                _verify_postlaunch_pose_dataset(dataset_root, frozen_materialization)
+                _verify_postlaunch_pose_dataset(
+                    dataset_root, frozen_materialization, manifest.get("materialization")
+                )
                 _complete_training_run(
                     session,
                     run,
