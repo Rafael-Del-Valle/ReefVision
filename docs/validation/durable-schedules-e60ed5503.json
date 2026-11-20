@@ -284,5 +284,127 @@
       }
     ],
     "result": "From each project, created a paused schedule, resumed it, inspected its real job and typed output, then confirmed one occurrence and unchanged fixture source bytes."
+  },
+  "packaged_scheduled_gpu_inference": {
+    "surface": "Real local-production MSI administrative image, physical Windows Tauri WebView2 and frozen PyInstaller sidecar",
+    "local_msi": "08943cf4ebfcbdce51bef5d81810a278a21173ec24ac22f38bcf72d13e64a162",
+    "hardware": "NVIDIA GeForce RTX 3090",
+    "driver": "617.42",
+    "exact_sidecar_compute_pid": 28816,
+    "frozen_manifest_sha256": "5aa2015f6cc3b7aebdbd61d25ebbe8c76ad5f02b4372183a4c941fcda947d510",
+    "checkpoint_sha256": "ce1350906e6b5be22887aef99f748f4bb1442db17309e063572d3f5cd92c2782",
+    "group": "fixture-colony-2",
+    "schedule_id": "7172dde5-d25e-41a3-bed5-fdc3ab98a573",
+    "occurrence_id": "546b2bd9-a7dc-4cbe-8a19-e8ce662b7aa7",
+    "workflow_run_id": "a0f2fcc2-cc78-4408-8f2e-c9a21de705b6",
+    "child_job_id": "fe57c6e4-bd63-44b4-ab70-4f7be588feb4",
+    "receipt_file_sha256": "7c57ff549d9fb858b7d24336941cc3ef449f2273bf1fb2e89c71d01d777091b9",
+    "result": "Scheduled CUDA inference on two held-out fixture images produced 19 pending proposals. Four training images were excluded, and all six image files, seven annotations and the checkpoint were preserved."
+  },
+  "official_predecessor_rollback": {
+    "surface": "Official original Windows Installer administrative images, same locally verified loopback runtime",
+    "run_id": 44814797163,
+    "candidate_msi": "60d3824e8fda5ddefba339603e73f191b8769efccfd6ab2b882196b35f8b4034",
+    "predecessor_msi": "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be",
+    "preserved": {
+      "projects": 7,
+      "historic_tables": 109,
+      "historic_rows": 3214,
+      "managed_project_files": 31
+    },
+    "old_runtime_rejection": {
+      "no_listener_published": true,
+      "explicit_new_revision_refusal": "b17_workflows_0001",
+      "log_sha256": "2f13cc49217b9247ae3212fbeea7edd4ba8e19948bd1fd4db29c743187b86711",
+      "unchanged_newer_db_sha256": "d00fc3dd76157e9e68216fe91a6578d8afdbdb8be9c7a3c0a4b167a4823eab35"
+    },
+    "independent_writable_rollback": {
+      "schema": "b16_integrated_0001",
+      "ordinary_post_status": 201,
+      "durable_added_project_id": "35278432-2f6f-4e6b-93ab-aeb6df773c47",
+      "historic_projects_reopened": true,
+      "expected_updated_database_sha256": "5ab9a2faf18952e8dd395b121d2bb29ba6468de146318e711242f9079a7b322f"
+    },
+    "proof_sha256": "40acdb50d547d3700786c6d7f5a20b7158198597eeeb1bc71a002d621df125a6"
+  },
+  "registered_windows_installation": {
+    "job_id": 136577421286,
+    "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44814797163/job/136577421286",
+    "status": "completed",
+    "conclusion": "success",
+    "failures": [],
+    "pending": [],
+    "artifact": {
+      "id": 14671933492,
+      "sha256": "dd0526521dace5686559680a3c03bf2f1d06cc65fc9a303c0147c5f17d899299",
+      "files_rehashed": 48
+    },
+    "msi_sha256": "60d3824e8fda5ddefba339603e73f191b8769efccfd6ab2b882196b35f8b4034",
+    "desktop_sha256": "5fc6b759c6a9a8f9636168ee561663bf4d48e42b872f8baff49d34d50b024716",
+    "schedule_sidecar_sha256": "7c572d8bde94e5edb261de660addf7c772c8e1cb0ce2aab2b7d591b82c3d1421",
+    "source": "e60ed5503451991316b831aab7a3841afa8705f7",
+    "version": "1.7.0",
+    "schedule": {
+      "validated": true,
+      "phases": {
+        "before": {
+          "desktop_pid": 3420,
+          "launcher_pid": 7452,
+          "backend_pid": 1516,
+          "backend_port": 65412,
+          "debug_port": 65387,
+          "desktop_integrity": 8192,
+          "backend_integrity": 8192,
+          "driver_integrity": 12288,
+          "sidecar_sha256": "7c572d8bde94e5edb261de660addf7c772c8e1cb0ce2aab2b7d591b82c3d1421",
+          "exact_profile_verified": true
+        },
+        "after": {
+          "desktop_pid": 7044,
+          "launcher_pid": 5384,
+          "backend_pid": 820,
+          "backend_port": 65480,
+          "debug_port": 65467,
+          "desktop_integrity": 8192,
+          "backend_integrity": 8192,
+          "driver_integrity": 12288,
+          "sidecar_sha256": "7c572d8bde94e5edb261de660addf7c772c8e1cb0ce2aab2b7d591b82c3d1421",
+          "exact_profile_verified": true
+        }
+      },
+      "first_slot": "2026-11-20T21:35:19Z",
+      "catchup_slot": "2026-11-20T21:36:19Z",
+      "seconds_closed": 55.879651,
+      "missed_intervals": 1,
+      "occurrence_ids": [
+        "50819c04-aadb-4a14-8c1c-e554819d5fea",
+        "a33a947d-5f40-4f3e-8fa1-1853ba17fda4"
+      ],
+      "workflow_run_ids": [
+        "1dda10e0-1be1-4c73-9002-6e5111aaa243",
+        "9f162911-68df-4b3d-84d7-7e8f05dab70d"
+      ],
+      "job_ids": [
+        "d518d54c-d868-49de-8e8c-2bcacdcd5fa9",
+        "2a403e13-b98a-4751-bb98-053008cff80f"
+      ],
+      "receipt_sha256": "59bc3e94cce2efcf41f8bd1a31b2cf1c47609867ba1eb7f6bcc2459f89fcd16f",
+      "receipt_file_sha256": "367c6093de2ce4cb79f00537b811e41852e7e8eb84783ae4feb870b193e10c91",
+      "replays": [
+        {
+          "id": "c923db6e-3f66-4ea0-a253-3ee3a4e450af",
+          "payloadSha256": "c7acad414bb7c4e6c4fc79681083301ecfcd10442165e66674e31f1722a98083"
+        },
+        {
+          "id": "66dd3dd7-9771-4b98-92f2-2f22f3025a75",
+          "payloadSha256": "c7acad414bb7c4e6c4fc79681083301ecfcd10442165e66674e31f1722a98083"
+        }
+      ],
+      "paused_control_id": "bef79e25-03ce-4cfc-8ba1-b601bceae4da"
+    },
+    "package_executables": {
+      "desktop_sha256": "5fc6b759c6a9a8f9636168ee561663bf4d48e42b872f8baff49d34d50b024716",
+      "backend_sha256": "7c572d8bde94e5edb261de660addf7c772c8e1cb0ce2aab2b7d591b82c3d1421"
+    }
   }
 }
