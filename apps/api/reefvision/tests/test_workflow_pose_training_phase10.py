@@ -361,6 +361,22 @@ def test_pose_workflow_replay_checks_secondary_checkpoint_bytes(
     replayed = execute(processor_with_secondary_checkpoint)
     assert replayed["training_run_id"] == result["training_run_id"]
 
+    # A real hard link preserves the secondary checkpoint digest but aliases
+    # its bytes, so completed-node replay must reject it without deleting it.
+    secondary_alias = last_checkpoint.parent / "last-hardlink-alias.pt"
+    try:
+        os.link(last_checkpoint, secondary_alias)
+    except (OSError, NotImplementedError):
+        pass  # Some filesystems do not support hard links.
+    else:
+        try:
+            with pytest.raises(ValidationError, match="checkpoint artifact is hard-linked"):
+                execute(processor_with_secondary_checkpoint)
+        finally:
+            secondary_alias.unlink()
+        restored = execute(processor_with_secondary_checkpoint)
+        assert restored["training_run_id"] == result["training_run_id"]
+
     # A current workflow must not become unchecked when a secondary checkpoint
     # digest is removed while its advertised file path remains intact.
     for digest_field in ("best_checkpoint_sha256", "last_checkpoint_sha256"):
@@ -1715,6 +1731,24 @@ def test_pose_workflow_training_creates_normal_training_result_without_gpu(
     reused = retry_completed_node()
     assert reused["training_run_id"] == result["training_run_id"]
     assert reused["result_checkpoint_sha256"] == result["result_checkpoint_sha256"]
+
+    # Keep the selected checkpoint bytes intact, but alias the inode. A saved
+    # workflow must reject it despite matching both previously frozen digests.
+    selected_checkpoint = resolve_managed_project_path(
+        test_settings, str(result["result_checkpoint_path"])
+    )
+    selected_alias = selected_checkpoint.parent / "best-hardlink-alias.pt"
+    try:
+        os.link(selected_checkpoint, selected_alias)
+    except (OSError, NotImplementedError):
+        pass  # Unsupported filesystems still exercise normal replay above.
+    else:
+        try:
+            with pytest.raises(ValidationError, match="checkpoint artifact is hard-linked"):
+                retry_completed_node()
+        finally:
+            selected_alias.unlink()
+        assert retry_completed_node()["training_run_id"] == result["training_run_id"]
 
     # This API-frozen, scientist-verified dataset produced a real persisted
     # experiment record. A changed software environment cannot be replayed
