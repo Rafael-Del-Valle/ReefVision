@@ -49,17 +49,28 @@ def signed_enclosed_volume_mesh_units(
         if not isfinite(contribution):
             raise ValueError("Enclosed mesh volume overflowed")
         contributions.append(contribution)
-    volume = fsum(contributions)
+    # Normalize before summation: an intermediate sum of large finite face
+    # contributions (or their magnitudes) can overflow even when the signed
+    # volume cancels to a finite value. The normalized cancellation check
+    # still routes ambiguous residuals to the exact source-coordinate path.
+    maximum_contribution = max((abs(term) for term in contributions), default=0.0)
+    normalized_contributions = (
+        [term / maximum_contribution for term in contributions]
+        if maximum_contribution
+        else []
+    )
+    normalized_sum = fsum(normalized_contributions)
+    volume = normalized_sum * maximum_contribution
     if not isfinite(volume):
         raise ValueError("Enclosed mesh volume overflowed")
     # Per-face determinants can be well-conditioned while the sum across
     # faces is not. In that case the rounded nonzero residual may still be
     # wrong: recover from the original source coordinates, not the rounded
     # individual face volumes. This is numeric QC, not biological validation.
-    contribution_magnitude = fsum(abs(term) for term in contributions)
+    normalized_magnitude = fsum(abs(term) for term in normalized_contributions)
     aggregate_cancellation_risk = (
-        contribution_magnitude > 0
-        and abs(volume) <= roundoff_guard * contribution_magnitude
+        normalized_magnitude > 0
+        and abs(normalized_sum) <= roundoff_guard * normalized_magnitude
     )
     if volume == 0.0 or cancellation_risk or aggregate_cancellation_risk:
         # An exact zero or ill-conditioned nonzero determinant may be due to
