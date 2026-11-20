@@ -189,6 +189,69 @@ describe("ImageViewport", () => {
     expect(transform.style.transform).toBe(afterMove);
   });
 
+  it("keeps wheel zoom while dragging and pans from the latest pointer position", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Zoom during pan viewport">
+        <svg aria-label="Preserved image annotations">
+          <rect x="10" y="20" width="30" height="40" />
+        </svg>
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", {
+      name: "Zoom during pan viewport",
+    });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const readTransform = () => {
+      const match = transform.style.transform.match(
+        /^translate\\(([-+\\d.e]+)px, ([-+\\d.e]+)px\\) scale\\(([-+\\d.e]+)\\)$/,
+      );
+      if (!match) throw new Error("Invalid viewport transform");
+      return match.slice(1).map(Number);
+    };
+
+    fireEvent.pointerDown(frame, {
+      pointerId: 12,
+      button: 1,
+      clientX: 20,
+      clientY: 30,
+    });
+    fireEvent.pointerMove(window, {
+      pointerId: 12,
+      clientX: 40,
+      clientY: 50,
+    });
+    const beforeZoom = readTransform();
+    fireEvent.wheel(frame, {
+      deltaY: -100,
+      clientX: 200,
+      clientY: 180,
+    });
+    const zoomed = readTransform();
+    expect(zoomed[2]).toBeGreaterThan(beforeZoom[2]);
+
+    fireEvent.pointerMove(window, {
+      pointerId: 12,
+      clientX: 55,
+      clientY: 75,
+    });
+    const moved = readTransform();
+    expect(moved[0]).toBeCloseTo(zoomed[0] + 15, 8);
+    expect(moved[1]).toBeCloseTo(zoomed[1] + 25, 8);
+    expect(moved[2]).toBe(zoomed[2]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Fit to View" }));
+    const fitted = transform.style.transform;
+    fireEvent.pointerMove(window, {
+      pointerId: 12,
+      clientX: 100,
+      clientY: 110,
+    });
+    expect(transform.style.transform).toBe(fitted);
+    expect(
+      screen.getByLabelText("Preserved image annotations").querySelector("rect"),
+    ).toHaveAttribute("x", "10");
+  });
+
   it("preserves Alt-modified polygon vertex gestures", () => {
     const onPointerDown = vi.fn();
     render(

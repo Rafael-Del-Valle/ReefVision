@@ -33,7 +33,6 @@ export function ImageViewport({
     pointerId: number;
     x: number;
     y: number;
-    view: ViewportTransform;
   } | null>(null);
   const [frameSize, setFrameSize] = useState(FALLBACK_SIZE);
   const [view, setView] = useState(viewRef.current);
@@ -86,10 +85,17 @@ export function ImageViewport({
       const drag = dragRef.current;
       // A secondary touch/pen pointer must not move the active drag.
       if (!drag || event.pointerId !== drag.pointerId) return;
+      // Apply movement to the latest view: a wheel zoom during a pan must
+      // not be rolled back by the next pointermove.
+      const deltaX = event.clientX - drag.x;
+      const deltaY = event.clientY - drag.y;
+      drag.x = event.clientX;
+      drag.y = event.clientY;
+      if (deltaX === 0 && deltaY === 0) return;
       updateView({
-        ...drag.view,
-        offsetX: drag.view.offsetX + event.clientX - drag.x,
-        offsetY: drag.view.offsetY + event.clientY - drag.y,
+        ...viewRef.current,
+        offsetX: viewRef.current.offsetX + deltaX,
+        offsetY: viewRef.current.offsetY + deltaY,
       });
     };
     const cancel = (event: PointerEvent) => {
@@ -134,7 +140,6 @@ export function ImageViewport({
       pointerId: event.pointerId,
       x: event.clientX,
       y: event.clientY,
-      view: viewRef.current,
     };
   }
 

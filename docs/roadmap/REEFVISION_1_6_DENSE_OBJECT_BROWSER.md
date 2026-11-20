@@ -133,3 +133,20 @@ Two frontend regressions exercise interleaved pointer-down/move/up/cancel,
 source-geometry preservation, and blur cancellation. Browser E2E on dense
 representative media and installed Windows pen/touch usability remain required
 for 1.6 acceptance.
+
+## Preserving live zoom during active pan (Track D)
+
+The image editor previously anchored pointer movement to the viewport transform
+at pointer-down. When a researcher turned the mouse wheel while holding an
+Alt/middle-button pan, the next move restored the stale starting scale and
+undid the zoom. Panning now consumes pointer movement increments against the
+**latest** transform, so wheel zoom remains in effect and subsequent movement
+continues from the most recent pointer position. Secondary pointers cannot
+move or terminate a different pointer's drag; fit/reset still ends the gesture.
+
+This is a display-only interaction fix. Original image pixels, annotation and
+mask coordinates, reviewer decisions, class visibility, scientific measurements,
+and executable saved Workflow Builder runs/provenance are unchanged. The React
+regression verifies pan → wheel zoom → pan continuity, zoom retention, reset
+cancellation and preserved overlay geometry. Exact-head frontend/Playwright and
+real Windows installed-GUI acceptance remain independently required.
