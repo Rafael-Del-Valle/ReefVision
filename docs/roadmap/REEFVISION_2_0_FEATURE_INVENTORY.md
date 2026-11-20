@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T06:12:00Z`
+Updated: `2026-11-20T06:18:00Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -605,6 +605,7 @@ Evidence:
 - `windows_installed`: none recorded
 - `physical_hardware`: RTX 3090 native WebView2 fixture on packaged 78a02c20c exercised training, registration, refinement, review and comparison on 12 common frames. Frame and temporal scored 24 coordinates apiece and both missed the one complete event. The report recorded exploratory lineage. — `docs/REEFVISION_1.4.0_REPORT.md#packaged-reefpose-comparison-on-the-rtx-3090` (`rv13-packaged-exploratory-rtx`)
 - `physical_hardware`: Two source CUDA studies used frozen, disjoint animal and recording declarations. The five-group study scored all 240 coordinates, seven complete reference events and 120 common frames. The two-group study retained the unsupported anatomical frames and unavailable event timing. — `docs/REEFVISION_1_3_HELDOUT_AGREEMENT.md#five-held-out-synthetic-recordings` (`rv13-declared-disjoint-cuda`)
+- `physical_hardware`: The 92e355b6a packaged RTX 3090 worker trained from scratch and scored 240 of 240 landmark positions and 120 of 120 shared anatomical frames on five separately generated held-out recording/animal groups. Mean errors were 5.575 and 4.006 px. Of seven complete reference events, frame missed seven with 15 extra. Temporal missed four with 18 extra. Independent animal labels and field acceptance remain open. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/92#issuecomment-7032104053` (`rv13-packaged-frozen-five`)
 - `representative_data`: none recorded
 
 ### rv13-study-assignments: Reviewed study, treatment, site, tank, and sampling-unit assignments
@@ -781,6 +782,7 @@ Evidence:
 - `windows_installed`: Exact-head source 36c80224a Windows acceptance passed a published 1.0.3 upgrade with schema migration, persistence, Project Exchange, uninstall, and data retention. This is partial evidence and does not substitute for representative 1.3 and legacy draft-1.4 profiles. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-103`)
 - `windows_installed`: Exact-head source 36c80224a passed all three installed synthetic profiles. Verified 1.3 MSI upgrade, 0038 and 0039 profile migration, evidence preservation, exchange round trips, and backup restoration. The historical 1.3 build rejected the upgraded schema and the upgraded database hash remained unchanged. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44072770396` (`rv14-lineage-win-synthetic`)
 - `windows_installed`: Installed candidate 72254d9a0 passed the published 1.0.3 upgrade, both historical numeric profile fixtures, and rollback using the genuine f44053a90 1.3 installer. The old reader preserved the upgraded database digest and reopened its separately restored pre-upgrade backup. The richer 1.3 fixture also showed that the packaged product Restore action still required the later resource-path fix. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44677664711` (`rv14-exact-87-installed`)
+- `windows_installed`: The local MSI built from 92e355b6a restored a verified backup created by the accepted f44053a90 executable through the production Restore action. IDs, source bytes, scientific records and checkpoint survived upgrade and Project Exchange. The old executable refused the newer database unchanged and wrote successfully in the recovered 1.3 profile. The material was a generated fixture. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/92#issuecomment-7032104053` (`rv14-rich-87-restore`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
