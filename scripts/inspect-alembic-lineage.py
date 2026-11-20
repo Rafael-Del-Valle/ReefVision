@@ -231,7 +231,14 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
         set(by_name) != contract["columns"]
         or declared_types != contract["types"]
         or any(row[6] != 0 for row in columns)
-        or any(not by_name[name][3] for name in contract["required"])
+        # A new NOT NULL on an originally nullable observation or review field
+        # can reject legitimate future data; making a required field nullable
+        # can admit unattributed evidence. Check the complete original contract.
+        or any(bool(row[3]) != (name in contract["required"]) for name, row in by_name.items())
+        # Neither source 0038 table declares column defaults. Injected defaults
+        # can fabricate future measurements or reviewer attribution while all
+        # current rows and indices remain unchanged.
+        or any(row[4] is not None for row in columns)
         or [row[1] for row in columns if row[5] > 0] != ["id"]
     ):
         return False
