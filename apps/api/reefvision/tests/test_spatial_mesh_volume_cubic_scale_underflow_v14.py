@@ -365,9 +365,10 @@ def test_cubic_volume_subresolution_scale_qc_standalone_and_saved_graph(
     ratio = direct["surface_to_enclosed_volume_ratio_per_m"]
     assert ratio is not None and ratio > 0
     assert direct["surface_to_enclosed_volume_ratio_scale_interval_per_m"] is None
-    assert direct["edge_connected_patch_surface_to_enclosed_volume_ratio_scale_intervals_per_m"] == [
-        None
-    ]
+    assert (
+        direct["edge_connected_patch_surface_to_enclosed_volume_ratio_scale_intervals_per_m"]
+        == [None]
+    )
     ratio_warning = "surface_volume_ratio_scale_interval_numeric_unrepresentable"
     assert ratio_warning in direct["qc_warnings"]
     warning = "enclosed_volume_scale_interval_numeric_unrepresentable"
@@ -393,7 +394,10 @@ def test_cubic_volume_subresolution_scale_qc_standalone_and_saved_graph(
     assert unknown["enclosed_volume_scale_interval_m3"] is None
     assert unknown["edge_connected_patch_enclosed_volume_scale_intervals_m3"] is None
     assert unknown["surface_to_enclosed_volume_ratio_scale_interval_per_m"] is None
-    assert unknown["edge_connected_patch_surface_to_enclosed_volume_ratio_scale_intervals_per_m"] is None
+    assert (
+        unknown["edge_connected_patch_surface_to_enclosed_volume_ratio_scale_intervals_per_m"]
+        is None
+    )
     assert warning not in unknown["qc_warnings"]
     assert ratio_warning not in unknown["qc_warnings"]
     full = measure_mesh_preview(**{**mesh_params, "relative_scale_uncertainty": 1.0})
@@ -412,9 +416,10 @@ def test_cubic_volume_subresolution_scale_qc_standalone_and_saved_graph(
     assert standalone["edge_connected_patch_enclosed_volume_scale_intervals_m3"] == [None]
     assert standalone["surface_to_enclosed_volume_ratio_per_m"] == ratio
     assert standalone["surface_to_enclosed_volume_ratio_scale_interval_per_m"] is None
-    assert standalone["edge_connected_patch_surface_to_enclosed_volume_ratio_scale_intervals_per_m"] == [
-        None
-    ]
+    assert (
+        standalone["edge_connected_patch_surface_to_enclosed_volume_ratio_scale_intervals_per_m"]
+        == [None]
+    )
     assert standalone["qc_warnings"] == direct["qc_warnings"]
     assert standalone["provenance"]["calibration_verified"] is False
     assert standalone["provenance"]["specimen_identity_verified"] is False
