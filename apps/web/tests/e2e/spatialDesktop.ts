@@ -1,4 +1,5 @@
 import { expect, test as base, type Page } from "@playwright/test";
+import { isAbsolute } from "node:path";
 
 interface SpatialDesktop {
   page: Page;
@@ -16,6 +17,7 @@ export const test = base.extend<{
   spatialApi: [process.env.REEFVISION_GUIDED_TEST_API ?? "", { option: true }],
   desktop: async ({ playwright, spatialWeb, spatialApi }, use, info) => {
     const endpoint = process.env.REEFVISION_SPATIAL_WEBVIEW2_ENDPOINT;
+    const artifactsDir = process.env.REEFVISION_SPATIAL_WEBVIEW2_ARTIFACTS_DIR;
     if (!spatialApi || (!spatialWeb && !endpoint)) {
       info.skip(
         true,
@@ -33,8 +35,16 @@ export const test = base.extend<{
         "Spatial WebView2 acceptance requires a loopback CDP endpoint.",
       );
     }
+    if (artifactsDir && (!endpoint || !isAbsolute(artifactsDir))) {
+      throw new Error(
+        "WebView2 browser artifacts require an absolute local path.",
+      );
+    }
     const browser = endpoint
-      ? await playwright.chromium.connectOverCDP(endpoint, { isLocal: true })
+      ? await playwright.chromium.connectOverCDP(endpoint, {
+          isLocal: true,
+          artifactsDir,
+        })
       : await playwright.chromium.launch(info.project.use.launchOptions);
     try {
       if (endpoint) {
