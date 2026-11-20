@@ -1299,36 +1299,36 @@ def test_pose_run_output_rejects_windows_junction_into_another_run(tmp_path: Pat
         nested_junction.rmdir()
 
 
-def test_pose_training_output_cleanup_rejects_locked_previous_checkpoint(
+def test_pose_training_output_cleanup_preserves_prior_run_artifacts(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # A locked checkpoint from a failed Windows run must never be mixed with
-    # the next training attempt's weights and misleading experiment provenance.
+    # An interrupted run may contain checkpoints already used by registered
+    # models. Refuse this run ID without deleting or mixing its original bytes.
     output_root = tmp_path / "training" / "current-run" / "ultralytics"
     old_checkpoint = output_root / "runs" / "pose" / "weights" / "best.pt"
     old_checkpoint.parent.mkdir(parents=True)
     old_checkpoint.write_bytes(b"checkpoint-from-interrupted-attempt")
-    original_rmtree = shutil.rmtree
 
-    def locked_cleanup(path: Path, *args: Any, **kwargs: Any) -> None:
-        if Path(path) == output_root:
-            raise PermissionError("prior checkpoint is locked")
-        original_rmtree(path, *args, **kwargs)
+    def unexpected_cleanup(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("pose training must preserve previous run artifacts")
 
     with monkeypatch.context() as patch:
-        patch.setattr(shutil, "rmtree", locked_cleanup)
-        with pytest.raises(PermissionError, match="prior checkpoint is locked"):
+        patch.setattr(shutil, "rmtree", unexpected_cleanup)
+        with pytest.raises(ValidationError, match="already exists"):
             _prepare_clean_pose_training_output(output_root)
 
     assert old_checkpoint.read_bytes() == b"checkpoint-from-interrupted-attempt"
 
-    # Once the operating system releases the lock, the next attempt starts
-    # with an empty output directory rather than silently reusing old weights.
-    _prepare_clean_pose_training_output(output_root)
-    assert output_root.is_dir()
-    assert not old_checkpoint.exists()
-    assert list(output_root.iterdir()) == []
+    # A genuinely new run can create its own empty log directory, but neither
+    # its nonempty nor its empty output may be silently reused.
+    fresh_root = tmp_path / "training" / "fresh-run" / "ultralytics"
+    _prepare_clean_pose_training_output(fresh_root)
+    assert fresh_root.is_dir()
+    assert list(fresh_root.iterdir()) == []
+    with pytest.raises(ValidationError, match="already exists"):
+        _prepare_clean_pose_training_output(fresh_root)
+    assert old_checkpoint.read_bytes() == b"checkpoint-from-interrupted-attempt"
 
 
 def test_pose_training_refuses_reused_gpu_output_and_preserves_checkpoints(

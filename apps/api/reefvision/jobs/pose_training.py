@@ -86,16 +86,16 @@ def _resolve_unlinked_pose_run_path(settings: Settings, relative_path: str) -> P
 
 
 def _prepare_clean_pose_training_output(save_root: Path) -> None:
-    """Never start a pose retrain with stale checkpoints from an earlier attempt.
+    """Create only fresh pose run logs, preserving prior scientific artifacts.
 
-    Windows can refuse to remove an in-use checkpoint or training log. If
-    cleanup fails, let the job fail rather than allowing Ultralytics to reuse
-    unverified files in the same run's output directory.
+    A run ID must not reuse an earlier attempt's logs or checkpoints. Refuse
+    existing output instead of recursively deleting potentially registered
+    model weights or evidence from an interrupted scientific training run.
     """
-    if save_root.is_symlink():
-        raise ValidationError("Pose training output directory is a symbolic link")
-    if save_root.exists():
-        shutil.rmtree(save_root)
+    if save_root.is_symlink() or save_root.exists():
+        raise ValidationError(
+            "Pose training log output already exists; refusing to overwrite prior artifacts"
+        )
     save_root.mkdir(parents=True, exist_ok=False)
 
 
