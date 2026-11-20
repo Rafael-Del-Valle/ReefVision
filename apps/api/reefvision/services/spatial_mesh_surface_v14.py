@@ -57,7 +57,9 @@ def _cubic_volume_scale_interval_m3(
     # not a claim that the lower bound is physically zero.
     if not all(isfinite(bound) for bound in bounds):
         return None
-    if volume_m3 > 0 and uncertainty < 1 and bounds[0] == 0:
+    if volume_m3 > 0 and (
+        (uncertainty < 1 and bounds[0] == 0) or (uncertainty > 0 and bounds[0] == bounds[1])
+    ):
         return None
     return bounds
 
@@ -77,8 +79,7 @@ def _quadratic_area_scale_interval_m2(
     # A zero lower limit is physically valid at 100% relative scale error
     # or for a true zero-area surface, but not from floating-point underflow.
     if area_m2 > 0 and (
-        (uncertainty < 1 and bounds[0] == 0)
-        or (uncertainty > 0 and bounds[0] == bounds[1])
+        (uncertainty < 1 and bounds[0] == 0) or (uncertainty > 0 and bounds[0] == bounds[1])
     ):
         return None
     return bounds
