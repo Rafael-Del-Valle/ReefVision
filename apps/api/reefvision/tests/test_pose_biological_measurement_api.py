@@ -645,6 +645,19 @@ def test_fish_gape_vertical_slice_persists_reviews_and_export(
     assert restored.json()["snapshot"] == event_report["snapshot"]
     assert restored.json()["source_id_map"][confirmed_event["id"]] == mapping[confirmed_event["id"]]
     assert restored.json()["stale_reasons"] == []
+    monitor_path = f"/api/v1/projects/{destination}/monitoring"
+    restored_monitor = client.get(f"{monitor_path}/assessments/{mapping[monitor['id']]}")
+    assert restored_monitor.status_code == 200, restored_monitor.text
+    restored_assessment = restored_monitor.json()
+    assert restored_assessment["source_status"] == "current"
+    assert restored_assessment["result_sha256"] != monitor["result_sha256"]
+    (restored_biology,) = restored_assessment["result"]["biological_sessions"]
+    assert restored_biology["video_id"] == mapping[biological["video_id"]]
+    assert restored_biology["event_ids"] == [mapping[confirmed_event["id"]]]
+    assert restored_biology["link_source_sha256"] == biological["link_source_sha256"]
+    assert restored_biology["event_revision_digest"] == biological["event_revision_digest"]
+    assert restored_biology["measurement_sha256"] == biological["measurement_sha256"]
+    assert restored_biology["video_sha256"] == biological["video_sha256"]
     target_event_export = client.get(f"/api/v1/pose-event-runs/{mapping[event_run_id]}/export")
     assert target_event_export.status_code == 200, target_event_export.text
 
