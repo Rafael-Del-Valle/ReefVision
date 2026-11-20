@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T02:54:15Z`
+Updated: `2026-11-20T03:07:14Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -47,8 +47,8 @@ Candidate target: `2.0`
 | 1.3 | Frozen temporal ReefPose datasets and checkpoint training | verified | Models & AI → Training → Temporal ReefPose |
 | 1.3 | Temporal ReefPose refinement and explicit frame review | verified | Video & automation → Video & tracking → Native temporal ReefPose |
 | 1.4 | Reviewed 3D organism matching across acquisitions | blocked | 3D scientific task → Organism correspondence |
-| 1.4 | Anatomical coral branch-length measurement | blocked | 3D scientific task → Measurements → Anatomical branch length |
-| 1.4 | Reviewed biological-condition measurements | blocked | 3D/scientific task → Condition review |
+| 1.4 | Anatomical coral branch-length measurement | blocked | Home → project → Video & automation → Workflow builder → select project mesh → Anatomical branch length |
+| 1.4 | Reviewed biological-condition measurements | blocked | Home → project → Video & automation → Workflow builder → select project original → Condition review |
 | 1.4 | Reviewed extents, dimensions, area, surface paths, and conditional volume | verified | 3D scientific task → Measurements |
 | 1.4 | Validated 1.3 to 1.4 ancestry, migration, exchange, and rollback | blocked | Installed upgrade and Project menu → Backup / Exchange |
 | 1.4 | Reviewed longitudinal 3D change | blocked | 3D scientific task → Longitudinal comparison |
@@ -690,18 +690,19 @@ Evidence:
 - Target: `1.4`
 - Status: `blocked`
 - Dependencies: `rv14-geometric-measurements`
-- Entry point: 3D scientific task → Measurements → Anatomical branch length
+- Entry point: Home → project → Video & automation → Workflow builder → select project mesh → Anatomical branch length
 - Workflow Builder: `required`
 - Missing input: An approved anatomical endpoint/centerline rubric, independently measured reference branches with scale evidence, repeatability study, preregistered error thresholds, and authorized adjudicator.
 
 Acceptance checks:
 
 - **blocked** — Apply a declared endpoint/centerline method and meet independent reference and repeatability thresholds before using the anatomical label. (`rv14-anatomical-branch-length-check`)
+- **verified** — Validate and replay a source-bound investigator-declared centerline, with named endpoints, ordered coordinates, operator, reference length and repeatability evidence. Report provisional length and scale-only uncertainty. (`rv14-centerline-project-engineering-check`)
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Validate and replay a source-bound investigator-declared centerline, with named endpoints, ordered coordinates, operator, reference length and repeatability evidence. Report provisional length and scale-only uncertainty. — `apps/api/reefvision/tests/test_spatial_anatomical_branch_v14.py` (`rv14-centerline-project-source`)
+- `browser`: Validate and replay a source-bound investigator-declared centerline, with named endpoints, ordered coordinates, operator, reference length and repeatability evidence. Report provisional length and scale-only uncertainty. — `apps/web/tests/e2e/anatomical-branch-live.spec.ts` (`rv14-centerline-project-browser`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -711,18 +712,19 @@ Evidence:
 - Target: `1.4`
 - Status: `blocked`
 - Dependencies: `rv14-versioned-spatial-assets`, `rv13-study-assignments`
-- Entry point: 3D/scientific task → Condition review
+- Entry point: Home → project → Video & automation → Workflow builder → select project original → Condition review
 - Workflow Builder: `required`
 - Missing input: An approved biological-condition rubric and observation unit, representative labeled specimens, independent reviewer authority, disagreement/adjudication rule, and preregistered reliability/accuracy thresholds.
 
 Acceptance checks:
 
 - **blocked** — Record condition against a versioned biological rubric with source evidence, independent review, disagreement/adjudication, revision, uncertainty, and export/replay. (`rv14-biological-condition-check`)
+- **verified** — Record an observation under a frozen, investigator-supplied rubric, attribute disagreement and adjudication, reopen the original, and export a report with its revision history and stated uncertainty. (`rv14-condition-project-engineering-check`)
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Record an observation under a frozen, investigator-supplied rubric, attribute disagreement and adjudication, reopen the original, and export a report with its revision history and stated uncertainty. — `apps/api/reefvision/tests/test_spatial_condition_v14.py` (`rv14-condition-project-source`)
+- `browser`: Record an observation under a frozen, investigator-supplied rubric, attribute disagreement and adjudication, reopen the original, and export a report with its revision history and stated uncertainty. — `apps/web/tests/e2e/spatial-condition-live.spec.ts` (`rv14-condition-project-browser`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded

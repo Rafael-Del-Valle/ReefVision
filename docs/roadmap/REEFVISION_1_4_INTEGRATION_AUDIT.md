@@ -111,3 +111,31 @@ frontend and API and run the two Playwright specs
 `project-spatial-comparison-live.spec.ts` and `spatial-guided-workflow-live.spec.ts`.
 Each comparison export contains its asset IDs, original byte hashes, calibration
 evidence and local review attribution.
+
+### Centerline and condition review
+
+After `1da2769e5` the selected asset also opens **Anatomical branch length**
+and **Condition review**. The centerline tool measures an investigator's
+ordered XYZ polyline in the declared source frame. It stores named endpoints,
+method, operator, scale and optionally a reference and repeatability protocol
+in the saved mesh workflow. An out-of-bounds point was rejected. The
+synthetic three-point trace measured 0.025 m with a scale-only interval of
+0.0225–0.0275 m. Two runs produced the same payload digest.
+
+Condition review freezes the supplied rubric version, labels an observation
+on the selected original and stores attributed decisions and adjudication
+as successor revisions. The project routes under
+`/api/v1/projects/{project_id}/spatial/assets/{asset_id}/condition-observations`
+support the observation ledger and JSON reports. The new Alembic head
+`b14_condition_0041` follows `b14_spatial_0040` and adds the rubric and
+condition revision tables. An upgraded copy of the disposable two-acquisition
+profile retained its originals and saved workflows. The browser recorded a
+disagreement, reopened the project and exported the observation and decision.
+
+Four source-browser journeys, 721 frontend tests, 51 focused migration,
+exchange, backup and spatial tests, and 123 Windows harness assertions passed
+in this integration. A successful run on a field dataset still requires the
+reference material, independent review and tolerances in the respective
+inventory rows. The Windows clean-install job exercises the packaged WebView2
+using a per-process disposable profile and a loopback connection. Its result
+belongs to the SHA identified by the installer provenance.

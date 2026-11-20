@@ -1,16 +1,11 @@
-import { expect, test, type Locator } from "@playwright/test";
+import { test } from "./spatialDesktop";
+import { expect, type Locator } from "@playwright/test";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 test("compares two project originals, reviews identity, reopens and exports the same result", async ({
-  page,
+  desktop: { page, web, api },
 }, info) => {
-  const web = process.env.REEFVISION_GUIDED_TEST_WEB;
-  const api = process.env.REEFVISION_GUIDED_TEST_API;
-  test.skip(
-    !web || !api,
-    "Requires the isolated ReefVision API and desktop frontend",
-  );
   const name = `Two synthetic acquisitions ${randomUUID().slice(0, 8)}`;
   const project = await page.request.post(`${api}/projects`, {
     data: { name },
@@ -21,7 +16,7 @@ test("compares two project originals, reviews identity, reopens and exports the 
     localStorage.setItem("reefvision.onboarding.dismissed.1.4.0", "true"),
   );
   async function open() {
-    await page.goto(web!);
+    await page.goto(web);
     await page
       .getByRole("button", { name: `Open ${name}`, exact: true })
       .click();

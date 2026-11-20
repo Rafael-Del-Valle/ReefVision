@@ -1,4 +1,5 @@
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { test } from "./spatialDesktop";
+import { expect, type Page, type TestInfo } from "@playwright/test";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import type {
@@ -7,58 +8,16 @@ import type {
 } from "../../src/features/workflow-graphs/workflowGraphApi";
 
 test("replays and exports a two-acquisition mesh comparison with review evidence", async ({
-  playwright,
+  desktop,
 }, info) => {
-  const web = process.env.REEFVISION_GUIDED_TEST_WEB;
-  const api = process.env.REEFVISION_GUIDED_TEST_API;
-  const endpoint = process.env.REEFVISION_SPATIAL_WEBVIEW2_ENDPOINT;
-  test.skip(
-    !api || (!web && !endpoint),
-    "Requires an isolated ReefVision API and browser or WebView2",
-  );
   test.setTimeout(120_000);
-
-  if (
-    endpoint &&
-    !/^ws:\/\/127\.0\.0\.1:\d+\/devtools\/browser\/[a-z0-9-]+$/i.test(endpoint)
-  ) {
-    throw new Error(
-      "Spatial WebView2 acceptance requires a loopback CDP endpoint.",
-    );
-  }
-
-  const browser = endpoint
-    ? await playwright.chromium.connectOverCDP(endpoint, { isLocal: true })
-    : await playwright.chromium.launch(info.project.use.launchOptions);
-  try {
-    if (endpoint) {
-      const pages = browser.contexts().flatMap((context) => context.pages());
-      const page = pages.find((candidate) =>
-        /^https?:\/\/tauri\.localhost(?:\/|$)/.test(candidate.url()),
-      );
-      expect(page, "Packaged ReefVision WebView2 target").toBeDefined();
-      await expect
-        .poll(() => page!.evaluate(() => "__TAURI_INTERNALS__" in window))
-        .toBe(true);
-      await runSpatialWorkflow(
-        page!,
-        new URL("/", page!.url()).href,
-        api!,
-        info,
-        "tauri-webview2",
-      );
-    } else {
-      await runSpatialWorkflow(
-        await browser.newPage(),
-        web!,
-        api!,
-        info,
-        "source-browser",
-      );
-    }
-  } finally {
-    await browser.close();
-  }
+  await runSpatialWorkflow(
+    desktop.page,
+    desktop.web,
+    desktop.api,
+    info,
+    desktop.surface,
+  );
 });
 
 async function runSpatialWorkflow(

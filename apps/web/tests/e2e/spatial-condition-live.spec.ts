@@ -1,17 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { test } from "./spatialDesktop";
+import { expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 test("records and reopens an attributed condition disagreement from a project asset", async ({
-  page,
+  desktop: { page, web, api },
 }, info) => {
-  const web = process.env.REEFVISION_GUIDED_TEST_WEB;
-  const api = process.env.REEFVISION_GUIDED_TEST_API;
-  test.skip(
-    !web || !api,
-    "Requires isolated local ReefVision API and Vite services",
-  );
-
   const project = `Synthetic condition ${randomUUID().slice(0, 8)}`;
   const created = await page.request.post(`${api}/projects`, {
     data: { name: project },
@@ -21,7 +15,7 @@ test("records and reopens an attributed condition disagreement from a project as
     localStorage.setItem("reefvision.onboarding.dismissed.1.4.0", "true"),
   );
   const open = async () => {
-    await page.goto(web!);
+    await page.goto(web);
     await page
       .getByRole("button", { name: `Open ${project}`, exact: true })
       .click();

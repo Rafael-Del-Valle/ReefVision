@@ -92,7 +92,13 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
     try {
         # Only the test driver uses the absolute Node path. The existing MSI
         # and desktop/sidecar processes still inherit the restricted PATH.
-        & $NodePath $playwrightCli test 'tests/e2e/spatial-guided-workflow-live.spec.ts' --workers=1 --retries=0 --reporter=list,json --output=$output *> $log
+        $specs = @(
+            'spatial-guided-workflow-live.spec.ts',
+            'project-spatial-comparison-live.spec.ts',
+            'anatomical-branch-live.spec.ts',
+            'spatial-condition-live.spec.ts'
+        )
+        & $NodePath $playwrightCli test @specs --workers=1 --retries=0 --reporter=list,json --output=$output *> $log
         if ($LASTEXITCODE -ne 0) {
             $tail = Get-Content -LiteralPath $log -Tail 25 | Out-String
             throw "Packaged WebView2 spatial workflow failed with exit code $LASTEXITCODE. $tail"
@@ -104,6 +110,10 @@ function Invoke-ReefVisionSpatialWebView2Acceptance {
         }
     }
 
+    $stats = (Get-Content -LiteralPath $report -Raw | ConvertFrom-Json).stats
+    if ($stats.expected -ne $specs.Count -or $stats.skipped -ne 0 -or $stats.unexpected -ne 0) {
+        throw 'Every packaged spatial journey must execute successfully.'
+    }
     $results = @(Get-ChildItem -LiteralPath $output -Recurse -File -Filter 'spatial-workflow.json')
     if ($results.Count -ne 1) { throw 'Expected one completed two-acquisition spatial replay report.' }
     $result = Get-Content -LiteralPath $results[0].FullName -Raw | ConvertFrom-Json

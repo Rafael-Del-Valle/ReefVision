@@ -1,13 +1,22 @@
-import { expect, test } from "@playwright/test";
+import { test } from "./spatialDesktop";
+import { expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
+test.use({
+  spatialWeb:
+    process.env.REEFVISION_ANATOMICAL_TEST_WEB ??
+    process.env.REEFVISION_GUIDED_TEST_WEB ??
+    "",
+  spatialApi:
+    process.env.REEFVISION_ANATOMICAL_TEST_API ??
+    process.env.REEFVISION_GUIDED_TEST_API ??
+    "",
+});
+
 test("records and replays a provisional centerline from a selected project mesh", async ({
-  page,
+  desktop: { page, web, api },
 }) => {
-  const api = process.env.REEFVISION_ANATOMICAL_TEST_API;
-  const web = process.env.REEFVISION_ANATOMICAL_TEST_WEB;
-  test.skip(!api || !web, "Requires an isolated ReefVision API and frontend.");
   const name = `Branch fixture ${randomUUID()}`;
   const project = await page.request.post(`${api}/projects`, {
     data: { name },
@@ -39,7 +48,7 @@ test("records and replays a provisional centerline from a selected project mesh"
   }, version);
 
   async function openSelectedMesh() {
-    await page.goto(web!);
+    await page.goto(web);
     await page
       .getByRole("button", { name: `Open ${name}`, exact: true })
       .click();
