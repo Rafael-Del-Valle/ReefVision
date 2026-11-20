@@ -352,10 +352,7 @@ def test_cache_list_rejects_rehashed_missing_foreign_or_duplicate_record_lineage
     assert {item["id"] for item in records.json()["items"]} == set(original_ids)
 
 
-
-@pytest.mark.parametrize(
-    "alteration", ["changed_record_key", "same_project_substitution"]
-)
+@pytest.mark.parametrize("alteration", ["changed_record_key", "same_project_substitution"])
 def test_environment_cache_rejects_unrelated_same_project_record_lineage(client, alteration):
     """A record's project and a rehashed payload alone do not prove dataset lineage."""
     from sqlalchemy import select
