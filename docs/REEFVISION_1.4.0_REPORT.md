@@ -494,3 +494,30 @@ surface-trace regression; its formatting was separately corrected.
 and representative coral datasets, independent scientific review, migrations,
 installed Windows MSI/CAB/GUI and physical GPU acceptance remain outstanding.
 Neither synthetic fixture validates biological branch length or calibration.
+
+
+## Track C: inverse-scale A/V precision boundary and saved graph (2026-11-19)
+
+The provisional surface-area/enclosed-volume ratio is an inverse-length
+geometric descriptor, not a biological condition metric or growth estimate.
+For strictly positive, sub-binary64 relative scale uncertainty, dividing by
+`1 +/- uncertainty` can produce identical inverse-scale interval endpoints;
+those falsely exact bounds are now withheld and the
+`surface_volume_ratio_scale_interval_numeric_unrepresentable` QC warning is
+attached when a finite provisional global or per-patch ratio exists. Unknown
+uncertainty does not invent bounds or QC. At 100% scale uncertainty, a finite
+upper A/V bound is mathematically unavailable and does **not** trigger the
+numeric-resolution warning. Zero uncertainty retains an exact interval.
+
+The existing synthetic closed-tetrahedron test additionally covers direct
+measurement, standalone API and two executable typed persisted Workflow Builder
+runs with equal scientific payloads and SHA-256 artifact hashes. Its direct
+engine fixture was corrected to omit request-level specimen/coordinate fields
+(which are attached only by `preview_from_request`); only API and workflow
+artifacts assert those unverified provenance fields. This is **synthetic
+regression coverage**, not validated coral data or independently verified
+calibration, segmentation, or specimen identity.
+
+**RELEASE HOLD:** This head still requires complete backend/frontend/E2E and
+migration CI, scientific review with representative observations, and real
+installed Windows MSI/CAB/GUI and GPU gates before any release-ready claim.
