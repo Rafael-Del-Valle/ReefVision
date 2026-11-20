@@ -552,11 +552,11 @@ def test_source_volume_below_binary64_recovers_after_large_calibration(
 
     expected_volume = float(Fraction(edge) ** 3 * 1_000_000**3 / 6)
     assert expected_volume > 0
-    params = _params(vertices=vertices, faces=faces)
-    params["meters_per_unit"] = scale
-    params["specimen_id"] = "synthetic-recovered-volume-unverified"
-    direct = measure_mesh_preview(**_params(vertices=vertices, faces=faces, uncertainty=0.1))
-    assert direct["enclosed_volume_m3"] is None
+    direct_params = _params(vertices=vertices, faces=faces)
+    direct_params["meters_per_unit"] = scale
+    direct = measure_mesh_preview(**direct_params)
+    assert direct["enclosed_volume_m3"] == pytest.approx(expected_volume, rel=1e-8, abs=0)
+    params = {**direct_params, "specimen_id": "synthetic-recovered-volume-unverified"}
 
     project_id = str(create_project(client, "Recovered calibrated volume QC")["id"])
     base = f"/api/v1/projects/{project_id}"
