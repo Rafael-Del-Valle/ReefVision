@@ -791,6 +791,18 @@ describe("VideoTrackingWorkspace", () => {
       "Segmentation mask 1 for track 8",
     );
     expect(renderedMask).toHaveAttribute("points", "110,130 390,140 380,360");
+    expect(
+      screen.getByRole("button", { name: "Add keyframe at frame 0" }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Hide class Fish" }));
+    expect(
+      screen.queryByLabelText("Segmentation mask 1 for track 8"),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Save track" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Show class Fish" }));
+    expect(
+      screen.getByLabelText("Segmentation mask 1 for track 8"),
+    ).toBeVisible();
 
     const maskEditor = screen.getByLabelText("Mask polygons for frame 0");
     fireEvent.change(maskEditor, {
@@ -799,6 +811,11 @@ describe("VideoTrackingWorkspace", () => {
       },
     });
     fireEvent.blur(maskEditor);
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(
+      screen.getByLabelText("Segmentation mask 1 for track 8"),
+    ).toHaveAttribute("points", "110,130 390,140 380,360");
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
     fireEvent.click(screen.getByRole("button", { name: "Save track" }));
 
     await waitFor(() => expect(api.updateVideoTrack).toHaveBeenCalledTimes(1));
