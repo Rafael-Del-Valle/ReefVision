@@ -196,8 +196,9 @@ def test_persisted_obj_measurement_matches_saved_workflow_and_detects_tampering(
     project_id = str(create_project(client, "Asset-bound mesh workflow")["id"])
     other_id = str(create_project(client, "Unrelated mesh workflow")["id"])
     base = f"/api/v1/projects/{project_id}"
-    imported = client.post(f"{base}/spatial/assets", files={"file": ("colony.obj", OBJ)})
+    imported = client.post(f"{base}/spatial/assets", files={"file": ("colony_🐠.obj", OBJ)})
     assert imported.status_code == 201, imported.text
+    assert imported.json()["original_filename"] == "colony_🐠.obj"
     asset_id = imported.json()["id"]
     params = {
         "asset_id": asset_id,
