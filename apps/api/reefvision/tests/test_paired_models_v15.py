@@ -82,6 +82,7 @@ def test_queued_comparison_reopens_exports_and_recomputes_twice(
     assert rejected.status_code == 422
     submitted = client.post(url, json=payload)
     assert submitted.status_code == 202, submitted.text
+    assert submitted.json()["created_at"].endswith("Z")
     jid = submitted.json()["id"]
     assert process_comparison(app.state.settings, app.state.session_factory, jid)
     assert not process_comparison(app.state.settings, app.state.session_factory, jid)
