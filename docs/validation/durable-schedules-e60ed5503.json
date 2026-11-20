@@ -1,0 +1,195 @@
+{
+  "feature_id": "rv17-durable-schedules",
+  "source": "e60ed5503451991316b831aab7a3841afa8705f7",
+  "version": "1.7.0",
+  "migration": "b17_workflows_0001",
+  "draft_pull": 106,
+  "researcher_entry": "Project → Video & automation → Schedules",
+  "inputs": "Generated reviewed images and ecological events, a recorded fixture transfer, and a pinned scratch detector.",
+  "transaction_boundaries": {
+    "source_commit": "f5882a637d52d7f3c29098e345e1eb7a1f136598",
+    "source_tree": "da47accfc66a633283567009453590ca1c02ee13",
+    "tested_OS": "Windows",
+    "process_hard_stop_cases": 2,
+    "targeted_workflow_tests": 31,
+    "ruff": "passed",
+    "mypy_source_files": 718,
+    "log_checksums": [
+      {
+        "name": "final-service.log",
+        "sha256": "0a20ff1cfcce156d491957b1485c05d105be793f6ee3e4410613f81d35942b3c"
+      },
+      {
+        "name": "process-fixed.log",
+        "sha256": "b58dfe9283b731737b265d05b5413cbcb4a59a0210b45398f7e74a994075a447"
+      },
+      {
+        "name": "mypy-final.txt",
+        "sha256": "dbc42e97268a974fe31d2a334a58afd5a3ba3478ad0e67abce2487d2189da4ec"
+      },
+      {
+        "name": "claim-red.log",
+        "sha256": "803a201ffed71e44508ccad62049b22d2f6159c71fbc35bd97d4b4e43444767d"
+      }
+    ],
+    "before_commit": "A hard-killed worker lost its uncommitted queue rows. Restart dispatched one surviving occurrence and job.",
+    "after_commit": "A hard-killed worker had already committed. Restart retained that same occurrence and job.",
+    "outputs": "Each case produced exactly one completed set of project and ranked QC outputs.",
+    "receipt_sha256": "d9768bff359f5f34375d827e1ae6372119f52ca770fe5d47e04a99f6a17bc74e"
+  },
+  "four_production_schedules": {
+    "source": "57a2cbdd028dacce6ac15b0fdd9b240db6bcac41",
+    "api_version": "1.7.0",
+    "completed": 4,
+    "summary": {
+      "acquisition": "Imported one original H.264 video from the sealed predecessor transfer. Bytes, origin batch and reconciliation receipt matched. No field review decisions were created.",
+      "inference": "Actual CPU inference from the verified local scratch checkpoint, only two validation originals, four training originals excluded, 15 pending proposals.",
+      "qc": "Two pending ranks at 12.5 in the verified predecessor ordering, with matching frozen manifest and scored input evidence.",
+      "report": "One reviewed event over 4.7 valid seconds. One excluded confirmed and one unreviewed candidate remained visible, and the saved CSV was byte-identical."
+    },
+    "cases": [
+      {
+        "purpose": "acquisition",
+        "project_id": "87b4b09b-bf8e-4081-a75c-9dbeb830b0af",
+        "schedule_id": "188c6807-6dd1-433e-b2b1-2e0f67b8a476",
+        "occurrence_id": "815f77c1-c048-43f8-9951-49307e1b3a87",
+        "graph_id": "6962aa0a-2638-4225-9644-cbcd25e41ed0",
+        "graph_sha256": "dff954d573ceb76dae83341c172b9abee9e8c50272be8958b25700f0c2a1d67d",
+        "scheduled_at": "2026-11-20T20:47:29.984930Z"
+      },
+      {
+        "purpose": "inference",
+        "project_id": "01f78c86-5b4b-4416-9ff5-a6fa99bd9412",
+        "schedule_id": "b4c5a3fb-0ef6-438e-a82e-378ac18cdcf2",
+        "occurrence_id": "c1f7a63f-e8c6-4d1e-9d35-01cb1ffb2e81",
+        "graph_id": "bdb73034-51d8-4602-8aa6-ff462a5dced6",
+        "graph_sha256": "948a8e192919102a4168a3eb1a5f0b4bc525fb68a23ab7a1479bb62ea43af987",
+        "scheduled_at": "2026-11-20T20:45:57.031535Z"
+      },
+      {
+        "purpose": "qc",
+        "project_id": "89a257a8-8ff9-4534-af2d-e5eee73bf66f",
+        "schedule_id": "b644b8b4-82a1-4c1e-a1c9-9c5e01fa08c1",
+        "occurrence_id": "9001e2d6-82dd-440b-8c93-a9b9d4c9722b",
+        "graph_id": "e6c9ad86-346e-4671-a082-aaf6776bb039",
+        "graph_sha256": "2b256b0b340dd34c711c740fbf1510fc9d060bb023f252035ce35e9567ff67b3",
+        "scheduled_at": "2026-11-20T20:45:57.088827Z"
+      },
+      {
+        "purpose": "report",
+        "project_id": "01abdfab-3bb7-4338-8729-096f0397308b",
+        "schedule_id": "20f7aae7-cc14-419c-a098-1f9d5ccc6623",
+        "occurrence_id": "a23a9ce4-6afa-480b-8fec-f4c85b6c6cb3",
+        "graph_id": "69c76eca-617c-4a3e-9512-ead9d1ba093f",
+        "graph_sha256": "9675c56e94123d634039942a5f8da44a52eee3dcd8a6efa4d783c78c600310e7",
+        "scheduled_at": "2026-11-20T20:45:57.205038Z"
+      }
+    ],
+    "receipt_sha256": "afce7b3b68c228341bda1dffcf2d458665f50cfb7887a110df42b84053594587"
+  },
+  "transfer": {
+    "implementation": "ac00f91dd",
+    "passed_in_integrated_tests": 26,
+    "failures": 0,
+    "result": "Exported an actual completed scheduled QC graph, restored twice, and verified each remapped run shared its schedule's frozen inputs. A repointed run with a resealed archive was refused.",
+    "junit_sha256": "be8dc1a68c1a544d4c419ba9f2492522f7ec5320ce820dc445e0b7c6f1ed39aa"
+  },
+  "source_upgrade": {
+    "scope": "Exact source Alembic migration on a verified seven-project copy; refusal and rollback via original MSI-extracted 1.6",
+    "source_migration_commit": "355b766155a0506a231fa76c27cd723001f7a2aa",
+    "previous_version": {
+      "source": "3a9ce1622e4f9e230e2ee14432ee7d2f32510870",
+      "version": "1.6.0",
+      "workflow_run_id": 44798678615,
+      "msi_sha256": "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be",
+      "provenance_sha256": "d4e53ebfebdf8201526fa7f58acd31392eceba6cdee12b5145e55313452ffb3c",
+      "extraction_receipt_sha256": "d11f8fdb548b6ec28c0edce087a778d302e02df3b747536d9856d0d2e64d74ff",
+      "sidecar_sha256": "4f515488bc6e183bc07bb067424dacf576e0e2b615e03f0be42f460946b5dc30",
+      "desktop_sha256": "a99cfb431f1eb4923a64d79e423467fa9223291dc1cb628d9762d9375e4a6346",
+      "upgrade_code": "{5EDA8EE0-2A5D-5B08-A8DF-9BECFC3A4351}",
+      "external_cabinet_count": 5
+    },
+    "original_backup_manifest_sha256": "34ee59e313c9de63f5c5d4de032c2989defe7b64185aeaed1d641c02cebba1bd",
+    "project_count": 7,
+    "retained_database_tables": 109,
+    "retained_table_rows": 3214,
+    "retained_managed_project_files": 31,
+    "old_revision": "b16_integrated_0001",
+    "new_revision": "b17_workflows_0001",
+    "new_tables": [
+      "workflow_schedule_occurrences",
+      "workflow_schedules"
+    ],
+    "upgraded_database_immutable_through_old_refusal_and_rollback_sha256": "d00fc3dd76157e9e68216fe91a6578d8afdbdb8be9c7a3c0a4b167a4823eab35",
+    "explicit_refusal_log_sha256": "d39c310706e881f47f994bdbf50a413ff3ff33371a4f1d16128f1fe2eed05b3a",
+    "source_migration_tree": "dfb40cf7d117477e3f71b29a1ee931f6e12371dc",
+    "readiness_probe_sha256": "550d87ecd1deb2f1c18bdcbb92304feee1aa42de69cc17b3b48fa0745249b071",
+    "receipt_sha256": "31261e40b49cc60409dd70803d52426c48bb55c5536a8260db002cdd7b7453bb"
+  },
+  "browser": {
+    "source": "e60ed5503451991316b831aab7a3841afa8705f7",
+    "state": "passed",
+    "surface": "source-browser",
+    "files": {
+      "closure.json": "9df47e1c837ecadf41bdf0f9924e84017a1b6f276059c1bf29e44edfd11a2089",
+      "restart-witness.json": "91ea616e887568f8d3fa567b70debe81481582f14cab682980276124dc80f3bf",
+      "before-restart-proof.json": "2730e0de64d21b48bffb3a3784abeace36f21af30ebb8d20c2bcecbd431b8269",
+      "before-restart-playwright.json": "e726f16e2f76033857cb784e44cb976cec93507469bec1554794b81416ddf940",
+      "before-restart-backend.log": "e90e871c3d2bbc25fc5f9d2c06c6c76b578cb2a95d2d65292b3cb7ea8479ba48",
+      "after-restart-proof.json": "ab8b5cd48c71a483fb15c77895699ef09ee5125aa8bffffc44e83814e65f0a93",
+      "after-restart-playwright.json": "d615c8147ec6d6328f6378d744d9f71e3d7dbbc41a4a1f3e695ce2e99eb32f0d",
+      "after-restart-backend.log": "f2c945054d8ea9855e59b17b9dae6dd521ceae5fc663ec82344fa88f6621f482"
+    },
+    "listener_stop_methods": [
+      "stdin-requested",
+      "stdin-requested"
+    ],
+    "verified_donor_files": 3,
+    "first": {
+      "id": "a8b3bd2d-1728-460b-97b6-53828e810b48",
+      "project_id": "89a257a8-8ff9-4534-af2d-e5eee73bf66f",
+      "schedule_id": "95cd27f0-94a3-4561-9627-eae214a1c30b",
+      "scheduled_at": "2026-11-20T20:50:51Z",
+      "created_at": "2026-11-20T20:50:51.449118Z",
+      "missed_intervals": 0,
+      "status": "succeeded",
+      "detail": null,
+      "workflow_run_id": "855b5a4b-8e04-4e62-9677-fd7cd5760662",
+      "job_id": "f07ece89-9158-4dcc-95c9-abbbce6057b4",
+      "graph_sha256": "2b256b0b340dd34c711c740fbf1510fc9d060bb023f252035ce35e9567ff67b3",
+      "inputs_sha256": "b21dee6f4a8b6b9000d68a43d5557b625df30cbf26750cffe5d6f81207fa7994"
+    },
+    "recovered": {
+      "id": "a4410687-475e-49cb-b960-e0ff3c341e8e",
+      "project_id": "89a257a8-8ff9-4534-af2d-e5eee73bf66f",
+      "schedule_id": "95cd27f0-94a3-4561-9627-eae214a1c30b",
+      "scheduled_at": "2026-11-20T20:51:51Z",
+      "created_at": "2026-11-20T20:51:57.600279Z",
+      "missed_intervals": 1,
+      "status": "succeeded",
+      "detail": null,
+      "workflow_run_id": "cc20514b-44f4-4182-ac10-c62d336b188e",
+      "job_id": "307c81b3-c2f8-49b8-af13-fbdd587a089e",
+      "graph_sha256": "2b256b0b340dd34c711c740fbf1510fc9d060bb023f252035ce35e9567ff67b3",
+      "inputs_sha256": "b21dee6f4a8b6b9000d68a43d5557b625df30cbf26750cffe5d6f81207fa7994"
+    },
+    "receipt": {
+      "receiptSha256": "309e684b124d008bfbc2d8216e97ff851e1948e9c39205e803f337ceb61d4174",
+      "downloadedFileSha256": "a8bb752f37238a7493f9ee764da66a9af4dce3448aeb4580bd0d978038ca7336",
+      "graphId": "4a2956a1-88bd-4a5a-bb88-b5cd337110b9",
+      "graphSha256": "80cf29d39ae90f307a94b7ee93cb78052a1464a6def5aa67aa327181a4e9a7d4",
+      "replays": [
+        {
+          "id": "a2a23af5-4185-45bb-a152-e72b7131f201",
+          "payloadSha256": "e5e93ee2ab18b4c7f9411f44fcec4f4fa2223a4bfe366ca88d08af1386f6f4f5"
+        },
+        {
+          "id": "ee81c301-c47c-4428-86e0-8501292fc9ba",
+          "payloadSha256": "e5e93ee2ab18b4c7f9411f44fcec4f4fa2223a4bfe366ca88d08af1386f6f4f5"
+        }
+      ]
+    },
+    "receipt_sha256": "c845d7f00f25b13262d6587514864ef0d9f22458ef1e8bc06b09ceccd7f04508"
+  },
+  "limits": "Independent field measurements, representative animal labels and physical acquisition have separate acceptance records."
+}

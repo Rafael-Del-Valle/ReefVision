@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T20:01:08Z`
+Updated: `2026-11-20T20:54:09Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1280,8 +1280,10 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Two hard process interruptions on Windows preserved one job and output set. All 31 focused service tests passed. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-atomic-queue`)
+- `source`: The production worker completed and paused one acquisition, frozen inference, QC and reviewed report schedule on recorded or generated material. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-four-purposes`)
+- `source`: Completed schedule and receipt remained bound to the same frozen run inputs after two Project Exchange generations. The integrated scheduling tests passed 26 cases. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-transfer`)
+- `browser`: The source browser reopened the same saved schedule after a cold restart, inspected its catch-up job and two ranked images, downloaded the receipt and replayed it twice with the same output digest. A paused schedule stayed empty. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-desktop-restart`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
