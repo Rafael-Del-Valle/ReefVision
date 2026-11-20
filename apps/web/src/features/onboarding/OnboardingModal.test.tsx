@@ -52,7 +52,9 @@ function ProjectCreationHandoffHarness() {
 
 function WorkspaceHandoffHarness() {
   const [open, setOpen] = useState(true);
-  const [workspace, setWorkspace] = useState<OnboardingDestination | null>(null);
+  const [workspace, setWorkspace] = useState<OnboardingDestination | null>(
+    null,
+  );
   return (
     <>
       <button type="button">Open help</button>
