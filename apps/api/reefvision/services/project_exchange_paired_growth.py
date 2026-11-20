@@ -125,13 +125,16 @@ def validate_paired_growth_exchange(
             )
             if receipt["payload_sha256"] != canonical_json_sha256(expected.model_dump(mode="json")):
                 raise ValueError("frozen report does not replay")
+    except ValidationError as exc:
+        raise ValidationError(
+            f"Paired growth workflow receipt could not be verified. {exc}"
+        ) from exc
     except (
         AttributeError,
         KeyError,
         TypeError,
         ValueError,
         ConflictError,
-        ValidationError,
     ) as exc:
         raise ValidationError(
             "Paired growth workflow receipt does not match its producer and frozen analysis"
