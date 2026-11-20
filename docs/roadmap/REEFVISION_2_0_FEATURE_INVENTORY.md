@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-20T19:06:10Z`
+Updated: `2026-11-20T19:09:33Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -540,6 +540,7 @@ Acceptance checks:
 Evidence:
 
 - `source`: Migration, dependency, evidence-hash, and unknown-head tests. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/87` (`rv13-exchange-src`)
+- `source`: The same original verified backup that previously failed can be restored with every member at its original path. A regression exercises interrupted publication, cancellation recovery and existing marker names. — `docs/validation/restored-projects-3a9ce1622.json` (`rv13-repeat-restore-source-3a9`)
 - `browser`: none recorded
 - `windows_installed`: Installed 1.2 to 1.3 upgrade and rollback evidence. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/87` (`rv13-exchange-win`)
 - `physical_hardware`: none recorded
@@ -1192,6 +1193,7 @@ Evidence:
 - `source`: none recorded
 - `browser`: At 960 by 640 CSS pixels and 150% scale, a new researcher used the keyboard to create a project, imported an original, annotated, undid and redid, reviewed, reopened and downloaded YOLO. No external HTTP attempts were recorded. — `docs/validation/research-workflows-1-6.json` (`rv16-first-use-compact`)
 - `browser`: The corrected source-built WebView2 opened the first project, imported the original, reviewed the annotation, downloaded YOLO data and reopened the saved result. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-onboarding-installer-native-first-use-a580042e8`)
+- `browser`: From System status the researcher restored the previously refused 38-member backup and a fresh 37-member backup, saw the new receipt and reopened the existing QC project in a separate application. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-repeated-recovery-source-3a9`)
 - `windows_installed`: The original 1.6 MSI installed, launched, exported a reviewed annotation, reopened it after restart and uninstalled under outbound deny. Both ordinary and SYSTEM controls recorded 149 denied observations over 147 seconds. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-onboarding-installer-offline-83b0a98b2`)
 - `windows_installed`: The same original MSI passed compact keyboard and DPI first use under an ordinary account, offline import, annotation, export and reopen, clean removal with retention, and a separate 1.5 upgrade and verified prior-reader rollback. — `docs/validation/compact-windows-review-a580042e8.json` (`rv16-onboarding-original-offline-upgrade-83b0a98b2`)
 - `windows_installed`: The corrected original MSI passed standard-user first use, the compact keyboard handoff, offline export and reopening after restart. The published 1.0.3 and validated 1.5 upgrades passed, including the old-reader rollback. — `docs/validation/installed-workflows-a580042e8.json` (`rv16-onboarding-installer-original-a580042e8`)

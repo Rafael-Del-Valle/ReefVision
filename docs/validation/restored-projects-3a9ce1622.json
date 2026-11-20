@@ -1,0 +1,127 @@
+{
+  "source": "3a9ce1622e4f9e230e2ee14432ee7d2f32510870",
+  "tree": "33a32f8c3887aacf6134369c729b173779131fc5",
+  "draft": "https://github.com/Rafael-Del-Valle/ReefVision/pull/105",
+  "material": "Generated seven-project restored profile; real earlier GitHub MSI, Project Exchange import and verified native backup.",
+  "before": {
+    "source": "8821ed9a1b71aff8e99751b0c6d66def06028970",
+    "msi_sha256": "e16beecec17ac17cb19d4c7916147ac3f72c97c2dbb9336ef360abe92ef4fc9f",
+    "build_run": 44790315334,
+    "source_archive_sha256": "ac3707828ebe86758a361b698bb9cab2beeb1d4f11408a4ef26456c8092627d7",
+    "imported_project": "6d31c90c-0a7b-410c-b5fa-c8a6ed5fa042",
+    "graph_id": "23eba894-8e2f-4ae9-ba1b-fabd9c902e66",
+    "graph_runs_after_restart": [
+      "34178133-9024-4626-b959-30cf1d403d7b",
+      "19987655-40c6-47a6-a720-f696811ae1f8"
+    ],
+    "identical_mesh_artifacts": [
+      "29d188eb216a614de3bdc7b71433359c36688c8c6094f40d5b883af86eb1d5ca",
+      "5ff659bdd5a7b9fc8c8a88b8ea32302d2ec222548030e183694af60386dfa560",
+      "c60c30543828a2193d354e3bcc47addb9457b7e0cb05b33198fddc0da352787d"
+    ],
+    "backup_id": "7438b6f8-4b5d-4463-b493-cb637f8a18c6",
+    "backup_manifest_sha256": "e54f4229a70c75ec87eec1396c150fd82962867d7090fc92688fe5f930e342c4",
+    "members_rehashed": 38,
+    "bytes": 4940397,
+    "manifested_prior_restore_documents": [
+      {
+        "path": "data/restore-receipt.json",
+        "sha256": "176a2d3440c7388df75ab5ec9b893650b4f9fe249507a11a92eb25e2a3e19299",
+        "size_bytes": 248
+      },
+      {
+        "path": "data/restored-from-backup-complete.json",
+        "sha256": "b34e54c308fcc5d21336ba1cfc7599f75e8e2dfddc763b952e16219433ad0e57",
+        "size_bytes": 217
+      }
+    ],
+    "failed_restore_job": "5d1e03c1-c885-4fc6-9e5d-45fb98a4a72e",
+    "observed_error": "Restored file failed verification: data/restore-receipt.json",
+    "failed_destination_published": false,
+    "archive_preserved": true
+  },
+  "before_receipt_sha256": "4a4ab732af448ea075758e830b6ab82b23eafb1fdd8cb6662cdbfc5cf853fcc6",
+  "source_regressions": {
+    "original_reproduction": {
+      "tests": 1,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 12.159,
+      "junit_sha256": "31cfb55a7a9a7f5a412b222b4827011df2d3695bdf0d6c0da1f54e74fb15bcd7"
+    },
+    "affected_suites": {
+      "tests": 27,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 270.626,
+      "junit_sha256": "9f9f831a682230d7e2efe862dffc3cc7d345ba09c3760857f1a595b280df7048"
+    },
+    "default_windows_path_lengths": {
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 30.238,
+      "junit_sha256": "d1df74e9856b339c9ea6ded4c8e9b0f621c9ab031d3e34bb15dc90402260c54a"
+    }
+  },
+  "desktop": {
+    "source": {
+      "raw_receipt_sha256": "bfdcf9674561d4df8667aabc1461f615fca0c4a1fc04432ce10762239633846c",
+      "surface": "source-browser",
+      "source_profile_unchanged_sha256": "0202b2d56533d1cb134099c3e53bd861698fbe1b67eb977b1bf3ef9153a6b763",
+      "source_and_fresh_backups": {
+        "original": {
+          "backup_id": "7438b6f8-4b5d-4463-b493-cb637f8a18c6",
+          "manifest_sha256": "e54f4229a70c75ec87eec1396c150fd82962867d7090fc92688fe5f930e342c4",
+          "archive_file_count": 38,
+          "verify_status": "valid",
+          "restore_job_id": "62aeab49-5013-4a47-9726-fc0dcadeba4d",
+          "status": "succeeded",
+          "old_metadata": {
+            "restore-receipt.json": "176a2d3440c7388df75ab5ec9b893650b4f9fe249507a11a92eb25e2a3e19299",
+            "restored-from-backup-complete.json": "b34e54c308fcc5d21336ba1cfc7599f75e8e2dfddc763b952e16219433ad0e57"
+          },
+          "receipt_path_shown_in_ui": "recoveries/retained-prior-archive/restore-receipt-2.json",
+          "new_receipt_sha256": "c59a4e6eb7e38419206334570871d38fc8c3b6130c601d2c07190668795e9744",
+          "new_marker_sha256": "07613410bfb1a7d1e52f5e437ec5e366f0c5f37fe5ef2f0024da4db31d591aaa"
+        },
+        "fresh": {
+          "backup_id": "e7a4350d-4cfa-4123-ba22-6fedb7ae22cb",
+          "manifest_sha256": "dfb45c445e28e3c9e09c8be82816970e2df79668c9bbff5699e3c637dfef55b4",
+          "archive_file_count": 37,
+          "verify_status": "valid",
+          "restore_job_id": "1a82ca7c-3a7a-4b9f-9f69-13cafe41efc9",
+          "status": "succeeded",
+          "old_metadata": {
+            "restore-receipt.json": "176a2d3440c7388df75ab5ec9b893650b4f9fe249507a11a92eb25e2a3e19299",
+            "restored-from-backup-complete.json": "b34e54c308fcc5d21336ba1cfc7599f75e8e2dfddc763b952e16219433ad0e57"
+          },
+          "receipt_path_shown_in_ui": "recoveries/fresh-history-backup/restore-receipt-2.json",
+          "new_receipt_sha256": "5a768919923d58918ba999623f46717586ff6bf90e8af5c446105402e1548e1a",
+          "new_marker_sha256": "9c3b99adfdf49a806b11f7a7651999ee087cba01c9f0a0d5c9c585931b627693"
+        }
+      },
+      "reopen": {
+        "projects": [
+          "22ab853e-f044-44bb-ad0c-8d6d9144f2c9",
+          "6d31c90c-0a7b-410c-b5fa-c8a6ed5fa042",
+          "89a257a8-8ff9-4534-af2d-e5eee73bf66f",
+          "8a580b82-f0b5-4ca0-8923-ef5992266a45",
+          "9937da15-a23f-41d3-adc6-4e1da24176b3",
+          "a7e63f55-7f03-4d2c-beb4-10800ad4e3a9",
+          "af85ca53-0281-449a-9cf6-756db541b756"
+        ],
+        "opened_project_id": "89a257a8-8ff9-4534-af2d-e5eee73bf66f",
+        "safe_mode": false,
+        "schema": "b16_integrated_0001"
+      },
+      "seconds": {
+        "restore": 11.92,
+        "reopen": 2.32
+      }
+    }
+  }
+}
