@@ -18,6 +18,7 @@ describe("pose architecture training workflow", () => {
                 name: "Verified coral landmarks",
                 item_count: 12,
                 pose_schema_revision: 3,
+                manifest_sha256: "a".repeat(64),
                 status: "complete",
               },
             ]
@@ -77,6 +78,117 @@ describe("pose architecture training workflow", () => {
           edge.target_port_id === "initial_model",
       ),
     ).toBe(false);
+    client.clear();
+  });
+
+  it("binds the guided native workflow to separate frozen datasets and an original recording", async () => {
+    const datasets = ["train", "validation"].map((name, index) => ({
+      id: `dataset-${name}`,
+      name,
+      status: "complete",
+      item_count: 12,
+      manifest_sha256: (index ? "b" : "a").repeat(64),
+      pose_schema_revision: 2,
+      pose_schema_id: "schema-1",
+      pose_schema_content_hash: "c".repeat(64),
+    }));
+    const recording = {
+      id: "video-3",
+      original_filename: "held-out.mp4",
+      sha256: "d".repeat(64),
+    };
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const endpoint = String(input);
+        const payload = endpoint.endsWith("/pose-training-datasets")
+          ? datasets
+          : endpoint.endsWith("/videos")
+            ? [recording]
+            : endpoint.endsWith("/validate")
+              ? { valid: true, issues: [], topological_order: [] }
+              : [];
+        return new Response(JSON.stringify(payload), { status: 200 });
+      });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <WorkflowGraphWorkspace project={{ id: "project-1" } as Project} />
+      </QueryClientProvider>,
+    );
+    const template = screen.getByRole("combobox", {
+      name: "Template",
+    });
+    expect(
+      screen.getByRole("option", {
+        name: "Native ReefPose training and reviewed export",
+      }),
+    ).toBeInTheDocument();
+    fireEvent.change(template, {
+      target: { value: "reefpose-native-reviewed-workflow" },
+    });
+    await screen.findAllByRole("option", {
+      name: /validation.*12 observations/,
+    });
+    fireEvent.change(
+      screen.getByRole("combobox", { name: /Frozen training dataset/ }),
+      { target: { value: datasets[0].id } },
+    );
+    fireEvent.change(
+      screen.getByRole("combobox", { name: /Frozen validation dataset/ }),
+      { target: { value: datasets[1].id } },
+    );
+    fireEvent.change(
+      await screen.findByRole("combobox", { name: /Held-out recording/ }),
+      { target: { value: recording.id } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Validate" }));
+    await waitFor(() =>
+      expect(
+        fetchSpy.mock.calls.some(([input]) =>
+          String(input).endsWith("/validate"),
+        ),
+      ).toBe(true),
+    );
+    const graph = JSON.parse(
+      String(
+        fetchSpy.mock.calls.find(([input]) =>
+          String(input).endsWith("/validate"),
+        )![1]?.body,
+      ),
+    );
+    expect(graph.nodes).toHaveLength(14);
+    expect(graph.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          node_type: "pose_training_dataset",
+          parameters: {
+            dataset_id: datasets[0].id,
+            manifest_sha256: datasets[0].manifest_sha256,
+          },
+        }),
+        expect.objectContaining({
+          node_type: "pose_training_dataset",
+          parameters: {
+            dataset_id: datasets[1].id,
+            manifest_sha256: datasets[1].manifest_sha256,
+          },
+        }),
+        expect.objectContaining({
+          node_type: "project_video_source",
+          parameters: {
+            video_id: recording.id,
+            video_sha256: recording.sha256,
+          },
+        }),
+        expect.objectContaining({ node_type: "pose_review_gate" }),
+        expect.objectContaining({
+          node_type: "pose_active_learning_review_gate",
+        }),
+      ]),
+    );
     client.clear();
   });
 
@@ -142,4 +254,87 @@ describe("pose architecture training workflow", () => {
     ).toBe(true);
     client.clear();
   });
+
+  it.each([
+    [
+      "pose_review_gate",
+      "pose_temporal_tracks",
+      { track_ids: ["track-7"] },
+      "Review temporal associations",
+      undefined,
+    ],
+    [
+      "pose_active_learning_review_gate",
+      "pose_active_learning_round",
+      { source_track_ids: ["track-7"], round_id: "round-5" },
+      "Open pose acquisition review",
+      "round-5",
+    ],
+  ])(
+    "links waiting %s to the precise local review",
+    async (nodeType, dataType, source, action, roundId) => {
+      vi.spyOn(globalThis, "fetch").mockImplementation(
+        async (input) =>
+          new Response(
+            JSON.stringify(
+              String(input).endsWith("/workflow-runs/run-3")
+                ? {
+                    run: {
+                      id: "run-3",
+                      project_id: "project-1",
+                      status: "waiting_for_review",
+                      result_json: {},
+                    },
+                    nodes: [
+                      {
+                        id: "node-2",
+                        node_id: "review",
+                        node_type: nodeType,
+                        status: "waiting_for_review",
+                        result_json: {
+                          review: { source_artifact_id: "artifact-4" },
+                        },
+                      },
+                    ],
+                    artifacts: [
+                      {
+                        id: "artifact-4",
+                        data_type: dataType,
+                        payload_sha256: "a".repeat(64),
+                        payload_json: {
+                          project_id: "project-1",
+                          video_id: "video-6",
+                          ...source,
+                        },
+                      },
+                    ],
+                  }
+                : [],
+            ),
+            { status: 200 },
+          ),
+      );
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const openReview = vi.fn();
+      render(
+        <QueryClientProvider client={client}>
+          <WorkflowGraphWorkspace
+            project={{ id: "project-1" } as Project}
+            initialRunId="run-3"
+            onOpenPoseReview={openReview}
+          />
+        </QueryClientProvider>,
+      );
+      fireEvent.click(await screen.findByRole("button", { name: action }));
+      expect(openReview).toHaveBeenCalledWith({
+        runId: "run-3",
+        videoId: "video-6",
+        trackId: "track-7",
+        roundId,
+      });
+      client.clear();
+    },
+  );
 });

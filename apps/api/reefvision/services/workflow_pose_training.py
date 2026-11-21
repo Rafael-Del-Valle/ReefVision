@@ -32,7 +32,10 @@ from reefvision.ml.ultralytics_registry import (
 from reefvision.services import (
     workflow_runtime_adapters as runtime_adapters,
 )
-from reefvision.services.workflow_pose_sources import resolve_frozen_pose_dataset
+from reefvision.services.workflow_pose_sources import (
+    resolve_frozen_pose_dataset,
+    verify_pose_dataset_separation,
+)
 from reefvision.storage.datasets import (
     canonical_json_sha256,
 )
@@ -462,6 +465,8 @@ def create_pose_workflow_training_result(
         raise ValidationError(
             "This pose retraining configuration requires a separate frozen validation dataset"
         )
+    if require_validation and validation_dataset is not None:
+        verify_pose_dataset_separation(session, dataset, validation_dataset)
 
     provider_id = str(parameters.get("provider_id") or "ultralytics").strip().casefold()
     if provider_id not in SUPPORTED_POSE_TRAINING_PROVIDERS:

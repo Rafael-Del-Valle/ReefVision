@@ -13,6 +13,7 @@ from reefvision.db.models import (
     LabelClass,
     ModelRegistration,
     ModelRuntimeSelection,
+    PoseTrainingDataset,
     Project,
     VideoAsset,
 )
@@ -25,12 +26,15 @@ from reefvision.schemas.workflow_graphs import (
     WorkflowGraphRequest,
     WorkflowGraphValidationResponse,
     WorkflowNodeDefinitionResponse,
+    WorkflowNodeInstance,
     WorkflowPlanInputBinding,
     WorkflowPlanStep,
 )
 from reefvision.services.workflow_node_registry import workflow_node_registry
 from reefvision.services.workflow_pose_sources import (
     resolve_frozen_pose_dataset,
+    verify_pose_dataset_separation,
+    verify_reserved_pose_video,
     verify_video_source_pin,
 )
 from reefvision.services.workflow_vlm import SUPPORTED_VLM_PROVIDERS
@@ -411,6 +415,86 @@ class WorkflowGraphService:
                 )
                 break
 
+    def _validate_guided_pose_sources(
+        self,
+        nodes: dict[str, WorkflowNodeInstance],
+        incoming: dict[tuple[str, str], list[WorkflowEdge]],
+        frozen: dict[str, PoseTrainingDataset],
+        issues: list[WorkflowGraphIssue],
+    ) -> None:
+        def source(node_id: str, port: str) -> WorkflowNodeInstance | None:
+            edges = incoming.get((node_id, port), [])
+            return nodes.get(edges[0].source_node_id) if len(edges) == 1 else None
+
+        def split(node_id: str) -> tuple[PoseTrainingDataset, PoseTrainingDataset] | None:
+            left = source(node_id, "dataset")
+            right = source(node_id, "validation_dataset")
+            training = frozen.get(left.node_id) if left else None
+            validation = frozen.get(right.node_id) if right else None
+            return (training, validation) if training and validation else None
+
+        for node in nodes.values():
+            if node.node_type == "pose_model_training" and (
+                node.parameters.get("require_validation_dataset") is True
+            ):
+                pair = split(node.node_id)
+                try:
+                    if source(node.node_id, "validation_dataset") is None:
+                        raise ValidationError("Choose a separate frozen validation dataset")
+                    if pair is not None:
+                        verify_pose_dataset_separation(self.session, *pair)
+                except ValidationError as error:
+                    issues.append(
+                        self._issue(
+                            "error", "invalid_frozen_pose_split", str(error), node_id=node.node_id
+                        )
+                    )
+
+            if node.node_type != "pose_inference" or (
+                node.parameters.get("require_held_out_recording") is not True
+            ):
+                continue
+            recording = source(node.node_id, "video")
+            registration = source(node.node_id, "model")
+            training = source(registration.node_id, "training") if registration else None
+            pair = split(training.node_id) if training else None
+            try:
+                if (
+                    not recording
+                    or recording.node_type != "project_video_source"
+                    or not recording.parameters.get("video_sha256")
+                ):
+                    raise ValidationError(
+                        "Choose a held-out recording with a pinned original checksum"
+                    )
+                if (
+                    not registration
+                    or registration.node_type != "register_trained_model"
+                    or not training
+                    or training.node_type != "pose_model_training"
+                    or pair is None
+                ):
+                    raise ValidationError(
+                        "Connect native training with frozen training and validation datasets"
+                    )
+                if any(
+                    (dataset_source := source(training.node_id, port)) is None
+                    or not dataset_source.parameters.get("manifest_sha256")
+                    for port in ("dataset", "validation_dataset")
+                ):
+                    raise ValidationError("Pin the manifests of both frozen pose datasets")
+                video = self.session.get(
+                    VideoAsset, str(recording.parameters.get("video_id") or "")
+                )
+                if video is not None and video.project_id == pair[0].project_id:
+                    verify_reserved_pose_video(self.session, video, pair)
+            except ValidationError as error:
+                issues.append(
+                    self._issue(
+                        "error", "invalid_pose_held_out_recording", str(error), node_id=node.node_id
+                    )
+                )
+
     def _validate_training_node(
         self,
         node_id: str,
@@ -467,6 +551,7 @@ class WorkflowGraphService:
         reviewed_models: dict[str, str] = {}
         referenced_dataset_ids: set[str] = set()
         referenced_video_ids: set[str] = set()
+        frozen: dict[str, PoseTrainingDataset] = {}
 
         project = self._project(project_id)
         if project is None:
@@ -565,7 +650,7 @@ class WorkflowGraphService:
                 )
             elif node.node_type == "pose_training_dataset" and node.parameters.get("dataset_id"):
                 try:
-                    resolve_frozen_pose_dataset(
+                    frozen[node.node_id] = resolve_frozen_pose_dataset(
                         self.session, project_id=project_id, payload=node.parameters, role="source"
                     )
                 except ValidationError as error:
@@ -690,6 +775,8 @@ class WorkflowGraphService:
                             node_id=node_id,
                         )
                     )
+
+        self._validate_guided_pose_sources(nodes, incoming, frozen, issues)
 
         # Prediction proposals are deliberately excluded from immutable
         # dataset-version QC context. Flag confidence-gated version queues at

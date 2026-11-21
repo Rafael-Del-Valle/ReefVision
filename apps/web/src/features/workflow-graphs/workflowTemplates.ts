@@ -1290,6 +1290,90 @@ export function createPoseComparisonWorkflow() {
   };
 }
 
+export function createNativeReviewedPoseWorkflow() {
+  const training = createPoseArchitectureWorkflow("reefpose-s");
+  const extraNodes: Array<
+    [string, string, Record<string, unknown>, number, number]
+  > = [
+    ["validation", "pose_training_dataset", { dataset_id: "" }, 40, 330],
+    ["project", "project_source", {}, 40, 580],
+    ["recording", "project_video_source", { video_id: "" }, 360, 580],
+    [
+      "infer",
+      "pose_inference",
+      { device: "auto", require_held_out_recording: true },
+      1000,
+      180,
+    ],
+    ["associate", "pose_temporal_association", {}, 1320, 180],
+    ["pose_review", "pose_review_gate", {}, 1640, 180],
+    [
+      "acquire",
+      "pose_active_learning",
+      { diversity_balance: true, requested_size: 4 },
+      1960,
+      180,
+    ],
+    ["acquisition_review", "pose_active_learning_review_gate", {}, 2280, 180],
+    [
+      "freeze",
+      "pose_training_dataset_freeze",
+      { name: "Reviewed poses from saved workflow" },
+      2600,
+      180,
+    ],
+    ["export", "pose_training_export", { format: "native" }, 2920, 180],
+  ];
+  const connections = [
+    ["validation", "dataset", "train", "validation_dataset"],
+    ["project", "project", "recording", "project"],
+    ["recording", "video", "infer", "video"],
+    ["register", "model", "infer", "model"],
+    ["infer", "poses", "associate", "poses"],
+    ["associate", "tracks", "pose_review", "tracks"],
+    ["pose_review", "poses", "acquire", "tracks"],
+    ["acquire", "round", "acquisition_review", "round"],
+    ["acquisition_review", "verified_round", "freeze", "verified_round"],
+    ["freeze", "dataset", "export", "dataset"],
+  ];
+  return {
+    ...training,
+    graph_id: "reefpose-native-reviewed-workflow",
+    name: "Native ReefPose training and reviewed export",
+    nodes: [
+      ...training.nodes.map((node) =>
+        node.node_id === "train"
+          ? {
+              ...node,
+              parameters: {
+                ...node.parameters,
+                require_validation_dataset: true,
+              },
+            }
+          : node,
+      ),
+      ...extraNodes.map(([node_id, node_type, parameters, x, y]) => ({
+        node_id,
+        node_type,
+        parameters,
+        position: { x, y },
+      })),
+    ],
+    edges: [
+      ...training.edges,
+      ...connections.map(
+        ([source_node_id, source_port_id, target_node_id, target_port_id]) => ({
+          edge_id: `${source_node_id}-${target_node_id}-${target_port_id}`,
+          source_node_id,
+          source_port_id,
+          target_node_id,
+          target_port_id,
+        }),
+      ),
+    ],
+  };
+}
+
 export function createPoseIdentityEvaluationWorkflow() {
   return {
     graph_id: "pose-identity-evaluation",
@@ -1685,6 +1769,13 @@ export const workflowTemplates: WorkflowTemplate[] = [
     description:
       "Train ReefPose-S from random initialization on an immutable verified pose dataset and register the completed checkpoint.",
     graph: createPoseArchitectureWorkflow("reefpose-s"),
+  },
+  {
+    id: "reefpose-native-reviewed-workflow",
+    name: "Native ReefPose training and reviewed export",
+    description:
+      "Train and select ReefPose on separate frozen datasets, run a held-out recording, and export poses after both review gates.",
+    graph: createNativeReviewedPoseWorkflow(),
   },
   {
     id: "pose-active-learning-retrain",

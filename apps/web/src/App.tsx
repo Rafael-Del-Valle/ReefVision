@@ -349,6 +349,9 @@ function ReefVisionMainApp() {
   const [researchGraph, setResearchGraph] =
     useState<WorkflowGraphRecord | null>(null);
   const [scheduledRunId, setScheduledRunId] = useState<string | null>(null);
+  const [workflowReviewOrigin, setWorkflowReviewOrigin] = useState<
+    string | null
+  >(null);
   const [editorLaunch, setEditorLaunch] =
     useState<AnnotationLaunchState | null>(null);
   const [trainingCatalogModelId, setTrainingCatalogModelId] = useState<
@@ -1341,6 +1344,16 @@ function ReefVisionMainApp() {
                     : undefined
                 }
                 onOpenScience={setActiveView}
+                onOpenPoseReview={(target) => {
+                  setScheduledRunId(target.runId);
+                  setWorkflowReviewOrigin(selectedProject.id);
+                  setVideoWorkspaceCommand({
+                    id: ++videoWorkspaceCommandSequenceRef.current,
+                    type: "open_workflow_pose_review",
+                    ...target,
+                  });
+                  setActiveView("video");
+                }}
                 onOpenReviewQueue={(queueId, datasetVersionId) => {
                   setWorkflowQueue({
                     projectId: selectedProject.id,
@@ -1353,6 +1366,18 @@ function ReefVisionMainApp() {
             )}
             {activeView === "video" && (
               <>
+                {workflowReviewOrigin === selectedProject.id && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setWorkflowReviewOrigin(null);
+                      setActiveView("workflows");
+                    }}
+                  >
+                    Back to workflow review
+                  </button>
+                )}
                 {poseOrganismOrigin?.projectId === selectedProject.id && (
                   <button
                     type="button"

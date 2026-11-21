@@ -67,6 +67,13 @@ export interface PoseEvidenceNavigation {
   eventRevisionId?: string;
 }
 
+export interface WorkflowPoseReviewTarget {
+  runId: string;
+  videoId: string;
+  trackId: string;
+  roundId?: string;
+}
+
 export type VideoWorkspaceCommand =
   | {
       id: number;
@@ -76,6 +83,10 @@ export type VideoWorkspaceCommand =
       seconds: number | null;
     }
   | ({ id: number; type: "open_pose_evidence" } & PoseEvidenceNavigation)
+  | ({
+      id: number;
+      type: "open_workflow_pose_review";
+    } & WorkflowPoseReviewTarget)
   | {
       id: number;
       type: "select_video";

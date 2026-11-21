@@ -214,6 +214,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                     "device": "auto",
                     "confidence": 0.25,
                     "allow_zero_detections": False,
+                    "require_held_out_recording": False,
                 },
                 execution_state="executable_pose_workflow",
                 executable=True,

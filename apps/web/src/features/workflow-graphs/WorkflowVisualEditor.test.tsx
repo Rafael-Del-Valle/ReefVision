@@ -436,11 +436,13 @@ describe("WorkflowVisualEditor", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: "Configure" })[0]);
 
-    expect(screen.getByLabelText("device")).toHaveValue("auto");
-    expect(screen.getByLabelText("confidence")).toHaveValue(0.25);
+    expect(screen.getByLabelText("Inference device")).toHaveValue("auto");
+    expect(screen.getByLabelText("Pose confidence threshold")).toHaveValue(
+      0.25,
+    );
     expect(screen.getByText("Advanced parameter JSON")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("confidence"), {
+    fireEvent.change(screen.getByLabelText("Pose confidence threshold"), {
       target: { value: "0.4" },
     });
 

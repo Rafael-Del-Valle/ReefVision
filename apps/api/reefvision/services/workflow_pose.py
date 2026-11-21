@@ -66,7 +66,11 @@ from reefvision.services.pose_training_datasets import (
 from reefvision.services.pose_training_exports import (
     PoseTrainingExportService,
 )
-from reefvision.services.workflow_pose_sources import verify_video_source_pin
+from reefvision.services.workflow_pose_sources import (
+    resolve_frozen_pose_dataset,
+    verify_reserved_pose_video,
+    verify_video_source_pin,
+)
 from reefvision.services.workflow_review import (
     WorkflowReviewRequired,
     biological_event_review_status,
@@ -274,6 +278,26 @@ def execute_pose_inference_adapter(
     # purpose while task='pose' distinguishes the scientific operation.
     if model.purpose != "detector" or model.task != "pose":
         raise ValidationError("Pose Inference requires a registered pose model")
+
+    if parameters.get("require_held_out_recording") is True:
+        if not pinned_video_digest or model.provider_name != "reefpose":
+            raise ValidationError(
+                "Held-out inference requires a pinned original and native ReefPose model"
+            )
+        metadata = model.metadata_json or {}
+        training, validation = [
+            resolve_frozen_pose_dataset(
+                session,
+                project_id=project_id,
+                role=role,
+                payload={
+                    "dataset_id": metadata.get(f"source_pose_{role}_dataset_id"),
+                    "manifest_sha256": metadata.get(f"source_pose_{role}_dataset_manifest_sha256"),
+                },
+            )
+            for role in ("training", "validation")
+        ]
+        verify_reserved_pose_video(session, video, (training, validation))
 
     raw_schema = dict(model.metadata_json or {}).get("pose_landmark_schema")
 
