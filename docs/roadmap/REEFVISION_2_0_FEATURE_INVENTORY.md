@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T10:33:24Z`
+Updated: `2026-11-21T11:00:09Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1603,6 +1603,7 @@ Evidence:
 - `browser`: Through Workflow Builder a researcher saw an unseen holdout class fail before publication. With a compatible holdout, eight validation images used training ordinal 1 for the same stable class at validation ordinal 0. The frozen originals and exact checkpoint identity survived reopening. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-frozen-class-map-recovery-9124acdb0`)
 - `browser`: Advanced Workflow Builder refused the historically queued and fresh connected validation inputs for both a shared recording and a shared animal. Retrying each original parent emitted zero training children and results. A disjoint validation fit and exploratory training without validation both completed, and four archived results remained intact. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-explicit-validation-port-15be85268`)
 - `browser`: In ordinary Training, both an older copied study and a newly imported archive registered and reopened the genuine checkpoint. Replacing those weights produced a visible checksum error and zero model registrations in each project. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-transferred-registration-6334bcbb8`)
+- `browser`: In the exact native desktop both pose providers scored and registered an overlapping fixture as an independent holdout. Its eight lossless frame hashes matched across distinct reviewed recording and animal groups. A disjoint control completed, and the successor must refuse both the original job and reuse of the historical score. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-frozen-frame-baseline-6334bcbb8`)
 - `windows_installed`: The physical WebView2 Workflow Builder showed both failures under an ordinary account and recovered the same parent, child and experiment after the right bytes were restored. The matching frozen worker trained with the held-out class projected by stable ID and reopened all three frozen exports. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-packaged-training-and-class-recovery-9124acdb0`)
 - `windows_installed`: An ordinary Windows user ran the same frozen guided graph twice through the registered original MSI. Both CPU runs trained and registered distinct checked model bytes, passed both human review gates and reopened frame 14 through the exports. All 17 registered lifecycle stages passed. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-original-registered-guided-96476bc46`)
 - `windows_installed`: The ordinary extracted Windows desktop reopened both old overlapping parent jobs and refused fresh runs and retries with zero children or outputs. The disjoint control produced independent metrics and the exploratory run warned and emitted none. Four archived studies retained their original bytes, and both current successes reopened. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-independent-validation-15be85268`)

@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T10:33:24.184249+00:00",
+  "updated_utc": "2026-11-21T10:59:40.007657+00:00",
   "candidate_pr": 150,
   "integrated_source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
   "selected_qualification": "exchanged_pose_training",
@@ -1572,5 +1572,41 @@
       "file": "1.9/checkpoints/7797efad6/official/offline/attempt-44873856510/offline-index.json",
       "sha256": "157fcb6eb80a0c64f0b53020ab4aea98c8aa819fdfa670e44510c3538a7f3485"
     }
+  },
+  "frozen_frame_qualification_boundary": {
+    "source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
+    "product_draft": 150,
+    "observation": "Two separately reviewed and frozen recordings with distinct video IDs, raw content hashes and declared acquisition groups shared eight lossless frames. Both real pose providers scored and registered the overlapping holdout. Training from the disjoint fixture succeeded. The old worker's interrupted parent and Training's registration action reproduced the same result. This candidate does not qualify independent holdouts with shared decoded frames.",
+    "native_webview_and_both_public_workers": {
+      "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/native-pose-frame-overlap-baseline/index.json",
+      "sha256": "7e35b2ff93457a473e525f7a601813bf3581c1f0afbf2f367af9ba329c0bea44"
+    },
+    "original_6334_physical_guided": {
+      "file": "1.9/checkpoints/6334bcbb8/official/evidence/physical-guided-rtx3090/evidence-index.json",
+      "sha256": "1da34950d5eaef827142a1c4b8b809c475f9791f39eb79fa77a62d7bbcf8153a"
+    },
+    "full_windows": {
+      "collected": 6094,
+      "passed": 6082,
+      "skipped": 12,
+      "failed": 0,
+      "proof": {
+        "file": "1.9/checkpoints/6334bcbb8/full-windows-backend/verified-summary.json",
+        "sha256": "328ec42d87236121bc3d6b5a0d41adac1369c4119192f725695b2e7c3673cde6"
+      }
+    },
+    "historical_parent_and_registration": {
+      "ultralytics": {
+        "file": "1.9/checkpoints/6334bcbb8/source/overlapping-frozen-frames/ultralytics-parent-retry.json",
+        "sha256": "53c911ee55f262fb0917594d8c6701c15a51c351b9ef2140ed213c62432fe175"
+      },
+      "reefpose": {
+        "file": "1.9/checkpoints/6334bcbb8/source/overlapping-frozen-frames/reefpose-parent-retry.json",
+        "sha256": "d47b87c4e4dce515e129767c6893aaa427e9a56d3fc9261eb34d79e44990c02f"
+      }
+    },
+    "successor_worktree": "C:/rv19-frame-holdout",
+    "successor_branch": "codex/reefvision-1.9-frozen-frame-separation",
+    "qualification": "Original #150 media, full backend and stock installation retain their individual observations. The corrected package receives the final registered guided and offline scenarios."
   }
 }
