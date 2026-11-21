@@ -15,6 +15,7 @@ from reefvision.db.models import (
     VideoAsset,
     VideoTrack,
     WorkflowArtifact,
+    WorkflowGraphRecord,
     WorkflowNodeRun,
     WorkflowRun,
 )
@@ -33,6 +34,12 @@ from reefvision.services.workflow_auto_label import (
     ensure_disagreement_active_learning_round,
     materialize_consensus_annotations,
 )
+from reefvision.services.workflow_provenance import (
+    verify_succeeded_node_artifacts,
+    verify_workflow_artifact,
+    verify_workflow_run_node_graph_lineage,
+)
+from reefvision.storage.datasets import canonical_json_sha256
 
 REVIEW_GATE_NODE_TYPES = {
     "detection_review_gate",
@@ -56,14 +63,92 @@ def _now() -> datetime:
 
 
 def _input_artifacts(session: Session, node_run: WorkflowNodeRun) -> list[WorkflowArtifact]:
-    artifact_ids = [str(value) for value in node_run.input_artifact_ids_json or []]
-    if not artifact_ids:
-        return []
+    raw_ids = node_run.input_artifact_ids_json
+    if raw_ids is None:
+        raw_ids = []
+    if not isinstance(raw_ids, list) or any(
+        not isinstance(value, str) or not value for value in raw_ids
+    ):
+        raise ConflictError("Workflow review input artifact IDs are invalid")
+    # Even an empty saved list must be checked against frozen graph edges;
+    # otherwise a paused review can be approved without scientific evidence.
     artifacts = list(
-        session.scalars(select(WorkflowArtifact).where(WorkflowArtifact.id.in_(artifact_ids)))
+        session.scalars(select(WorkflowArtifact).where(WorkflowArtifact.id.in_(raw_ids)))
     )
     by_id = {artifact.id: artifact for artifact in artifacts}
-    return [by_id[artifact_id] for artifact_id in artifact_ids if artifact_id in by_id]
+    if len(by_id) != len(set(raw_ids)):
+        raise ConflictError("Workflow review input artifact is missing")
+    # A review approval must refer to the outputs that the frozen workflow
+    # actually routed into this review node. Valid artifact hashes alone do
+    # not prevent a different same-run artifact from being approved instead.
+    run = session.get(WorkflowRun, node_run.workflow_run_id)
+    graph = (
+        session.get(WorkflowGraphRecord, run.workflow_graph_record_id) if run is not None else None
+    )
+    if (
+        run is None
+        or graph is None
+        or graph.project_id != run.project_id
+        or not isinstance(graph.graph_json, dict)
+        or graph.graph_sha256 != run.graph_sha256
+        or canonical_json_sha256(graph.graph_json) != run.graph_sha256
+    ):
+        raise ConflictError("Workflow review graph provenance checksum failed")
+    # Paused runs are mutable database records, while approval is a scientific
+    # audit event. Recheck the complete node identity, frozen parameters, and
+    # execution order before recording review approval or post-review outputs.
+    saved_nodes = list(
+        session.scalars(select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run.id))
+    )
+    verify_workflow_run_node_graph_lineage(graph, saved_nodes)
+    raw_edges = graph.graph_json.get("edges")
+    if not isinstance(raw_edges, list) or any(
+        not isinstance(edge, dict) or not isinstance(edge.get("edge_id"), str) for edge in raw_edges
+    ):
+        raise ConflictError("Workflow review graph edges are invalid")
+    expected_bindings = [
+        (edge.get("source_node_id"), edge.get("source_port_id"))
+        for edge in sorted(raw_edges, key=lambda edge: edge["edge_id"])
+        if edge.get("target_node_id") == node_run.node_id
+    ]
+    ordered_artifacts = [by_id[artifact_id] for artifact_id in raw_ids]
+    actual_bindings: list[tuple[str, str]] = []
+    for artifact in ordered_artifacts:
+        verify_workflow_artifact(artifact, expected_run_id=node_run.workflow_run_id)
+        producer = session.get(WorkflowNodeRun, artifact.producer_node_run_id)
+        if (
+            producer is None
+            or producer.workflow_run_id != node_run.workflow_run_id
+            or producer.status != "succeeded"
+            or producer.execution_order >= node_run.execution_order
+        ):
+            raise ConflictError("Workflow review input lacks an earlier succeeded producer")
+        # A paused review must not certify a producer whose persisted output
+        # summary or own upstream inputs no longer match the saved execution.
+        verify_succeeded_node_artifacts(
+            session,
+            run_id=node_run.workflow_run_id,
+            node_run=producer,
+        )
+        # A hash-valid replacement from the same producer/port is not review
+        # evidence unless it was declared by that completed node. Reject
+        # ambiguous duplicate outputs rather than approving one arbitrarily.
+        declared_output_ids = producer.output_artifact_ids_json
+        if not isinstance(declared_output_ids, list) or artifact.id not in declared_output_ids:
+            raise ConflictError("Workflow review input is not a declared producer output")
+        producer_port_count = session.scalar(
+            select(func.count(WorkflowArtifact.id)).where(
+                WorkflowArtifact.workflow_run_id == node_run.workflow_run_id,
+                WorkflowArtifact.producer_node_run_id == producer.id,
+                WorkflowArtifact.producer_port_id == artifact.producer_port_id,
+            )
+        )
+        if producer_port_count != 1:
+            raise ConflictError("Workflow review producer output is ambiguous")
+        actual_bindings.append((producer.node_id, artifact.producer_port_id))
+    if actual_bindings != expected_bindings:
+        raise ConflictError("Workflow review inputs do not match saved graph edges")
+    return ordered_artifacts
 
 
 def _pending_review_count(session: Session, artifacts: list[WorkflowArtifact]) -> int:
@@ -104,16 +189,56 @@ def _disagreement_artifact_for_consensus(
     session: Session,
     consensus_artifact: WorkflowArtifact,
 ) -> WorkflowArtifact | None:
-    return session.scalar(
-        select(WorkflowArtifact)
-        .where(
-            WorkflowArtifact.workflow_run_id == consensus_artifact.workflow_run_id,
-            WorkflowArtifact.producer_node_run_id == consensus_artifact.producer_node_run_id,
-            WorkflowArtifact.data_type == "detection_disagreements",
+    producer = session.get(WorkflowNodeRun, consensus_artifact.producer_node_run_id)
+    if (
+        producer is None
+        or producer.workflow_run_id != consensus_artifact.workflow_run_id
+        or not isinstance(producer.output_artifact_ids_json, list)
+        or any(
+            not isinstance(artifact_id, str) or not artifact_id
+            for artifact_id in producer.output_artifact_ids_json
         )
-        .order_by(WorkflowArtifact.created_at.desc(), WorkflowArtifact.id.desc())
-        .limit(1)
+    ):
+        raise ConflictError("Workflow consensus producer outputs are invalid")
+    declared_ids = producer.output_artifact_ids_json
+    declared_outputs = list(
+        session.scalars(select(WorkflowArtifact).where(WorkflowArtifact.id.in_(declared_ids)))
     )
+    # An absent disagreement row must not silently suppress a scientist's
+    # active-learning handoff when it is still listed in the producer manifest.
+    if len(declared_outputs) != len(declared_ids) or any(
+        artifact.workflow_run_id != consensus_artifact.workflow_run_id
+        or artifact.producer_node_run_id != producer.id
+        for artifact in declared_outputs
+    ):
+        raise ConflictError(
+            "Workflow consensus declared producer output is missing or inconsistent"
+        )
+
+    disagreements = list(
+        session.scalars(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.workflow_run_id == consensus_artifact.workflow_run_id,
+                WorkflowArtifact.producer_node_run_id == consensus_artifact.producer_node_run_id,
+                WorkflowArtifact.data_type == "detection_disagreements",
+            )
+        )
+    )
+    if not disagreements:
+        return None
+    # Never choose the newest of multiple checksum-valid outputs: that would
+    # allow an undeclared artifact to change the scientist's AL handoff.
+    if len(disagreements) != 1:
+        raise ConflictError("Workflow consensus disagreement outputs are ambiguous")
+
+    disagreement = disagreements[0]
+    if disagreement.id not in declared_ids or disagreement.producer_port_id != "disagreements":
+        raise ConflictError("Workflow disagreement is not a declared producer output")
+    verify_workflow_artifact(
+        disagreement,
+        expected_run_id=consensus_artifact.workflow_run_id,
+    )
+    return disagreement
 
 
 def _auto_label_post_review(
@@ -184,29 +309,44 @@ def pose_temporal_review_status(
 
     raw_track_ids = payload.get("track_ids", [])
 
-    if not isinstance(raw_track_ids, list):
+    if not isinstance(raw_track_ids, list) or any(
+        not isinstance(value, str) or not value for value in raw_track_ids
+    ):
         raise ValidationError("Pose Review artifact track_ids are invalid")
+    if len(set(raw_track_ids)) != len(raw_track_ids):
+        raise ValidationError("Pose Review artifact track_ids contain duplicates")
 
-    track_ids = list(
-        dict.fromkeys(str(value) for value in raw_track_ids if isinstance(value, str) and value)
-    )
+    track_ids = raw_track_ids
 
     if not track_ids:
         raise ValidationError("Pose Review requires at least one temporal pose track")
 
     expected_revisions: dict[str, int] = {}
 
-    raw_builds = payload.get("builds", [])
-    if isinstance(raw_builds, list):
-        for raw in raw_builds:
-            if not isinstance(raw, dict):
-                continue
+    # A missing or malformed build revision must not silently bypass the
+    # stale-track check when a scientist approves persisted temporal evidence.
+    raw_builds = payload.get("builds")
+    if not isinstance(raw_builds, list):
+        raise ValidationError("Pose Review source track revisions are missing")
+    for raw in raw_builds:
+        if not isinstance(raw, dict):
+            raise ValidationError("Pose Review source track revisions are invalid")
 
-            track_id = str(raw.get("parent_video_track_id") or "")
-            revision = raw.get("source_track_revision")
+        track_id = raw.get("parent_video_track_id")
+        revision = raw.get("source_track_revision")
+        if (
+            not isinstance(track_id, str)
+            or track_id not in track_ids
+            or track_id in expected_revisions
+            or not isinstance(revision, int)
+            or isinstance(revision, bool)
+            or revision < 1
+        ):
+            raise ValidationError("Pose Review source track revisions are invalid")
+        expected_revisions[track_id] = revision
 
-            if track_id and isinstance(revision, int) and revision >= 1:
-                expected_revisions[track_id] = revision
+    if set(expected_revisions) != set(track_ids):
+        raise ValidationError("Pose Review requires a revision for every source track")
 
     service = PoseTemporalTrackingService(session)
 
@@ -341,6 +481,23 @@ def pose_active_learning_review_status(
 
     if manifest.project_id != project_id:
         raise ValidationError("Pose Active Learning round belongs to another project")
+
+    if payload.get("selection_sha256") != manifest.selection_sha256:
+        raise ValidationError(
+            "Pose Active Learning Review selection differs from saved workflow evidence"
+        )
+
+    candidate_ids = payload.get("candidate_ids")
+    if (
+        not isinstance(candidate_ids, list)
+        or any(not isinstance(value, str) or not value for value in candidate_ids)
+        or len(candidate_ids) != len(set(candidate_ids))
+        or set(candidate_ids) != {candidate["candidate_id"] for candidate in manifest.candidates}
+        or payload.get("candidate_count") != len(candidate_ids)
+    ):
+        raise ValidationError(
+            "Pose Active Learning Review candidates differ from saved workflow evidence"
+        )
 
     ready = manifest.status == "complete" and manifest.retraining_ready
 

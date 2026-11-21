@@ -463,7 +463,26 @@ try {
     $exchange = Invoke-RestMethod "$api/projects/$projectId/exchange-packages" -Method Post -ContentType 'application/json' -Body (@{include_media=$true;include_model_weights=$false;include_generated_artifacts=$true;notes='clean install acceptance'} | ConvertTo-Json)
     $jobId = $exchange.job_id
     $deadline = [DateTime]::UtcNow.AddSeconds(60)
-    do { Start-Sleep -Milliseconds 500; $job = Invoke-RestMethod "$api/jobs/$jobId" } while ($job.status -in @('queued','running') -and [DateTime]::UtcNow -lt $deadline)
+    $job = $null
+    $pollServerErrors = 0
+    $lastPollError = ''
+    do {
+        Start-Sleep -Milliseconds 500
+        try {
+            $job = Invoke-RestMethod "$api/jobs/$jobId" -ErrorAction Stop
+        } catch {
+            $statusCode = try { [int]$_.Exception.Response.StatusCode } catch { 0 }
+            # A freshly restarted packaged SQLite backend can briefly return
+            # HTTP 500 under writer contention. Retry only transient server
+            # responses within the existing deadline; never infer job success.
+            if ($statusCode -notin @(500, 502, 503, 504)) { throw }
+            $job = $null
+            $pollServerErrors++
+            $lastPollError = "HTTP ${statusCode}: $($_.Exception.Message)"
+            Write-Warning "Project Exchange status poll $pollServerErrors failed ($lastPollError); retrying within 60-second deadline."
+        }
+    } while (($null -eq $job -or $job.status -in @('queued','running')) -and [DateTime]::UtcNow -lt $deadline)
+    if ($null -eq $job) { throw "Project Exchange status remained unavailable after $pollServerErrors transient server errors: $lastPollError" }
     if ($job.status -ne 'succeeded') { throw "Project Exchange export job ended as $($job.status)." }
     $archive = Join-Path $EvidenceRoot 'project-exchange.reefvision.zip'
     Invoke-WebRequest "$api/exchange-packages/$($exchange.package.id)/download" -OutFile $archive

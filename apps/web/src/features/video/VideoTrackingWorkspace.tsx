@@ -1783,6 +1783,7 @@ export function VideoTrackingWorkspace({
               type="button"
               onClick={() => poseInteropImportMutation.mutate()}
               disabled={
+                !selectedVideo ||
                 !poseInteropImportFile ||
                 !labelClassId ||
                 poseInteropImportMutation.isPending

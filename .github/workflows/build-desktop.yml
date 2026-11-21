@@ -67,6 +67,7 @@ jobs:
           apps/api/reefvision/tests/test_desktop_runtime.py
           apps/api/reefvision/tests/test_model_install.py
           apps/api/reefvision/tests/test_bundled_models.py
+          apps/api/reefvision/tests/test_workflow_pose_training_phase10.py::test_pose_run_output_rejects_windows_junction_into_another_run
 
       - name: Build MSI desktop installer with bundled checkpoints
         shell: pwsh
