@@ -67,6 +67,11 @@ class EnvironmentalContextService:
     @staticmethod
     def _verify_cache_integrity(entry: EnvironmentalCacheEntry) -> None:
         """Bind cached evidence to its immutable query identity and source."""
+        # A correctly recomputed checksum alone cannot prove that an imported
+        # provider response still has the schema needed to refresh or explain
+        # scientific missingness. Fail closed before dereferencing cache fields.
+        if not isinstance(entry.payload_json, dict):
+            raise ConflictError("Environmental cache has malformed provider evidence")
         if content_hash(entry.payload_json) != entry.content_sha256:
             raise ConflictError(
                 "Environmental cache checksum mismatch; cached values cannot be trusted"
@@ -76,6 +81,13 @@ class EnvironmentalContextService:
             raise ConflictError(
                 "Environmental cache identity mismatch; cached values cannot be trusted"
             )
+        # Rehashed, malformed cache payloads must not become 500 errors, false
+        # counts of missing observations, or unusable refresh snapshots.
+        missing = entry.payload_json.get("skipped_missing")
+        if type(missing) is not int or missing < 0:
+            raise ConflictError("Environmental cache has invalid missing-observation count")
+        if not isinstance(entry.payload_json.get("provider_response"), dict):
+            raise ConflictError("Environmental cache has malformed provider evidence")
         # NOAA includes the provider URL in its query identity. Copernicus
         # identifies its subset by provider/request instead; do not require a
         # URL for datasets whose cache key does not include one.
