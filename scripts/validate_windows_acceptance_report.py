@@ -53,6 +53,10 @@ CAUSAL_GATE_ORDER = (
     ("external_annotation_imports", "restart"),
     ("class_visibility_persistence", "restart"),
     ("restart", "project_persistence"),
+    # A reviewed QC queue must derive from a project whose annotation and
+    # image identity were actually verified after the installed API restart.
+    # Both gates being PASS within the run window is not proof of this order.
+    ("project_persistence", "qc_review_coordination"),
     ("restart", "qc_review_coordination"),
     ("qc_review_coordination", "qc_workflow_persistence"),
     ("qc_workflow_persistence", "qc_workflow_replay"),

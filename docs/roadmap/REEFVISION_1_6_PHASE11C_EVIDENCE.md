@@ -42,3 +42,25 @@ different-run tokens plus the parent-to-verifier CLI contract. This is an
 evidence integrity improvement, not proof of a completed MSI installation;
 full exact-head CI, cross-track 0038 reconciliation, representative biology,
 installed-GUI upgrade/rollback, and researcher approval remain outstanding.
+
+## Installed QC project-lineage causal gate (2026-11-21)
+
+Audited the already implemented 1.6 class-management, visibility, review,
+saved executable QC Workflow Builder, native Windows acceptance harness and
+1.0–1.5 overlap. The installed harness records successful post-restart
+`project_persistence` **before** `qc_review_coordination`, but its independent
+Python verifier previously allowed the reverse while both gates individually
+reported PASS inside the test window. This could attribute QC results to
+an image/annotation whose survival across restart had not yet been verified.
+
+The independent verifier now requires project persistence before QC
+coordination. Regression tests reject the inverted chronology and accept the
+restored native-harness sequence, without altering scientific data, installation
+artifacts, typed graph execution, provenance, approvals, or migrations. Also
+corrected the exact backend Ruff E501 test line reported by CI
+[#44904743983](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44904743983).
+
+**RELEASE HOLD:** new exact-head CI, full tests, 1.1/1.6 Alembic-0038
+reconciliation, representative biological persisted-workflow acceptance,
+genuine Windows MSI/CAB clean install/upgrade/rollback and installed-GUI
+checks, plus explicit researcher approval. No unrelated version changes.

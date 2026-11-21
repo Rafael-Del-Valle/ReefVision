@@ -780,6 +780,35 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                 ):
                     MODULE.validate_report(report, expected_version="1.0.2")
 
+
+    def test_installed_qc_cannot_precede_persisted_project_evidence(self) -> None:
+        # Prior to this guard, individually dated PASS gates could attest to
+        # QC research output before verifying the project's original image and
+        # annotation survived the installed API restart.
+        report = good_report()
+        timestamps = {
+            "restart": "02:11:00",
+            "qc_review_coordination": "02:13:00",
+            "project_persistence": "02:14:00",
+            "qc_workflow_persistence": "02:15:00",
+            "qc_workflow_replay": "02:16:00",
+            "project_exchange": "02:17:00",
+            "uninstall": "02:18:00",
+            "data_retention": "02:19:00",
+        }
+        for gate, clock in timestamps.items():
+            report[gate]["timestamp_utc"] = f"2026-10-25T{clock}Z"
+        with self.assertRaisesRegex(
+            MODULE.AcceptanceEvidenceError,
+            "project_persistence must not follow qc_review_coordination",
+        ):
+            MODULE.validate_report(report, expected_version="1.0.2")
+
+        # Confirm the valid native-harness order still passes unmodified
+        # scientific results, recorded installer evidence and QC review gates.
+        report["project_persistence"]["timestamp_utc"] = "2026-10-25T02:12:00Z"
+        MODULE.validate_report(report, expected_version="1.0.2")
+
     def test_pre_restart_scientific_probes_follow_installed_api(self) -> None:
         # The old policy accepted these spliced timestamps because each probe
         # individually preceded restart. They are not the harness execution
