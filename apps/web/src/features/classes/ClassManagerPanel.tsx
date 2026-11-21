@@ -74,6 +74,8 @@ function validReviewGroup(value: unknown): boolean {
 // Reassignment preview groups are a typed inventory, not arbitrary display
 // rows. An unfamiliar or repeated category could conceal scientific references
 // while still passing checks on individual record counts and identifiers.
+// The backend cannot yet reassign these source-class modalities during Merge.
+// Do not offer a misleading operation that would archive the class but strand them.
 const UNSUPPORTED_MERGE_CATEGORIES = [
   "mask_annotations_active",
   "mask_annotations_deleted",
@@ -250,8 +252,6 @@ const REQUIRED_USAGE_CATEGORIES: Readonly<
   model_registrations: { mutable: false, immutable: true },
 };
 
-// The backend cannot yet reassign these source-class modalities during Merge.
-// Do not offer a misleading operation that would archive the class but strand them.
 function usageHasCompleteEmptyBreakdown(
   counts: Awaited<ReturnType<typeof getProjectLabelClassUsage>>["counts"],
 ): boolean {
