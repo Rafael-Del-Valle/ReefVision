@@ -1,12 +1,14 @@
 """Exercise resource controls through the public queue and a pair of local workers."""
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 
 from reefvision.config import Settings
 from reefvision.db.models import Job, TrainingRun
@@ -16,7 +18,16 @@ from reefvision.tests.test_annotations import create_project
 
 def queued(client: TestClient, project: str, kind: str, **request: object) -> str:
     with cast(FastAPI, client.app).state.session_factory() as session:
-        job = Job(project_id=project, job_type=kind, status="queued", request_json=request)
+        # Distinguish submission times even when the Windows clock repeats one tick.
+        count = session.scalar(select(func.count()).select_from(Job)) or 0
+        submitted = datetime(2026, 1, 1, tzinfo=UTC) + timedelta(seconds=count)
+        job = Job(
+            project_id=project,
+            job_type=kind,
+            status="queued",
+            request_json=request,
+            created_at=submitted,
+        )
         session.add(job)
         session.commit()
         return job.id
