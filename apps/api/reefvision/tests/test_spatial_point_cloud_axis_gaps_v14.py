@@ -190,9 +190,9 @@ def test_hidden_maximum_gap_boundary_is_disclosed_on_saved_workflow_replay(
     params = dict(PARAMS)
     if source_format == "ply":
         params["ply_text"] = (
-            f"ply\\nformat ascii 1.0\\nelement vertex {len(points)}\\n"
-            "property double x\\nproperty double y\\nproperty double z\\nend_header\\n"
-            + "".join(f"{point[0]:g} 0 0\\n" for point in points)
+            f"ply\nformat ascii 1.0\nelement vertex {len(points)}\n"
+            "property double x\nproperty double y\nproperty double z\nend_header\n"
+            + "".join(f"{point[0]:g} 0 0\n" for point in points)
         )
     else:
         params["points"] = points
