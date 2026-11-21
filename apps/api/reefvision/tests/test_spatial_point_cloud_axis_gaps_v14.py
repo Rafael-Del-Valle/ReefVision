@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import cast
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.spatial_point_cloud_v14 import measure_point_cloud_preview
@@ -177,6 +177,92 @@ def test_positive_axis_gap_below_calibration_resolution_is_not_zero() -> None:
     assert result["axis_aligned_dimensions_m"][0] > 0.0
     assert "axis_sampling_gap_below_numeric_resolution" in result["qc_warnings"]
     assert result["provenance"]["calibration_verified"] is False
+
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+def test_hidden_maximum_gap_boundary_is_disclosed_on_saved_workflow_replay(
+    client: TestClient, source_format: str
+) -> None:
+    # Uniform 512/600-row sampling omits source row 6 but displays row 7.
+    # The largest source-x gap is between those two acquisition rows; both
+    # source-axis extrema remain displayed, so extrema QC alone misses this.
+    points = [[float(index + (100 if index >= 7 else 0)), 0.0, 0.0] for index in range(600)]
+    params = dict(PARAMS)
+    if source_format == "ply":
+        params["ply_text"] = (
+            f"ply\\nformat ascii 1.0\\nelement vertex {len(points)}\\n"
+            "property double x\\nproperty double y\\nproperty double z\\nend_header\\n"
+            + "".join(f"{point[0]:g} 0 0\\n" for point in points)
+        )
+    else:
+        params["points"] = points
+
+    project_id = str(create_project(client, "Hidden scan gap display QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    assert expected["axis_largest_adjacent_coordinate_gaps"]["x"][
+        "source_endpoint_values"
+    ] == [6.0, 107.0]
+    assert 6 not in expected["preview_point_indices"]
+    assert 7 in expected["preview_point_indices"]
+    assert expected["preview_axis_extrema_covered"] is True
+    assert expected["preview_largest_axis_gap_endpoint_support"] == {
+        "x": {"lower": False, "upper": True},
+        "y": None,
+        "z": None,
+    }
+    assert expected["preview_omitted_largest_gap_boundary_axes"] == ["x"]
+    assert "preview_omits_largest_axis_gap_endpoint" in expected["qc_warnings"]
+    assert "preview_omits_axis_extrema" not in expected["qc_warnings"]
+    assert expected["surface_area_m2"] is None
+    assert expected["branch_length_m"] is None
+    assert expected["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": f"hidden-gap-boundary-{source_format}-v14",
+        "name": "Inspect omitted projected gap support without inferring tissue loss",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-to-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    hashes = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            artifact
+            for artifact in detail.json()["artifacts"]
+            if artifact["data_type"] == "point_cloud_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == expected
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
 
 
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
