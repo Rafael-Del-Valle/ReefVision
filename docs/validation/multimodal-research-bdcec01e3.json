@@ -1,0 +1,124 @@
+{
+  "source_commit": "bdcec01e3e41e028b873e8183c4de9e739d27eb6",
+  "schema": "b18_spectral_0002",
+  "surface": "source Chromium with real local API and queue",
+  "fixture_scope": "Generated, with real offline CPU training and two reviewed local model registrations.",
+  "setup": {
+    "startTime": "2026-11-21T00:17:26.166Z",
+    "duration": 46620.397,
+    "expected": 2,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "five_research_workflows": {
+    "startTime": "2026-11-21T00:18:13.135Z",
+    "duration": 27216.458,
+    "expected": 5,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "process_shutdown": "owned-process termination",
+  "owned_listeners_closed": true,
+  "reference": {
+    "file": "1.8/checkpoints/bdcec01e3/source/source-research-tools-rehearsal.json",
+    "sha256": "a8eed05390854a4937f6a59739218ebcb7ee4476c1984553fa824d0ecd4fe783"
+  },
+  "workflow_receipts": {
+    "rv18-taxonomy-detectability": {
+      "file": "1.8/checkpoints/bdcec01e3/source/taxonomy-detectability-proof.json",
+      "sha256": "e0f85664b5d16e645dafe26b699ad02e08d6a9af6db1d44a60722c4accc0c6da"
+    },
+    "rv18-bioacoustics": {
+      "file": "1.8/checkpoints/bdcec01e3/source/bioacoustics-evidence.json",
+      "sha256": "2fc7143707f04d9b029cd0a51ab5f343492651731dbe85d026faab8935a31c60"
+    },
+    "rv18-multispectral": {
+      "file": "1.8/checkpoints/bdcec01e3/source/multispectral-evidence.json",
+      "sha256": "ec11adab23224f5719dcfc3b4dd5e70a605371086e23d99cfdc3856b84b7aca1"
+    },
+    "rv18-underwater-correction": {
+      "file": "1.8/checkpoints/bdcec01e3/source/underwater-adjustment-evidence.json",
+      "sha256": "f74729b140f821611971dd935acb8d6bbcdcf5fe03475f4e5e7b39c7206dc94a"
+    },
+    "rv18-domain-shift": {
+      "file": "1.8/checkpoints/bdcec01e3/source/domain-shift-evidence.json",
+      "sha256": "14120d044636571c88fc62ebc68351b59d20dcaa1cab462e5cf8b01dc91150cd",
+      "group_outcomes": [
+        {
+          "group_id": "fresh-heldout-group-a",
+          "domain": "reference",
+          "observations": 2,
+          "status": "included"
+        },
+        {
+          "group_id": "fresh-heldout-group-b",
+          "domain": "target",
+          "observations": 1,
+          "status": "included"
+        },
+        {
+          "group_id": "Unobserved validation acquisition",
+          "domain": "target",
+          "observations": 0,
+          "status": "missing"
+        }
+      ],
+      "adjusted_model_evaluation_job_ids": [
+        "1b3809a6-fbc1-4667-9739-a93d64a728cf",
+        "a642261a-8098-4bbc-a980-89f31edd4eaf",
+        "1343d68e-03e3-4c40-8dbb-77541195c8a7",
+        "1dcc45b8-2649-47d2-a8a3-7dee917b3900",
+        "bd27d6b7-b217-4499-b4b8-83331a9f7808",
+        "f1f090cd-ade8-4814-956a-9c422f08af4d"
+      ],
+      "replays": [
+        {
+          "id": "182cdb2f-e33f-49b0-9fa4-57f777ba43a3",
+          "payloadSha256": "0ed8b11422d112538f6864cb7bdd4072d81082d58d65b89e4765ad0f7b07de97"
+        },
+        {
+          "id": "94d81956-128f-41c1-b6ff-20c5d03f36ab",
+          "payloadSha256": "0ed8b11422d112538f6864cb7bdd4072d81082d58d65b89e4765ad0f7b07de97"
+        }
+      ],
+      "export_json_sha256": "d175d98e0ae8adafb8553ba4f061ea708f48f6f585737fc72b2369bebf8bd668",
+      "export_csv_sha256": "38927e56540fc2e31713baee6065aee1167d852aae14778e73d9cab9d4bac726"
+    }
+  },
+  "source_recovery": {
+    "source_commit": "a82cc730e1bd2ca5df0245171a630f17f06cd2a5",
+    "receipt": "1.8/checkpoints/a82cc730e1/source/evidence/managed-recovery/four-modality-managed-recovery.json",
+    "sha256": "dad412ce854bc4ffff99e02ec962ebbe77726eca8456b18b421ae9acf454f5dd",
+    "restored_files": 75,
+    "restored_bytes": 8803802,
+    "projects": 7,
+    "workflow_outputs": 8,
+    "older_1_7_refused_new_database_without_change": true
+  },
+  "hourly_predecessors": {
+    "preview": {
+      "donor_pr": 77,
+      "donor_commit": "fafbd00edfec5ea4390063b0fb685ef56418c7e8",
+      "integration_commit": "044e8e2dee81bef4056b828335d3884c2e53253e",
+      "review_pr": 112,
+      "ordinary_class_workflow": {
+        "file": "1.8/checkpoints/bdcec01e3/source/class-lifecycle-evidence.json",
+        "sha256": "9fe8a02d84b11591e2d02c5e81a21bf7e8ab2cfee1b3fc9c8bceb64ba463ab6a"
+      },
+      "unit_tests": 6,
+      "regressions_before": 4
+    },
+    "geometry": {
+      "donor_pr": 79,
+      "donor_commit": "e9e8afbd4b7e9fbff5214d02d8d56bd5b52ef661",
+      "unchanged_candidate_tests": 79,
+      "report": {
+        "file": "1.8/checkpoints/bdcec01e3/source/mesh-cancellation-applicability-93c5faba0.json",
+        "sha256": "91dfd115bb14036f08ead2b66f13463979d385c20db12fd2243020915aca359f"
+      }
+    }
+  },
+  "field_status": "Open. Generated labels, scores, calibration, and fixture clock alignments establish engineering behavior."
+}

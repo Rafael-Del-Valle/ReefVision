@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T00:05:39Z`
+Updated: `2026-11-21T00:20:35Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -764,6 +764,7 @@ Evidence:
 - `source`: The previous desktop returned zero for a closed nearly planar tetrahedron with nonzero volume within the floating-point range. Both windings now agree with an independent exact rational oracle, the exactly planar control remains zero, and standalone plus two saved workflow runs preserve the provisional measure and its source. — `apps/api/reefvision/tests/test_spatial_mesh_enclosed_volume_v14.py` (`rv14-geometric-measurements-recover-volume-cancellation`)
 - `source`: The project API regression imports the tiny closed OBJ, verifies its structural receipt and original, rejects a still-unrepresentable unit-scale measurement and returns the independently calculated positive value at scale 1,000,000. Forty-nine focused backend cases passed. — `https://github.com/Rafael-Del-Valle/ReefVision/blob/1d3942662ba2c4a75c30c59acf37851be51ce3e1/apps/api/reefvision/tests/test_spatial_asset_parse_jobs_v14.py` (`rv14-geometry-import-and-calibration-1d3942662`)
 - `source`: The signed volume matched 448 independently evaluated tetrahedral permutations and a bounded 3,996-face bipyramid. The source fixture covers four vertex origins, both windings, exact planar zero, calibrated recovery of a positive source underflow and a true overflow. — `docs/validation/mesh-volume-8821ed9a1.json` (`rv14-volume-winding-rational-8821`)
+- `source`: The four finite-volume cancellation examples from hourly #79 at e9e8afbd4 passed on the existing exact-sum candidate. All 79 standalone, arithmetic, topology and saved-workflow controls passed on source 93c5faba0. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv14-geometric-measurements-cancelled-shell-volume-bdcec01e3`)
 - `browser`: Workflow Builder exposes a project-owned original picker, scale, calibration evidence, uncertainty, specimen/observation/frame context, and an explicit warning that geometric routes are not anatomical branch lengths. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-geometric-guided-ui`)
 - `browser`: The ordinary source desktop imported all three generated OBJs, exercised four calibrated previews, reopened both saved graphs, repeated each and downloaded the Exchange package. All three originals and six typed artifacts verified against the source-browser receipt with SHA-256 c46681c4df9075abb7bbdb17c228b05107fce72174eb236c16255428542ef388. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv14-geometry-project-replay-1d3942662`)
 - `browser`: From the project's 3D assets, the researcher imported the same OBJ, measured both windings, supplied scale uncertainty, reopened the graph, ran it twice and downloaded the project. Both measurements now match the exact volume, the planar control withholds volume, and the exports preserve the three originals and six saved artifacts. — `docs/validation/mesh-volume-8821ed9a1.json` (`rv14-volume-winding-guided-8821`)
@@ -1129,6 +1130,7 @@ Evidence:
 
 - `source`: Thirty-five backend checks cover class use, archived classes, reassignment and protected historical records. — `docs/validation/research-workflows-1-6.json` (`rv16-class-safe-writes`)
 - `browser`: Classes retained the frozen manifest and exported YOLO mapping after a reviewed reassignment and reopen. Polygon and image-level references prevented deletion. — `docs/validation/research-workflows-1-6.json` (`rv16-class-frozen-export`)
+- `browser`: At reviewed 1.6 source 044e8e2de, editing the destination class withdrew a previously enabled reassignment. The Classes workspace required another preview before confirmation and retained the source-pixel boxes, unrelated masks and labels, original and frozen export. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv16-class-management-class-preview-revision-bdcec01e3`)
 - `windows_installed`: On the original 1.6 MSI under an ordinary Windows account, the class lifecycle test passed. The researcher reviewed the reassignment, reopened the project and verified the earlier frozen export. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44768324452/job/136420579045` (`rv16-class-management-original-msi-used-classes`)
 - `windows_installed`: The corrected original MSI passed the standard-user class lifecycle, including explicit reassignment after annotations exist and reopening the frozen export. — `docs/validation/installed-workflows-a580042e8.json` (`rv16-class-management-original-a580042e8`)
 - `physical_hardware`: In native Classes, confirmed reassignment advanced the live annotation from revision 2 to 3. Mask and image-classification references remained protected. The frozen dataset manifest and YOLO mapping survived reopening. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-class-management-physical-83b0`)
@@ -1353,8 +1355,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: The frozen roster preserves missing groups and pinning for both registered models, with original or checked adjusted input per eligible image. Numerical tests exercise group-weighted effects, Welch uncertainty, excluded or overlapping units and withheld intervals. A partial source page still finds an eligible older comparison. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv18-domain-shift-group-scores-bdcec01e3`)
+- `browser`: The five-workflow Windows source trial compared two actual locally trained CPU checkpoints across two generated held-out acquisition groups, kept the third group missing, ran six adjusted evaluations on three original images, withheld intervals at one independent unit per domain, exported JSON and CSV and replayed the report twice. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv18-domain-shift-adjusted-evaluation-bdcec01e3`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
