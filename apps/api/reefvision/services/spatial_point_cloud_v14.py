@@ -226,6 +226,7 @@ def measure_point_cloud_preview(
     preserve_measured_chord_endpoints_in_preview: bool = False,
     preserve_largest_axis_gap_boundaries_in_preview: bool = False,
     preserve_largest_axis_gap_boundary_loci_in_preview: bool = False,
+    preserve_distinct_xyz_loci_in_preview: bool = False,
 ) -> dict[str, Any]:
     """Report point extents, not surface area, organism size, or branch length."""
     if not 1 <= len(points) <= MAX_VERTICES:
@@ -238,6 +239,8 @@ def measure_point_cloud_preview(
         raise ValueError("preserve_largest_axis_gap_boundaries_in_preview must be a boolean")
     if not isinstance(preserve_largest_axis_gap_boundary_loci_in_preview, bool):
         raise ValueError("preserve_largest_axis_gap_boundary_loci_in_preview must be a boolean")
+    if not isinstance(preserve_distinct_xyz_loci_in_preview, bool):
+        raise ValueError("preserve_distinct_xyz_loci_in_preview must be a boolean")
     if type(meters_per_unit) not in (int, float) or not 0 < meters_per_unit <= 1_000_000:
         raise ValueError("meters_per_unit must be a finite numeric value within bounds")
     scale = float(meters_per_unit)
@@ -683,11 +686,23 @@ def measure_point_cloud_preview(
                     first_index_per_locus.setdefault(vertex, index)
             gap_boundary_indices.update(first_index_per_level.values())
             gap_boundary_indices.update(first_index_per_locus.values())
+    # A bounded preview can lose a rare, genuinely observed XYZ locus while
+    # spending hundreds of display slots on duplicate acquisition rows.
+    # Explicitly pin one original row per distinct locus when requested.
+    # Retaining locations does not imply independent biological replicates,
+    # complete scan coverage, or retention of every acquisition row.
+    distinct_locus_indices: set[int] = set()
+    if preserve_distinct_xyz_loci_in_preview:
+        first_index_per_xyz: dict[tuple[float, float, float], int] = {}
+        for index, vertex in enumerate(vertices):
+            first_index_per_xyz.setdefault(vertex, index)
+        distinct_locus_indices.update(first_index_per_xyz.values())
     if (
         preserve_axis_extrema_in_preview
         or pin_chords
         or preserve_largest_axis_gap_boundaries_in_preview
         or preserve_largest_axis_gap_boundary_loci_in_preview
+        or preserve_distinct_xyz_loci_in_preview
     ) and len(vertices) > preview_count:
         protected = {0, len(vertices) - 1}
         if preserve_axis_extrema_in_preview:
@@ -695,6 +710,7 @@ def measure_point_cloud_preview(
         if pin_chords:
             protected.update(selected_endpoint_indices)
         protected.update(gap_boundary_indices)
+        protected.update(distinct_locus_indices)
         # Fill remaining slots evenly across the entire source index range.
         # Taking the first N candidates biases the sample toward early rows.
         candidates = [index for index in range(len(vertices)) if index not in protected]
@@ -872,6 +888,7 @@ def measure_point_cloud_preview(
                 if preserve_largest_axis_gap_boundary_loci_in_preview
                 else ""
             )
+            + ("_distinct_xyz_loci_preserving" if preserve_distinct_xyz_loci_in_preview else "")
         ),
         "preview_largest_axis_gap_boundary_loci_preservation_requested": (
             preserve_largest_axis_gap_boundary_loci_in_preview
@@ -879,6 +896,7 @@ def measure_point_cloud_preview(
         "preview_largest_axis_gap_boundaries_preservation_requested": (
             preserve_largest_axis_gap_boundaries_in_preview
         ),
+        "preview_distinct_xyz_loci_preservation_requested": preserve_distinct_xyz_loci_in_preview,
         "preview_omitted_selected_chord_endpoint_indices": omitted_chord_endpoints,
         "preview_selected_chord_endpoints_covered": not omitted_chord_endpoints,
         "preview_omitted_axis_extrema": preview_omitted_axis_extrema,
@@ -1102,6 +1120,7 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         preserve_largest_axis_gap_boundary_loci_in_preview=(
             payload.preserve_largest_axis_gap_boundary_loci_in_preview
         ),
+        preserve_distinct_xyz_loci_in_preview=payload.preserve_distinct_xyz_loci_in_preview,
     )
     result["preview_point_colors_rgb_uint8"] = (
         [point_colors[i] for i in result["preview_point_indices"]] if point_colors else None

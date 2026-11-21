@@ -53,6 +53,9 @@ class PointCloudPreviewRequest(BaseModel):
     # Retain the first acquisition row for every distinct XYZ locus at all
     # maximal projected-gap boundary levels, rejecting previews over 512 points.
     preserve_largest_axis_gap_boundary_loci_in_preview: StrictBool = False
+    # Pin one source row per unique XYZ location across the entire cloud.
+    # Fail when the requested distinct locations exceed the display budget.
+    preserve_distinct_xyz_loci_in_preview: StrictBool = False
 
     @field_validator("meters_per_unit", "relative_scale_uncertainty", mode="before")
     @classmethod

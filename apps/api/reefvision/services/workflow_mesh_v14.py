@@ -132,6 +132,7 @@ def extend_mesh_registry(
                 "preserve_measured_chord_endpoints_in_preview": False,
                 "preserve_largest_axis_gap_boundaries_in_preview": False,
                 "preserve_largest_axis_gap_boundary_loci_in_preview": False,
+                "preserve_distinct_xyz_loci_in_preview": False,
                 "expected_source_payload_sha256": None,
                 "relative_scale_uncertainty": None,
                 "calibration_review": None,
@@ -154,6 +155,9 @@ def extend_mesh_registry(
                 "Optional largest-gap boundary pinning retains projected levels or distinct "
                 "XYZ locations for display only, subject to the 512-point limit.",
                 "Pinned boundary loci are not complete acquisition-row retention.",
+                "Optional distinct XYZ locus pinning retains one original row per unique "
+                "source location for display, or rejects over-512-location requests.",
+                "Retained source locations are not tissue completeness or replicates.",
                 "Optional source SHA-256 binding rejects changed ASCII PLY bytes on replay.",
                 "Project-owned PLY originals are verified at run time, not on graph save.",
                 "Not an asset importer or a full interactive asset picker.",

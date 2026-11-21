@@ -102,3 +102,22 @@ coordinate-registration and biological-identity review states; numeric source
 integrity alone never verifies a reconstruction or an organism. The dedicated
 regressions are in `test_spatial_mesh_obj_numeric_integrity_v14.py`. This
 section defines testable behavior, not a field-validation acceptance claim.
+
+### Complete distinct XYZ location retention in bounded previews
+
+The opt-in, strict-boolean \`preserve_distinct_xyz_loci_in_preview\` control is
+available in standalone XYZ and imported ASCII PLY point-cloud analysis and in
+the executable typed \`point_cloud_preview\` Workflow Builder node. For source
+clouds with more than 512 acquisition rows, pin the first original source row
+for **each distinct XYZ coordinate** before allocating the remaining bounded
+preview slots across source indices. When protected rows (including any selected
+chords or requested gap boundaries) exceed 512, reject the preview explicitly.
+Do not silently sample the protected set, round away distinct loci, or reassign
+source indices. The option retains unique source locations, **not** all duplicate
+acquisition rows, verified area coverage, independent organisms, or anatomical
+structures. Confirm source-index provenance, independent XYZ-versus-row
+retention counts, explicit omission QC, strict request validation, and equal
+standalone versus twice-replayed saved-workflow artifacts/SHA-256 for both
+inline XYZ and imported ASCII PLY. Include a rare locus on an ordinarily
+omitted index and a source containing more than 512 unique XYZ locations.
+Keep unreviewed calibration, specimen identity, and registration provisional.
