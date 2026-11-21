@@ -346,6 +346,97 @@ describe("TrainingWorkspace progress freshness", () => {
     );
   });
 
+  it.each(["Models", "Runs"] as const)(
+    "shows a pose registration rejection in %s and clears it after successful retry",
+    async (section) => {
+      const completed = {
+        ...run,
+        draft_id: null,
+        registered_model_id: null,
+        provider_id: "ultralytics",
+        task: "pose",
+        run_name: "Restored pose training",
+        status: "completed",
+        stage: "completed",
+        result_checkpoint_path: "training/restored/best.pt",
+      } satisfies api.TrainingRun;
+      const model = {
+        id: "pose-model-1",
+        project_id: project.id,
+        purpose: "detector",
+        display_name: "Restored pose training best",
+        source_filename: "best.pt",
+        managed_path: "models/best.pt",
+        sha256: "a".repeat(64),
+        file_size_bytes: 128,
+        framework: "pytorch",
+        task: "pose",
+        provider_name: "ultralytics",
+        provider_version: "1",
+        class_map_json: {},
+        input_size_json: null,
+        metadata_json: { source_training_run_id: completed.id },
+        notes: null,
+        created_at: completed.created_at,
+        updated_at: completed.created_at,
+      } satisfies api.ModelRegistration;
+      const reason =
+        "Pose training split manifest checksum no longer matches the persisted training run";
+      vi.mocked(api.getTrainingWorkspaceBootstrap).mockResolvedValue({
+        providers: [],
+        catalog: { models: [] },
+        draft_summaries: [],
+        selected_draft: null,
+      } as unknown as api.TrainingWorkspaceBootstrapResponse);
+      vi.mocked(api.getTrainingRuns).mockResolvedValue([completed]);
+      vi.mocked(api.registerModelFromRun)
+        .mockRejectedValueOnce(new Error(reason))
+        .mockImplementationOnce(async () => {
+          vi.mocked(api.getModels).mockResolvedValue([model]);
+          vi.mocked(api.getTrainingRuns).mockResolvedValue([
+            { ...completed, registered_model_id: model.id },
+          ]);
+          return model;
+        });
+      renderWorkspace();
+      await screen.findByRole("heading", {
+        name: "No training draft selected",
+      });
+      fireEvent.click(screen.getByRole("tab", { name: section }));
+
+      const register = await screen.findByRole("button", {
+        name: "Register best pose model",
+      });
+      fireEvent.click(register);
+      expect(
+        await screen.findByText(reason, {
+          selector: '[role="alert"]',
+          exact: false,
+        }),
+      ).toBeVisible();
+      expect(register).toBeEnabled();
+      expect(api.registerModelFromRun).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(register);
+      await screen.findByText(
+        section === "Models"
+          ? "Registered as Restored pose training best"
+          : "Best model registered as Restored pose training best",
+      );
+      expect(
+        screen.queryByText(reason, {
+          selector: '[role="alert"]',
+          exact: false,
+        }),
+      ).not.toBeInTheDocument();
+      expect(api.registerModelFromRun).toHaveBeenCalledTimes(2);
+      expect(api.registerModelFromRun).toHaveBeenLastCalledWith(
+        project.id,
+        expect.objectContaining({ training_run_id: completed.id }),
+      );
+    },
+  );
+
   it("labels completed mask and detector registrations by task with a draft open", async () => {
     const completed = ["detect", "segment", "semantic_segment"].map(
       (task) =>

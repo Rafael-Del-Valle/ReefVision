@@ -37,6 +37,10 @@ from reefvision.schemas.models import (
 from reefvision.services.image_adjustments_v18 import adjusted_inference_binding
 from reefvision.services.model_runtime import ModelRuntimeService, pinned_job_settings
 from reefvision.services.pose_schemas import definition_for_revision
+from reefvision.services.project_exchange_pose_training import (
+    checkpoint_schema_matches,
+    recover_imported_pose_training,
+)
 from reefvision.services.segmentation_models import SegmentationModelService
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import copy_model_file, hash_model_file
@@ -96,6 +100,7 @@ class SemanticModelService(SegmentationModelService):
                 "Trained-pose registration supports ReefPose and Ultralytics checkpoints only"
             )
 
+        recover_imported_pose_training(self.session, run)
         artifact_manifest = dict(run.artifact_manifest_json or {})
 
         split_manifest_raw = artifact_manifest.get("pose_split_manifest")
@@ -302,7 +307,9 @@ class SemanticModelService(SegmentationModelService):
                 )
             anatomy = inspected.metadata.get("reefpose_anatomy_schema")
             if not isinstance(anatomy, dict) or (
-                anatomy.get("schema_id") != revision.schema_id
+                not checkpoint_schema_matches(
+                    self.session, run, anatomy.get("schema_id"), revision.schema_id
+                )
                 or anatomy.get("revision") != revision.revision
             ):
                 raise ValidationError(

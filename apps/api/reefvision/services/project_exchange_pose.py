@@ -10,16 +10,19 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import (
+    ExperimentRecord,
     Job,
     ModelRegistration,
     PoseEvaluationRun,
     PoseLandmarkSchemaRevision,
     PoseTrainingDataset,
+    TrainingRun,
 )
 from reefvision.domain.errors import ValidationError
 from reefvision.services.pose_evaluation import pose_evaluation_result_sha256
 from reefvision.services.pose_schemas import definition_for_revision
 from reefvision.services.project_exchange_models import has_local_model_lineage
+from reefvision.services.project_exchange_pose_training import rebind_pose_training_run
 from reefvision.services.project_exchange_validation_report import validate_reefpose_report
 from reefvision.services.reefpose_validation import frozen_recording, heldout_locks
 from reefvision.storage.datasets import canonical_json_sha256
@@ -492,7 +495,7 @@ def restore_pose_model_lineage(
     sections: dict[str, list[dict[str, Any]]],
     mapping: dict[str, str],
     digests: dict[str, str],
-) -> None:
+) -> list[tuple[TrainingRun, str, str]]:
     source_datasets = {
         row["id"]: row["manifest_sha256"] for row in sections.get("pose_training_datasets", [])
     }
@@ -505,6 +508,33 @@ def restore_pose_model_lineage(
     digests.update(
         {digest: datasets[mapping[identifier]] for identifier, digest in source_datasets.items()}
     )
+    source_ids = {local: source for source, local in mapping.items()}
+    verified_source_pins = {
+        row["id"]: row["manifest_sha256"]
+        for row in sections.get("pose_training_datasets", [])
+        if canonical_json_sha256(row["manifest_json"]) == row["manifest_sha256"]
+    }
+    experiments = {
+        row.training_run_id: row
+        for row in session.scalars(
+            select(ExperimentRecord).where(ExperimentRecord.project_id == project_id)
+        )
+    }
+    rebound = []
+    for run in session.scalars(
+        select(TrainingRun).where(TrainingRun.project_id == project_id, TrainingRun.task == "pose")
+    ):
+        prior_split, prior_dataset = run.split_manifest_sha256, run.dataset_manifest_sha256
+        rebind_pose_training_run(
+            session,
+            run,
+            source_ids,
+            digests,
+            verified_source_pins,
+            experiment=experiments.get(run.id),
+        )
+        if run.split_manifest_sha256 != prior_split:
+            rebound.append((run, prior_split, prior_dataset))
     for row in sections.get("models", []):
         if not has_local_model_lineage(row):
             continue
@@ -525,6 +555,7 @@ def restore_pose_model_lineage(
                 metadata[f"{field}_manifest_sha256"] = datasets[mapping[original_id]]
         if metadata != model.metadata_json:
             model.metadata_json = metadata
+    return rebound
 
 
 def restore_phase6_track_digests(

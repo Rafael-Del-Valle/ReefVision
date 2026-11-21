@@ -133,6 +133,7 @@ from reefvision.services.project_exchange_pose import (
     restore_pose_reports,
     validate_frozen_pose_frames,
 )
+from reefvision.services.project_exchange_pose_training import bind_pose_history_digests
 from reefvision.services.project_exchange_qc_v16 import (
     QC_FORMATS,
     frozen_qc_dataset_ids,
@@ -543,6 +544,9 @@ def import_project_exchange(
         _validate_heatmap_artifacts(old_project_id, section_rows)
         restores_workflow_provenance = bool(integrated) or has_portable_workflow_history(
             section_rows
+        )
+        retains_origin = restores_workflow_provenance or bool(
+            section_rows.get("pose_training_datasets")
         )
 
         project: Project | None = None
@@ -993,7 +997,7 @@ def import_project_exchange(
                 shutil.copyfileobj(source, target)
 
             manifest_sha256 = canonical_json_sha256(manifest)
-            origin = (manifest.get("origin") or {}) if restores_workflow_provenance else {}
+            origin = (manifest.get("origin") or {}) if retains_origin else {}
             origin_ids = map_origin_ids(origin, id_map)
             field_origin = (
                 restore_field_origin(section_rows, manifest.get(FIELD_ORIGIN) or {}, id_map)
@@ -1016,12 +1020,13 @@ def import_project_exchange(
                 archive_path=archive_relative,
                 options_json={
                     "source_project_id": old_project_id,
+                    "source_storage_root": source_storage_root,
                     "source_project_name": source_project.get("name"),
                     "id_remapped": True,
                     "id_map": id_map,
                     **(
                         {"digest_map": digests, "origin_id_map": origin_ids}
-                        if restores_workflow_provenance
+                        if retains_origin
                         else {}
                     ),
                     "copied_media_count": copied_media_count,
@@ -1034,8 +1039,11 @@ def import_project_exchange(
             session.flush()
             if finalize is not None:
                 finalize(project, package)
+            rebound_pose_runs = []
             if section_rows.get("pose_training_datasets"):
-                restore_pose_model_lineage(session, project.id, section_rows, id_map, digests)
+                rebound_pose_runs = restore_pose_model_lineage(
+                    session, project.id, section_rows, id_map, digests
+                )
             if integrated:
                 restore_phase6_track_digests(session, project.id, id_map, track_digests)
                 restore_temporal_links(session, project.id, digests)
@@ -1071,6 +1079,17 @@ def import_project_exchange(
                 restore_workflow_provenance(
                     session, project.id, section_rows, id_map, digests, _remap_json
                 )
+            for training_run, previous_split, previous_dataset in rebound_pose_runs:
+                bind_pose_history_digests(
+                    session,
+                    training_run,
+                    previous_split,
+                    previous_dataset,
+                    source_storage_root,
+                    project.storage_root,
+                    digests,
+                )
+            if retains_origin:
                 package.options_json = {**package.options_json, "digest_map": digests}
             restore_reviewer_lab_exchange(session, section_rows, id_map)
             session.commit()
