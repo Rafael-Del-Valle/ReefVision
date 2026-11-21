@@ -1,0 +1,135 @@
+name: Windows Registered Original MSI Proof
+
+on:
+  pull_request:
+    branches: [codex/reefvision-1.8-reviewed-research-candidate]
+    paths:
+      - '.github/workflows/windows-registered-original-proof.yml'
+      - '.github/windows-installed-proof/**'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  registered-original-clean-install:
+    if: github.repository == 'Rafael-Del-Valle/ReefVision' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-2022
+    timeout-minutes: 100
+    env:
+      PROOF_ROOT: C:/rv-registered-${{ github.run_id }}-${{ github.run_attempt }}
+      SOURCE_COMMIT: 542254b8aa0d896fb630282d70f263a74a65b99f
+      ORIGINAL_BUILD_RUN: '44844039968'
+      ORIGINAL_BUILD_JOB: '136659258014'
+      DRIVER_BLOB: eda1038efb0c38a202c447e82e0b7a56a583e608
+      DRIVER_COMMIT: 0058717ad15b5edc98b5d02d33f2f11af45cc39a
+      DRIVER_PATH: scripts/lib/windows-spatial-webview2-acceptance.ps1
+      APPLY_ARGV_OVERLAY: '1'
+      SIDECAR_DRIVER_BLOB: f7bbfa040913e075b33b37d910c33b4f0f02de39
+      SIDECAR_DRIVER_COMMIT: fa521bd4c78d9e6f34d7a564feefe93b4bcf3b79
+      SIDECAR_DRIVER_PATH: scripts/acceptance-windows-clean-install.ps1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: proof
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: source/apps/web/package-lock.json
+      - name: Stage verified original MSI and pinned driver
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ./proof/.github/windows-installed-proof/stage-original.ps1 -RepositoryRoot ./source -RunId $env:ORIGINAL_BUILD_RUN `
+            -SourceCommit $env:SOURCE_COMMIT -Version 1.8.0 -Root $env:PROOF_ROOT
+          $receipt = Get-Content -LiteralPath "$env:PROOF_ROOT/evidence/verified-transport.json" -Raw | ConvertFrom-Json
+          if ($receipt.build_job_id -ne [long]$env:ORIGINAL_BUILD_JOB -or $receipt.original_msi_sha256 -cnotmatch '^[a-f0-9]{64}$') {
+            throw 'The original MSI transport must bind to the exact manufacturing job and its verified MSI digest.'
+          }
+          $patches = @('sidecar-path.patch')
+          $expected = @($env:SIDECAR_DRIVER_PATH)
+          if ($env:APPLY_ARGV_OVERLAY -ceq '1') {
+            $patches += 'native-arguments.patch'
+            $expected += $env:DRIVER_PATH
+          }
+          foreach ($name in $patches) {
+            $patch = (Resolve-Path -LiteralPath "./proof/.github/windows-installed-proof/$name").Path
+            git -C source apply --unidiff-zero --check $patch
+            if ($LASTEXITCODE) { throw "The exact scoped driver correction $name does not apply." }
+            git -C source apply --unidiff-zero $patch
+            if ($LASTEXITCODE) { throw "The exact scoped driver correction $name did not apply." }
+          }
+          $files = @(git -C source diff --name-only)
+          if ($files.Count -ne $expected.Count -or (Compare-Object $expected $files -CaseSensitive) -or
+              (git -C source hash-object $env:DRIVER_PATH).Trim() -cne $env:DRIVER_BLOB -or
+              (git -C source hash-object $env:SIDECAR_DRIVER_PATH).Trim() -cne $env:SIDECAR_DRIVER_BLOB) {
+            throw 'The retest must use only the verified native argv and sidecar path driver changes.'
+          }
+          [ordered]@{
+            source_commit=$env:SOURCE_COMMIT; workflow_run_id=[long]$env:ORIGINAL_BUILD_RUN; build_job_id=[long]$env:ORIGINAL_BUILD_JOB
+            original_msi_sha256=$receipt.original_msi_sha256; driver_commit=$env:DRIVER_COMMIT
+            driver_git_blob=$env:DRIVER_BLOB; changed_paths=$files
+            driver_sha256=(Get-FileHash -LiteralPath (Join-Path ./source $env:DRIVER_PATH)).Hash.ToLowerInvariant()
+            sidecar_driver_commit=$env:SIDECAR_DRIVER_COMMIT; sidecar_driver_git_blob=$env:SIDECAR_DRIVER_BLOB
+            sidecar_driver_sha256=(Get-FileHash -LiteralPath (Join-Path ./source $env:SIDECAR_DRIVER_PATH)).Hash.ToLowerInvariant()
+          } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath "$env:PROOF_ROOT/evidence/registered-retest-provenance.json"
+          npm --prefix source/apps/web ci --no-audit --no-fund
+          if ($LASTEXITCODE) { throw 'Could not stage pinned installed acceptance drivers.' }
+          ./proof/.github/windows-installed-proof/test-native-arguments.ps1 -NodePath (Get-Command node.exe).Source `
+            -Scratch "$env:PROOF_ROOT/argv" -Library (Resolve-Path -LiteralPath (Join-Path './source' $env:DRIVER_PATH)).Path
+          ./proof/.github/windows-installed-proof/test-sidecar-path.ps1 -NodePath (Get-Command node.exe).Source `
+            -Scratch "$env:PROOF_ROOT/sidecar-path" -DriverScript (Resolve-Path -LiteralPath (Join-Path './source' $env:SIDECAR_DRIVER_PATH)).Path
+      - name: Complete the original registered clean role with the reviewed driver corrections
+        shell: pwsh
+        working-directory: source
+        run: |
+          . ./scripts/lib/node-tools.ps1
+          $playwrightNode = Find-ReefVisionExecutable -Names 'node.exe'
+          $env:PATH = @((Join-Path $env:SystemRoot 'System32'), $env:SystemRoot,
+            (Join-Path $env:SystemRoot 'System32/Wbem'), (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0'),
+            (Split-Path -Parent (Get-Command pwsh.exe).Source)) -join ';'
+          & ./scripts/acceptance-windows-clean-install.ps1 `
+            -InstallerPath "$env:PROOF_ROOT/payload/ReefVision_1.8.0_x64_en-US.msi" `
+            -ExpectedVersion '1.8.0' -ExpectedSchemaRevision 'b18_spectral_0002' `
+            -AcceptanceRoot "$env:PROOF_ROOT/acceptance" `
+            -SpatialWorkflowNodePath $playwrightNode -HostedStandardUserWebView2 -FirstUseAcceptance -ResearchWorkflowAcceptance -WorkspaceWorkflowAcceptance `
+            -ScheduleWorkflowAcceptance -MonitoringWorkflowAcceptance -ResearchToolsAcceptance `
+            -SkipUpgrade -DisposableTest -KeepArtifacts
+      - name: Stage all retained provenance on the checkout drive
+        if: always()
+        shell: pwsh
+        run: |
+          ./proof/.github/windows-installed-proof/collect-original-provenance.ps1 -RepositoryRoot ./source -ProofRoot $env:PROOF_ROOT
+      - name: Retain independent test and original payload provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-1.8-Original-Registered-Clean-Retest
+          path: |
+            source/.artifacts/registered-retest-transport/*.json
+            source/.artifacts/windows-clean-acceptance-*/report.json
+            source/.artifacts/windows-clean-acceptance-*/*.log
+            source/.artifacts/windows-clean-acceptance-*/*-playwright.json
+            source/.artifacts/windows-clean-acceptance-*/*-evidence.json
+            source/.artifacts/windows-clean-acceptance-*/*-playwright/**/*-evidence.json
+            source/.artifacts/windows-clean-acceptance-*/spatial-playwright/**/spatial-workflow.json
+            source/.artifacts/windows-clean-acceptance-*/schedule-*-playwright/**/schedule-proof.json
+            source/.artifacts/windows-clean-acceptance-*/monitoring-playwright/**/monitoring-proof.json
+            source/.artifacts/windows-clean-acceptance-*/research-tools-playwright/**/taxonomy-detectability-proof.json
+            source/.artifacts/windows-clean-acceptance-*/research-tools-playwright/**/detectability-assessment.json
+            source/.artifacts/windows-clean-acceptance-*/research-tools-playwright/**/reviewed-bioacoustic-report.json
+            source/.artifacts/windows-clean-acceptance-*/research-tools-playwright/**/spectral-index.json
+            source/.artifacts/windows-clean-acceptance-*/research-tools-playwright/**/spectral-index.tif
+            source/.artifacts/windows-clean-acceptance-*/research-tools-playwright/**/domain-shift-report.json
+            source/.artifacts/windows-clean-acceptance-*/research-tools-playwright/**/domain-shift-report.csv
+          include-hidden-files: true
+          if-no-files-found: warn
