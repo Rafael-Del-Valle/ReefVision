@@ -179,6 +179,11 @@ test("reviews class edits and preserves frozen exports after reopening", async (
   await expect(button(renamed, "Run reassign")).toBeEnabled();
   await renamed.getByText("Records in this preview", { exact: true }).click();
   await expect(renamed.getByText(box.id, { exact: true })).toBeVisible();
+  await button(renamed, "Preview Reassign and Delete").click();
+  const otherPlan = renamed.getByText("Reassign and Delete preview", {
+    exact: true,
+  });
+  await expect(otherPlan).toBeVisible();
   const reassign = button(renamed, "Run reassign");
   await reassign.click();
   const reassignConfirmation = page.getByRole("alertdialog", {
@@ -200,6 +205,15 @@ test("reviews class edits and preserves frozen exports after reopening", async (
   await reassignConfirmation
     .getByRole("button", { name: "Run reassign" })
     .click();
+  await expect(
+    renamed.getByText("Latest operation", { exact: true }),
+  ).toBeVisible();
+  await expect(otherPlan).toHaveCount(0);
+  await expect(button(renamed, "Run Reassign and Delete")).toBeDisabled();
+  await button(renamed, "Preview reassign").click();
+  await expect(
+    renamed.getByText("Reassign preview", { exact: true }),
+  ).toBeVisible();
   await expect(
     renamed.getByText("Latest operation", { exact: true }),
   ).toBeVisible();
@@ -291,6 +305,7 @@ test("reviews class edits and preserves frozen exports after reopening", async (
         original_sha256: digest(image),
         explicit_confirmation: true,
         destination_revision_required_new_preview: true,
+        both_plans_consumed_and_completed_receipt_preserved: true,
         reassign: {
           annotation_id: box.id,
           from: source.id,

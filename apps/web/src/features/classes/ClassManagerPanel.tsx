@@ -468,9 +468,16 @@ function ClassRow({
     onSuccess: (operation, selection) => {
       // Delayed HTTP responses remain non-executable if inputs have changed.
       setReassignPreview({ operation, selectionKey: selection.selectionKey });
-      setLatestOperation(operation);
     },
   });
+  async function finishReassignment(operation: ClassOperationRecord) {
+    setLatestOperation(operation);
+    setReassignPreview(null);
+    setReassignDeletePreview(null);
+    // Earlier previews were based on the inventory before this operation.
+    setPreviewEpoch((epoch) => epoch + 1);
+    await refresh();
+  }
   const runReassign = useMutation({
     mutationFn: () => {
       if (!canRunReassign || !reassignPreview) {
@@ -484,11 +491,7 @@ function ClassRow({
         notes: reassignNotes.trim() || null,
       });
     },
-    onSuccess: async (operation) => {
-      setLatestOperation(operation);
-      setReassignPreview(null);
-      await refresh();
-    },
+    onSuccess: finishReassignment,
   });
   const previewReassignDelete = useMutation({
     mutationFn: (selection: ClassPreviewSelection) =>
@@ -501,7 +504,6 @@ function ClassRow({
         operation,
         selectionKey: selection.selectionKey,
       });
-      setLatestOperation(operation);
     },
   });
   const runReassignDelete = useMutation({
@@ -517,11 +519,7 @@ function ClassRow({
         notes: reassignNotes.trim() || null,
       });
     },
-    onSuccess: async (operation) => {
-      setLatestOperation(operation);
-      setReassignDeletePreview(null);
-      await refresh();
-    },
+    onSuccess: finishReassignment,
   });
 
   const actionError =
