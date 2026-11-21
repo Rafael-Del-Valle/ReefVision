@@ -242,6 +242,63 @@ def _preflight_pose_zip_frame_inventory(archive: zipfile.ZipFile) -> None:
         raise ValidationError("Ultralytics pose export has unmatched image/label frame sets")
 
 
+def _preflight_pose_zip_structure(archive: zipfile.ZipFile) -> None:
+    """Reject unsafe ZIP members before any immutable scientific files are created."""
+
+    # Preflight every entry before extracting any files. Aliases such as
+    # ./data.yaml and data.yaml otherwise overwrite the same scientific
+    # artifact, while case-only aliases behave differently on Windows.
+    seen_paths: set[str] = set()
+    file_paths: set[str] = set()
+    windows_device_names = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
+    for prefix in ("COM", "LPT"):
+        for digit in "123456789¹²³":
+            windows_device_names.add(f"{prefix}{digit}")
+    for item in archive.infolist():
+        # Reviewed exports contain only regular files and directories.
+        # A Unix link or device entry must never masquerade as image truth.
+        if item.create_system == 3 and stat.S_IFMT(item.external_attr >> 16) not in (
+            0,
+            stat.S_IFREG,
+            stat.S_IFDIR,
+        ):
+            raise ValidationError("Pose training export contains a special archive member")
+        relative = Path(item.filename.replace("\\", "/"))
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValidationError("Pose training export contains an unsafe archive path")
+        # Windows ignores trailing dots and spaces in ordinary file paths.
+        # Reject these aliases before any reviewed image bytes are written.
+        if any(part.rstrip(" .") != part for part in relative.parts):
+            raise ValidationError("Pose training export contains a noncanonical archive path")
+        # NTFS device names, alternate data streams and invalid path
+        # characters must never alter reviewed training artifacts.
+        if any(
+            any(ord(char) < 32 or char in '<>:"|?*' for char in part)
+            or part.split(".", 1)[0].upper() in windows_device_names
+            for part in relative.parts
+        ):
+            raise ValidationError("Pose training export contains a Windows-unsafe archive path")
+        key = "/".join(relative.parts).casefold()
+        if not key or key in seen_paths:
+            raise ValidationError("Pose training export contains a duplicate archive path")
+        seen_paths.add(key)
+        if not item.is_dir():
+            file_paths.add(key)
+
+    # A file cannot also be a parent directory, even when that directory
+    # appears only implicitly in another ZIP entry. Check all paths before
+    # writing any verified training data.
+    for key in seen_paths:
+        components = key.split("/")
+        if any(
+            "/".join(components[:index]) in file_paths for index in range(1, len(components))
+        ):
+            raise ValidationError(
+                "Pose training export contains a file-directory archive collision"
+            )
+
+
+
 def _safe_extract_zip(
     content: bytes,
     destination: Path,
@@ -249,57 +306,7 @@ def _safe_extract_zip(
     """Extract an in-memory pose dataset without allowing path traversal."""
 
     with zipfile.ZipFile(io.BytesIO(content)) as archive:
-        # Preflight every entry before extracting any files. Aliases such as
-        # ./data.yaml and data.yaml otherwise overwrite the same scientific
-        # artifact, while case-only aliases behave differently on Windows.
-        seen_paths: set[str] = set()
-        file_paths: set[str] = set()
-        windows_device_names = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
-        for prefix in ("COM", "LPT"):
-            for digit in "123456789¹²³":
-                windows_device_names.add(f"{prefix}{digit}")
-        for item in archive.infolist():
-            # Reviewed exports contain only regular files and directories.
-            # A Unix link or device entry must never masquerade as image truth.
-            if item.create_system == 3 and stat.S_IFMT(item.external_attr >> 16) not in (
-                0,
-                stat.S_IFREG,
-                stat.S_IFDIR,
-            ):
-                raise ValidationError("Pose training export contains a special archive member")
-            relative = Path(item.filename.replace("\\", "/"))
-            if relative.is_absolute() or ".." in relative.parts:
-                raise ValidationError("Pose training export contains an unsafe archive path")
-            # Windows ignores trailing dots and spaces in ordinary file paths.
-            # Reject these aliases before any reviewed image bytes are written.
-            if any(part.rstrip(" .") != part for part in relative.parts):
-                raise ValidationError("Pose training export contains a noncanonical archive path")
-            # NTFS device names, alternate data streams and invalid path
-            # characters must never alter reviewed training artifacts.
-            if any(
-                any(ord(char) < 32 or char in '<>:"|?*' for char in part)
-                or part.split(".", 1)[0].upper() in windows_device_names
-                for part in relative.parts
-            ):
-                raise ValidationError("Pose training export contains a Windows-unsafe archive path")
-            key = "/".join(relative.parts).casefold()
-            if not key or key in seen_paths:
-                raise ValidationError("Pose training export contains a duplicate archive path")
-            seen_paths.add(key)
-            if not item.is_dir():
-                file_paths.add(key)
-
-        # A file cannot also be a parent directory, even when that directory
-        # appears only implicitly in another ZIP entry. Check all paths before
-        # writing any verified training data.
-        for key in seen_paths:
-            components = key.split("/")
-            if any(
-                "/".join(components[:index]) in file_paths for index in range(1, len(components))
-            ):
-                raise ValidationError(
-                    "Pose training export contains a file-directory archive collision"
-                )
+        _preflight_pose_zip_structure(archive)
 
         # ZIP metadata can be valid even if a reviewed frame has a broken
         # checksum. Verify every member before creating an immutable output
@@ -732,6 +739,9 @@ def materialize_pose_training_exports(
                 zipfile.ZipFile(io.BytesIO(training_content)) as training_archive,
                 zipfile.ZipFile(io.BytesIO(validation_content)) as validation_archive,
             ):
+                # Reject unsafe holdout paths before claiming the training output.
+                # A corrupt or aliased supplementary member must not strand it.
+                _preflight_pose_zip_structure(validation_archive)
                 # CRC-check the complete held-out ZIP before claiming the
                 # immutable training directory. Frame checks alone never read
                 # unrelated members, which might be corrupt.
