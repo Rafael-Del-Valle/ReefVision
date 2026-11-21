@@ -129,6 +129,21 @@ def check_workflow(workflow: str, version: str) -> list[str]:
         ):
             errors.append("Installer exact-head clean checkout must run before bootstrap")
 
+    # A skipped or soft-failed packaging/installation job must not produce
+    # misleading release evidence when unrelated tests are green. Check
+    # actual job-level keys, not mentions inside PowerShell commands.
+    for label, section in (
+        ("Windows installer build", build_job),
+        ("Windows clean-install acceptance", job),
+    ):
+        job_header = section.split("\n    steps:", 1)[0]
+        if re.search(r"(?m)^    (?:if|continue-on-error):", job_header):
+            errors.append(f"{label} must not be conditionally skipped or soft-failed")
+
+    clean_header = job.split("\n    steps:", 1)[0]
+    if not re.search(r"(?m)^    needs: build-windows-installer\s*$", clean_header):
+        errors.append("Windows clean-install acceptance must depend on MSI/CAB build")
+
     required_clean_fragments = (
         "Fresh install, upgrade, launch, persist and uninstall "
         "${{ needs.build-windows-installer.outputs.release-version }} on disposable Windows",
