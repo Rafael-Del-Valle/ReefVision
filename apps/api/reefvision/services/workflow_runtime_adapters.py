@@ -37,6 +37,7 @@ from reefvision.services.workflow_bioacoustics import execute_audio_report
 from reefvision.services.workflow_coral_growth import execute_coral_growth
 from reefvision.services.workflow_coral_skeleton import execute_coral_skeleton
 from reefvision.services.workflow_depth import create_depth_map_artifacts
+from reefvision.services.workflow_domain_shift_v18 import execute_domain_shift
 from reefvision.services.workflow_ecology_analysis import execute_verified_ecology_analysis
 from reefvision.services.workflow_ecology_event_summary import execute_event_summary
 from reefvision.services.workflow_field_capture import execute_field_capture_reconcile
@@ -81,6 +82,7 @@ RUNTIME_ADAPTER_NODE_TYPES = {
     "paired_growth_contrast",
     "reviewed_study_design",
     "paired_model_comparison",
+    "domain_shift_report",
     "research_reproducibility_package",
     "ecology_event_summary",
     "research_publication_figure",
@@ -1186,6 +1188,7 @@ _ADAPTERS = {
     "paired_growth_contrast": execute_paired_growth_contrast,
     "reviewed_study_design": execute_reviewed_study_design,
     "paired_model_comparison": execute_paired_models,
+    "domain_shift_report": execute_domain_shift,
     "research_reproducibility_package": execute_reproducibility,
     "field_capture_reconcile": execute_field_capture_reconcile,
     "acquisition_source_capture": execute_acquisition_source,

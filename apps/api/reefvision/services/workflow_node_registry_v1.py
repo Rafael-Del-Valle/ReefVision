@@ -15,6 +15,7 @@ from reefvision.services.workflow_bioacoustics import audio_report_node
 from reefvision.services.workflow_coral_growth import coral_growth_node
 from reefvision.services.workflow_coral_skeleton import coral_skeleton_node
 from reefvision.services.workflow_depth_3d import register_video_depth_3d_adapter
+from reefvision.services.workflow_domain_shift_v18 import domain_shift_node
 from reefvision.services.workflow_ecology_analysis import verified_ecology_analysis_node
 from reefvision.services.workflow_ecology_event_summary import event_summary_workflow_node
 from reefvision.services.workflow_field_capture import field_capture_reconcile_node
@@ -950,6 +951,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
     registry["paired_growth_contrast"] = paired_growth_contrast_node()
     registry["reviewed_study_design"] = reviewed_study_design_node()
     registry["paired_model_comparison"] = paired_models_node()
+    registry["domain_shift_report"] = domain_shift_node()
     registry["research_reproducibility_package"] = reproducibility_node()
     registry["field_capture_reconcile"] = field_capture_reconcile_node()
     registry["acquisition_source_capture"] = acquisition_source_node()

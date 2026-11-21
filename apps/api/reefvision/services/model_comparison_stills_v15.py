@@ -35,11 +35,17 @@ from reefvision.domain.annotation_comparison import (
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.jobs.inference import process_inference_job
 from reefvision.repositories.jobs import paired_owner_active
+from reefvision.schemas.image_adjustments_v18 import ImageAdjustmentPin
 from reefvision.schemas.paired_growth_contrast import Digest
 from reefvision.schemas.static_comparison import (
     ReferenceAnnotation,
     StaticLineage,
     StaticReferenceImage,
+)
+from reefvision.services.image_adjustments_v18 import (
+    ImageAdjustmentService,
+    adjusted_inference_binding,
+    adjusted_input_provenance,
 )
 from reefvision.services.segmentation_scoring import _verified_runs
 from reefvision.services.static_comparison import _model_mapping, reference_image
@@ -89,6 +95,7 @@ class ModelOutputs:
     by_image: dict[str, list[PredictionProposal]]
     invalid_images: set[str]
     digest: str
+    child_job_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -103,6 +110,10 @@ class RecordedImageRuns:
 
 class UnverifiedLegacyInference(ValidationError):
     """An older receipt cannot be linked to a unique pair of frozen worker outputs."""
+
+
+class ComparisonLineageOverlap(ValidationError):
+    """Known training or model selection exposure invalidates a holdout."""
 
 
 def _dataset_items(session: Session, version: DatasetVersion) -> list[DatasetVersionItem]:
@@ -251,7 +262,7 @@ def _model(
         session, registration, references, selection_jobs, training_task=registration.task
     )
     if lineage.status == "overlap":
-        raise ValidationError(
+        raise ComparisonLineageOverlap(
             f"Known holdout overlap for {registration.display_name}; choose disjoint evidence"
         )
     return ModelEvidence(
@@ -432,6 +443,7 @@ def _run_side(
     owner_run_id: str | None = None,
     reference_sha256: str,
     legacy_digest: bool = False,
+    adjustment: ImageAdjustmentPin | None = None,
 ) -> ModelOutputs:
     choice = model.choice.model_dump(mode="json")
     request = {key: value for key, value in choice.items() if key != "checkpoint_sha256"}
@@ -441,6 +453,23 @@ def _run_side(
         "image_ids": image_ids,
         "evaluation_only": True,
     }
+    expected_input = None
+    if adjustment is not None:
+        assert settings is not None
+        if len(image_ids) != 1:
+            raise ValidationError("Each adjusted evaluation job requires one original image")
+        checkpoint = session.get(ModelRegistration, str(model.choice.model_id))
+        if checkpoint is None:
+            raise NotFoundError("The reviewed adjustment evaluation model is unavailable")
+        expected_request.update(
+            adjusted_inference_binding(
+                session, settings, project_id, image_ids, adjustment, checkpoint
+            )
+        )
+        record = ImageAdjustmentService(session, settings).get(
+            image_ids[0], str(adjustment.recipe_id)
+        )
+        expected_input = adjusted_input_provenance(record)
     if recorded_job_id is not None:
         job_id = recorded_job_id
     else:
@@ -478,6 +507,8 @@ def _run_side(
         )
         or sorted(finished.request_json.get("image_ids", [])) != sorted(image_ids)
         or result.get("proposal_count") != len(rows)
+        or ("image_adjustment" in finished.request_json and adjustment is None)
+        or result.get("model_input") != expected_input
     ):
         raise ValidationError("Pinned inference output is incomplete")
     archived = original_ids or {}
@@ -513,6 +544,7 @@ def _run_side(
             or provenance.get("runtime_selection_id") != str(model.choice.runtime_selection_id)
             or provenance.get("runtime_selection_sha256") != model.choice.runtime_selection_sha256
             or provenance.get("model_task") != model.task
+            or provenance.get("model_input") != expected_input
         ):
             raise ValidationError("Inference output differs from the reviewed comparison pins")
         mapped = model.mapping.get(row.predicted_label)
@@ -554,8 +586,41 @@ def _run_side(
                 "invalid_images": sorted(
                     archived.get(identifier, identifier) for identifier in invalid
                 ),
+                **({"image_adjustment": adjustment.model_dump(mode="json")} if adjustment else {}),
             }
         ),
+    )
+
+
+def _run_adjusted_side(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    model: ModelEvidence,
+    targets: list[str],
+    pins: Mapping[str, ImageAdjustmentPin],
+    owner_run_id: str | None,
+    reference_sha256: str,
+) -> ModelOutputs:
+    outcomes = [
+        _run_side(
+            session,
+            settings,
+            project_id,
+            model,
+            [image_id],
+            owner_run_id=owner_run_id,
+            reference_sha256=reference_sha256,
+            adjustment=pins[image_id],
+        )
+        for image_id in targets
+    ]
+    return ModelOutputs(
+        outcomes[0].job_id,
+        {key: rows for outcome in outcomes for key, rows in outcome.by_image.items()},
+        set().union(*(item.invalid_images for item in outcomes)),
+        canonical_json_sha256({"adjusted_scores": [item.digest for item in outcomes]}),
+        tuple(item.job_id for item in outcomes),
     )
 
 
@@ -744,6 +809,7 @@ def compare_image_models(
     *,
     recorded: RecordedImageRuns | None = None,
     owner_run_id: str | None = None,
+    adjusted_inputs: Mapping[str, ImageAdjustmentPin] | None = None,
 ) -> dict[str, Any]:
     _require_active_owner(session, project_id, owner_run_id)
     if (
@@ -823,7 +889,7 @@ def compare_image_models(
                 and item.group_key.strip().casefold() in holdout_groups
                 for item in frozen_datasets[identifier]
             ):
-                raise ValidationError(
+                raise ComparisonLineageOverlap(
                     "Recorded training or model selection has sampling group overlap"
                 )
     truth = [
@@ -839,9 +905,33 @@ def compare_image_models(
             "The reviewed test split has no usable positive reference for this task"
         )
     targets = [image.item.image_id for image in truth if image.exclusion is None]
+    if adjusted_inputs is not None:
+        if recorded is not None or settings is None or set(adjusted_inputs) != set(targets):
+            raise ValidationError("Select a pinned adjustment for every usable frozen test image")
+        service = ImageAdjustmentService(session, settings)
+        parameters = {
+            canonical_json_sha256(
+                service.verified_input(project_id, image_id, pin)[1].receipt.parameters.model_dump()
+            )
+            for image_id, pin in adjusted_inputs.items()
+        }
+        if len(parameters) != 1:
+            raise ValidationError("Both acquisition domains must use the same adjustment settings")
     outputs = []
     for index, model in enumerate((left, right)):
-        if recorded is not None and recorded.job_ids is None:
+        if adjusted_inputs is not None:
+            assert settings is not None
+            outcome = _run_adjusted_side(
+                session,
+                settings,
+                project_id,
+                model,
+                targets,
+                adjusted_inputs,
+                owner_run_id,
+                reference_sha256,
+            )
+        elif recorded is not None and recorded.job_ids is None:
             if recorded.legacy_digests is None:
                 raise UnverifiedLegacyInference("Both archived inference jobs are required")
             outcome = _resolve_legacy_side(
@@ -920,7 +1010,10 @@ def compare_image_models(
     return {
         "reference_id": dataset_id,
         "reference_sha256": reference_sha256,
-        "inference_job_ids": [first.job_id, second.job_id],
+        "inference_job_ids": [
+            *(first.child_job_ids or (first.job_id,)),
+            *(second.child_job_ids or (second.job_id,)),
+        ],
         "source_sha256": [
             left.choice.checkpoint_sha256,
             right.choice.checkpoint_sha256,
