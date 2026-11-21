@@ -309,9 +309,9 @@ def test_real_camera_jpeg_fractional_exposure_preserves_qc_and_source(
     assert inspected.capture_timestamp.isoformat() == expected_utc
     assert inspected.metadata["exif"]["SubsecTimeOriginal"] == subseconds
     if precision_warning:
-        assert "exceeds microsecond precision" in inspected.metadata[
-            "capture_time_precision_warning"
-        ]
+        assert (
+            "exceeds microsecond precision" in inspected.metadata["capture_time_precision_warning"]
+        )
     else:
         assert "capture_time_precision_warning" not in inspected.metadata
     assert inspected.sha256 == digest
