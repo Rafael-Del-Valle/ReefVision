@@ -1212,6 +1212,50 @@ def test_pose_materialization_rejects_aliased_archive_entries(
     assert (destination / "images" / "train" / "frame_00000001.png").read_bytes() == b"reviewed"
 
 
+def test_pose_materialization_rejects_ambiguous_frozen_landmark_names(
+    tmp_path: Path,
+) -> None:
+    # The exported external names must uniquely identify each anatomical point.
+    # An ambiguous saved header must fail before the immutable run is claimed.
+    def export_with_second_name(second_name: bytes) -> bytes:
+        stream = io.BytesIO()
+        with (
+            zipfile.ZipFile(io.BytesIO(_pose_export_zip(b"reviewed-frame"))) as original,
+            zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as rewritten,
+        ):
+            for member in original.namelist():
+                content = original.read(member)
+                if member == "data.yaml":
+                    content = content.replace(b"kpt_shape: [1, 3]", b"kpt_shape: [2, 3]")
+                    content = content.replace(
+                        b'  - "keypoint"\\n',
+                        b'  - "keypoint"\\n  - "' + second_name + b'"\\n',
+                    )
+                elif member.startswith("labels/train/"):
+                    content = content.replace(
+                        b"0.5 0.5 2\\n", b"0.5 0.5 2 0.25 0.75 2\\n"
+                    )
+                rewritten.writestr(member, content)
+        return stream.getvalue()
+
+    destination = tmp_path / "frozen-pose-names"
+    with pytest.raises(ValidationError, match="noncanonical class/keypoint metadata"):
+        materialize_pose_training_exports(
+            training_content=export_with_second_name(b"keypoint"),
+            validation_content=None,
+            destination=destination,
+        )
+    assert not destination.exists()
+
+    corrected = materialize_pose_training_exports(
+        training_content=export_with_second_name(b"other_keypoint"),
+        validation_content=None,
+        destination=destination,
+    )
+    assert corrected["training_image_count"] == 1
+    assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed-frame"
+
+
 def test_pose_materialization_missing_header_allows_corrected_frozen_export(
     tmp_path: Path,
 ) -> None:
