@@ -43,6 +43,7 @@ from reefvision.ml.dependencies import (
     require_provider_ready,
 )
 from reefvision.ml.providers import resolve_torch_device
+from reefvision.repositories.jobs import JobRepository
 from reefvision.services.pose_training_exports import (
     EXPORT_MANIFEST_FILENAME,
     PoseTrainingExportService,
@@ -338,11 +339,7 @@ def _process_ultralytics_pose_training_job(
     run_id: str | None = None
 
     with factory() as session:
-        job = session.get(
-            Job,
-            job_id,
-        )
-
+        job = JobRepository(session).get_for_update(job_id)
         if job is None or job.job_type != "training" or job.status != "queued":
             return False
 

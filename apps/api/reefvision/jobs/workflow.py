@@ -16,6 +16,7 @@ from reefvision.db.models import (
     WorkflowRun,
 )
 from reefvision.domain.errors import WorkflowExecutionCancelled
+from reefvision.repositories.jobs import JobRepository
 from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPlanInputBinding
 from reefvision.services.workflow_execution import WorkflowExecutionService
 from reefvision.services.workflow_graphs import WorkflowGraphService
@@ -423,10 +424,9 @@ def process_workflow_run_job(
                 WorkflowRun,
                 run_id,
             )
-            job = session.get(
-                Job,
-                job_id,
-            )
+            job = JobRepository(session).get_for_update(job_id)
+            if job is not None and job.status in {"cancel_requested", "cancelled"}:
+                raise WorkflowExecutionCancelled("Workflow was cancelled before completion")
             now = _now()
 
             if run is None:

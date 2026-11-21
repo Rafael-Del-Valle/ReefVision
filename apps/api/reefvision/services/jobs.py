@@ -66,20 +66,19 @@ class JobService:
         return self.session.scalar(select(WorkflowRun).where(WorkflowRun.job_id == job.id))
 
     def _workflow_child_jobs(self, run: WorkflowRun, parent_job_id: str) -> list[Job]:
-        candidates = list(
+        return list(
             self.session.scalars(
-                select(Job).where(
+                select(Job)
+                .where(
                     Job.project_id == run.project_id,
                     Job.id != parent_job_id,
+                    Job.request_json["workflow_run_id"].as_string() == run.id,
                     Job.status.in_(("queued", "running", "cancel_requested")),
                 )
+                .with_for_update()
+                .execution_options(populate_existing=True)
             )
         )
-        return [
-            child
-            for child in candidates
-            if str((child.request_json or {}).get("workflow_run_id") or "") == run.id
-        ]
 
     def _cancel_queued_pose_identity_run(self, job: Job, *, now: datetime) -> None:
         if job.job_type != "pose_identity_tracking":
@@ -260,7 +259,9 @@ class JobService:
         return job
 
     def cancel(self, job_id: str) -> Job:
-        job = self.get(job_id)
+        job = self.jobs.get_for_update(job_id)
+        if job is None:
+            raise NotFoundError("Job not found")
         quality_control_run = (
             self.quality_control.get_run_by_job_id(job.id) if job.job_type == "qc" else None
         )

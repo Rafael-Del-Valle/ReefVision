@@ -35,6 +35,7 @@ from reefvision.ml.reefpose.training import (
     ReefPoseTrainingConfig,
     ReefPoseTrainingResult,
 )
+from reefvision.repositories.jobs import JobRepository
 from reefvision.services.pose_training_exports import (
     PoseTrainingExportService,
     verify_pose_export_frame_separation,
@@ -201,7 +202,7 @@ def process_reefpose_training_job(
     work_root: Path | None = None
     try:
         with factory() as session:
-            job = session.get(Job, job_id)
+            job = JobRepository(session).get_for_update(job_id)
             if job is None or job.job_type != "training" or job.status != "queued":
                 return False
             run_id = str(job.request_json.get("training_run_id") or "")

@@ -20,6 +20,7 @@ from reefvision.db.models import (
     Project,
     TrainingRun,
     WorkflowArtifact,
+    WorkflowRun,
 )
 from reefvision.domain.errors import ValidationError, WorkflowExecutionCancelled
 from reefvision.jobs.pose_training import (
@@ -30,6 +31,7 @@ from reefvision.ml.reefpose.constants import REEFPOSE_PROVIDER_VERSION
 from reefvision.ml.ultralytics_registry import (
     validate_ultralytics_training_configuration,
 )
+from reefvision.repositories.jobs import JobRepository
 from reefvision.services import (
     workflow_runtime_adapters as runtime_adapters,
 )
@@ -698,6 +700,15 @@ def create_pose_workflow_training_result(
             "Requested pose training disk budget exceeds the available disk space "
             "in the ReefVision data directory"
         )
+
+    # Publish the training and job together while the parent's Cancel action is serialized.
+    parent_job_id = session.scalar(
+        select(WorkflowRun.job_id).where(WorkflowRun.id == workflow_run_id)
+    )
+    if parent_job_id is not None:
+        parent_job = JobRepository(session).get_for_update(parent_job_id)
+        if parent_job is not None and parent_job.status in {"cancel_requested", "cancelled"}:
+            raise WorkflowExecutionCancelled("Workflow was cancelled before pose training started")
 
     run = TrainingRun(
         project_id=project_id,
