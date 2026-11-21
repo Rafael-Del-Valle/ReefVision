@@ -544,10 +544,13 @@ def measure_point_cloud_preview(
     sampling_gap_nominal_underflow = False
     sampling_gap_interval_unresolved = False
     for axis, label in enumerate(("x", "y", "z")):
-        levels = sorted({vertex[axis] for vertex in vertices})
+        level_source_rows = Counter(vertex[axis] for vertex in vertices)
+        level_distinct_loci = Counter(vertex[axis] for vertex in coordinate_multiplicities)
+        levels = sorted(level_source_rows)
         gap_details: dict[str, Any] = {
             "distinct_source_coordinate_levels": len(levels),
             "source_endpoint_values": None,
+            "gap_endpoint_support": None,
             "largest_adjacent_source_gap_units": None,
             "fraction_of_source_axis_span": None,
             "calibrated_gap_m": None,
@@ -563,6 +566,18 @@ def measure_point_cloud_preview(
             right = levels[largest_index + 1]
             gap = right - left
             gap_details["source_endpoint_values"] = [left, right]
+            # Count acquisition rows separately from independent XYZ loci at
+            # each boundary. Neither is proof of missing coral tissue.
+            gap_details["gap_endpoint_support"] = {
+                "lower": {
+                    "source_rows": level_source_rows[left],
+                    "distinct_xyz_loci": level_distinct_loci[left],
+                },
+                "upper": {
+                    "source_rows": level_source_rows[right],
+                    "distinct_xyz_loci": level_distinct_loci[right],
+                },
+            }
             gap_details["largest_adjacent_source_gap_units"] = gap
             gap_details["fraction_of_source_axis_span"] = gap / (levels[-1] - levels[0])
             gap_m = gap * scale
