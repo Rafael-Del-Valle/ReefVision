@@ -20,7 +20,12 @@ from reefvision import __version__
 from reefvision.api.router import api_router
 from reefvision.config import Settings, get_settings
 from reefvision.db.session import create_database_engine, create_session_factory
-from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
+from reefvision.domain.errors import (
+    ConflictError,
+    NotFoundError,
+    StorageCapacityError,
+    ValidationError,
+)
 from reefvision.jobs.worker import thumbnail_worker_loop
 from reefvision.jobs.workflow_schedules import workflow_schedule_loop
 from reefvision.logging_utils import configure_rotating_json_logging, default_api_log_path
@@ -171,6 +176,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             extra={"event_id": "api_conflict", "component": "api", "error_code": "conflict"},
         )
         return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(StorageCapacityError)
+    async def handle_storage_capacity(_: Request, exc: StorageCapacityError) -> JSONResponse:
+        LOGGER.warning(
+            "Insufficient space for the request",
+            extra={
+                "event_id": "api_storage_full",
+                "component": "api",
+                "error_code": "storage_full",
+            },
+        )
+        return JSONResponse(
+            status_code=507,
+            content={
+                "code": "storage_full",
+                "detail": "ReefVision storage is full. Free space and retry this operation.",
+            },
+        )
 
     @app.exception_handler(ValidationError)
     async def handle_validation(_: Request, exc: ValidationError) -> JSONResponse:
