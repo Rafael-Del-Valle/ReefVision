@@ -28,3 +28,13 @@ def test_clean_install_harness_refuses_unmarked_destructive_use() -> None:
     assert ".reefvision-clean-install-acceptance" in source
     assert "Refusing to modify an existing ReefVision installation" in source
     assert "Administrator privileges are required" in source
+
+def test_phase11c_refuses_ambiguous_native_acceptance_report_selection() -> None:
+    wrapper = _script("phase11c-acceptance.ps1")
+    helper = _script("lib/phase11c-track16.ps1")
+
+    assert "Assert-ReefVisionPhase11CUniqueNewReport" in helper
+    assert "-PriorDirectories $ExistingReports -CurrentDirectories $CurrentReports" in wrapper
+    assert "Select-Object -ExpandProperty FullName" in wrapper
+    assert "Sort-Object LastWriteTimeUtc -Descending" not in wrapper
+    assert "Select-Object -First 1" not in wrapper.split("$CurrentReports = @(", 1)[1].split("$ReportPath", 1)[0]

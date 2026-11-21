@@ -168,15 +168,12 @@ if ($LASTEXITCODE -ne 0) {
     throw "Windows clean-install acceptance failed with exit code $LASTEXITCODE."
 }
 
-$Reports = @(
+$CurrentReports = @(
     Get-ChildItem -LiteralPath (Join-Path $Repo ".artifacts") -Directory -Filter "windows-clean-acceptance-*" -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTimeUtc -Descending
+        Select-Object -ExpandProperty FullName
 )
-$NewReportDirectory = $Reports | Where-Object { $_.FullName -notin $ExistingReports } | Select-Object -First 1
-if ($null -eq $NewReportDirectory) {
-    throw "Could not identify the new clean-install acceptance evidence directory."
-}
-$ReportPath = Join-Path $NewReportDirectory.FullName "report.json"
+$NewReportDirectory = Assert-ReefVisionPhase11CUniqueNewReport -PriorDirectories $ExistingReports -CurrentDirectories $CurrentReports
+$ReportPath = Join-Path $NewReportDirectory "report.json"
 if (-not (Test-Path -LiteralPath $ReportPath -PathType Leaf)) {
     throw "Clean-install evidence report is missing: $ReportPath"
 }

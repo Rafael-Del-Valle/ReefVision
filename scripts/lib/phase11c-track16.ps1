@@ -32,3 +32,23 @@ function Assert-ReefVisionPhase11CBuildSource {
         throw 'Track D 1.6 installed acceptance requires an MSI built from the exact checked-out commit.'
     }
 }
+
+# A child harness can run beside other isolated acceptance runs. Never
+# attribute its evidence by directory modification time: another run may
+# finish later, yielding a false PASS for this invocation.
+function Assert-ReefVisionPhase11CUniqueNewReport {
+    param(
+        [AllowEmptyCollection()][string[]]$PriorDirectories = @(),
+        [AllowEmptyCollection()][string[]]$CurrentDirectories = @()
+    )
+
+    $new = @(
+        $CurrentDirectories |
+            Where-Object { $_ -notin $PriorDirectories } |
+            Select-Object -Unique
+    )
+    if ($new.Count -ne 1) {
+        throw "Phase 11C expected exactly one new acceptance evidence directory; found $($new.Count). Cannot attribute concurrent evidence."
+    }
+    return [string]$new[0]
+}
