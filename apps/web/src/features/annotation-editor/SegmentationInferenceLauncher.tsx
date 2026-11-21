@@ -21,21 +21,11 @@ interface EditorTarget {
 }
 
 function currentEditorTarget(): EditorTarget | null {
-  const canvas = document.querySelector<SVGSVGElement>("svg.annotation-canvas");
-  const sourceImage =
-    canvas?.querySelector<SVGImageElement>(":scope > g > image");
-  const href =
-    sourceImage?.getAttribute("href") ??
-    sourceImage?.getAttribute("xlink:href") ??
-    "";
-  const match = href.match(/\/images\/([^/]+)\/(?:content|thumbnail)(?:\?|$)/);
   const container = document.querySelector<HTMLElement>(
-    ".annotation-editor-topbar .annotation-editor-actions",
+    ".annotation-editor-actions[data-segmentation-image-id]",
   );
-  if (!match?.[1] || !container) {
-    return null;
-  }
-  return { imageId: decodeURIComponent(match[1]), container };
+  const imageId = container?.dataset.segmentationImageId;
+  return container && imageId ? { imageId, container } : null;
 }
 
 async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -65,11 +55,18 @@ function modelKind(model: ModelRegistration): string {
 
 export function SegmentationInferenceLauncher() {
   const [target, setTarget] = useState<EditorTarget | null>(null);
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const [loadedFor, setLoadedFor] = useState<{
+    imageId: string;
+    projectId: string;
+  } | null>(null);
   const [models, setModels] = useState<ModelRegistration[]>([]);
   const [modelId, setModelId] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [launching, setLaunching] = useState(false);
+  const projectId =
+    target && loadedFor?.imageId === target.imageId
+      ? loadedFor.projectId
+      : null;
 
   const selectedModel = useMemo(
     () => models.find((model) => model.id === modelId) ?? null,
@@ -98,7 +95,7 @@ export function SegmentationInferenceLauncher() {
 
   useEffect(() => {
     if (!target) {
-      setProjectId(null);
+      setLoadedFor(null);
       setModels([]);
       setModelId("");
       return;
@@ -121,7 +118,8 @@ export function SegmentationInferenceLauncher() {
             (model.purpose === "semantic_segmenter" &&
               model.task === "semantic_segment"),
         );
-        setProjectId(nextProjectId);
+        if (controller.signal.aborted) return;
+        setLoadedFor({ imageId: target.imageId, projectId: nextProjectId });
         setModels(nextModels);
         setModelId((current) =>
           nextModels.some((model) => model.id === current)
@@ -145,6 +143,10 @@ export function SegmentationInferenceLauncher() {
 
   const launch = async () => {
     if (!target || !projectId || !modelId) return;
+    const stillActive = () =>
+      target.container.isConnected &&
+      target.container.dataset.segmentationImageId === target.imageId;
+    if (!stillActive()) return;
     setLaunching(true);
     setStatus(null);
     try {
@@ -160,15 +162,19 @@ export function SegmentationInferenceLauncher() {
         },
       );
       const kind = selectedModel ? modelKind(selectedModel).toLowerCase() : "";
-      setStatus(
-        `${kind ? `${kind} ` : ""}segmentation queued; mask proposals will appear on this image.`,
-      );
+      if (stillActive()) {
+        setStatus(
+          `${kind ? `${kind} ` : ""}segmentation queued; mask proposals will appear on this image.`,
+        );
+      }
     } catch (error) {
-      setStatus(
-        error instanceof Error
-          ? error.message
-          : "Segmentation inference could not be queued.",
-      );
+      if (stillActive()) {
+        setStatus(
+          error instanceof Error
+            ? error.message
+            : "Segmentation inference could not be queued.",
+        );
+      }
     } finally {
       setLaunching(false);
     }
@@ -182,7 +188,7 @@ export function SegmentationInferenceLauncher() {
         aria-label="Segmentation model"
         value={modelId}
         onChange={(event) => setModelId(event.target.value)}
-        disabled={models.length === 0 || launching}
+        disabled={!projectId || models.length === 0 || launching}
         title="Select a trained instance or semantic segmentation model"
       >
         {models.length > 0 ? (
@@ -198,7 +204,7 @@ export function SegmentationInferenceLauncher() {
       <button
         type="button"
         className="secondary"
-        disabled={!modelId || launching}
+        disabled={!projectId || !modelId || launching}
         onClick={() => void launch()}
         title={status ?? "Run segmentation on the open image"}
       >

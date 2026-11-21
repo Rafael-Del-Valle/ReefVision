@@ -2809,7 +2809,10 @@ export function AnnotationEditor({
             </div>
           )}
         </div>
-        <div className="annotation-editor-actions">
+        <div
+          className="annotation-editor-actions"
+          data-segmentation-image-id={image.id}
+        >
           <button
             type="button"
             className="secondary"
@@ -4103,36 +4106,35 @@ export function AnnotationEditor({
               acceptance.
             </p>
           )}
-          {fullImageLoading && (
-            <div className="rv-media-load-status" role="status">
-              <p>Loading full-resolution image...</p>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => setFullImageRetry((value) => value + 1)}
-              >
-                Retry loading full-resolution image
-              </button>
-            </div>
-          )}
-          {fullImageFailed && (
-            <div className="rv-media-load-error" role="alert">
-              <strong>Full-resolution image could not load</strong>
-              <p>
-                {image.thumbnail_path
-                  ? "A thumbnail preview is shown. Do not verify new annotations against this preview."
-                  : "No thumbnail is available. The image cannot be reliably reviewed until the full-resolution file loads."}
-              </p>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => setFullImageRetry((value) => value + 1)}
-              >
-                Retry full-resolution image
-              </button>
-            </div>
-          )}
           <div className="annotation-canvas-frame" ref={viewportRef}>
+            {(fullImageLoading || fullImageFailed) && (
+              <div
+                className="annotation-media-state"
+                role={fullImageLoading ? "status" : "alert"}
+              >
+                {fullImageLoading ? (
+                  <p>Loading full-resolution image...</p>
+                ) : (
+                  <>
+                    <strong>Full-resolution image could not load</strong>
+                    <p>
+                      {image.thumbnail_path
+                        ? "A thumbnail preview is shown. Do not verify new annotations against this preview."
+                        : "No thumbnail is available. The image cannot be reliably reviewed until the full-resolution file loads."}
+                    </p>
+                  </>
+                )}
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setFullImageRetry((value) => value + 1)}
+                >
+                  {fullImageLoading
+                    ? "Retry loading full-resolution image"
+                    : "Retry full-resolution image"}
+                </button>
+              </div>
+            )}
             {learningOpen && (
               <ImprovePredictionsPanel
                 projectId={project.id}

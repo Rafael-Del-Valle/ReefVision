@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T00:54:14Z`
+Updated: `2026-11-21T01:59:40Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -669,7 +669,7 @@ Acceptance checks:
 Evidence:
 
 - `source`: Refinement, boundary context, identity/revision staleness, and review tests. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/87` (`rv13-refine-src`)
-- `browser`: none recorded
+- `browser`: In the corrected 1.8 local MSI's ordinary extracted WebView2, disconnect, selection change and reconnect cancelled only the clicked queued identity job. The raw reopened database preserved both job/run outcomes. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv13-temporal-refinement-review-native-identity-cancel-9cde9e6e7`)
 - `windows_installed`: Installed 1.2 to 1.3 temporal workflow acceptance. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/87` (`rv13-refine-win`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -766,6 +766,7 @@ Evidence:
 - `source`: The signed volume matched 448 independently evaluated tetrahedral permutations and a bounded 3,996-face bipyramid. The source fixture covers four vertex origins, both windings, exact planar zero, calibrated recovery of a positive source underflow and a true overflow. — `docs/validation/mesh-volume-8821ed9a1.json` (`rv14-volume-winding-rational-8821`)
 - `source`: The four finite-volume cancellation examples from hourly #79 at e9e8afbd4 passed on the existing exact-sum candidate. All 79 standalone, arithmetic, topology and saved-workflow controls passed on source 93c5faba0. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv14-geometric-measurements-cancelled-shell-volume-bdcec01e3`)
 - `source`: The three additional translated or reflected XY, YZ and XZ frame cases from hourly #79 passed unchanged on the 542254b8a candidate, including standalone and saved area measurements. Six related checks passed. — `docs/validation/reviewed-operations-dd3c7207e.json` (`rv14-geometric-measurements-axis-frames-dd3c7207e`)
+- `source`: Eight regression cases from the current spatial donor passed on the 1.8 product, including calibrated oblique triangles, normal project measurement and saved replay. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv14-eight-oblique-3654a781a-on-9cde9e6e7`)
 - `browser`: Workflow Builder exposes a project-owned original picker, scale, calibration evidence, uncertainty, specimen/observation/frame context, and an explicit warning that geometric routes are not anatomical branch lengths. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-geometric-guided-ui`)
 - `browser`: The ordinary source desktop imported all three generated OBJs, exercised four calibrated previews, reopened both saved graphs, repeated each and downloaded the Exchange package. All three originals and six typed artifacts verified against the source-browser receipt with SHA-256 c46681c4df9075abb7bbdb17c228b05107fce72174eb236c16255428542ef388. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv14-geometry-project-replay-1d3942662`)
 - `browser`: From the project's 3D assets, the researcher imported the same OBJ, measured both windings, supplied scale uncertainty, reopened the graph, ran it twice and downloaded the project. Both measurements now match the exact volume, the planar control withholds volume, and the exports preserve the three originals and six saved artifacts. — `docs/validation/mesh-volume-8821ed9a1.json` (`rv14-volume-winding-guided-8821`)
@@ -810,6 +811,7 @@ Evidence:
 - `windows_installed`: The 1.5 MSI passed clean installation, upgrades from published 1.0.3 and validated 1.4 and 1.3, and both historical 1.4 draft schema fixtures. A separately restored verified backup reopened in the older application. A generated two-project fixture on the physical host preserved both checkpoints and all seven project files. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44722744547` (`rv14-windows-lineage-3c8e2d070`)
 - `windows_installed`: The 9645531ea local MSI sidecar restored the verified 3c8e2d070 backup using the normal Backup API. All 312 files matched. Eight reopened projects retained 41 data fingerprints, 52 images, two videos and five available registered checkpoints. SQLite remained byte-identical, SHA-256 1819e2e76f3735c51adb34498475fea101908e199425dc8e61db8fd630f95d61. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv14-restore-eight-projects-9645531ea`)
 - `windows_installed`: Two historical revisions independently recorded 0038. The 1.5 package preserved the generated 68 degrees Fahrenheit observation, original uncertainty, normalized units and calibration from science commit e1cd11d38. It refused QC revision d4dc3a3aa before opening an API port and preserved all three audit events and the original database bytes. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv14-historical-science-qc-controls-3c8e2d070`)
+- `windows_installed`: The actual registered cached 1.7 installation upgraded offline to the hosted 1.8 MSI, preserving its reviewed annotation. Seven recovered files rehashed, the original 1.7 reader reopened on the backup, and the offline verifier sampled the ordinary identity 648 times and SYSTEM 651 times. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv14-lineage-upgrade-offline-restore-542254b8a`)
 - `physical_hardware`: The locally built 54756d0cf MSI on Windows 11 with long paths disabled restored 398 and 400 files from consecutive backups and retained a 286-character path and its original SHA-256. An earlier archive restored all 794 members, including its 397 nested recovery members. Local MSI SHA-256 af597ff725585c098957c47c25989e6c0fbb06225d0a17cfdd4ad01ac0dfdfca. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/97` (`rv14-restore-long-cycle-54756d0cf`)
 - `physical_hardware`: On the b846f57e9 MSI-extracted Windows sidecar, stopping the worker with 31 staged files left the destination unpublished. Restart resumed the same job, verified all 395 files and 107,232,142 bytes, removed its stage and preserved a separately owned stage. A second interrupted job with a persisted cancellation finished cancelled with no published target. Local MSI SHA-256 ac85ed3b5168e47405a5ac3af6342e4e47cf3c908d7e6fd573529ced26a4af4b. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/97` (`rv14-packaged-restore-replay-b846f57e9`)
 - `physical_hardware`: The original 1.5 MSI restored 398 then 400 files in two physical desktop cycles. An independently interrupted 395-file restore resumed the same job, matched all file hashes, and preserved its original archive and unrelated staging data. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/97` (`rv14-restore-original-msi-restart-b846f57e9`)
@@ -1018,6 +1020,7 @@ Evidence:
 - `physical_hardware`: Packaged CUDA on the physical RTX 3090. Direct inference and two saved runs agreed on 9 proposals, with SHA-256 4428cc1865bc9b57380597ea920b021630cd0640dbca579c5db107d58b31e812. Official MSI SHA-256 c6e92040617eb055c4ee62afcca86af709ebe73d02602165d474e1259582e05e. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv15-model-catalog-runtime-physical-3c8e2d070`)
 - `physical_hardware`: The original installer payload opened Models on the physical RTX 3090. A reviewed locally trained detector completed direct inference and two saved graph runs, each with nine matched proposals. Both saved digests were b0dc4cea1b7b7cfaab2329547230f56107a9ee2c8224f79ff37c508730f52f48. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/97` (`rv15-runtime-original-msi-rtx-b846f57e9`)
 - `physical_hardware`: In the packaged Workflow Builder two saved CPU runs used the reviewed checkpoint and only the two frozen validation images, excluded four training images and returned the same 15 proposals with independent IDs. — `docs/validation/restored-projects-3a9ce1622.json` (`rv15-frozen-detector-runtime-3a9`)
+- `physical_hardware`: The corrected locally manufactured 1.8 MSI's extracted WebView2 on RTX 3090 generated nine detector proposals on one source image. Its two saved runs each processed six images and 54 proposals using the same reviewed CUDA selection. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv15-model-catalog-runtime-local-reviewed-cuda-9cde9e6e7`)
 - `representative_data`: none recorded
 
 ### rv15-model-comparison: Unified detector, mask, pose, tracking, and event comparison
@@ -1133,6 +1136,7 @@ Evidence:
 - `browser`: Classes retained the frozen manifest and exported YOLO mapping after a reviewed reassignment and reopen. Polygon and image-level references prevented deletion. — `docs/validation/research-workflows-1-6.json` (`rv16-class-frozen-export`)
 - `browser`: At reviewed 1.6 source 044e8e2de, editing the destination class withdrew a previously enabled reassignment. The Classes workspace required another preview before confirmation and retained the source-pixel boxes, unrelated masks and labels, original and frozen export. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv16-class-management-class-preview-revision-bdcec01e3`)
 - `browser`: The integrated Classes journey withdrew the other review after reassignment, preserved the completed receipt during a new preview and retained source pixels and frozen exports. Two corresponding unit cases failed on the predecessor, and all ten corrected panel cases passed. — `docs/validation/reviewed-operations-dd3c7207e.json` (`rv16-class-management-single-use-dd3c7207e`)
+- `browser`: The corrected 1.8 local MSI's extracted ordinary WebView2 consumed both preview approvals, preserved the earlier class export and retained original media and annotation, mask and label evidence. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv16-class-management-native-class-provenance-9cde9e6e7`)
 - `windows_installed`: On the original 1.6 MSI under an ordinary Windows account, the class lifecycle test passed. The researcher reviewed the reassignment, reopened the project and verified the earlier frozen export. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44768324452/job/136420579045` (`rv16-class-management-original-msi-used-classes`)
 - `windows_installed`: The corrected original MSI passed the standard-user class lifecycle, including explicit reassignment after annotations exist and reopening the frozen export. — `docs/validation/installed-workflows-a580042e8.json` (`rv16-class-management-original-a580042e8`)
 - `physical_hardware`: In native Classes, confirmed reassignment advanced the live annotation from revision 2 to 3. Mask and image-classification references remained protected. The frozen dataset manifest and YOLO mapping survived reopening. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-class-management-physical-83b0`)
@@ -1204,6 +1208,8 @@ Evidence:
 - `windows_installed`: The corrected original MSI passed standard-user first use, the compact keyboard handoff, offline export and reopening after restart. The published 1.0.3 and validated 1.5 upgrades passed, including the old-reader rollback. — `docs/validation/installed-workflows-a580042e8.json` (`rv16-onboarding-installer-original-a580042e8`)
 - `windows_installed`: The original installer completed clean ordinary-user annotation, review, export and recovery, with separate upgrade and rollback checks across the supported historical profiles. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-original-installed-3a9`)
 - `windows_installed`: An ordinary user installed the original MSI under measured outbound denial, reviewed a box, exported it, reopened it in a fresh desktop process and uninstalled successfully. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-offline-original-3a9`)
+- `windows_installed`: The genuine hosted MSI installed and launched in a clean disposable standard-user Windows environment under 201 seconds of outbound denial. The project reopened and retained its data after uninstall. The verifier sampled both ordinary and SYSTEM identities 511 times. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv16-onboarding-installer-offline-install-542254b8a`)
+- `windows_installed`: The 1.8 hosted MSI completed fresh and cached 1.7 upgrade runs under enforced network denial for both Windows identities. The restored seven-file backup reopened under the original 1.7 standard-user desktop. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv16-registered-offline-9cde9e6e7`)
 - `physical_hardware`: The native packaged first launch at 960 by 640 CSS pixels and emulated 150% scaling preserved keyboard focus and dismissal. The researcher imported image and video, edited, undid and redid, reviewed, exported YOLO and reopened. The browser attempted zero external HTTP requests. A separate eight-project 1.5 backup reopened with all 303 project files. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-onboarding-installer-physical-83b0`)
 - `physical_hardware`: The locally built Windows desktop restored both generations, preserved both historical metadata digests and reopened all seven projects in a separate launch. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-repeated-recovery-local-production-3a9`)
 - `physical_hardware`: The desktop extracted from the original GitHub MSI restored both generations from System status and reopened the existing QC project on physical Windows. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-repeated-recovery-original-windows-3a9`)
@@ -1330,10 +1336,12 @@ Evidence:
 - Dependencies: `rv17-device-sources`, `rv15-reviewer-lab`
 - Entry point: Project assets → Import audio → Review
 - Workflow Builder: `required`
+- Missing input: Authorized field WAV audio and synchronized video or observation clocks, the recording device timebase and uncertainty, independently marked events and channel identities, and prespecified onset, offset and matching tolerances.
 
 Acceptance checks:
 
 - **in_progress** — Preserve original audio, annotate source time, align clocks explicitly, review proposals, and export provenance. (`rv18-bioacoustics-check`)
+- **blocked** — From Project assets → Import audio → Review, compare reviewed source-sample intervals and aligned event times against the independent references by recording and channel. Retain clock fit, residuals, exclusions and reviewer decisions. (`rv18-bioacoustics-independent-field-check`)
 
 Evidence:
 
@@ -1341,7 +1349,12 @@ Evidence:
 - `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-bioacoustics-managed-restore-542254b8a`)
 - `browser`: A stereo PCM recording was played and a source sample range was reviewed and explicitly time-aligned. Two saved graph runs reproduced the same report. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-bioacoustics-a82cc730e-browser`)
 - `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-bioacoustics-frozen-desktop-542254b8a`)
-- `windows_installed`: none recorded
+- `browser`: The corrected Windows source completed two real local training and registration controls and all five research journeys. The application closed through its ordinary owner channel after executing the saved workflows. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-bioacoustics-corrected-source-9cde9e6e7`)
+- `browser`: On the separately manufactured six-cabinet 542254b8a MSI, a standard Windows account opened the real administratively extracted WebView2 application, completed both CPU training controls and all five ordinary research actions. A separate staged upgrade from 1.7 and restored writable 1.7 copy retained the verified project contents. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-bioacoustics-msi-extracted-local-9cde9e6e7`)
+- `browser`: A standard Windows account used the hosted five-cabinet MSI's administratively extracted WebView2 application on the physical RTX workstation. Its ordinary controls trained two fixture models and completed the five research journeys. An independent validation rehashed 13 outputs. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-bioacoustics-hosted-msi-native-542254b8a`)
+- `browser`: The corrected locally manufactured 1.8 MSI's ordinary, administratively extracted WebView2 completed two real CPU training controls, all five research journeys and their saved replay checks. The verified Windows profile and all owned listeners closed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-bioacoustics-corrected-local-package-9cde9e6e7`)
+- `browser`: The hosted 1.8 MSI's administratively extracted WebView2 completed all five research workflows and two real CPU training controls on generated fixtures. Corresponding reports and saved runs were independently rehashed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-bioacoustics-official-extracted-9cde9e6e7`)
+- `windows_installed`: The original 542254b8a MSI completed all five generated research workflows in a registered standard-user Windows desktop, with retained report and saved replay results. The pinned test-driver retest ran 30 journeys plus two scheduler phases. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-bioacoustics-registered-standard-user-542254b8a`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1352,10 +1365,12 @@ Evidence:
 - Dependencies: `rv15-model-comparison`, `rv18-underwater-correction`
 - Entry point: Models & AI → Model comparison → Domain shift
 - Workflow Builder: `required`
+- Missing input: Labeled observations from prespecified independent sites or recordings in each compared acquisition domain, frozen assignments with disjoint training and selection groups, compatible registered model weights, and a declared uncertainty and decision protocol.
 
 Acceptance checks:
 
 - **in_progress** — Compare frozen acquisition groups without leakage and report uncertainty, missing groups, and training/selection overlap. (`rv18-domain-shift-check`)
+- **blocked** — From Models & AI → Model comparison → Domain shift, score the same held-out acquisitions for each model, reconcile group identity and excluded overlap, and compare the paired errors and across-unit uncertainty to independently scored results. (`rv18-domain-shift-independent-field-check`)
 
 Evidence:
 
@@ -1364,7 +1379,13 @@ Evidence:
 - `source`: Two real local instance segmenters evaluated six held-out stills in twelve adjusted jobs. Two weight-free archive hops retained the frozen mask and detector reports, CSV and replay hashes. A separate provider-boundary check rejected an omitted mandatory raster before project creation. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-domain-shift-real-mask-exchange-542254b8a`)
 - `browser`: The five-workflow Windows source trial compared two actual locally trained CPU checkpoints across two generated held-out acquisition groups, kept the third group missing, ran six adjusted evaluations on three original images, withheld intervals at one independent unit per domain, exported JSON and CSV and replayed the report twice. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv18-domain-shift-adjusted-evaluation-bdcec01e3`)
 - `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-domain-shift-frozen-desktop-542254b8a`)
-- `windows_installed`: none recorded
+- `browser`: The corrected Windows source completed two real local training and registration controls and all five research journeys. The application closed through its ordinary owner channel after executing the saved workflows. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-domain-shift-corrected-source-9cde9e6e7`)
+- `browser`: On the separately manufactured six-cabinet 542254b8a MSI, a standard Windows account opened the real administratively extracted WebView2 application, completed both CPU training controls and all five ordinary research actions. A separate staged upgrade from 1.7 and restored writable 1.7 copy retained the verified project contents. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-domain-shift-msi-extracted-local-9cde9e6e7`)
+- `browser`: A standard Windows account used the hosted five-cabinet MSI's administratively extracted WebView2 application on the physical RTX workstation. Its ordinary controls trained two fixture models and completed the five research journeys. An independent validation rehashed 13 outputs. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-domain-shift-hosted-msi-native-542254b8a`)
+- `browser`: The corrected locally manufactured 1.8 MSI's ordinary, administratively extracted WebView2 completed two real CPU training controls, all five research journeys and their saved replay checks. The verified Windows profile and all owned listeners closed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-domain-shift-corrected-local-package-9cde9e6e7`)
+- `browser`: Using eight generated reviewed observations across six independent fixture groups and two locally trained detectors, Models → Model comparison → Domain shift displayed group-level intervals. Ten intervals matched a separate calculation within 1e-10, one planned group was missing, and two saved graph outputs agreed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-domain-shift-six-group-intervals-9cde9e6e7`)
+- `browser`: The hosted 1.8 MSI's administratively extracted WebView2 completed all five research workflows and two real CPU training controls on generated fixtures. Corresponding reports and saved runs were independently rehashed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-domain-shift-official-extracted-9cde9e6e7`)
+- `windows_installed`: The original 542254b8a MSI completed all five generated research workflows in a registered standard-user Windows desktop, with retained report and saved replay results. The pinned test-driver retest ran 30 journeys plus two scheduler phases. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-domain-shift-registered-standard-user-542254b8a`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1375,10 +1396,12 @@ Evidence:
 - Dependencies: `rv18-underwater-correction`, `rv12-calibration-evidence`
 - Entry point: Project assets → Import multispectral image
 - Workflow Builder: `required`
+- Missing input: An authorized physical-sensor acquisition with original discrete bands, wavelengths and units, dark and reference or reflectance measurements, independently surveyed alignment controls, and prespecified radiometric and spatial tolerances.
 
 Acceptance checks:
 
 - **in_progress** — Preserve bands and calibration, render selected composites, align source coordinates, and withhold incompatible indices. (`rv18-multispectral-check`)
+- **blocked** — From Project assets → Import multispectral image, compare registered control-point residuals and calibrated band or index values to the independent references. Retain sensor and band identities, unavailable or excluded samples and uncertainty. (`rv18-multispectral-independent-field-check`)
 
 Evidence:
 
@@ -1386,7 +1409,12 @@ Evidence:
 - `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-multispectral-managed-restore-542254b8a`)
 - `browser`: Two aligned generated bands produced the expected composite pixel and a 0.5 normalized reflectance index on three of eight reference pixels. JSON, float TIFF and two saved runs agreed. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-multispectral-a82cc730e-browser`)
 - `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-multispectral-frozen-desktop-542254b8a`)
-- `windows_installed`: none recorded
+- `browser`: The corrected Windows source completed two real local training and registration controls and all five research journeys. The application closed through its ordinary owner channel after executing the saved workflows. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-multispectral-corrected-source-9cde9e6e7`)
+- `browser`: On the separately manufactured six-cabinet 542254b8a MSI, a standard Windows account opened the real administratively extracted WebView2 application, completed both CPU training controls and all five ordinary research actions. A separate staged upgrade from 1.7 and restored writable 1.7 copy retained the verified project contents. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-multispectral-msi-extracted-local-9cde9e6e7`)
+- `browser`: A standard Windows account used the hosted five-cabinet MSI's administratively extracted WebView2 application on the physical RTX workstation. Its ordinary controls trained two fixture models and completed the five research journeys. An independent validation rehashed 13 outputs. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-multispectral-hosted-msi-native-542254b8a`)
+- `browser`: The corrected locally manufactured 1.8 MSI's ordinary, administratively extracted WebView2 completed two real CPU training controls, all five research journeys and their saved replay checks. The verified Windows profile and all owned listeners closed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-multispectral-corrected-local-package-9cde9e6e7`)
+- `browser`: The hosted 1.8 MSI's administratively extracted WebView2 completed all five research workflows and two real CPU training controls on generated fixtures. Corresponding reports and saved runs were independently rehashed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-multispectral-official-extracted-9cde9e6e7`)
+- `windows_installed`: The original 542254b8a MSI completed all five generated research workflows in a registered standard-user Windows desktop, with retained report and saved replay results. The pinned test-driver retest ran 30 journeys plus two scheduler phases. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-multispectral-registered-standard-user-542254b8a`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1397,10 +1425,12 @@ Evidence:
 - Dependencies: `rv12-organism-identity`, `rv15-reviewer-lab`
 - Entry point: Research → Organisms & ecology → Taxonomy and detectability
 - Workflow Builder: `required`
+- Missing input: A versioned taxon reference, independently reviewed taxon and known-presence labels, repeated field surveys by independent unit, effort and exclusion rules, plus an independent reference estimate and decision margins.
 
 Acceptance checks:
 
 - **in_progress** — Review taxonomy proposals and estimate detectability only from declared sampling/observation evidence with uncertainty and assumptions. (`rv18-taxonomy-detectability-check`)
+- **blocked** — From Research → Organisms & ecology → Taxonomy and detectability, reconcile adjudicated taxa and per-visit detection histories, then compare eligible sampling units, effort, estimates and uncertainty to the independent survey analysis. (`rv18-taxonomy-detectability-independent-field-check`)
 
 Evidence:
 
@@ -1408,7 +1438,12 @@ Evidence:
 - `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-taxonomy-detectability-managed-restore-542254b8a`)
 - `browser`: Separate fixture role revisions and five generated tanks yielded ten eligible visits, 300 seconds of effort and 50% detection. The downloaded assessment reopened and two saved runs agreed. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-taxonomy-detectability-a82cc730e-browser`)
 - `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-taxonomy-detectability-frozen-desktop-542254b8a`)
-- `windows_installed`: none recorded
+- `browser`: The corrected Windows source completed two real local training and registration controls and all five research journeys. The application closed through its ordinary owner channel after executing the saved workflows. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-taxonomy-detectability-corrected-source-9cde9e6e7`)
+- `browser`: On the separately manufactured six-cabinet 542254b8a MSI, a standard Windows account opened the real administratively extracted WebView2 application, completed both CPU training controls and all five ordinary research actions. A separate staged upgrade from 1.7 and restored writable 1.7 copy retained the verified project contents. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-taxonomy-detectability-msi-extracted-local-9cde9e6e7`)
+- `browser`: A standard Windows account used the hosted five-cabinet MSI's administratively extracted WebView2 application on the physical RTX workstation. Its ordinary controls trained two fixture models and completed the five research journeys. An independent validation rehashed 13 outputs. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-taxonomy-detectability-hosted-msi-native-542254b8a`)
+- `browser`: The corrected locally manufactured 1.8 MSI's ordinary, administratively extracted WebView2 completed two real CPU training controls, all five research journeys and their saved replay checks. The verified Windows profile and all owned listeners closed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-taxonomy-detectability-corrected-local-package-9cde9e6e7`)
+- `browser`: The hosted 1.8 MSI's administratively extracted WebView2 completed all five research workflows and two real CPU training controls on generated fixtures. Corresponding reports and saved runs were independently rehashed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-taxonomy-detectability-official-extracted-9cde9e6e7`)
+- `windows_installed`: The original 542254b8a MSI completed all five generated research workflows in a registered standard-user Windows desktop, with retained report and saved replay results. The pinned test-driver retest ran 30 journeys plus two scheduler phases. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-taxonomy-detectability-registered-standard-user-542254b8a`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1419,10 +1454,12 @@ Evidence:
 - Dependencies: `rv16-class-visibility-dense-editing`
 - Entry point: Annotate → Image adjustments
 - Workflow Builder: `required`
+- Missing input: Authorized underwater originals with independently measured color or radiometric targets, illumination and acquisition metadata, and an agreed error and repeatability margin for the selected correction.
 
 Acceptance checks:
 
 - **in_progress** — Preview reversible corrections, retain original pixels and transform provenance, and map annotations/predictions exactly to source pixels. (`rv18-underwater-correction-check`)
+- **blocked** — From Annotate → Image adjustments, compare the original and corrected measurements against the independent targets by acquisition. Retain transform, original and corrected input hashes, uncertainty and reviewer decision. (`rv18-underwater-correction-independent-field-check`)
 
 Evidence:
 
@@ -1430,7 +1467,12 @@ Evidence:
 - `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-underwater-correction-managed-restore-542254b8a`)
 - `browser`: The editor reopened the original pixel grid in box, polygon and raster annotation. Its explicitly selected CPU detector emitted pending proposals on the saved rendition. Two saved workflow runs reproduced the adjustment receipt. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-underwater-correction-a82cc730e-browser`)
 - `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-underwater-correction-frozen-desktop-542254b8a`)
-- `windows_installed`: none recorded
+- `browser`: The corrected Windows source completed two real local training and registration controls and all five research journeys. The application closed through its ordinary owner channel after executing the saved workflows. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-underwater-correction-corrected-source-9cde9e6e7`)
+- `browser`: On the separately manufactured six-cabinet 542254b8a MSI, a standard Windows account opened the real administratively extracted WebView2 application, completed both CPU training controls and all five ordinary research actions. A separate staged upgrade from 1.7 and restored writable 1.7 copy retained the verified project contents. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-underwater-correction-msi-extracted-local-9cde9e6e7`)
+- `browser`: A standard Windows account used the hosted five-cabinet MSI's administratively extracted WebView2 application on the physical RTX workstation. Its ordinary controls trained two fixture models and completed the five research journeys. An independent validation rehashed 13 outputs. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-underwater-correction-hosted-msi-native-542254b8a`)
+- `browser`: The corrected locally manufactured 1.8 MSI's ordinary, administratively extracted WebView2 completed two real CPU training controls, all five research journeys and their saved replay checks. The verified Windows profile and all owned listeners closed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-underwater-correction-corrected-local-package-9cde9e6e7`)
+- `browser`: The hosted 1.8 MSI's administratively extracted WebView2 completed all five research workflows and two real CPU training controls on generated fixtures. Corresponding reports and saved runs were independently rehashed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-underwater-correction-official-extracted-9cde9e6e7`)
+- `windows_installed`: The original 542254b8a MSI completed all five generated research workflows in a registered standard-user Windows desktop, with retained report and saved replay results. The pinned test-driver retest ran 30 journeys plus two scheduler phases. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-underwater-correction-registered-standard-user-542254b8a`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1448,7 +1490,7 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
+- `source`: Two actual export/import generations on the inherited 1.8 source preserved typed links and original bytes but changed an unavailable provider's external UUID literals. The source project and opaque-field regression fixture are retained for repair. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv19-ancestry-integration-inherited-transfer-baseline-9cde9e6e7`)
 - `browser`: none recorded
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -1671,7 +1713,7 @@ Evidence:
 
 - `source`: none recorded
 - `browser`: none recorded
-- `windows_installed`: none recorded
+- `windows_installed`: A registered 1.8 first-use run saved a box at source row 60 after requesting row 40. Controlled WebView2 reproduction traced it to the full image arriving during a drag. This 1.8 baseline identifies a regression to retest on the integrated candidate. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv20-compact-box-baseline-9cde9e6e7`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 

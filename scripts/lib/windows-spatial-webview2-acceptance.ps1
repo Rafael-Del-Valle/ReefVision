@@ -332,6 +332,7 @@ function Invoke-ReefVisionWorkspaceAcceptance {
         dense_image = @('dense-image-live.spec.ts', 'dense-image-evidence.json')
         manual_video = @('manual-video-editor-live.spec.ts', 'manual-video-editor-evidence.json')
         editor_decisions = @('editor-confirmations-live.spec.ts', 'editor-confirmation-evidence.json')
+        source_image_gesture = @('source-image-gesture-live.spec.ts', 'source-image-gesture-evidence.json')
     }
     $specs = @($journeys.Values | ForEach-Object { $_[0] })
     $output = Invoke-ReefVisionInstalledPlaywrightSuite -NodePath $NodePath -RepositoryRoot $RepositoryRoot `
@@ -391,6 +392,16 @@ function Invoke-ReefVisionWorkspaceAcceptance {
         @($editor.conflicts).Count -ne 2 -or @($editor.conflicts | Where-Object { $_ -ne 409 }).Count -ne 0 -or
         $editor.canceled_preserved_drafts_and_undo -ne $true) {
         throw 'Editor decisions receipt lacks both real revision conflicts, the approved reload, or the unchanged saved mask and cancelled drafts.'
+    }
+    $gesture = $result.source_image_gesture
+    if ($gesture.application_version -cne $Version -or $gesture.schema_revision -cne $Revision -or
+        $gesture.viewport.width -ne 960 -or $gesture.viewport.height -ne 640 -or $gesture.viewport.devicePixelRatio -ne 1.5 -or
+        $gesture.imageId -notmatch $uuid -or $gesture.neighbor_image_id -notmatch $uuid -or
+        $gesture.imageId -eq $gesture.neighbor_image_id -or $gesture.sha256 -notmatch $sha -or
+        !$gesture.keyboard_retry -or !$gesture.adjustment_slot_stable -or !$gesture.launcher_closed -or
+        [Math]::Abs($gesture.box.x_min - 20) -ge 0.5 -or [Math]::Abs($gesture.box.y_min - 15) -ge 0.5 -or
+        [Math]::Abs($gesture.box.x_max - 55) -ge 0.5 -or [Math]::Abs($gesture.box.y_max - 40) -ge 0.5) {
+        throw 'The installed editor lacks compact source-coordinate, image-switch or keyboard recovery evidence.'
     }
     return [pscustomobject]$result
 }

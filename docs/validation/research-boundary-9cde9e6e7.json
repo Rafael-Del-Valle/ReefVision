@@ -1,0 +1,633 @@
+{
+  "source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+  "version": "1.8.0",
+  "schema": "b18_spectral_0002",
+  "fixtures": "Generated; ordinary CPU training and local registration supplied the actual models.",
+  "browser": {
+    "two_cpu_prerequisites": {
+      "startTime": "2026-11-21T01:02:36.639Z",
+      "duration": 63463.96,
+      "expected": 2,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "five_research_journeys": {
+      "startTime": "2026-11-21T01:03:40.482Z",
+      "duration": 36570.225,
+      "expected": 5,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "help_qc_classes_on_production_frontend": {
+      "startTime": "2026-11-21T01:02:40.948Z",
+      "duration": 24143.693,
+      "expected": 3,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "standard_suite": {
+      "startTime": "2026-11-21T01:03:28.653Z",
+      "duration": 9547.497000000001,
+      "expected": 15,
+      "skipped": 49,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "stopped_via_owner_stdin": true,
+    "feature_receipts": {
+      "taxonomy": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/research/taxonomy-detectability-proof.json",
+        "sha256": "6cf9862ee3fad77e896edd56f7024cca3ffcd50ac89910bfc2f4aec15a06e8bb"
+      },
+      "audio": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/research/bioacoustics-evidence.json",
+        "sha256": "fae727f62d7cf76bb339ae0f83aa7b026387608e75ec04cbf528a713e646a148"
+      },
+      "multispectral": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/research/multispectral-evidence.json",
+        "sha256": "f9761af32577fe77bda771aa4c30adc0095d7c701c92d2d73020783ad5d4280b"
+      },
+      "underwater": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/research/underwater-adjustment-evidence.json",
+        "sha256": "ae6f74e3549fe563f7314970ac84ef6a9f46654d64dd9152b9b626d8c6f87b2c"
+      },
+      "domain": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/research/domain-shift-evidence.json",
+        "sha256": "9212accd1083e529ab42041baedc30b117aa3590849417fff9acc87582b7d2bb"
+      }
+    }
+  },
+  "source_checks": {
+    "ruff_format_files": 1420,
+    "mypy_source_files": 778,
+    "focused_desktop_inventory_and_research": 41,
+    "native_argument_cases": 3,
+    "rust_tests": 8,
+    "frontend_unit_tests": 930,
+    "migration_table_counts": [
+      133,
+      1,
+      133
+    ],
+    "source_logs": {
+      "checks.json": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/checks.json",
+        "sha256": "f72121077051690757b89ff48a68ce14d22e05df4c99bae0e7914b72bd42795e"
+      },
+      "lockfile.log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/lockfile.log",
+        "sha256": "a4f05eb0e0f8c59dc774dbcc0f960075269991f0bb58fa76735a0f21b6e87b56"
+      },
+      "format.log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/format.log",
+        "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+      },
+      "typecheck.log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/typecheck.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "unit.log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/unit.log",
+        "sha256": "fd9147af477318a8f96ec58489f9697029f2d9125092fbd7d135d17a070a611d"
+      },
+      "ui-build.log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/ui-build.log",
+        "sha256": "8401f4b07f30c1ee5dee1a914d10019515e6c4fc15333e19f0b6b784e9768458"
+      },
+      "browser.log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/browser.log",
+        "sha256": "4ca50451ad3cbe2dfca2dd83a1eb005b36f6d90b6bcb92b057a17990963c3846"
+      },
+      "migration.json": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/migration.json",
+        "sha256": "f8f1f8123b2c3e9d59c8bd0ba2b99272ebd3a16ab0384abe7722f88c81eedd60"
+      },
+      "desktop-and-research.xml": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/desktop-and-research.xml",
+        "sha256": "62498586c4a69c846d20d0d65964e7ea9e85124e9037061df5a2d381bbe4b4c0"
+      },
+      "final-9cde-mypy.log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/final-9cde-mypy.log",
+        "sha256": "4601cdc37daba45d0f60d4161f3621adf48b6c1ad78e79177171ba9845d60900"
+      },
+      "final-9cde-rust.log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/final-9cde-rust.log",
+        "sha256": "ec2630f5becf6481e9f864231d0a44099e323e11b07c5018891a8fc927ac599a"
+      }
+    },
+    "physical_cuda": {
+      "tests_passed": 3,
+      "runtime": "PyTorch 2.5.1+cu121",
+      "device": "NVIDIA GeForce RTX 3090",
+      "evidence": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/physical-cuda/result.json",
+        "sha256": "b1837a96876e0c53a83750a9c906af75e498346ad8263bebdaf0d51c9a0124be"
+      }
+    }
+  },
+  "original_installer": {
+    "source": "542254b8aa0d896fb630282d70f263a74a65b99f",
+    "draft": 113,
+    "workflow": 44844039968,
+    "job": 136659258014,
+    "msi_sha256": "4bf9d763c43d7df809b8e97e9bc9c67500342ea27e2d241ab664e6194b310fc4",
+    "external_cabinets": 5,
+    "checksums": {
+      "file": "1.8/checkpoints/542254b8a/official/installer/SHA256SUMS.txt",
+      "sha256": "9863b07288c9ad8aad21ce6ac128e6a3b5bbe0f32fdb0f44d3eda2f218e5d641"
+    },
+    "transport": {
+      "file": "1.8/checkpoints/542254b8a/official/verified-transport.json",
+      "sha256": "6a88e18c5d92d1f3adb6b3beace4440a8365bb52b5566b553894558f01e8c8ff"
+    },
+    "upgrade_1_7_to_1_8": {
+      "projects": 5,
+      "populated_table_fingerprints": 54,
+      "verified_restore_files": 26,
+      "verified_restore_bytes": 20378834,
+      "old_reader_reopened_for_writing": true,
+      "evidence": {
+        "file": "1.8/checkpoints/542254b8a/official/evidence/official-rich-five-projects.json",
+        "sha256": "a56bab4f058ee7432ae56214463ea038ae4a39852315577e12fe7f27de981890"
+      }
+    },
+    "extracted_native_webview2": {
+      "research_journeys": 5,
+      "fixture_training_journeys": 2,
+      "cuda_inference_jobs": 3,
+      "evidence": {
+        "file": "1.8/checkpoints/542254b8a/official/evidence/physical-original/native-original-index.json",
+        "sha256": "687ca069e5d4406d4d901339745cf7ef14b2967706def59c937db1726c327b13"
+      },
+      "independent_retained_output_check": {
+        "file": "1.8/checkpoints/542254b8a/official/evidence/physical-original/independent-validation.json",
+        "sha256": "ef755930d5a9440c3f2eba36b57bbae70afbf9eb48b043786a55897a34cde083"
+      }
+    },
+    "registered_offline": {
+      "fresh": {
+        "ordinary": 511,
+        "system": 511
+      },
+      "cached_upgrade": {
+        "ordinary": 648,
+        "system": 651
+      },
+      "restored_files": 7,
+      "predecessor": "1.7.0",
+      "workflow": 44845170720,
+      "evidence": {
+        "file": "1.8/checkpoints/542254b8a/official/offline/attempt-44845170720/offline-index.json",
+        "sha256": "cddbaa86c267eaa144deaee2f673617ac5c103f33c1396a89d0bcd8e07148099"
+      }
+    },
+    "registered_clean": {
+      "proof_run": 44850003894,
+      "proof_source": "82ee96e1a36ed234c70e964584fc9c7ac9323c6a",
+      "job": 136678849293,
+      "journeys": {
+        "first-use_journeys": 1,
+        "workspace_journeys": 6,
+        "research_journeys": 6,
+        "spatial_journeys": 10,
+        "monitoring_journeys": 2,
+        "research-tools_journeys": 5
+      },
+      "stages": {
+        "PASS": 21,
+        "SKIPPED": 11
+      },
+      "skipped_stage_scope": "This clean-only role excludes separate upgrade scenarios.",
+      "scheduler_restarts": 2,
+      "original_transport": {
+        "id": 14685658019,
+        "sha256": "8cf1724cb6d75c3beddee3531c231454a9abc3e604230833c2f15f2694aa71a6",
+        "retained_files": 77
+      },
+      "receipt": {
+        "file": "1.8/checkpoints/542254b8a/official/registered-retest/attempt-44850003894/registered-retest-index.json",
+        "sha256": "82fb56b57fa25f3cb0841e747e3fb47a1ada6d8b033553717e3dd37cdf54fbdc"
+      }
+    }
+  },
+  "separately_built_msis": {
+    "local_542_sha256": "4c43233cc01e0a6757187ee1c29576d989230e8fd67a4aaeec866074ebe5d8ad",
+    "local_cabs": 6,
+    "native_local_profile": {
+      "device": "GeForce RTX 3090",
+      "standard_account_cpu_research_journeys": 5,
+      "cpu_fixture_training": 2,
+      "physical_reviewed_cuda_jobs": 3,
+      "evidence": {
+        "file": "1.8/checkpoints/542254b8a/local-production/evidence/physical-local/native-local-index.json",
+        "sha256": "61e93ec729ff2f0f8a460e2ed964680060af0845f8f0a4cd11e132729ea0a408"
+      }
+    }
+  },
+  "corrected_windows": {
+    "draft": 115,
+    "workflow": 44847408180,
+    "build_job": 136670423050,
+    "qualification": "Hosted builder succeeded. Ten registered roles and separate offline and corrected clean drivers have their own results."
+  },
+  "field_acceptance": "Open for field color, acoustic, spectral, ecological and acquisition-group reference evidence.",
+  "original_full_windows_backend": {
+    "source": "542254b8aa0d896fb630282d70f263a74a65b99f",
+    "collected": 6034,
+    "passed": 6022,
+    "skipped": 12,
+    "failed": 0,
+    "errors": 0,
+    "evidence": {
+      "file": "1.8/checkpoints/542254b8a/source/backend/independent-verification.json",
+      "sha256": "75d59b6ca6e8693c093a75cad5f58ec1becf49a6149582a6eb8b01b80ad6eb17"
+    }
+  },
+  "corrected_local_package": {
+    "source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "msi_sha256": "deeb9dc17c4e6d45550d9c9638c5f590efba108eaffd5ed9f94d9cf7f58476f7",
+    "external_cabinets": 5,
+    "all_members_sha256": {
+      "file": "1.8/checkpoints/9cde9e6e7/local-production/installer/SHA256SUMS.txt",
+      "sha256": "06c1604ec9cf793cf018c7a6e7aa1ee9463ed206e7b53faf044ea4e971f41d44"
+    },
+    "frontend_toolchain": "Node 22.23.5, npm 11.20.0",
+    "verified_extracted_paths": 19205,
+    "frozen_python_modules": 12424,
+    "predecessor_upgrade": {
+      "projects": 5,
+      "preserved_populated_tables": 54,
+      "managed_backup_files": 26,
+      "managed_backup_bytes": 20378834,
+      "restored_predecessor_writable": true
+    },
+    "administratively_extracted_native_webview2": {
+      "classes": "Both one-use previews consumed; immutable previous class export reopened.",
+      "pose_identity": "The clicked pending job and its run were cancelled, the other run stayed queued across reopen.",
+      "reviewed_cuda_inference": {
+        "images": [
+          1,
+          6,
+          6
+        ],
+        "proposals": [
+          9,
+          54,
+          54
+        ],
+        "device": "NVIDIA GeForce RTX 3090"
+      },
+      "five_research": {
+        "cpu_controls": 2,
+        "research_journeys": 5,
+        "distinct_trained_checkpoints": 2,
+        "evidence": {
+          "file": "1.8/checkpoints/9cde9e6e7/local-production/evidence/native-research-tools/evidence-index.json",
+          "sha256": "342e125f73bbc51b44cee945e38471f9a8a5598279aeca770f64af55341d78d0"
+        },
+        "independent_validation": {
+          "file": "1.8/checkpoints/9cde9e6e7/local-production/evidence/native-research-tools/independent-validation.json",
+          "sha256": "bf8ac72cbfd6c515850419353ce3cafbe4cdc2be0f3329d1fd86b599ebc10e33",
+          "rehashed_files": 18
+        }
+      }
+    },
+    "signature_and_policy": {
+      "file": "1.8/checkpoints/9cde9e6e7/local-production/smart-app-control.json",
+      "sha256": "8cb673f14e5684bd0d1aa0a6f0e0e0b85e9508f6dd559f16ac8b16d8c76f812b"
+    },
+    "package_audit": {
+      "file": "1.8/checkpoints/9cde9e6e7/local-production/payload-audit.json",
+      "sha256": "3e6157ff04b4e59d861c05a75390effd7b8b7d90ad15982e866a17ccec1f0cc1"
+    },
+    "evidence": {
+      "native-corrections": {
+        "file": "1.8/checkpoints/9cde9e6e7/local-production/evidence/native-corrections/evidence-index.json",
+        "sha256": "1a7c8de406eab00e9e7005f9ca2d579a04ab5f5e51a522781b95f1216c244904"
+      },
+      "physical-rtx3090": {
+        "file": "1.8/checkpoints/9cde9e6e7/local-production/evidence/physical-rtx3090/evidence-index.json",
+        "sha256": "aabce1b007218ba2153fd0d8c94f6af3acc0fb6d8d916942ea7ddfa8b958c0f6"
+      },
+      "rich-direct-rollback": {
+        "file": "1.8/checkpoints/9cde9e6e7/local-production/evidence/rich-direct-rollback/rich-upgrade-and-rollback.json",
+        "sha256": "ccc54cc732ac7281bd0722d2a187eae49a94c0ac64a27581260c78713bcaf1f8"
+      }
+    }
+  },
+  "registered_driver": {
+    "fix": "fa521bd4c78d9e6f34d7a564feefe93b4bcf3b79",
+    "integrated_ci_preflight": "8ed353e1280559aeee157e726053b3ff93304c7c",
+    "historical_failed_job": 136670175477,
+    "first_repeat": 44847607119,
+    "original_binary_repeat": 44850003894,
+    "corrected_binary_repeat": 44850071433,
+    "diagnosis": {
+      "file": "1.8/checkpoints/542254b8a/official/registered-retest/verified-driver-path-diagnosis.json",
+      "sha256": "9e3503fbcf424b088dadfd885665eea2978bf78de5568e8a044cb6169440202d"
+    },
+    "local_release_checks": 125,
+    "windows_clean_harness_assertions": 205,
+    "native_preflight_cases": [
+      "science/first-use/workspace arguments",
+      "actual Windows sidecar executable"
+    ],
+    "preflight_log": {
+      "file": "1.8/checkpoints/9cde9e6e7/source/gates/registered-native-preflight.log",
+      "sha256": "7336761027d61cf2c0215e56cd547efa8cd009c4c1bd19eb0032a13923efe017"
+    },
+    "release_suite": {
+      "file": "1.8/checkpoints/9cde9e6e7/source/gates/qualified-release-driver.xml",
+      "sha256": "8824202262a0092b5b6c92a94c67086e89d81f68dca1fc87c73460ecca969953"
+    }
+  },
+  "open_provider_archive_preservation": {
+    "feature": "rv19-ancestry-integration",
+    "source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "observation": "Two real 1.8 import-as-new-project operations remapped provider-owned external UUID literals that equalled local project, image and model IDs. The original, relational links, reviewed source bytes and inert attachment were preserved.",
+    "candidate_review": "Use the original project for these historical provider literals until a corrected import passes the two-generation check.",
+    "receipt": {
+      "file": "1.8/checkpoints/9cde9e6e7/source/provider-history/unknown-provider-exchange.json",
+      "sha256": "6aed707c20e9d58531b6f5affceaeec7568fecfd857a59a08e5263c8c2397d5c"
+    },
+    "reproducer": {
+      "file": "1.8/checkpoints/9cde9e6e7/source/provider-history/regression-design.json",
+      "sha256": "e8dbdc32f6b26ce4aaa677d0df3c6d112054df2d4dd23f7b9b7bd1c157f88888"
+    }
+  },
+  "grouped_interval_fixture": {
+    "source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "surface": "Normal navigation on the optimized frontend with the real Windows queue.",
+    "source_images": 8,
+    "groups_per_domain": [
+      3,
+      3
+    ],
+    "independently_computed_intervals": 10,
+    "absolute_tolerance": 1e-10,
+    "method": "A separate Welch t-test confidence_interval call used the observed paired-job scores, averaging within each recording first. The domain UI, downloaded report and two saved runs agreed.",
+    "first_model_absolute_count_error": {
+      "metric": "absolute_count_error",
+      "side": "left",
+      "group_means": [
+        7.5,
+        5.0,
+        7.0,
+        4.0,
+        6.0,
+        2.5
+      ],
+      "estimate": -2.333333333333333,
+      "ci95": [
+        -5.9657918454729,
+        1.2991251788062343
+      ],
+      "independent_units": [
+        3,
+        3
+      ]
+    },
+    "evidence": {
+      "independent-results.json": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/domain-group-uncertainty/independent-results.json",
+        "sha256": "af357bc65b6b125967353041b7b110bdd8f9e54a3720822ed4aef0b5178fbcbd"
+      },
+      "desktop.json": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/domain-group-uncertainty/desktop.json",
+        "sha256": "013c21027ade15cc740ea85ef7410ed32035f02636b6cebcd2d9452ced49cb48"
+      },
+      "domain.json": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/domain-group-uncertainty/domain.json",
+        "sha256": "f3f321d8499eb4e96afebdc8bc0a7675ae444c3cea3bccb3fe128c0dc7719be2"
+      },
+      "groups.csv": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/domain-group-uncertainty/groups.csv",
+        "sha256": "c837a54bca43bda904416ff0f97046265f0d7892e38e7e2b1eced4161c474f35"
+      },
+      "paired.json": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/domain-group-uncertainty/paired.json",
+        "sha256": "28ae0d898e17be922d055c14dff18751cb090fa59278c9ecda44215d2fe6e989"
+      },
+      "closure.json": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/domain-group-uncertainty/closure.json",
+        "sha256": "70da77d3d894807de95a19ad31532f9da8fec93f48f8b2ca80354268d38efeb9"
+      },
+      "fixture.json": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/domain-group-uncertainty/fixture.json",
+        "sha256": "38caaf1e5bb0690450768c137879e27f046e89f4d43948636ca7f9d9184aa0c2"
+      }
+    }
+  },
+  "corrected_original_hosted_package": {
+    "source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "run": 44847408180,
+    "build_job": 136670423050,
+    "msi_sha256": "7d8a5d4d4b0eebd2274a17de6676204eac724ebe06ffc3c87d7cbef353532511",
+    "cab_count": 5,
+    "sha256sums": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/installer/SHA256SUMS.txt",
+      "sha256": "208aee663b937ef67487f4486a58041f2ddfbebc094d45415cbabab906d22cb6"
+    },
+    "authenticated_transport": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/verified-transport.json",
+      "sha256": "d38ba441be913db41b5b3470bcf38bcadfbaef8db0976f8c82a53513b56765e3"
+    },
+    "build_smoke": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/build-diagnostics/receipt.json",
+      "sha256": "ca81d64c39a09aaf047d52075fdc9e981da4a51c6c2c7a78c2756ed48672f72d"
+    },
+    "extracted_file_count": 19154,
+    "migration_files": 83,
+    "bundled_weights": 0,
+    "audited_cab_members": 19153,
+    "frozen_python_modules": 12112,
+    "payload_audit": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/payload-audit.json",
+      "sha256": "babb404127f77c10cec34c3f3eb736e049c0651bbe2e697e66c1eeac79be2a06"
+    },
+    "signature_and_policy": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/smart-app-control.json",
+      "sha256": "5069529d8104c4a3913802c4df4230b9e35d2283d78faf922e41eb68de3b0f4b"
+    },
+    "extracted_native_corrections": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/evidence/native-corrections/evidence-index.json",
+      "sha256": "40ac9790bc51af764ecce7ac49013f1a55fd46ca77c71e580bcaa8ac15f0172c"
+    },
+    "five_project_upgrade_and_recovered_write": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/evidence/rich-direct-rollback/rich-upgrade-and-rollback.json",
+      "sha256": "1b7f099f288a86237ff797311db8688507a767c25f1611e941ad2f4ceada2b53"
+    },
+    "registered_offline": {
+      "run": 44849140656,
+      "fresh_job": 136676062672,
+      "upgrade_job": 136676062878,
+      "network_denial_seconds": [
+        196.32,
+        266.695
+      ],
+      "fresh_blocked_control_counts_ordinary_system": [
+        492,
+        492
+      ],
+      "upgrade_blocked_control_counts_ordinary_system": [
+        625,
+        627
+      ],
+      "rollback_members": 7,
+      "receipt": {
+        "file": "1.8/checkpoints/9cde9e6e7/official/offline/attempt-44849140656/offline-index.json",
+        "sha256": "0e2c8012bdfe996c44c7ef39f44bef6c6f8cb88dfd1e28f6615cee44f7c85f56"
+      }
+    },
+    "extracted_native_research": {
+      "cpu_training_controls": 2,
+      "research_journeys": 5,
+      "receipt": {
+        "file": "1.8/checkpoints/9cde9e6e7/official/evidence/native-research-tools/evidence-index.json",
+        "sha256": "8d319e83741ed5fb09e758692b40796a4a5fdbb6f7ec819694bdbaa6b701b630"
+      }
+    },
+    "physical_cuda": {
+      "device": "NVIDIA GeForce RTX 3090",
+      "distinct_saved_jobs": 2,
+      "replay_result_sha256": "ab5a0050a94f04ba14af6a71f515a6f4d428dc07390df6b118726a729d79ccbb",
+      "receipt": {
+        "file": "1.8/checkpoints/9cde9e6e7/official/evidence/physical-rtx3090/evidence-index.json",
+        "sha256": "45592b9ef49c9b6bc7f113ce6798d3038d58ac4e34b2eb3b4259852c400ce175"
+      }
+    },
+    "independent_native_file_verification": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/evidence/9cde-official-independent-native-validation.json",
+      "sha256": "f137998a2aa97aad1b752515ebdebc9830e99218f3da0b1acc616048c8f90232"
+    },
+    "closed_predecessor_for_replacement": {
+      "description": "Original 1.8 opened an independent restored copy of six generated projects, 37 source stills and ten saved research outputs. Its verified managed backup contains 229 members and 60,624,990 bytes. This prepares a genuine existing profile for a repaired 1.8 build.",
+      "receipt": {
+        "file": "1.8/checkpoints/9cde9e6e7/official/evidence/same-version-predecessor/evidence-index.json",
+        "sha256": "79849e64279837c75e7fbe60bf75d47baeed9a5598421ccefb1b05f630edc4f3"
+      }
+    }
+  },
+  "predecessor_recheck": {
+    "donor79": "3654a781adf1774b8b16ab03993404ea2c70c143",
+    "lineage89": "36c80224a627e8fe1c1d8ffb5a704ffa9f90c701",
+    "validated13": "f44053a90286ce57cc6f7356be922bcf8ba41e22",
+    "unchanged_product": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "latest_geometry": {
+      "general_ci": 44850159339,
+      "pose_ci": 44850159293,
+      "windows_ci": 44850159273,
+      "outcome": "Eight donor cases passed on the unchanged 1.8 source, including near-parallel oblique XYZ variants, standalone parsing and saved replay.",
+      "test_source": "8b400a2afc70574647e51a1c396d66751e96f772",
+      "test_file_sha256": "c0785b6581b3a628662ea9f3a553d797562c849a6ab6aa0a227cac33a70a89ff",
+      "junit": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/predecessors/oblique-areas.xml",
+        "sha256": "684117233625b90768a04edda5ff80f64bc7602358839919222655bccb768747"
+      }
+    },
+    "donor77": {
+      "source": "ab7f33baa123bbe8faeb827e0a4dd92158ad01e9",
+      "frontend_failure_job": 136662221872,
+      "scope": "Donor Prettier flagged ClassManagerPanel.test.tsx. The integrated version passed targeted and complete Prettier, and the corrected class workflow passed on the two native Windows payloads.",
+      "log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/predecessors/donor-77-format.log",
+        "sha256": "92e52a1872984ea3af730d9776506e6098d931489f276a2bd26a7c4ca700bb30"
+      }
+    },
+    "donor78": {
+      "source": "cda67a688bb67341cde2a5b4b2fa440f41c53f16",
+      "pose_ci": 44846725526,
+      "general_ci": 44846725408,
+      "windows_ci": 44846725378,
+      "scope": "Inspection identified a corrupted frozen ZIP member preflight on the optional Ultralytics pose training path. Native ReefPose loads its own frozen-recording data. Evaluate the optional worker's retry and cleanup in the 1.9 resilience milestone."
+    }
+  },
+  "open_compact_box_regression": {
+    "source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "hosted_msi_sha256": "7d8a5d4d4b0eebd2274a17de6676204eac724ebe06ffc3c87d7cbef353532511",
+    "registered_run": 44850071433,
+    "registered_job": 136679063819,
+    "observed": "At 960 × 640 CSS pixels and DPR 1.5, drawing from source (20, 15) to (55, 40) sometimes stored a lower edge at row 60 after Undo, Redo, review and Save.",
+    "controlled_native_reproduction": "Delivering the full-resolution image after pointerdown removed the loading notice. The canvas moved from y=427.140625 to 261.296875 CSS pixels with unchanged scroll. The fixed screen endpoint mapped to source y=112.124 and clipped to 60. With the image already loaded it saved y=39.977.",
+    "original_registered_failure": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/registered-retest/attempt-44850071433/first-use-coordinate-discrepancy.json",
+      "sha256": "fbb7470899fff762195104f3123640d98b099f3a11283af92b9f2e732d1dfd8a"
+    },
+    "controlled_native": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/evidence/first-use-geometry/evidence-index.json",
+      "sha256": "3b53af0de332310bf828a67d65729476e5538be15782b404c6272e94a3df63ff"
+    },
+    "diagnostic_only_source": "ded802cfbccb138d1af367089bc3639cdc2ddb33",
+    "stable_source_browser": {
+      "file": "1.8/checkpoints/9cde9e6e7/source/compact-box/first-use-box-evidence.json",
+      "sha256": "61d918c5a738cf6ebd58aa551161476f72e82da0ab4324de0eb5f400ac32fdc3"
+    },
+    "next": "Keep the canvas anchored across thumbnail, original and error status changes. Repeat the forced mid-drag case, ordinary image and video journey, registered installation and offline proof on the repaired build."
+  },
+  "corrected_full_windows_backend": {
+    "source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "selection": [
+      "apps/api/reefvision/tests",
+      "--pose-interop-integration"
+    ],
+    "collected": 6037,
+    "passed": 6025,
+    "skipped_with_recorded_reason": 12,
+    "failed": 0,
+    "errors": 0,
+    "ordered_nodeids_sha256": "30a82142f5c7823338078549cf5010aaa193d8daf474ed9b1d04e861b3851fff",
+    "full_run": {
+      "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/summary.json",
+      "sha256": "601e31bce81eb3a59f6d910d5c2f4f7f2cf34f3e68d2196b8759d97351511c19"
+    },
+    "independent_verification": {
+      "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/independent-verification.json",
+      "sha256": "662265d75050cd16e54dd22234d585b059ce7c27e8e1a62c0cf16d95a305d22c"
+    },
+    "junit": [
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w00.xml",
+        "sha256": "b4a232bcbc6baf54e599b989e3c62c6e8a08b4ac3703da3b6682c6e3eaef8eee"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w01.xml",
+        "sha256": "6ca4fa48efc2294df4961cb1a5cdc58a3f3c1bd8af1b8ab284b57dd6e1459ef1"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w02.xml",
+        "sha256": "ddae4db0dd41aaf4c88d79d371e78e24ebbeb0953d99ad39a243de96d8b46797"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w03.xml",
+        "sha256": "691fd37a03d2748494d425348d55e99c6cc732d34b9cd0a70f02441218411b6c"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w04.xml",
+        "sha256": "8418d4a1eda8488ac9720f5860f842dd22cf2221a95b075f088766b862b9d3ec"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w05.xml",
+        "sha256": "13b495716f347d5941f21a7a9abd8cc4b22fe9a53856acb0cb4f9bb224243e4a"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w06.xml",
+        "sha256": "03f6a94e032503c6c01d193dfc7835c47cb1afcf88c087d9e6eac6abd0028468"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w07.xml",
+        "sha256": "ae658c91dfcbf4f38f26f71f255baf55c030f53c0f730e859d4fd1459769d985"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w08.xml",
+        "sha256": "ee48ef45b4a58a129660849b0fdd0d814ef27b7e1d73f52d7a022cc8e2e6cf4c"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w09.xml",
+        "sha256": "5fa268a7ca423e3fc29a9a07cfed41bea983cffe9196eec155cf7c1bb896834f"
+      }
+    ]
+  }
+}
