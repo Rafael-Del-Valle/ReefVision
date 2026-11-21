@@ -96,6 +96,7 @@ def _sample_mesh_display_geometry(
     faces: list[list[int]],
     scale: float,
     preserve_axis_extrema: bool = False,
+    largest_face_index: int | None = None,
 ) -> dict[str, Any]:
     """Bounded render-only triangle sample; scientific metrics use all faces."""
     count = min(len(faces), MAX_PREVIEW_TRIANGLES)
@@ -110,7 +111,11 @@ def _sample_mesh_display_geometry(
         for axis in range(3):
             extremal_vertices.add(min(referenced, key=lambda index: (points[index][axis], index)))
             extremal_vertices.add(max(referenced, key=lambda index: (points[index][axis], -index)))
+        # An area-dominant face need not contain a coordinate extremum.
+        # Preserve it for visual fidelity without changing full-mesh science.
         protected = {0, last}
+        if largest_face_index is not None:
+            protected.add(largest_face_index)
         for vertex_index in sorted(extremal_vertices):
             protected.add(next(index for index, face in enumerate(faces) if vertex_index in face))
         remaining = [index for index in range(len(faces)) if index not in protected]
@@ -671,8 +676,20 @@ def measure_mesh_preview(
     ).hexdigest()
     # Display sampling can underrepresent large triangles; expose its area
     # coverage without treating sampled faces as scientific measurements.
+    largest_triangle_face_index = (
+        max(range(len(face_areas)), key=face_areas.__getitem__) if raw_area > 0 else None
+    )
     display_geometry = _sample_mesh_display_geometry(
-        points, faces, scale, preserve_axis_extrema_in_preview
+        points,
+        faces,
+        scale,
+        preserve_axis_extrema_in_preview,
+        largest_face_index=largest_triangle_face_index,
+    )
+    preview_largest_triangle_displayed = (
+        largest_triangle_face_index in display_geometry["preview_face_indices"]
+        if largest_triangle_face_index is not None
+        else None
     )
     sampled_raw_area = fsum(face_areas[index] for index in display_geometry["preview_face_indices"])
     # The camera frame uses all source faces, whereas the renderer only
@@ -892,6 +909,8 @@ def measure_mesh_preview(
         "area_weighted_centroid_scale_uncertainty_m": centroid_uncertainty_m,
         "face_count": len(faces),
         "largest_triangle_area_fraction": largest_triangle_area_fraction,
+        "preview_largest_triangle_face_index": largest_triangle_face_index,
+        "preview_largest_triangle_displayed": preview_largest_triangle_displayed,
         "area_weighted_effective_triangle_count": area_weighted_effective_triangle_count,
         **display_geometry,
         "preview_sampled_surface_area_m2": sampled_raw_area * scale * scale,
@@ -1151,6 +1170,11 @@ def measure_mesh_preview(
                 else []
             )
             + (["preview_omits_source_axis_extrema"] if omitted_extremum_sides else [])
+            + (
+                ["preview_omits_largest_mesh_triangle"]
+                if preview_largest_triangle_displayed is False
+                else []
+            )
             + (
                 ["zero_area_mesh_patch_centroid_undefined"]
                 if any(patch_area_mesh_units[patch] == 0 for patch in ordered_patches)
