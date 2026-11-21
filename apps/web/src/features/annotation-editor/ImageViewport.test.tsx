@@ -89,10 +89,15 @@ describe("ImageViewport", () => {
       }
     }
     vi.stubGlobal("ResizeObserver", SilentResizeObserver);
+    const removedListeners = vi.spyOn(window, "removeEventListener");
     try {
       const dimensions = { width: 960, height: 640 };
       const { unmount } = render(
-        <ImageViewport width={1600} height={1200} label="Silent observer camera">
+        <ImageViewport
+          width={1600}
+          height={1200}
+          label="Silent observer camera"
+        >
           <svg data-testid="silent-observer-overlay" viewBox="0 0 1600 1200">
             <polygon points="10,20 40,20 40,60" />
           </svg>
@@ -125,9 +130,8 @@ describe("ImageViewport", () => {
 
       // A scientist's manual zoom must survive a second desktop resize.
       fireEvent.wheel(frame, { deltaY: -120, clientX: 480, clientY: 320 });
-      const manuallyZoomedScale = transform.style.transform.match(
-        /scale\(([^)]+)\)/,
-      )?.[1];
+      const manuallyZoomedScale =
+        transform.style.transform.match(/scale\(([^)]+)\)/)?.[1];
       expect(manuallyZoomedScale).toBeDefined();
       dimensions.width = 1100;
       dimensions.height = 720;
@@ -139,7 +143,13 @@ describe("ImageViewport", () => {
 
       unmount();
       expect(disconnects).toBe(1);
+      // The fallback must not accumulate listeners after switching images.
+      expect(removedListeners).toHaveBeenCalledWith(
+        "resize",
+        expect.any(Function),
+      );
     } finally {
+      removedListeners.mockRestore();
       vi.unstubAllGlobals();
     }
   });
