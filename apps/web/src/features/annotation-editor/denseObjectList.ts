@@ -31,33 +31,64 @@ function recentMatchingSelectionRows<T extends { id: string }>(
   if (items.length === 0 || (windowStart === 0 && windowEnd === items.length)) {
     return rows;
   }
+
   const pinnedIds = new Set<string>();
-  let nextIndex = selectedIds.length - 1;
-  while (nextIndex >= 0 && pinnedIds.size < 200) {
-    const candidates = new Set<string>();
-    const remaining = 200 - pinnedIds.size;
-    while (nextIndex >= 0 && candidates.size < remaining) {
-      const id = selectedIds[nextIndex];
-      nextIndex -= 1;
-      if (!visibleIds.has(id) && !pinnedIds.has(id)) {
-        candidates.add(id);
+  let selectionIndex = selectedIds.length - 1;
+  const candidates = new Set<string>();
+  // The overwhelmingly common case needs only the newest 200 distinct IDs.
+  // Do not copy the potentially huge source selection into an intermediate.
+  while (selectionIndex >= 0 && candidates.size < 200) {
+    const id = selectedIds[selectionIndex];
+    selectionIndex -= 1;
+    if (!visibleIds.has(id)) {
+      candidates.add(id);
+    }
+  }
+  if (candidates.size === 0) {
+    return rows;
+  }
+
+  const scanCandidates = (from: number, to: number) => {
+    for (let index = from; index < to && candidates.size > 0; index += 1) {
+      const item = items[index];
+      if (candidates.delete(item.id)) {
+        pinnedIds.add(item.id);
+        rows.push({ item, position: offset + index });
       }
     }
-    if (candidates.size === 0) {
-      break;
-    }
+  };
+  scanCandidates(0, windowStart);
+  scanCandidates(windowEnd, items.length);
 
-    const scan = (from: number, to: number) => {
-      for (let index = from; index < to && candidates.size > 0; index += 1) {
-        const item = items[index];
-        if (candidates.delete(item.id)) {
-          pinnedIds.add(item.id);
-          rows.push({ item, position: offset + index });
+  if (selectionIndex >= 0 && pinnedIds.size < 200) {
+    // A long deleted/filtered-out selection tail would otherwise re-scan the
+    // entire document for each small candidate batch. Build an off-page lookup
+    // only on this exceptional path, then inspect earlier selected IDs once.
+    // The fallback uses O(filtered off-page objects) temporary memory.
+    const offPageIndices = new Map<string, number>();
+    const indexOffPage = (from: number, to: number) => {
+      for (let index = from; index < to; index += 1) {
+        const id = items[index].id;
+        if (!offPageIndices.has(id)) {
+          offPageIndices.set(id, index);
         }
       }
     };
-    scan(0, windowStart);
-    scan(windowEnd, items.length);
+    indexOffPage(0, windowStart);
+    indexOffPage(windowEnd, items.length);
+
+    while (selectionIndex >= 0 && pinnedIds.size < 200) {
+      const id = selectedIds[selectionIndex];
+      selectionIndex -= 1;
+      if (visibleIds.has(id) || pinnedIds.has(id)) {
+        continue;
+      }
+      const itemIndex = offPageIndices.get(id);
+      if (itemIndex !== undefined) {
+        pinnedIds.add(id);
+        rows.push({ item: items[itemIndex], position: offset + itemIndex });
+      }
+    }
   }
   return rows;
 }
