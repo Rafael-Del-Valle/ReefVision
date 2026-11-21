@@ -7,7 +7,10 @@ on:
     branches:
       - develop/reefvision-1.0.3-consolidated
     paths:
+      # Keep all three 1.0.3 release-gate workflows on the same candidate SHA
+      # when their acceptance or cancellation policy changes.
       - .github/workflows/reefvision-103-console-regression.yml
+      - .github/workflows/reefvision-103-camera-gallery-regression.yml
       - apps/web/src-tauri/src/main.rs
       # A sanitized backend tail feeds this embedded external observer.
       # Exercise the Windows consumer whenever its source changes.
