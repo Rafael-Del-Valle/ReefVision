@@ -939,9 +939,7 @@ describe("AnnotationEditor", () => {
   ])("rejects $description edits", async ({ xMax, yMax }) => {
     const corruptSession: AnnotationSession = {
       ...session,
-      annotations: [
-        { ...session.annotations[0], x_max: xMax, y_max: yMax },
-      ],
+      annotations: [{ ...session.annotations[0], x_max: xMax, y_max: yMax }],
     };
     const writes: string[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
