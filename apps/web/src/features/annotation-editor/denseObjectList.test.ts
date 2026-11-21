@@ -199,16 +199,72 @@ describe("dense object-browser window", () => {
     expect(annotations).toHaveLength(50_000);
   });
 
-  it("preserves last-200-entry pin semantics when selected IDs repeat", () => {
+  it("recovers distinct matching pins even when recent selections repeat", () => {
     const annotations = Array.from({ length: 300 }, (_, index) => ({
       id: `box-${index}`,
     }));
     const selectedIds = ["box-250", ...Array(200).fill("box-299")];
     const rows = boundedDenseObjectRows(annotations, [], 10, selectedIds, []);
     expect(rows.map((row) => row.position)).toEqual([
-      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 299,
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 250, 299,
     ]);
     expect(selectedIds).toHaveLength(201);
+    expect(annotations).toHaveLength(300);
+  });
+
+  it("keeps selected matching boxes and masks reachable after filtered-out selections", () => {
+    const allAnnotations = Array.from({ length: 300 }, (_, index) => ({
+      id: `box-${index}`,
+    }));
+    const allMasks = Array.from({ length: 300 }, (_, index) => ({
+      id: `mask-${index}`,
+    }));
+    // Mimic the editor's class-name filtering: half the observations remain.
+    const annotations = allAnnotations.filter((_, index) => index % 2 === 0);
+    const masks = allMasks.filter((_, index) => index % 2 === 0);
+    const annotationSelection = [
+      "box-296",
+      ...Array.from({ length: 500 }, (_, index) => `filtered-box-${index}`),
+    ];
+    const maskSelection = [
+      "mask-298",
+      ...Array.from({ length: 500 }, (_, index) => `deleted-mask-${index}`),
+    ];
+    const rows = boundedDenseObjectRows(
+      annotations,
+      masks,
+      10,
+      annotationSelection,
+      maskSelection,
+    );
+    expect(rows.map((row) => row.position)).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 148, 299,
+    ]);
+    expect(rows[10].item).toBe(allAnnotations[296]);
+    expect(rows[11].item).toBe(allMasks[298]);
+    expect(annotationSelection).toHaveLength(501);
+    expect(maskSelection).toHaveLength(501);
+    expect(allAnnotations).toHaveLength(300);
+    expect(allMasks).toHaveLength(300);
+  });
+
+  it("fills the bounded 200-pin budget with matching rows, not stale IDs", () => {
+    const annotations = Array.from({ length: 1_000 }, (_, index) => ({
+      id: `box-${index}`,
+    }));
+    const selection = [
+      ...Array.from({ length: 250 }, (_, index) => `box-${750 + index}`),
+      ...Array.from({ length: 800 }, (_, index) => `deleted-${index}`),
+    ];
+    const rows = boundedDenseObjectRows(annotations, [], 10, selection, []);
+    expect(rows).toHaveLength(210);
+    expect(rows.slice(0, 10).map((row) => row.position)).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+    ]);
+    expect(rows[10].position).toBe(800);
+    expect(rows[209].position).toBe(999);
+    expect(selection).toHaveLength(1_050);
+    expect(annotations).toHaveLength(1_000);
   });
 
   it("bounds both selected types independently and preserves source ordering", () => {
