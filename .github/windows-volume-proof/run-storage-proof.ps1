@@ -172,9 +172,9 @@ try {
     while (-not $driver.HasExited -and [datetimeoffset]::UtcNow -lt $deadline) {
         if ($null -eq $pressure -and (Test-RequestedSignal 'fill')) {
             $null = Get-ReefVisionQuotaVolume $owned
-            $checkpoint = Join-Path $evidence 'pre-pressure-wal.json'
+            $checkpoint = Join-Path $evidence 'pre-pressure-journal.json'
             & $python (Join-Path $PSScriptRoot 'fixture_db.py') checkpoint $profile $owned.Root $checkpoint
-            if ($LASTEXITCODE) { throw 'The stock SQLite WAL did not safely checkpoint before volume pressure.' }
+            if ($LASTEXITCODE) { throw 'The prepared SQLite database was not ready for isolated volume pressure.' }
             $pressure = Set-ReefVisionQuotaPressure $owned
             Complete-Signal 'fill' $pressure
         }

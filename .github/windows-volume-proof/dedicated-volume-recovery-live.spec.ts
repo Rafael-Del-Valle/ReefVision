@@ -113,9 +113,9 @@ test("the original installed editor preserves a draft on real full NTFS and retr
     await data(await page.request.put(api + path, {
       data: { base_revision: 0, annotation_status: "in_progress", annotations: initial },
     }), 200);
-    const before = await get(path);
-    expect(before.image).toMatchObject({ annotation_revision: 1, sha256: sourceSha });
-    expect(before.annotations).toHaveLength(96);
+    const seeded = await get(path);
+    expect(seeded.image).toMatchObject({ annotation_revision: 1, sha256: sourceSha });
+    expect(seeded.annotations).toHaveLength(96);
 
     const card = page.getByRole("article", { name: /capacity-witness\.png/ });
     await card.getByRole("button", { name: "Annotate", exact: true }).click();
@@ -133,6 +133,12 @@ test("the original installed editor preserves a draft on real full NTFS and retr
     await expect(editor.getByRole("listbox", { name: "Objects" }).getByRole("option", { selected: true })).toHaveCount(96);
     const save = editor.getByRole("button", { name: "Save now", exact: true });
     await expect(save).toBeEnabled();
+    // Thumbnails arrive through the ordinary worker after import. Let that write finish
+    // before capturing the annotation state and preparing real volume pressure.
+    await expect.poll(async () => (await get(path)).image.thumbnail_path).toBeTruthy();
+    const before = await get(path);
+    expect(before.image).toMatchObject({ annotation_revision: 1, sha256: sourceSha });
+    expect(before.annotations).toEqual(seeded.annotations);
     const writes: { status: number; body: string }[] = [];
     const relevant = (r: Response) => r.url() === api + path && r.request().method() === "PUT";
     page.on("response", (r) => {
