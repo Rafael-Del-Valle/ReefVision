@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T06:58:04Z`
+Updated: `2026-11-21T07:10:46Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1590,6 +1590,7 @@ Evidence:
 - `browser`: Twelve source-browser journeys exercised still/video detection, optional adjusted-mask inference, archived datasets, paired detectors, backup and recovery, calibrated growth and spatial review. Three new detector runs used CPU and scratch initialization. Both comparison replays returned the same report digest; adjusted-image segmentation left both proposals pending on the selected source. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-twelve-preserved-workflows-96476bc46`)
 - `browser`: With zero training drafts, the researcher opened Training → Models, registered the correct pose checkpoint, reopened the project and found the same registered run and model. The five targeted RTX workflow, evaluation and temporal continuity tests passed separately. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-zero-draft-models-7797efad6`)
 - `browser`: Through Workflow Builder a researcher saw an unseen holdout class fail before publication. With a compatible holdout, eight validation images used training ordinal 1 for the same stable class at validation ordinal 0. The frozen originals and exact checkpoint identity survived reopening. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-frozen-class-map-recovery-9124acdb0`)
+- `browser`: Advanced Workflow Builder refused the historically queued and fresh connected validation inputs for both a shared recording and a shared animal. Retrying each original parent emitted zero training children and results. A disjoint validation fit and exploratory training without validation both completed, and four archived results remained intact. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-explicit-validation-port-15be85268`)
 - `windows_installed`: The physical WebView2 Workflow Builder showed both failures under an ordinary account and recovered the same parent, child and experiment after the right bytes were restored. The matching frozen worker trained with the held-out class projected by stable ID and reopened all three frozen exports. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-packaged-training-and-class-recovery-9124acdb0`)
 - `physical_hardware`: The original 1.8 MSI payload ran the same 14-node graph twice in native WebView2 on the RTX 3090. Each separately trained, registered and inferred on actual CUDA, paused for two ordinary reviews and downloaded the audited pose and training ZIP. The generated held-out video and source-pixel landmarks are pinned in both receipts. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-end-to-end-workflows-cuda-two-saved-e3e8`)
 - `physical_hardware`: The local 1.9 production WebView2 ran one saved 14-node graph twice on the RTX 3090. Each run trained and registered its checkpoint, inferred the held-out recording, stopped for both human decisions and exported the confirmed source points. The retained record includes 132 process-bound GPU samples. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-local-native-rtx-96476bc46`)

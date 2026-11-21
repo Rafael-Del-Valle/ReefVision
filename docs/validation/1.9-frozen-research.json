@@ -914,5 +914,74 @@
     },
     "cause": "Both jobs reached their fixed wait limit before the original installer was uploaded. Installation and offline behavior were not exercised.",
     "retry_action": "Rerun the two failed offline jobs after job 136734331397 succeeds and the original media are available. Retain attempt 2 independently."
+  },
+  "independent_frozen_pose_validation": {
+    "source": "15be85268fc0cf4f801152fa79b4901adffddc3d",
+    "parent": "9124acdb0696871208c69f2ffc7601722329daac",
+    "version": "1.9.0",
+    "schema": "b19_registration_0001",
+    "product_pr": 149,
+    "branch": "codex/reefvision-1.9-independent-pose-validation",
+    "product_worktree": "C:/rv19-pose-independent",
+    "product_tree_change": "Five files covering the graph planner, saved pose execution, native and Ultralytics workers and regressions. The five modified paths add no migration or packaging change.",
+    "two_optional_overlap_controls_baseline": {
+      "file": "1.9/checkpoints/15be85268/source-independent-pose-validation/overlapping-baseline-red.json",
+      "sha256": "489f97310bbe898535b6d3b9e816d7ee27fe177bfe80ba6a39086c43a52b64da"
+    },
+    "corrected_controls": {
+      "file": "1.9/checkpoints/15be85268/source-independent-pose-validation/overlapping-corrected-green.json",
+      "sha256": "a32415a2588242510ff90d457a62340e43073f4ed768d2668d5dcc8d3c2d2dda"
+    },
+    "workflow_builder": {
+      "file": "1.9/checkpoints/15be85268/source-independent-pose-validation/ordinary-workflow-builder.json",
+      "sha256": "491b604fb77d3ced5efefa9751688c38a4dfced581dc3b99f75ce1f7df524b74"
+    },
+    "seven_focused_tests": {
+      "file": "1.9/checkpoints/15be85268/source-independent-pose-validation/independent-green-tests.log",
+      "sha256": "9024e8cc85c1b1cab89a888b1de77a14ec3c95e5ae1a74c86919123b37c938cd"
+    },
+    "normal_lint_format_typecheck": {
+      "file": "1.9/checkpoints/15be85268/source-independent-pose-validation/api-and-inventory.log",
+      "sha256": "05ce9fc173b578168c17e5753aec9595ec9937bbea8e460f108e135c9d21d74a"
+    },
+    "alembic": {
+      "file": "1.9/checkpoints/15be85268/source-independent-pose-validation/roundtrip.log",
+      "sha256": "614363a4932e9422cda58b812c85468d877d274d40cc75e8e33ac7d7f85040b9"
+    },
+    "full_windows": {
+      "output": "C:/rvb19-15be",
+      "checkout": "C:/rv19-15be-full",
+      "cases": 6088,
+      "node_ids_sha256": "53a6ec579b8adeecc1794d807c5ae19a52ec6252b777f2d6631b5009757cc8f3",
+      "workers": 16,
+      "shares_completed_slots_with": "9124acdb0696871208c69f2ffc7601722329daac"
+    },
+    "affected_windows": {
+      "output": "C:/rvb19-split-15be",
+      "cases": 93,
+      "node_ids_sha256": "dbec1c63de2135ede1b71c63c1d709daa6fdda42e649cd85e199b6215bee0492",
+      "workers": 5
+    },
+    "original_windows": {
+      "run": 44878790843,
+      "job": 136769291129,
+      "roles": 11
+    },
+    "hosted_ci": {
+      "general_run": 44878790851,
+      "backend_job": 136769290837,
+      "scientific_run": 44878790815,
+      "scientific_backend_job": 136769290679
+    },
+    "local_manufacture": {
+      "checkout": "C:/rv19n-15be8526",
+      "staging": "C:/rv19e-15be8526",
+      "owner_location": "1.9/checkpoints/15be85268/local-production"
+    },
+    "known_provider_diagnostic": "For training with no validation set, the pinned optional Ultralytics plot can log an index error. Training and export completed with the explicit exploratory warning and zero independent validation metrics on both source checkpoints.",
+    "ordinary_workflow_builder_audit": {
+      "file": "1.9/checkpoints/15be85268/source/heldout-independence-ui/index.json",
+      "sha256": "71ebe04cd7c0fa41b2a8527973ac25e579c37226fe2b9866bbc1d47f9683c98a"
+    }
   }
 }
