@@ -847,3 +847,45 @@ def test_camera_rendition_nontransient_io_failure_is_not_retried(
     assert source.read_bytes() == original
     assert destination.read_bytes() == previous
     assert list(tmp_path.glob(f".{destination.name}.*.part")) == []
+
+@pytest.mark.parametrize("rendition", ["display", "thumbnail"])
+@pytest.mark.parametrize("winerror", [5, 53, 112])
+def test_permanent_windows_camera_rendition_error_does_not_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    rendition: str,
+    winerror: int,
+) -> None:
+    """Do not mistake access denial, unavailable shares or full disks for viewer locks."""
+    source = tmp_path / "camera_original.JPEG"
+    original = image_bytes("JPEG", size=(48, 32))
+    source.write_bytes(original)
+    destination = tmp_path / ("display.png" if rendition == "display" else "thumbnail.jpg")
+    previous = b"last committed preview"
+    destination.write_bytes(previous)
+    attempts = 0
+    delays: list[float] = []
+
+    def permanently_blocked(temporary: Path, target: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        assert temporary.exists()
+        assert target == destination
+        failure = PermissionError(errno.EACCES, "permanent rendition publication error")
+        failure.winerror = winerror
+        raise failure
+
+    monkeypatch.setattr(image_storage.os, "replace", permanently_blocked)
+    monkeypatch.setattr(image_storage.time, "sleep", delays.append)
+
+    with pytest.raises(PermissionError, match="permanent rendition publication error"):
+        if rendition == "display":
+            image_storage.create_browser_display(source, destination)
+        else:
+            image_storage.create_thumbnail(source, destination, max_width=24, max_height=24)
+
+    assert attempts == 1
+    assert delays == []
+    assert source.read_bytes() == original
+    assert destination.read_bytes() == previous
+    assert list(tmp_path.glob(f".{destination.name}.*.part")) == []
