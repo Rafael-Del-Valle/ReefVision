@@ -715,3 +715,89 @@ def test_locked_camera_rendition_cleanup_preserves_original_publish_failure(
     assert not destination.exists()
     assert len(list(tmp_path.glob(f".{destination.name}.*.part"))) == 1
     assert "Could not remove incomplete camera import artifact" in caplog.text
+
+
+@pytest.mark.parametrize("rendition", ["display", "thumbnail"])
+@pytest.mark.parametrize("lock_kind", ["win32", "win33", "busy"])
+def test_transient_camera_rendition_lock_retry_without_mutating_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    rendition: str,
+    lock_kind: str,
+) -> None:
+    """Windows file locks should retry atomically without changing scientific originals."""
+    source = tmp_path / "camera_original.JPG"
+    original = image_bytes("JPEG", size=(48, 32))
+    source.write_bytes(original)
+    destination = tmp_path / ("display.png" if rendition == "display" else "thumbnail.jpg")
+    previous_rendition = b"previous display remains valid until atomic publish"
+    destination.write_bytes(previous_rendition)
+    real_replace = image_storage.os.replace
+    attempts = 0
+    delays: list[float] = []
+
+    def temporarily_locked(temporary: Path, target: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        assert target == destination
+        assert destination.read_bytes() == previous_rendition
+        if attempts <= 2:
+            if lock_kind == "busy":
+                raise OSError(errno.EBUSY, "simulated removable-volume contention")
+            failure = OSError(errno.EIO, "simulated Windows file lock")
+            failure.winerror = 32 if lock_kind == "win32" else 33
+            raise failure
+        real_replace(temporary, target)
+
+    monkeypatch.setattr(image_storage.os, "replace", temporarily_locked)
+    monkeypatch.setattr(image_storage.time, "sleep", delays.append)
+
+    if rendition == "display":
+        image_storage.create_browser_display(source, destination)
+    else:
+        image_storage.create_thumbnail(source, destination, max_width=24, max_height=24)
+
+    assert attempts == 3
+    assert delays == [0.01, 0.02]
+    assert source.read_bytes() == original
+    assert destination.read_bytes() != previous_rendition
+    with Image.open(destination) as preview:
+        preview.load()
+        assert preview.format == ("PNG" if rendition == "display" else "JPEG")
+    assert list(tmp_path.glob(f".{destination.name}.*.part")) == []
+
+
+@pytest.mark.parametrize("rendition", ["display", "thumbnail"])
+def test_camera_rendition_nontransient_io_failure_is_not_retried(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    rendition: str,
+) -> None:
+    """A disconnected drive must fail immediately and retain the last published preview."""
+    source = tmp_path / "camera_original.JPEG"
+    original = image_bytes("JPEG", size=(32, 24))
+    source.write_bytes(original)
+    destination = tmp_path / ("display.png" if rendition == "display" else "thumbnail.jpg")
+    previous = b"last committed rendition"
+    destination.write_bytes(previous)
+    attempts = 0
+
+    def disconnected_volume(temporary: Path, target: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        assert temporary.exists()
+        assert target == destination
+        raise OSError(errno.EIO, "simulated camera preview volume disconnect")
+
+    monkeypatch.setattr(image_storage.os, "replace", disconnected_volume)
+
+    with pytest.raises(OSError, match="volume disconnect"):
+        if rendition == "display":
+            image_storage.create_browser_display(source, destination)
+        else:
+            image_storage.create_thumbnail(source, destination, max_width=24, max_height=24)
+
+    assert attempts == 1
+    assert source.read_bytes() == original
+    assert destination.read_bytes() == previous
+    assert list(tmp_path.glob(f".{destination.name}.*.part")) == []
