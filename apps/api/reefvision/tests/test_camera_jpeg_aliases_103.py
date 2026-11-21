@@ -180,10 +180,39 @@ def test_orphaned_camera_exposure_exif_reports_uncertain_capture_time(
 
     assert inspected.capture_timestamp is None
     assert inspected.metadata["exif"][tag_name] == orphan_value
-    assert "offset or fractional seconds without DateTimeOriginal" in (
-        inspected.metadata["capture_time_warning"]
+    assert (
+        "offset or fractional seconds without DateTimeOriginal"
+        in (inspected.metadata["capture_time_warning"])
     )
     assert "UTC capture timestamp not inferred" in inspected.metadata["capture_time_warning"]
+    assert path.read_bytes() == original
+
+
+
+@pytest.mark.parametrize(
+    ("non_exposure_time_tag", "non_exposure_offset_tag", "suffix"),
+    [
+        (36868, 36882, ".JPG"),  # DateTimeDigitized / OffsetTimeDigitized
+        (306, 36880, ".JPEG"),  # DateTime / OffsetTime
+    ],
+)
+def test_camera_processing_dates_never_substitute_for_exposure_time(
+    tmp_path, non_exposure_time_tag: int, non_exposure_offset_tag: int, suffix: str
+) -> None:
+    """Only DateTimeOriginal identifies acquisition, even with later offsets."""
+    path = tmp_path / ("processed_not_exposed" + suffix)
+    exif = Image.Exif()
+    exif[non_exposure_time_tag] = "2026:04:04 18:00:00"
+    exif[non_exposure_offset_tag] = "+02:00"
+    Image.new("RGB", (17, 11), (25, 75, 125)).save(path, format="JPEG", exif=exif)
+    original = path.read_bytes()
+
+    inspected = inspect_staged_image(path, hashlib.sha256(original).hexdigest(), len(original))
+
+    assert inspected.capture_timestamp is None
+    assert "no DateTimeOriginal exposure time" in inspected.metadata["capture_time_warning"]
+    assert inspected.media_type == "image/jpeg"
+    assert inspected.sha256 == hashlib.sha256(original).hexdigest()
     assert path.read_bytes() == original
 
 
