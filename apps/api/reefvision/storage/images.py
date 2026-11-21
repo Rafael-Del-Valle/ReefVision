@@ -426,6 +426,7 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                 TypeError,
                 struct.error,
                 OverflowError,
+                RecursionError,
                 IndexError,
                 KeyError,
             ):
@@ -455,6 +456,7 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                     TypeError,
                     struct.error,
                     OverflowError,
+                    RecursionError,
                     IndexError,
                     KeyError,
                 ):
