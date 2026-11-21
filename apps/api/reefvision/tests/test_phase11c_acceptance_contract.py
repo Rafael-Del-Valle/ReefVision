@@ -52,7 +52,12 @@ def test_phase11c_track16_report_is_bound_to_the_child_invocation() -> None:
     assert "$Arguments += @('-EvidenceToken', $EvidenceToken)" in wrapper
     assert "$ExpectedReportDirectory" in wrapper
     assert "[string]$Report.evidence_run_token -cne $EvidenceToken" in wrapper
-    assert '"reefvision-clean-$EvidenceToken"' in wrapper
+    assert "Assert-ReefVisionPhase11CReportDataRoot" in helper
+    assert "Assert-ReefVisionPhase11CReportDataRoot -ExpectedAcceptanceRoot $AcceptanceRoot" in wrapper
+    assert "-ReportedAcceptanceRoot ([string]$Report.acceptance_root)" in wrapper
+    assert "-ReportedDataRoot ([string]$Report.isolated_data_root)" in wrapper
+    assert "GetFileName(" not in wrapper
+    assert '"reefvision-clean-$EvidenceToken"' in helper
     assert "[string]$EvidenceToken = ''" in child
     assert "Assert-ReefVisionPhase11CEvidenceToken -Token $EvidenceToken" in child
     assert "Test-Path -LiteralPath $EvidenceRoot" in child

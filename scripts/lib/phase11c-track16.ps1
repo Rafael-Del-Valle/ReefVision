@@ -42,6 +42,36 @@ function Assert-ReefVisionPhase11CEvidenceToken {
     return $Token
 }
 
+# Reject another disposable root even if the report has the right token and
+# last path component. This checks evidence only; the child still validates
+# filesystem junctions, protected user paths and marker-gated cleanup.
+function Assert-ReefVisionPhase11CReportDataRoot {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExpectedAcceptanceRoot,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$ReportedAcceptanceRoot,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$ReportedDataRoot,
+        [Parameter(Mandatory = $true)][string]$EvidenceToken
+    )
+
+    [void](Assert-ReefVisionPhase11CEvidenceToken -Token $EvidenceToken)
+    if ([string]::IsNullOrWhiteSpace($ReportedAcceptanceRoot) -or
+        [string]::IsNullOrWhiteSpace($ReportedDataRoot) -or
+        -not [System.IO.Path]::IsPathRooted($ReportedAcceptanceRoot) -or
+        -not [System.IO.Path]::IsPathRooted($ReportedDataRoot)) {
+        throw 'Phase 11C acceptance report roots must be nonempty absolute paths.'
+    }
+    $expectedRoot = [System.IO.Path]::GetFullPath($ExpectedAcceptanceRoot).TrimEnd([char[]]@('\', '/'))
+    $reportedRoot = [System.IO.Path]::GetFullPath($ReportedAcceptanceRoot).TrimEnd([char[]]@('\', '/'))
+    $expectedData = [System.IO.Path]::GetFullPath(
+        (Join-Path (Join-Path $expectedRoot "reefvision-clean-$EvidenceToken") 'data')
+    ).TrimEnd([char[]]@('\', '/'))
+    $reportedData = [System.IO.Path]::GetFullPath($ReportedDataRoot).TrimEnd([char[]]@('\', '/'))
+    if ($reportedRoot -ine $expectedRoot -or $reportedData -ine $expectedData) {
+        throw 'Phase 11C report does not match the invoking acceptance root and isolated data path.'
+    }
+    return $expectedData
+}
+
 # A child harness can run beside other isolated acceptance runs. Never
 # attribute its evidence by directory modification time: another run may
 # finish later, yielding a false PASS for this invocation.

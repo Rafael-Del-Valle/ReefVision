@@ -201,12 +201,9 @@ if ($TrackD16) {
     if ([string]$Report.evidence_run_token -cne $EvidenceToken) {
         throw 'Track D 1.6 acceptance report token does not match this invocation.'
     }
-    $ReportedRunDirectory = [System.IO.Path]::GetFileName(
-        [System.IO.Path]::GetDirectoryName([string]$Report.isolated_data_root)
-    )
-    if ($ReportedRunDirectory -cne "reefvision-clean-$EvidenceToken") {
-        throw 'Track D 1.6 report references another disposable research-data run.'
-    }
+    [void](Assert-ReefVisionPhase11CReportDataRoot -ExpectedAcceptanceRoot $AcceptanceRoot `
+        -ReportedAcceptanceRoot ([string]$Report.acceptance_root) `
+        -ReportedDataRoot ([string]$Report.isolated_data_root) -EvidenceToken $EvidenceToken)
 }
 
 if ([bool]$Report.plan_only) {

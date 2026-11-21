@@ -29,6 +29,33 @@ foreach ($badToken in @('', 'A1B2C3D4E5F6', 'a1b2c3d4e5', 'a1b2c3d4e5f60',
     }
 }
 
+# A matching token and run basename do not prove the intended data root.
+$acceptanceRoot = 'C:\reefvision-disposable-acceptance'
+$expectedData = Join-Path (Join-Path $acceptanceRoot "reefvision-clean-$validToken") 'data'
+$confirmedData = Assert-ReefVisionPhase11CReportDataRoot -ExpectedAcceptanceRoot $acceptanceRoot `
+    -ReportedAcceptanceRoot $acceptanceRoot -ReportedDataRoot $expectedData -EvidenceToken $validToken
+if ($confirmedData -ine $expectedData) { throw 'Exact invocation data root was not preserved.' }
+[void](Assert-ReefVisionPhase11CReportDataRoot -ExpectedAcceptanceRoot $acceptanceRoot `
+    -ReportedAcceptanceRoot ($acceptanceRoot.ToUpperInvariant()) `
+    -ReportedDataRoot ($expectedData.ToUpperInvariant()) -EvidenceToken $validToken)
+[void](Assert-ReefVisionPhase11CReportDataRoot -ExpectedAcceptanceRoot $acceptanceRoot `
+    -ReportedAcceptanceRoot "$acceptanceRoot\." `
+    -ReportedDataRoot "$expectedData\." -EvidenceToken $validToken)
+foreach ($bad in @(
+    @{ Root = 'C:\other-disposable'; Data = $expectedData },
+    @{ Root = $acceptanceRoot; Data = "C:\other-disposable\reefvision-clean-$validToken\data" },
+    @{ Root = $acceptanceRoot; Data = (Join-Path $acceptanceRoot "reefvision-clean-$validToken\other-data") },
+    @{ Root = $acceptanceRoot; Data = (Join-Path $acceptanceRoot "reefvision-clean-$validToken\data-old") },
+    @{ Root = ''; Data = $expectedData },
+    @{ Root = $acceptanceRoot; Data = '' },
+    @{ Root = $acceptanceRoot; Data = "reefvision-clean-$validToken\data" }
+)) {
+    Assert-Rejected -MessagePattern 'acceptance report roots|does not match the invoking' -Action {
+        Assert-ReefVisionPhase11CReportDataRoot -ExpectedAcceptanceRoot $acceptanceRoot `
+            -ReportedAcceptanceRoot $bad.Root -ReportedDataRoot $bad.Data -EvidenceToken $validToken
+    }
+}
+
 $old = 'C:\disposable\windows-clean-acceptance-old'
 $own = 'C:\disposable\windows-clean-acceptance-own'
 $other = 'C:\disposable\windows-clean-acceptance-other'
