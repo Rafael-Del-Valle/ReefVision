@@ -3,9 +3,8 @@
 use serde::Serialize;
 #[cfg(test)]
 use std::sync::Arc;
-#[cfg(target_os = "windows")]
-use std::{ffi::OsStr, os::windows::ffi::OsStrExt, ptr::null};
 use std::{
+    ffi::OsStr,
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -17,10 +16,19 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+#[cfg(target_os = "windows")]
+use std::{
+    mem::MaybeUninit,
+    os::windows::{ffi::OsStrExt, fs::OpenOptionsExt, io::AsRawHandle},
+    ptr::null,
+};
 use tauri::{AppHandle, Manager, State, WindowEvent};
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::{
     Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, HANDLE},
+    Storage::FileSystem::{
+        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS,
+    },
     System::Threading::CreateMutexW,
     UI::WindowsAndMessaging::{FindWindowW, IsIconic, SetForegroundWindow, ShowWindow, SW_RESTORE},
 };
@@ -326,11 +334,39 @@ fn focus_existing_instance_window() {
 fn focus_existing_instance_window() {}
 
 #[cfg(target_os = "windows")]
-fn acquire_single_instance_guard() -> std::io::Result<Option<SingleInstanceGuard>> {
-    let mutex_name: Vec<u16> = OsStr::new("Local\\ReefVisionDesktopInstance")
-        .encode_wide()
-        .chain(Some(0))
-        .collect();
+fn instance_mutex_name(acceptance_profile: Option<&Path>) -> std::io::Result<String> {
+    let Some(profile) = acceptance_profile else {
+        return Ok("Local\\ReefVisionDesktopInstance".into());
+    };
+    let directory = profile.canonicalize()?;
+    if !directory.join(ACCEPTANCE_MARKER).is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "The isolated desktop mutex requires a marked acceptance profile",
+        ));
+    }
+    // The Windows file identity keys aliases of the same canonical directory alike.
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(directory)?;
+    let mut info = MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::uninit();
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), info.as_mut_ptr()) } == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    let info = unsafe { info.assume_init() };
+    Ok(format!(
+        "Local\\ReefVisionDesktopAcceptance-{:08x}-{:08x}{:08x}",
+        info.dwVolumeSerialNumber, info.nFileIndexHigh, info.nFileIndexLow
+    ))
+}
+
+#[cfg(target_os = "windows")]
+fn acquire_single_instance_guard(
+    acceptance_profile: Option<&Path>,
+) -> std::io::Result<Option<SingleInstanceGuard>> {
+    let name = instance_mutex_name(acceptance_profile)?;
+    let mutex_name: Vec<u16> = OsStr::new(&name).encode_wide().chain(Some(0)).collect();
     let handle = unsafe { CreateMutexW(null(), 1, mutex_name.as_ptr()) };
     if handle.is_null() {
         return Err(std::io::Error::last_os_error());
@@ -347,8 +383,14 @@ fn acquire_single_instance_guard() -> std::io::Result<Option<SingleInstanceGuard
 }
 
 #[cfg(not(target_os = "windows"))]
-fn acquire_single_instance_guard() -> std::io::Result<Option<SingleInstanceGuard>> {
+fn acquire_single_instance_guard(
+    _acceptance_profile: Option<&Path>,
+) -> std::io::Result<Option<SingleInstanceGuard>> {
     Ok(Some(SingleInstanceGuard))
+}
+
+fn focus_existing_on_duplicate(acceptance_profile: Option<&Path>) -> bool {
+    acceptance_profile.is_none()
 }
 
 fn workspace_root() -> std::io::Result<PathBuf> {
@@ -655,10 +697,15 @@ fn shutdown_backend(state: &DesktopState) {
 }
 
 fn main() {
-    let _single_instance_guard = match acquire_single_instance_guard() {
+    let acceptance_profile = acceptance_data_dir_from_environment()
+        .expect("ReefVision could not validate its requested acceptance profile");
+    let _single_instance_guard = match acquire_single_instance_guard(acceptance_profile.as_deref())
+    {
         Ok(Some(guard)) => guard,
         Ok(None) => {
-            focus_existing_instance_window();
+            if focus_existing_on_duplicate(acceptance_profile.as_deref()) {
+                focus_existing_instance_window();
+            }
             eprintln!("ReefVision desktop is already running.");
             return;
         }
@@ -667,6 +714,15 @@ fn main() {
         }
     };
 
+    let mut context = tauri::generate_context!();
+    if acceptance_profile.is_some() {
+        // Keep ordinary title-based activation away from these disposable windows as well.
+        for window in &mut context.config_mut().app.windows {
+            if window.label == "main" {
+                window.title = "ReefVision (isolated acceptance)".into();
+            }
+        }
+    }
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
@@ -703,7 +759,7 @@ fn main() {
             install_panic_shutdown_hook(app_handle);
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("ReefVision desktop shell encountered an unrecoverable error");
 
     app.run(|app_handle, event| {
@@ -727,6 +783,60 @@ fn main() {
 mod tests {
     use super::*;
     use std::sync::atomic::AtomicUsize;
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn ordinary_mode_keeps_the_existing_desktop_mutex_and_duplicate_activation() {
+        assert_eq!(
+            instance_mutex_name(None).unwrap(),
+            "Local\\ReefVisionDesktopInstance"
+        );
+        assert!(focus_existing_on_duplicate(None));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn marked_acceptance_profiles_share_only_their_canonical_directory_mutex() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "reefvision-acceptance-lock-{}-{unique}",
+            std::process::id()
+        ));
+        let first = root.join("first");
+        let second = root.join("second");
+        fs::create_dir_all(&first).unwrap();
+        fs::create_dir_all(&second).unwrap();
+        assert!(instance_mutex_name(Some(&first)).is_err());
+        for path in [&first, &second] {
+            fs::write(path.join(ACCEPTANCE_MARKER), "test-only profile").unwrap();
+        }
+
+        let alias = second.join("..").join("first");
+        assert_eq!(
+            instance_mutex_name(Some(&first)).unwrap(),
+            instance_mutex_name(Some(&alias)).unwrap()
+        );
+        assert_ne!(
+            instance_mutex_name(Some(&first)).unwrap(),
+            instance_mutex_name(Some(&second)).unwrap()
+        );
+        let one = acquire_single_instance_guard(Some(&first)).unwrap();
+        let duplicate = acquire_single_instance_guard(Some(&alias)).unwrap();
+        let other = acquire_single_instance_guard(Some(&second)).unwrap();
+        assert!(one.is_some() && duplicate.is_none() && other.is_some());
+        assert!(!focus_existing_on_duplicate(Some(&first)));
+        drop((one, other));
+        for path in [first, second] {
+            fs::remove_file(path.join(ACCEPTANCE_MARKER)).unwrap();
+            fs::remove_dir(path).unwrap();
+        }
+        fs::remove_dir(root).unwrap();
+    }
 
     #[test]
     fn training_console_accepts_only_opaque_run_ids() {
