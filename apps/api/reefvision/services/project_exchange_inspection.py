@@ -508,6 +508,17 @@ def inspect_project_exchange(
                     (manifest.get("origin") or {}).get("id_map", {}),
                     read_raster=read_raster,
                 )
+                if version == MULTIMODAL_FORMAT:
+                    from reefvision.services.project_exchange_domain_shift_v18 import (
+                        validate_domain_shift_exchange,
+                    )
+
+                    validate_domain_shift_exchange(
+                        source_record["id"],
+                        section_rows,
+                        (manifest.get("origin") or {}).get("id_map", {}),
+                        read_raster=read_raster,
+                    )
             if not errors:
                 validate_native_proofs(
                     section_rows,

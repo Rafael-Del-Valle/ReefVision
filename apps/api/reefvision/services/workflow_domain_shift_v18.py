@@ -64,10 +64,11 @@ def execute_domain_shift(
         )
     except SchemaError as exc:
         raise ValidationError("Choose a saved domain shift report UUID and digest") from exc
+    result = read_report(session, project_id, str(pin.id), pin.sha256)
     return [
         {
             "port_id": "report",
             "data_type": NODE,
-            "payload": read_report(session, project_id, str(pin.id), pin.sha256),
+            "payload": {key: result[key] for key in ("snapshot", "content_sha256")},
         }
     ]

@@ -21,6 +21,7 @@ from reefvision.db.models import (
 from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.services.project_exchange_adjustment_v18 import remap_adjustment_parameters
 from reefvision.services.project_exchange_comparison import restore_comparison_artifact
+from reefvision.services.project_exchange_domain_shift_v18 import remap_domain_shift_parameters
 from reefvision.services.project_exchange_field_v15 import FIELD_DATA_TYPE
 from reefvision.services.project_exchange_mesh_v14 import (
     MESH_NODE_TYPES,
@@ -65,6 +66,7 @@ HISTORICAL_ARTIFACT_TYPES = frozenset(
         "detectability_assessment",
         "multispectral_index",
         "adjusted_image_reference",
+        "domain_shift_report",
         PAIRED_GROWTH_TYPE,
         REVIEWER_LAB_TYPE,
     }
@@ -205,6 +207,8 @@ def restore_workflow_provenance(
                     node["parameters"] = remap_study_parameters(source["parameters"], id_map)
                 elif node_type == "underwater_adjustment":
                     node["parameters"] = remap_adjustment_parameters(source["parameters"], id_map)
+                elif node_type == "domain_shift_report":
+                    node["parameters"] = remap_domain_shift_parameters(source["parameters"], id_map)
                 elif node_type == "paired_model_comparison":
                     node["parameters"] = remap_paired_models_parameters(
                         source["parameters"], id_map
@@ -244,6 +248,10 @@ def restore_workflow_provenance(
                 )
             elif node.node_type == "underwater_adjustment":
                 node.parameters_json = remap_adjustment_parameters(
+                    source_nodes[node.id]["parameters_json"], id_map
+                )
+            elif node.node_type == "domain_shift_report":
+                node.parameters_json = remap_domain_shift_parameters(
                     source_nodes[node.id]["parameters_json"], id_map
                 )
             elif node.node_type == "paired_model_comparison":

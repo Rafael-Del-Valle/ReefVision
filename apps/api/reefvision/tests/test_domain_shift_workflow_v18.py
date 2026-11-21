@@ -1,16 +1,27 @@
+from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import Job, PredictionProposal
+from reefvision.db.models import Job, PredictionProposal, Project
+from reefvision.db.models.image_adjustment import ImageAdjustmentRecipe
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.schemas.domain_shift_v18 import DomainShiftDraft
+from reefvision.services.domain_shift_metrics_v18 import summarize_domain_shift
 from reefvision.services.domain_shift_v18 import process_domain_shift
 from reefvision.services.paired_models_v15 import process_comparison
+from reefvision.services.project_exchange import _row
+from reefvision.services.project_exchange_domain_shift_v18 import validate_domain_shift_exchange
+from reefvision.services.project_exchange_v1 import ProjectExchangeV1Service
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_model_comparison_stills_v15 import _confirm_runtime, _dataset, _register
 from reefvision.tests.test_model_comparison_stills_v15 import reviewed_runtime as reviewed_runtime
+from reefvision.tests.test_scientific_project_exchange import export_archive, import_archive
 
 
 def test_domain_shift_uses_pinned_adjustments_and_replays_with_groups(
@@ -47,23 +58,30 @@ def test_domain_shift_uses_pinned_adjustments_and_replays_with_groups(
     assert process_comparison(settings, factory, baseline_id)
     previous = client.get(root + "/paired-model-comparisons/" + baseline_id).json()["result_json"]
     domain = root + "/domain-shift"
-    # Archived comparisons can have a terminal status without the evidence
-    # required for a domain analysis. They must not hide an eligible older result.
-    with factory() as session:
-        session.add(
-            Job(
-                project_id=project,
-                job_type="paired_model_comparison",
-                status="succeeded",
-                request_json={"task": "detector"},
-                result_json={},
-            )
-        )
-        session.commit()
-    first_page = client.get(domain + "/sources?offset=0&limit=1")
-    assert first_page.status_code == 200, first_page.text
-    assert [entry["id"] for entry in first_page.json()] == [baseline_id]
-    assert client.get(domain + "/sources?offset=1&limit=1").json() == []
+    declaration = {
+        "comparison_id": baseline_id,
+        "comparison_sha256": previous["content_sha256"],
+        "independent_unit": "Tank",
+        "reference": {"label": "Clear water", "groups": ["held-out-tank-a"]},
+        "target": {"label": "Turbid", "groups": ["held-out-tank-b", "Unobserved tank"]},
+    }
+    original_job = client.post(domain, json={**declaration, "preprocessing": "original"})
+    assert original_job.status_code == 202
+    original_id = original_job.json()["id"]
+    assert process_domain_shift(settings, factory, original_id)
+    original_report = client.get(f"{domain}/{original_id}/report").json()
+    assert original_report["snapshot"]["preprocessing_executed"] == "original"
+    # A domain report must select 1.8 even in a project that uses unchanged originals.
+    payload = export_archive(client, settings, project)
+    imported = import_archive(client, payload)
+    assert imported.status_code == 201, imported.text
+    copied = imported.json()
+    assert copied["package"]["format_version"] == "1.8"
+    mapped = copied["package"]["options_json"]["id_map"][original_id]
+    restored = client.get(f"/api/v1/projects/{copied['project_id']}/domain-shift/{mapped}/report")
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["snapshot"] == original_report["snapshot"]
+    assert restored.json()["content_sha256"] == original_report["content_sha256"]
     pins = []
     for key in ("first", "second", "blank"):
         image_id = images[key]
@@ -85,11 +103,7 @@ def test_domain_shift_uses_pinned_adjustments_and_replays_with_groups(
             }
         )
     study = {
-        "comparison_id": baseline_id,
-        "comparison_sha256": previous["content_sha256"],
-        "independent_unit": "Tank",
-        "reference": {"label": "Clear water", "groups": ["held-out-tank-a"]},
-        "target": {"label": "Turbid", "groups": ["held-out-tank-b", "Unobserved tank"]},
+        **declaration,
         "preprocessing": "adjusted",
         "adjustments": pins,
     }
@@ -188,3 +202,72 @@ def test_domain_shift_uses_pinned_adjustments_and_replays_with_groups(
     assert process_domain_shift(settings, factory, overlap)
     withhold = client.get(f"{domain}/{overlap}").json()["result_json"]["snapshot"]["summary"]
     assert withhold["lineage"] == "overlap" and withhold["metrics"] == []
+
+    with factory() as session:
+        records = ProjectExchangeV1Service(session, settings)._records(
+            session.get_one(Project, project)
+        )
+        records["image_adjustment_recipes"] = session.scalars(
+            select(ImageAdjustmentRecipe).where(ImageAdjustmentRecipe.project_id == project)
+        ).all()
+        sections = {name: [_row(row) for row in rows] for name, rows in records.items()}
+    validate_domain_shift_exchange(project, sections, {})
+
+    def archived_report(rows: dict[str, Any], target: str) -> dict[str, Any]:
+        return next(row["result_json"] for row in rows["jobs"] if row["id"] == target)
+
+    forged = deepcopy(sections)
+    changed = archived_report(forged, job_id)
+    body = changed["snapshot"]
+    body["observed_evidence"]["groups"][0]["observations"][0]["metrics"][0]["left"] = 42.0
+    body["summary"] = summarize_domain_shift(
+        DomainShiftDraft.model_validate(body["declaration"]),
+        body["observed_evidence"]["groups"],
+        "held_out",
+    )
+    changed["content_sha256"] = canonical_json_sha256(body)
+    with pytest.raises(ValidationError, match="scores no longer match"):
+        validate_domain_shift_exchange(project, forged, {})
+
+    foreign = deepcopy(sections)
+    children = snapshot["observed_evidence"]["inference_job_ids"]
+    child = next(row for row in foreign["jobs"] if row["id"] == children[0])
+    child["request_json"]["paired_owner_run_id"] = baseline_id
+    with pytest.raises(ValidationError, match="belongs to a different domain report"):
+        validate_domain_shift_exchange(project, foreign, {})
+
+    artifact_rows = deepcopy(sections)
+    artifact = next(
+        row
+        for row in artifact_rows["workflow_artifacts"]
+        if row["data_type"] == "domain_shift_report"
+    )
+    artifact["payload_json"]["snapshot"]["reference"]["split"] = "train"
+    artifact["payload_sha256"] = canonical_json_sha256(artifact["payload_json"])
+    with pytest.raises(
+        ValidationError, match="workflow does not produce its declared frozen report"
+    ):
+        validate_domain_shift_exchange(project, artifact_rows, {})
+
+    # An earlier paired report can carry its measured scores without the child
+    # inference IDs required for domain analysis. Paginate the usable reports.
+    legacy = deepcopy(previous)
+    del legacy["snapshot"]["evidence"]["inference_job_ids"]
+    legacy["content_sha256"] = canonical_json_sha256(legacy["snapshot"])
+    with factory() as session:
+        prior_comparison = session.get(Job, baseline_id)
+        assert prior_comparison is not None
+        session.add(
+            Job(
+                project_id=project,
+                job_type="paired_model_comparison",
+                status="succeeded",
+                request_json=prior_comparison.request_json,
+                result_json=legacy,
+            )
+        )
+        session.commit()
+    first_page = client.get(domain + "/sources?offset=0&limit=1")
+    assert first_page.status_code == 200, first_page.text
+    assert [entry["id"] for entry in first_page.json()] == [baseline_id]
+    assert client.get(domain + "/sources?offset=1&limit=1").json() == []

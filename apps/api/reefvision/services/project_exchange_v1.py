@@ -88,6 +88,7 @@ from reefvision.services.project_exchange_bioacoustics_v18 import (
     gather_audio_media,
     has_audio_assets,
 )
+from reefvision.services.project_exchange_domain_shift_v18 import domain_shift_raster_paths
 from reefvision.services.project_exchange_field_v15 import (
     FIELD_EXCHANGE_FORMATS,
     FIELD_ORIGIN,
@@ -920,6 +921,13 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         }
         mandatory_rasters = paired_comparison_raster_paths(raster_sections, include_legacy=False)
         raster_paths = paired_comparison_raster_paths(raster_sections)
+        for managed, digest in domain_shift_raster_paths(raster_sections).items():
+            if raster_paths.get(managed, digest) != digest:
+                raise ValidationError(
+                    "The domain and paired comparison disagree on a raster checksum"
+                )
+            mandatory_rasters[managed] = digest
+            raster_paths[managed] = digest
         seen_generated = {descriptor["source_relative_path"] for descriptor, _ in generated}
         prefix = project.storage_root.rstrip("/") + "/"
         for managed, digest in sorted(raster_paths.items()):

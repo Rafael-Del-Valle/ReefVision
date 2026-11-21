@@ -1,5 +1,6 @@
 """Evaluate two declared acquisition domains using frozen grouped still evidence."""
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -34,6 +35,35 @@ from reefvision.storage.model_comparison_stills_v15 import read_comparison_raste
 
 JOB_TYPE = "domain_shift_analysis"
 VERSION = "domain-shift-0001"
+
+
+def remap_domain_declaration(value: dict[str, Any], mapping: Mapping[str, str]) -> dict[str, Any]:
+    draft = DomainShiftDraft.model_validate(value).model_dump(mode="json")
+    draft["comparison_id"] = mapping.get(draft["comparison_id"], draft["comparison_id"])
+    for item in draft["adjustments"]:
+        for key in ("image_id", "recipe_id"):
+            item[key] = mapping.get(item[key], item[key])
+    return draft
+
+
+def _remap_lineage(evidence: dict[str, Any], aliases: Mapping[str, str]) -> list[dict[str, Any]]:
+    def local(identifier: str) -> str:
+        return aliases.get(identifier, identifier)
+
+    return [
+        {
+            **row,
+            "model_id": local(row["model_id"]),
+            "training_run_ids": [local(value) for value in row["training_run_ids"]],
+            "model_selection_job_ids": [local(value) for value in row["model_selection_job_ids"]],
+            "checkpoint_dependencies": {
+                local(key): value for key, value in row["checkpoint_dependencies"].items()
+            },
+            "datasets": [{**item, "id": local(item["id"])} for item in row["datasets"]],
+            "overlapping_image_ids": [local(value) for value in row["overlapping_image_ids"]],
+        }
+        for row in evidence["lineage"]
+    ]
 
 
 def _source(session: Session, project_id: str, comparison_id: str) -> tuple[Job, dict[str, Any]]:
@@ -179,7 +209,23 @@ def evaluate(
     current_plan = {"dataset_version_id": str(live_request.sources[0].id)}
     args = (session, settings, project_id, live_request.task, current_plan, selected)
     archival_ids = {value: key for key, value in aliases.items()}
-    current: dict[str, Any] = evidence
+    current: dict[str, Any] = {
+        **evidence,
+        "reference_id": current_plan["dataset_version_id"],
+        "reference_sha256": live_request.sources[0].sha256,
+        "inference_job_ids": list(baseline_job_ids),
+        "lineage": _remap_lineage(evidence, aliases),
+        "groups": [
+            {
+                **group,
+                "observations": [
+                    {**item, "media_id": aliases.get(item["media_id"], item["media_id"])}
+                    for item in group["observations"]
+                ],
+            }
+            for group in evidence["groups"]
+        ],
+    }
     lineage: Lineage = "overlap"
     reasons = []
     try:
@@ -314,6 +360,13 @@ def read_report(
     ):
         raise ConflictError("The domain shift report checksum does not match")
     draft = DomainShiftDraft.model_validate(row.request_json)
+    aliases = result.get("source_id_map", {})
+    if aliases.get(
+        snapshot["project_id"], snapshot["project_id"]
+    ) != project_id or remap_domain_declaration(
+        snapshot["declaration"], aliases
+    ) != draft.model_dump(mode="json"):
+        raise ConflictError("The saved domain report no longer matches its local declaration")
     _check_source(session, project_id, draft)
     if (
         summarize_domain_shift(
