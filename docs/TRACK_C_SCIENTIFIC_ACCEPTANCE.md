@@ -4,6 +4,22 @@ This is a **test plan**, not evidence that ReefVision 1.4 or 1.5 is validated or
 
 ## 1.4: 3D geometry and longitudinal studies
 
+## Imported point-cloud PLY Unicode boundary (synthetic; CI pending)
+
+The stand-alone and typed persisted Workflow Builder PLY entrypoints must
+reject malformed ASCII sources before SHA-256 source-byte provenance is
+constructed. Direct service entry also must reject lone UTF-16 surrogates
+and control bytes as a bounded `ValueError`, not crash with an uncaught
+`UnicodeEncodeError` when old/untrusted saved records bypass model validation.
+A well-formed ASCII PLY retains its exact source-byte digest, its unverified
+calibration status, and normal deterministic saved-workflow replay; invalid
+input produces no scientific measurement artifact. Regression:
+`test_spatial_point_cloud_ply_numeric_grammar_v14.py` (direct boundary,
+standalone API, fail-closed saved workflow) and existing source-binding
+replay tests. This verifies parser integrity, not instrument calibration or
+biological identity.
+
+
 ## Interactive render coverage QA (synthetic, GUI test; CI pending)
 
 The persisted 1.4 mesh artifact already reports whether render-only sampling
