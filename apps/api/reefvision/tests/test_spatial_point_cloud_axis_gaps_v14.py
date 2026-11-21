@@ -499,16 +499,44 @@ def test_distinct_xyz_gap_boundary_loci_audited_in_saved_workflow(
         "partially_displayed_intervals": 0,
         "hidden_intervals": 0,
     }
-    assert ("x" in expected["preview_omitted_largest_gap_boundary_locus_axes"]) is (
-        not duplicate_loci
+    # The distinct-loci cloud also has 299 *tied* maximum y-axis gaps
+    # (unit spacing at each of 300 levels). Their union spans all 600 rows,
+    # and default 512-row decimation omits 21 y levels. The repeated-row
+    # fixture has a constant y axis, so it must not report a y-axis gap.
+    # Do not conflate retaining both x-gap endpoints with retaining all
+    # maximum-gap boundaries on the other axes.
+    if duplicate_loci:
+        assert support["y"] is None
+    else:
+        assert support["y"] == support["x"]
+        assert (
+            expected["axis_largest_adjacent_coordinate_gaps"]["y"][
+                "equally_largest_adjacent_gap_count"
+            ]
+            == 299
+        )
+        assert expected["preview_largest_axis_gap_interval_coverage"]["y"] == {
+            "total_intervals": 299,
+            "fully_displayed_intervals": 257,
+            "partially_displayed_intervals": 42,
+            "hidden_intervals": 0,
+        }
+    assert expected["preview_omitted_largest_gap_boundary_locus_axes"] == (
+        [] if duplicate_loci else ["x", "y"]
     )
-    assert expected["preview_omitted_largest_gap_boundary_acquisition_axes"] == ["x"]
-    assert "x" not in expected["preview_omitted_largest_gap_boundary_axes"]
+    assert expected["preview_omitted_largest_gap_boundary_acquisition_axes"] == (
+        ["x"] if duplicate_loci else ["x", "y"]
+    )
+    assert expected["preview_omitted_largest_gap_boundary_axes"] == (
+        [] if duplicate_loci else ["y"]
+    )
     assert ("preview_omits_largest_axis_gap_boundary_xyz_loci" in expected["qc_warnings"]) is (
         not duplicate_loci
     )
     assert "preview_omits_largest_axis_gap_boundary_acquisition_rows" in expected["qc_warnings"]
-    assert "preview_omits_largest_axis_gap_endpoint" not in expected["qc_warnings"]
+    assert ("preview_omits_largest_axis_gap_endpoint" in expected["qc_warnings"]) is (
+        not duplicate_loci
+    )
     assert (
         expected["axis_largest_adjacent_coordinate_gaps"]["x"]["largest_adjacent_source_gap_units"]
         == 100.0
