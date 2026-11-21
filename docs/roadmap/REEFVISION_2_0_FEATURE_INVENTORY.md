@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T03:50:08Z`
+Updated: `2026-11-21T04:08:46Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1524,6 +1524,7 @@ Evidence:
 
 - `source`: Two actual export/import generations on the inherited 1.8 source preserved typed links and original bytes but changed an unavailable provider's external UUID literals. The source project and opaque-field regression fixture are retained for repair. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv19-ancestry-integration-inherited-transfer-baseline-9cde9e6e7`)
 - `source`: Two real export, inspect, import and reopen generations preserved unknown provider data and checkpoint bytes exactly while the local rows and ordinary class links rebound. This is inherited source evidence. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-ancestry-integration-literal-history-3736712ff`)
+- `source`: A second completed training record with identical checkpoint bytes preserves the registered model's original training provenance. The two workflows retain their producing experiment and share the immutable model ID. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-ancestry-integration-shared-checkpoint-a4efc2765`)
 - `browser`: none recorded
 - `windows_installed`: Ten registered roles with rehashed reports passed on the original 1.8 package, including the two historical 1.4 fingerprints. A second workflow exercised fresh and cached offline recovery. This identifies the predecessor for the direct 1.8 upgrade. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-ancestry-integration-installed-1-8-lineage`)
 - `physical_hardware`: none recorded
@@ -1566,7 +1567,7 @@ Evidence:
 - `source`: none recorded
 - `browser`: A researcher used the existing advanced graph editor with declared input IDs, then ran one 14-node revision twice. Both scratch CPU checkpoints, reviewed held-out poses and downloaded ZIPs have distinct receipts. The result uses run-derived registration names and provides the source baseline for the 1.9 guided and installed workflow. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-end-to-end-workflows-inherited-57f16152b`)
 - `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `physical_hardware`: The original 1.8 MSI payload ran the same 14-node graph twice in native WebView2 on the RTX 3090. Each separately trained, registered and inferred on actual CUDA, paused for two ordinary reviews and downloaded the audited pose and training ZIP. The generated held-out video and source-pixel landmarks are pinned in both receipts. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-end-to-end-workflows-cuda-two-saved-e3e8`)
 - `representative_data`: none recorded
 
 ### rv19-performance-resilience: Large-project/video performance and restart/resume resilience
