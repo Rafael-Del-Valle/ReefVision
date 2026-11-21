@@ -478,6 +478,7 @@ def process_reefpose_training_job(
                 **dict(run.artifact_manifest_json or {}),
                 "best_checkpoint_path": best_relative,
                 "best_checkpoint_sha256": best_sha256,
+                "result_checkpoint_sha256": best_sha256,
                 "best_checkpoint_size_bytes": best_size,
                 "last_checkpoint_path": last_relative,
                 "native_results_rows": _history_rows(persisted_history),

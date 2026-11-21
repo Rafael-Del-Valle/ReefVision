@@ -41,6 +41,7 @@ from reefvision.services.segmentation_models import SegmentationModelService
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import copy_model_file, hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.training import verify_pose_checkpoint_digest
 
 SEMANTIC_MODEL_PURPOSE = "semantic_segmenter"
 SEMANTIC_BUNDLE_METADATA = "reefvision-semantic-model.json"
@@ -251,9 +252,9 @@ class SemanticModelService(SegmentationModelService):
             raise ValidationError("Trained pose checkpoint is missing")
 
         actual_checkpoint_sha256, actual_checkpoint_size = hash_model_file(source_path)
-        expected_checkpoint_sha256 = str(artifact_manifest.get("best_checkpoint_sha256") or "")
-        if expected_checkpoint_sha256 and actual_checkpoint_sha256 != expected_checkpoint_sha256:
-            raise ValidationError("Trained pose checkpoint checksum changed after completion")
+        verify_pose_checkpoint_digest(
+            artifact_manifest, run.result_checkpoint_path, actual_checkpoint_sha256
+        )
 
         # Inspect before registration so a malformed or incompatible
         # checkpoint cannot leave behind a partially registered model.
