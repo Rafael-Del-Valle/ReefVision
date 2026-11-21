@@ -118,6 +118,22 @@ class JobService:
         }
         run.completed_at = now
 
+    def _cancel_queued_job(self, job: Job, *, now: datetime) -> None:
+        job.status = "cancelled"
+        job.completed_at = now
+        self._cancel_queued_pose_identity_run(job, now=now)
+        self._cancel_queued_pose_analysis_run(job, now=now)
+        if job.job_type == "training":
+            run = self.session.scalar(
+                select(TrainingRun).where(
+                    TrainingRun.job_id == job.id, TrainingRun.status == "queued"
+                )
+            )
+            if run is not None:
+                run.status = run.stage = "cancelled"
+                run.completed_at = now
+            job.result_json = {**dict(job.result_json or {}), "stage": "cancelled"}
+
     def _cancel_workflow_children(
         self,
         run: WorkflowRun,
@@ -128,11 +144,8 @@ class JobService:
         counts = {"cancelled": 0, "cancel_requested": 0}
         for child in self._workflow_child_jobs(run, parent_job_id):
             if child.status == "queued":
-                child.status = "cancelled"
-                child.completed_at = now
                 child.error_message = "Parent workflow was cancelled before child execution"
-                self._cancel_queued_pose_identity_run(child, now=now)
-                self._cancel_queued_pose_analysis_run(child, now=now)
+                self._cancel_queued_job(child, now=now)
                 counts["cancelled"] += 1
             elif child.status == "running":
                 child.status = "cancel_requested"
@@ -263,10 +276,7 @@ class JobService:
             )
 
         if job.status in {"queued", "waiting_for_review"}:
-            job.status = "cancelled"
-            job.completed_at = now
-            self._cancel_queued_pose_identity_run(job, now=now)
-            self._cancel_queued_pose_analysis_run(job, now=now)
+            self._cancel_queued_job(job, now=now)
             if job.job_type == "pose_evaluation":
                 job.deduplication_key = None
                 job.result_json = {

@@ -21,7 +21,7 @@ from reefvision.db.models import (
     TrainingRun,
     WorkflowArtifact,
 )
-from reefvision.domain.errors import ValidationError
+from reefvision.domain.errors import ValidationError, WorkflowExecutionCancelled
 from reefvision.jobs.pose_training import (
     process_pose_training_job,
 )
@@ -841,6 +841,10 @@ def create_pose_workflow_training_result(
     job = refreshed_job
     run = refreshed_run
 
+    if job.status == "cancelled":
+        raise WorkflowExecutionCancelled(
+            run.error_message or job.error_message or "Pose training was cancelled"
+        )
     if job.status != "succeeded" or run.status != "completed":
         detail = run.error_message or job.error_message or (f"job={job.status}, run={run.status}")
 

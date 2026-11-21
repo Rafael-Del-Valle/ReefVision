@@ -1480,7 +1480,8 @@ def test_cancelling_before_pose_worker_claim_closes_the_training_and_graph(
     (training,) = client.get(url + "/training-runs").json()
     assert training["status"] == training["stage"] == "cancelled"
     assert training["completed_at"] and training["result_checkpoint_path"] is None
-    assert client.get(f"/api/v1/jobs/{training['job_id']}").json()["status"] == "cancelled"
+    child_job = client.get(f"/api/v1/jobs/{training['job_id']}").json()
+    assert child_job["status"] == child_job["result_json"]["stage"] == "cancelled"
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json()
     assert detail["run"]["status"] == "cancelled"
     assert {n["node_id"]: n["status"] for n in detail["nodes"]} == {
