@@ -10,15 +10,24 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Preserve completed or running exact-commit evidence for the still-unreleased
+# 1.0.3 branch. A later hourly push may replace a pending run, but must not
+# abort backend/frontend/Windows validation already executing. Other branches
+# retain the normal superseded-run cancellation policy.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/develop/reefvision-1.0.3-consolidated' }}
 
 jobs:
   backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Assert tested source equals the workflow commit
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "CI checkout SHA: $GITHUB_SHA"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -44,6 +53,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Assert tested source equals the workflow commit
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "CI checkout SHA: $GITHUB_SHA"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -107,6 +121,11 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - name: Assert tested source equals the workflow commit
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "CI checkout SHA: $GITHUB_SHA"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
