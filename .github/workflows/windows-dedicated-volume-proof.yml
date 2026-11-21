@@ -1,0 +1,70 @@
+name: Windows Original Storage Recovery Proof
+
+on:
+  pull_request:
+    branches: [codex/reefvision-1.9-research-integration]
+    paths:
+      - '.github/workflows/windows-dedicated-volume-proof.yml'
+      - '.github/windows-volume-proof/**'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  original-packaged-storage-recovery:
+    if: >-
+      github.repository == 'Rafael-Del-Valle/ReefVision' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'codex/reefvision-1.9-original-storage-proof'
+    runs-on: windows-2022
+    timeout-minutes: 95
+    env:
+      PROOF_ROOT: C:/rv-storage-proof-${{ github.run_id }}-${{ github.run_attempt }}
+      SOURCE_COMMIT: 96476bc462aeed0137a55b02ded6d66b1d4a2c72
+      ORIGINAL_BUILD_RUN: '44867493658'
+      ORIGINAL_BUILD_JOB: '136734331397'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: proof
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: source/apps/web/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Stage and verify the original 1.9 Windows installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ./proof/.github/windows-volume-proof/stage-original.ps1 -RepositoryRoot ./source -RunId $env:ORIGINAL_BUILD_RUN `
+            -SourceCommit $env:SOURCE_COMMIT -Version 1.9.0 -Root $env:PROOF_ROOT
+          $receipt = Get-Content -LiteralPath "$env:PROOF_ROOT/evidence/verified-transport.json" -Raw | ConvertFrom-Json
+          if ($receipt.build_job_id -ne [long]$env:ORIGINAL_BUILD_JOB) { throw 'Unexpected original manufacturing job.' }
+          npm --prefix source/apps/web ci --no-audit --no-fund
+          if ($LASTEXITCODE) { throw 'Could not stage pinned Playwright dependencies.' }
+      - name: Recover a normal editor save on the isolated bounded volume
+        shell: pwsh
+        run: |
+          $node = (Get-Command node.exe -CommandType Application | Select-Object -First 1).Source
+          $python = (Get-Command python.exe -CommandType Application | Select-Object -First 1).Source
+          ./proof/.github/windows-volume-proof/run-storage-proof.ps1 -RepositoryRoot ./source -ProofRoot $env:PROOF_ROOT `
+            -NodePath $node -PythonPath $python
+      - name: Retain original transport, capacity, browser and cleanup evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-1.9-Original-Storage-Recovery
+          path: ${{ env.PROOF_ROOT }}/evidence
+          if-no-files-found: warn
