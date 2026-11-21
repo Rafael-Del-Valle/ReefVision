@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T05:29:11Z`
+Updated: `2026-11-21T05:46:43Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1150,6 +1150,7 @@ Evidence:
 - `windows_installed`: On the original 1.6 MSI under an ordinary Windows account, the class lifecycle test passed. The researcher reviewed the reassignment, reopened the project and verified the earlier frozen export. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44768324452/job/136420579045` (`rv16-class-management-original-msi-used-classes`)
 - `windows_installed`: The corrected original MSI passed the standard-user class lifecycle, including explicit reassignment after annotations exist and reopening the frozen export. — `docs/validation/installed-workflows-a580042e8.json` (`rv16-class-management-original-a580042e8`)
 - `physical_hardware`: In native Classes, confirmed reassignment advanced the live annotation from revision 2 to 3. Mask and image-classification references remained protected. The frozen dataset manifest and YOLO mapping survived reopening. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-class-management-physical-83b0`)
+- `physical_hardware`: The local MSI WebView2 Class Manager refused both malformed receipts and kept annotation revision 2. A fresh confirmed reassignment saved revision 3. Its frozen dataset retained the original class map during YOLO export. — `docs/validation/1.9-frozen-research.json` (`rv16-class-management-packaged-caa-ordinary-class-manager`)
 - `representative_data`: none recorded
 
 ### rv16-class-visibility-dense-editing: Class visibility, dense annotation editing, and large-gallery performance
@@ -1580,6 +1581,7 @@ Evidence:
 - `windows_installed`: none recorded
 - `physical_hardware`: The original 1.8 MSI payload ran the same 14-node graph twice in native WebView2 on the RTX 3090. Each separately trained, registered and inferred on actual CUDA, paused for two ordinary reviews and downloaded the audited pose and training ZIP. The generated held-out video and source-pixel landmarks are pinned in both receipts. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-end-to-end-workflows-cuda-two-saved-e3e8`)
 - `physical_hardware`: The local 1.9 production WebView2 ran one saved 14-node graph twice on the RTX 3090. Each run trained and registered its checkpoint, inferred the held-out recording, stopped for both human decisions and exported the confirmed source points. The retained record includes 132 process-bound GPU samples. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-local-native-rtx-96476bc46`)
+- `physical_hardware`: Ordinary Retry produced a new Ultralytics CPU pose checkpoint on 96 training and 48 validation images. A checkpoint-inclusive Training Results ZIP verified 57 members. Register Trained Model and direct registration both rejected the retained checkpoint. The base inspector read its two landmarks. The active expanded catalog rejected the pose task. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-packaged-caa-ultralytics-recovery-register`)
 - `representative_data`: none recorded
 
 ### rv19-performance-resilience: Large-project/video performance and restart/resume resilience

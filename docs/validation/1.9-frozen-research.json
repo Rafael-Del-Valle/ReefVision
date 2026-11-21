@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T05:30:45.522499+00:00",
+  "updated_utc": "2026-11-21T05:46:43.637060+00:00",
   "candidate_pr": 131,
   "scope": "Generated research projects. Registered installer trials identify their own package.",
   "reviewed_predecessors": {
@@ -466,6 +466,33 @@
       "general_ci": 44870566833,
       "scientific_and_secondary_build": 44870566734
     },
-    "broader_optional_lint": "Extending the CI command to all historical scripts reported 16 lint diagnostics. The successor changes no scripts. The CI-scoped API lint and format commands both passed."
+    "broader_optional_lint": "Extending the CI command to all historical scripts reported 16 lint diagnostics. The successor changes no scripts. The CI-scoped API lint and format commands both passed.",
+    "local_windows_package": {
+      "source": "caa6931c2f4a8aefbf4e248d2c46c61ca9c8688b",
+      "version": "1.9.0",
+      "msi_sha256": "48e4553adece0984e99263d812b6c60fa26170a89ded1ac75fdf0797c68c1e37",
+      "matching_external_cabs": 5,
+      "total_payload_bytes": 2979676954,
+      "checksums": {
+        "file": "1.9/checkpoints/caa6931c2/local-production/installer/SHA256SUMS.txt",
+        "sha256": "6ef772c8b12dff0c9d139d18b6ae14c3f77c6f2e1389d633e6bcbbe516004b7f"
+      },
+      "administrative_extraction": {
+        "file": "1.9/checkpoints/caa6931c2/local-production/administrative-extraction.json",
+        "sha256": "9a647c95434b3e7c5ff36337fd56484ce44a0610e12d0a6077e8a4c6f127ec45"
+      },
+      "native_class_manager": {
+        "file": "1.9/checkpoints/caa6931c2/local-production/evidence/native-class-manager/index.json",
+        "sha256": "d2157ac20528284ab7327d8335c3160c4041075af14a129cbd7136f2f52f3507"
+      },
+      "packaged_pose_training_and_registration": {
+        "file": "1.9/checkpoints/caa6931c2/local-production/evidence/ultralytics-pose-recovery/evidence-index.json",
+        "sha256": "755fa227d2d70fb830f8c8db8454a1997e73d4ac075bd2785d091345a719d9a4"
+      },
+      "observations": [
+        "The local MSI WebView2 Class Manager refused both malformed receipts and kept annotation revision 2. A fresh confirmed reassignment saved revision 3. Its frozen dataset retained the original class map during YOLO export.",
+        "Ordinary Retry produced a new Ultralytics CPU pose checkpoint on 96 training and 48 validation images. A checkpoint-inclusive Training Results ZIP verified 57 members. Register Trained Model and direct registration both rejected the retained checkpoint. The base inspector read its two landmarks. The active expanded catalog rejected the pose task."
+      ]
+    }
   }
 }
