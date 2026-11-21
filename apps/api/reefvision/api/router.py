@@ -28,6 +28,7 @@ from reefvision.api.routes.coral_graph import router as coral_graph_router
 from reefvision.api.routes.coral_structure import router as coral_structure_router
 from reefvision.api.routes.current_field import router as current_field_router
 from reefvision.api.routes.dataset_versions import router as dataset_versions_router
+from reefvision.api.routes.domain_shift_v18 import router as domain_shift_router
 from reefvision.api.routes.ecology_analysis import router as ecology_analysis_router
 from reefvision.api.routes.ecology_event_summary import router as ecology_event_summary_router
 from reefvision.api.routes.ecology_identity import router as ecology_identity_router
@@ -149,6 +150,7 @@ api_router.include_router(class_operations_router)
 api_router.include_router(class_visibility_router)
 api_router.include_router(images_router)
 api_router.include_router(image_adjustments_router)
+api_router.include_router(domain_shift_router)
 api_router.include_router(annotation_imports_router)
 api_router.include_router(annotations_router)
 api_router.include_router(annotation_aggregates_router)

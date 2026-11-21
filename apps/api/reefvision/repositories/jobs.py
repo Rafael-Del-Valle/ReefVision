@@ -18,7 +18,7 @@ def paired_owner_active(
         owner is not None
         and project_id is not None
         and owner.project_id == project_id
-        and owner.job_type in {"paired_model_comparison", "workflow_run"}
+        and owner.job_type in {"paired_model_comparison", "domain_shift_analysis", "workflow_run"}
         and owner.status in ({"queued", "running"} if queued else {"running"})
     )
 
