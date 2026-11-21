@@ -9,28 +9,52 @@ export type DenseObjectListRow<
   | { kind: "annotation"; item: A; position: number }
   | { kind: "mask"; item: M; position: number };
 
-/** Keep pinning bounded in memory as well as in DOM nodes.
- * Work backwards through the selection without copying a potentially huge
- * selected-ID array into a Set or a filtered intermediate array. Counting
- * repeated off-window entries preserves the last-200-entry behavior.
+/** Pin at most 200 distinct selected rows that actually match this filtered
+ * browser, not simply 200 selected IDs. Class filtering, deletion and repeated
+ * selection IDs can leave the most recent selection tail absent from the
+ * visible document. Resume earlier IDs only when a candidate batch missed.
+ *
+ * Memory stays bounded to the page, 200 candidates and 200 pinned rows; the
+ * common case still examines only the latest 200 distinct off-page IDs.
  */
-function mostRecentOffWindowSelectionIds(
+function recentMatchingSelectionRows<T extends { id: string }>(
+  items: readonly T[],
   selectedIds: readonly string[],
   visibleIds: ReadonlySet<string>,
-): Set<string> {
-  const pinned = new Set<string>();
-  let remaining = 200;
-  let index = selectedIds.length - 1;
-  while (index >= 0 && remaining > 0) {
-    const id = selectedIds[index];
-    index -= 1;
-    if (visibleIds.has(id)) {
-      continue;
+  windowStart: number,
+  windowEnd: number,
+  offset: number,
+): Array<{ item: T; position: number }> {
+  const rows: Array<{ item: T; position: number }> = [];
+  const pinnedIds = new Set<string>();
+  let nextIndex = selectedIds.length - 1;
+  while (nextIndex >= 0 && pinnedIds.size < 200) {
+    const candidates = new Set<string>();
+    const remaining = 200 - pinnedIds.size;
+    while (nextIndex >= 0 && candidates.size < remaining) {
+      const id = selectedIds[nextIndex];
+      nextIndex -= 1;
+      if (!visibleIds.has(id) && !pinnedIds.has(id)) {
+        candidates.add(id);
+      }
     }
-    pinned.add(id);
-    remaining -= 1;
+    if (candidates.size === 0) {
+      break;
+    }
+
+    const scan = (from: number, to: number) => {
+      for (let index = from; index < to && candidates.size > 0; index += 1) {
+        const item = items[index];
+        if (candidates.delete(item.id)) {
+          pinnedIds.add(item.id);
+          rows.push({ item, position: offset + index });
+        }
+      }
+    };
+    scan(0, windowStart);
+    scan(windowEnd, items.length);
   }
-  return pinned;
+  return rows;
 }
 
 export function boundedDenseObjectRows<
@@ -78,49 +102,28 @@ export function boundedDenseObjectRows<
     visibleMaskIds.add(item.id);
   }
 
-  // Large selections do not override the bounded DOM or require a second
-  // full-size selection copy. Pin the latest 200 off-window entries per type.
-  const pinnedAnnotations = mostRecentOffWindowSelectionIds(
+  // Only selected IDs matching the filtered document consume the 200-row
+  // off-page budget. Deleted or other-class selections cannot hide valid pins.
+  for (const pinned of recentMatchingSelectionRows(
+    annotations,
     selectedAnnotationIds,
     visibleAnnotationIds,
-  );
-  const pinnedMasks = mostRecentOffWindowSelectionIds(
+    annotationStart,
+    annotationEnd,
+    0,
+  )) {
+    rows.push({ kind: "annotation", ...pinned });
+  }
+  for (const pinned of recentMatchingSelectionRows(
+    masks,
     selectedMaskIds,
     visibleMaskIds,
-  );
-
-  // Scan only regions outside the displayed window. A saved annotation
-  // selected before a jumped-to window must still be accessible, and no
-  // unrelated mask geometry is read after all pinned IDs have been found.
-  const appendPinnedAnnotations = (from: number, to: number) => {
-    for (
-      let index = from;
-      index < to && pinnedAnnotations.size > 0;
-      index += 1
-    ) {
-      const item = annotations[index];
-      if (pinnedAnnotations.delete(item.id)) {
-        rows.push({ kind: "annotation", item, position: index });
-      }
-    }
-  };
-  appendPinnedAnnotations(0, annotationStart);
-  appendPinnedAnnotations(annotationEnd, annotations.length);
-
-  const appendPinnedMasks = (from: number, to: number) => {
-    for (let index = from; index < to && pinnedMasks.size > 0; index += 1) {
-      const item = masks[index];
-      if (pinnedMasks.delete(item.id)) {
-        rows.push({
-          kind: "mask",
-          item,
-          position: annotations.length + index,
-        });
-      }
-    }
-  };
-  appendPinnedMasks(0, maskStart);
-  appendPinnedMasks(maskEnd, masks.length);
+    maskStart,
+    maskEnd,
+    annotations.length,
+  )) {
+    rows.push({ kind: "mask", ...pinned });
+  }
 
   // Selected rows before the window must precede the window in the
   // accessible list; position always refers to the full filtered document.
