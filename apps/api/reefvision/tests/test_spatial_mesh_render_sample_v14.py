@@ -309,10 +309,7 @@ def test_mesh_preview_registry_matches_executable_request_schema(client: TestCli
     )
     assert declared_fields == set(MeshPreviewRequest.model_fields)
     assert definition["optional_parameters"]["preserve_axis_extrema_in_preview"] is False
-    assert (
-        definition["optional_parameters"]["preserve_edge_connected_patches_in_preview"]
-        is False
-    )
+    assert definition["optional_parameters"]["preserve_edge_connected_patches_in_preview"] is False
     assert definition["executable"] is True
     assert definition["execution_state"] == "executable_analysis"
 
@@ -344,9 +341,10 @@ def test_patch_preserving_display_recovers_small_hidden_component(
     assert pinned["surface_area_m2"] == uniform["surface_area_m2"]
     assert pinned["surface_area_scale_interval_m2"] == uniform["surface_area_scale_interval_m2"]
     assert pinned["axis_aligned_dimensions_m"] == uniform["axis_aligned_dimensions_m"]
-    assert pinned["edge_connected_patch_geometry_sha256"] == uniform[
-        "edge_connected_patch_geometry_sha256"
-    ]
+    assert (
+        pinned["edge_connected_patch_geometry_sha256"]
+        == uniform["edge_connected_patch_geometry_sha256"]
+    )
     assert pinned["provenance"]["geometry_sha256"] == uniform["provenance"]["geometry_sha256"]
     assert pinned["provenance"]["calibration_verified"] is False
     assert pinned["measurement_status"] == "caller_supplied_unverified"
@@ -440,9 +438,7 @@ def test_patch_only_preview_prefers_largest_patches_over_arbitrary_end_faces(
         "relative_scale_uncertainty": 0.1,
     }
     uniform = measure_mesh_preview(**params)
-    patch_only = measure_mesh_preview(
-        **params, preserve_edge_connected_patches_in_preview=True
-    )
+    patch_only = measure_mesh_preview(**params, preserve_edge_connected_patches_in_preview=True)
     combined = measure_mesh_preview(
         **params,
         preserve_axis_extrema_in_preview=True,
@@ -471,9 +467,7 @@ def test_patch_only_preview_prefers_largest_patches_over_arbitrary_end_faces(
         "enclosed_volume_m3",
     ):
         assert patch_only[key] == uniform[key] == combined[key]
-    assert patch_only["provenance"]["geometry_sha256"] == uniform["provenance"][
-        "geometry_sha256"
-    ]
+    assert patch_only["provenance"]["geometry_sha256"] == uniform["provenance"]["geometry_sha256"]
     assert patch_only["provenance"]["calibration_verified"] is False
     assert patch_only["measurement_status"] == "caller_supplied_unverified"
 
