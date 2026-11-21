@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T08:50:43.896851+00:00",
+  "updated_utc": "2026-11-21T09:00:53.326782+00:00",
   "candidate_pr": 131,
   "scope": "Generated research projects. Registered installer trials identify their own package.",
   "reviewed_predecessors": {
@@ -1387,6 +1387,31 @@
         "file": "1.9/checkpoints/6334bcbb8/local-production/verified-workflows.json",
         "sha256": "903c06c81f68b7dfaf7d4e3c5e7a53cf2a8e3dfa248dd473dc717d30034862ca"
       }
+    },
+    "registered_native_seed_on_packaged_runtime": {
+      "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/registered-native-seed/registered-native-seed.json",
+      "sha256": "0a47e5643a99b755ea90b0b0e61fb8d7adb8db5bc817beac5c0303af2d625998"
+    },
+    "saved_mask_inference_review_and_measurement": {
+      "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/native-saved-mask-review/index.json",
+      "sha256": "66ab8dd82d95b35f40081c6f6659ff50b7ab6c59c29fcbf0bf143e8f8155d053"
+    },
+    "gallery_scroll_and_final_decoded_page": {
+      "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/native-gallery-navigation/index.json",
+      "sha256": "3688d8cd380e0fdd6e0a1420a6167a06bbf4a6da9d35d817a172fc8d1a84a355"
+    }
+  },
+  "original_offline_7797": {
+    "source": "7797efad64f65e2f19c6f4ff64a94382335bd0a9",
+    "proof_run": 44873856510,
+    "original_build_run": 44873530801,
+    "msi_sha256": "cbb877535bb94b8c34e54a3932e31b4bdb3a53519f5f36ec893dff3f40068480",
+    "fresh_offline_seconds": 187.3441305,
+    "cached_offline_seconds": 234.7882078,
+    "verified_restored_files": 7,
+    "receipt": {
+      "file": "1.9/checkpoints/7797efad6/official/offline/attempt-44873856510/offline-index.json",
+      "sha256": "157fcb6eb80a0c64f0b53020ab4aea98c8aa819fdfa670e44510c3538a7f3485"
     }
   }
 }
