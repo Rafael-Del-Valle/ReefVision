@@ -15,10 +15,19 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from reefvision.config import Settings
-from reefvision.db.models import ExperimentRecord, Job, ModelRegistration, TrainingRun
+from reefvision.db.models import (
+    ExperimentRecord,
+    Job,
+    ModelRegistration,
+    PoseTrainingDataset,
+    TrainingRun,
+)
 from reefvision.domain.errors import ValidationError
+from reefvision.jobs import reefpose_training
 from reefvision.jobs.pose_training import process_pose_training_job
+from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.ml.reefpose.training import ReefPoseTrainer
+from reefvision.services.workflow_execution import WorkflowExecutionService
 from reefvision.services.workflow_pose_training import create_pose_workflow_training_result
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
@@ -27,12 +36,12 @@ FRAME_COUNT = 8
 WIDTH, HEIGHT = 96, 64
 
 
-def _generated_mp4(tmp_path: Path) -> bytes:
+def _generated_mp4(tmp_path: Path, *, variant: int = 0) -> bytes:
     import imageio_ffmpeg
 
-    video = tmp_path / "source.mp4"
+    video = tmp_path / f"source-{variant}.mp4"
     pixels = b"".join(
-        bytes((32 + frame * 18, 80, 172 - frame * 12)) * (WIDTH * HEIGHT)
+        bytes((32 + frame * 18, 80 + variant, 172 - frame * 12)) * (WIDTH * HEIGHT)
         for frame in range(FRAME_COUNT)
     )
     subprocess.run(
@@ -194,17 +203,10 @@ def _exported_frames(client: TestClient, dataset_id: str) -> set[str]:
         return {hashlib.sha256(export.read(name)).hexdigest() for name in names}
 
 
-@pytest.mark.parametrize("provider", ["ultralytics", "reefpose"])
-def test_queued_pose_worker_refuses_frozen_frame_overlap_before_output(
-    client: TestClient,
-    test_settings: Settings,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    provider: str,
-) -> None:
-    from ultralytics import YOLO
-
-    project = create_project(client, "Physically overlapping frozen pose frames")
+def _frozen_split(
+    client: TestClient, tmp_path: Path, *, overlapping: bool
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    project = create_project(client, "Two independent recordings of frozen pose frames")
     project_id = str(project["id"])
     label = project["label_classes"][0]["id"]
     schema = _checked(
@@ -220,7 +222,8 @@ def test_queued_pose_worker_refuses_frozen_frame_overlap_before_output(
         ),
         201,
     )
-    clip = _generated_mp4(tmp_path)
+    training_clip = _generated_mp4(tmp_path)
+    validation_clip = training_clip if overlapping else _generated_mp4(tmp_path, variant=50)
     # A legal ISO-BMFF free-space atom changes the original file's hash without
     # changing the pictures that decode into the frozen training examples.
     rec_a, rec_b = (
@@ -232,7 +235,10 @@ def test_queued_pose_worker_refuses_frozen_frame_overlap_before_output(
             video_bytes=clip + struct.pack(">I4s4s", 12, b"free", marker),
             name=name,
         )
-        for name, marker in (("training-video", b"TRN1"), ("holdout-video", b"VAL2"))
+        for name, marker, clip in (
+            ("training-video", b"TRN1", training_clip),
+            ("holdout-video", b"VAL2", validation_clip),
+        )
     )
     train_video, training = rec_a
     holdout_video, holdout = rec_b
@@ -240,24 +246,46 @@ def test_queued_pose_worker_refuses_frozen_frame_overlap_before_output(
     assert train_video["sha256"] != holdout_video["sha256"]
     assert training["id"] != holdout["id"]
     assert training["manifest_sha256"] != holdout["manifest_sha256"]
-    duplicated = _exported_frames(client, training["id"])
-    assert len(duplicated) == FRAME_COUNT
-    assert duplicated == _exported_frames(client, holdout["id"])
+    training_frames = _exported_frames(client, training["id"])
+    holdout_frames = _exported_frames(client, holdout["id"])
+    assert len(training_frames) == len(holdout_frames) == FRAME_COUNT
+    if overlapping:
+        assert training_frames == holdout_frames
+    else:
+        assert training_frames.isdisjoint(holdout_frames)
+    return project, training, holdout
 
+
+def _native_training_config() -> dict[str, int]:
+    return {
+        "epochs": 1,
+        "batch": 1,
+        "input_height": 64,
+        "input_width": 64,
+        "base_channels": 4,
+        "fpn_channels": 8,
+        "workers": 0,
+    }
+
+
+@pytest.mark.parametrize("provider", ["ultralytics", "reefpose"])
+def test_queued_pose_worker_refuses_frozen_frame_overlap_before_output(
+    client: TestClient,
+    test_settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    provider: str,
+) -> None:
+    from ultralytics import YOLO
+
+    project, training, holdout = _frozen_split(client, tmp_path, overlapping=True)
+    project_id = str(project["id"])
     if provider == "ultralytics":
         architecture = "yolo11n-pose.yaml"
         config = {"epochs": 1, "batch": 1, "imgsz": 64, "workers": 0}
     else:
         architecture = "reefpose-s"
-        config = {
-            "epochs": 1,
-            "batch": 1,
-            "input_height": 64,
-            "input_width": 64,
-            "base_channels": 4,
-            "fpn_channels": 8,
-            "workers": 0,
-        }
+        config = _native_training_config()
 
     app = cast(FastAPI, client.app)
     factory = app.state.session_factory
@@ -327,3 +355,160 @@ def test_queued_pose_worker_refuses_frozen_frame_overlap_before_output(
         test_settings, f"{project['storage_root']}/training/{run_id}"
     )
     assert not managed.exists()
+
+
+@pytest.mark.parametrize("overlapping", [True, False], ids=["overlap", "disjoint"])
+def test_saved_pose_retry_revalidates_frozen_frames_from_completed_child(
+    client: TestClient,
+    test_settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    overlapping: bool,
+) -> None:
+    project, training, holdout = _frozen_split(client, tmp_path, overlapping=overlapping)
+    project_id = project["id"]
+    graph = {
+        "graph_id": "recover-frozen-frame-study",
+        "name": "Recovery of a completed native pose study",
+        "nodes": [
+            {
+                "node_id": node_id,
+                "node_type": "pose_training_dataset",
+                "parameters": {
+                    "dataset_id": dataset["id"],
+                    "manifest_sha256": dataset["manifest_sha256"],
+                },
+            }
+            for node_id, dataset in (("training", training), ("holdout", holdout))
+        ]
+        + [
+            {
+                "node_id": "train",
+                "node_type": "pose_model_training",
+                "parameters": {
+                    "provider_id": "reefpose",
+                    "architecture": "reefpose-s",
+                    "device": "cpu",
+                    "precision": "fp32",
+                    "initialization_mode": "random",
+                    "training_config": _native_training_config(),
+                },
+            }
+        ],
+        "edges": [
+            {
+                "edge_id": f"{node_id}-train",
+                "source_node_id": node_id,
+                "source_port_id": "dataset",
+                "target_node_id": "train",
+                "target_port_id": port_id,
+            }
+            for node_id, port_id in (("training", "dataset"), ("holdout", "validation_dataset"))
+        ],
+    }
+    factory = cast(FastAPI, client.app).state.session_factory
+    url = f"/api/v1/projects/{project_id}"
+    saved = _checked(client.post(f"{url}/workflow-graphs", json={"graph": graph}), 201)
+    queued = _checked(
+        client.post(f"{url}/workflow-runs", json={"graph_record_id": saved["id"]}), 202
+    )
+    job_id = queued["job_id"]
+    detail_url = f"/api/v1/workflow-runs/{queued['id']}"
+
+    execute_node = WorkflowExecutionService.execute_node
+
+    def interrupt_after_child(service: WorkflowExecutionService, **kwargs: Any) -> Any:
+        outputs = execute_node(service, **kwargs)
+        if kwargs["step"].node_type == "pose_model_training":
+            raise OSError("Interrupted after the completed pose child")
+        return outputs
+
+    with monkeypatch.context() as historical:
+        # Simulate the child predating the frame-content check. All actual fitting,
+        # evaluation, checkpoint writing and experiment registration still run.
+        historical.setattr(
+            reefpose_training, "verify_pose_export_frame_separation", lambda *_: None, raising=False
+        )
+        historical.setattr(WorkflowExecutionService, "execute_node", interrupt_after_child)
+        assert not process_workflow_run_job(test_settings, factory, job_id)
+
+    before = _checked(client.get(detail_url), 200)
+    assert before["run"]["status"] == "failed"
+    assert "Interrupted after the completed pose child" in before["run"]["error_message"]
+    assert {artifact["data_type"] for artifact in before["artifacts"]} == {"pose_training_dataset"}
+    with factory() as session:
+        child = session.scalars(
+            select(TrainingRun).where(TrainingRun.project_id == project_id)
+        ).one()
+        assert child.status == "completed" and child.result_checkpoint_path
+        assert child.job_id is not None
+        child_id, child_job_id = child.id, child.job_id
+        child_job = session.get(Job, child_job_id)
+        assert child_job is not None and child_job.status == "succeeded"
+        assert child_job.request_json["pose_training_dataset_id"] == training["id"]
+        assert child_job.request_json["pose_validation_dataset_id"] == holdout["id"]
+        experiment = session.scalars(
+            select(ExperimentRecord).where(ExperimentRecord.training_run_id == child_id)
+        ).one()
+        experiment_id, experiment_metrics = experiment.id, experiment.summary_metrics_json
+        checkpoint = resolve_managed_project_path(test_settings, child.result_checkpoint_path)
+        original_checkpoint = checkpoint.read_bytes()
+        sha256 = hashlib.sha256(original_checkpoint).hexdigest()
+        child_manifest = child.artifact_manifest_json
+        assert child_manifest["result_checkpoint_sha256"] == sha256
+        assert child_manifest.get("frame_content_separation") is None
+        frozen_manifests = dict(
+            session.execute(
+                select(PoseTrainingDataset.id, PoseTrainingDataset.manifest_json).where(
+                    PoseTrainingDataset.project_id == project_id
+                )
+            ).all()
+        )
+
+    fitting_again = Mock(side_effect=AssertionError("Retry must reuse the completed pose child"))
+    monkeypatch.setattr(ReefPoseTrainer, "fit", fitting_again)
+    _checked(client.post(f"/api/v1/jobs/{job_id}/retry"), 200)
+    processed = process_workflow_run_job(test_settings, factory, job_id)
+    after = _checked(client.get(detail_url), 200)
+
+    fitting_again.assert_not_called()
+    assert after["run"]["job_id"] == job_id
+    assert after["run"]["workflow_graph_record_id"] == saved["id"]
+    assert after["run"]["graph_sha256"] == saved["graph_sha256"]
+    assert checkpoint.read_bytes() == original_checkpoint
+    with factory() as session:
+        runs = session.scalars(
+            select(TrainingRun).where(TrainingRun.project_id == project_id)
+        ).all()
+        assert [(run.id, run.job_id, run.status) for run in runs] == [
+            (child_id, child_job_id, "completed")
+        ]
+        assert runs[0].artifact_manifest_json == child_manifest
+        child_job = session.get(Job, child_job_id)
+        assert child_job is not None and child_job.status == "succeeded"
+        experiment = session.get(ExperimentRecord, experiment_id)
+        assert experiment is not None and experiment.summary_metrics_json == experiment_metrics
+        assert (
+            session.scalar(
+                select(ModelRegistration).where(ModelRegistration.project_id == project_id)
+            )
+            is None
+        )
+        for dataset_id, manifest in frozen_manifests.items():
+            dataset = session.get(PoseTrainingDataset, dataset_id)
+            assert dataset is not None and dataset.manifest_json == manifest
+
+    results = [
+        row["payload_json"] for row in after["artifacts"] if row["data_type"] == "training_result"
+    ]
+    if overlapping:
+        assert not processed and after["run"]["status"] == "failed", after["run"]
+        assert "frozen frame" in after["run"]["error_message"].casefold()
+        assert results == []
+    else:
+        assert processed and after["run"]["status"] == "succeeded", after["run"]
+        assert len(results) == 1
+        assert results[0]["training_run_id"] == child_id
+        assert results[0]["training_job_id"] == child_job_id
+        assert results[0]["experiment_id"] == experiment_id
+        assert results[0]["result_checkpoint_sha256"] == sha256
