@@ -1228,12 +1228,12 @@ def test_pose_materialization_rejects_ambiguous_frozen_landmark_names(
                 if member == "data.yaml":
                     content = content.replace(b"kpt_shape: [1, 3]", b"kpt_shape: [2, 3]")
                     content = content.replace(
-                        b'  - "keypoint"\\n',
-                        b'  - "keypoint"\\n  - "' + second_name + b'"\\n',
+                        b'  - "keypoint"\n',
+                        b'  - "keypoint"\n  - "' + second_name + b'"\n',
                     )
                 elif member.startswith("labels/train/"):
                     content = content.replace(
-                        b"0.5 0.5 2\\n", b"0.5 0.5 2 0.25 0.75 2\\n"
+                        b"0.5 0.5 2\n", b"0.5 0.5 2 0.25 0.75 2\n"
                     )
                 rewritten.writestr(member, content)
         return stream.getvalue()
