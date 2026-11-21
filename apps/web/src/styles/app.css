@@ -1316,6 +1316,31 @@ textarea {
     #021117;
 }
 
+.annotation-media-state {
+  position: absolute;
+  inset-block-start: 0.75rem;
+  inset-inline-end: 0.75rem;
+  z-index: 2;
+  display: grid;
+  justify-items: start;
+  gap: 0.45rem;
+  max-inline-size: min(24rem, calc(100% - 1.5rem));
+  box-sizing: border-box;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--rv-border);
+  border-radius: 0.6rem;
+  background: var(--rv-panel);
+  pointer-events: none;
+}
+
+.annotation-media-state p {
+  margin: 0;
+}
+
+.annotation-media-state button {
+  pointer-events: auto;
+}
+
 .annotation-image-viewport {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
