@@ -163,8 +163,40 @@ test("reviews class edits and preserves frozen exports after reopening", async (
   await renamed
     .getByLabel("Operation notes")
     .fill("Reviewed mapping of this generated box");
+  await page.route(
+    `**/classes/${source.id}/reassign/preview`,
+    async (route) => {
+      const response = await route.fetch();
+      expect(response.ok()).toBeTruthy();
+      const preview = await response.json();
+      const affected = preview.plan.mutable_records.find(
+        (group: { record_ids: string[] }) => group.record_ids.includes(box.id),
+      );
+      expect(affected).toBeDefined();
+      expect(affected.count).toBe(affected.record_ids.length);
+      affected.record_ids = affected.record_ids.filter(
+        (id: string) => id !== box.id,
+      );
+      await route.fulfill({ response, json: preview });
+    },
+    { times: 1 },
+  );
+  await button(renamed, "Preview reassign").click();
+  await expect(renamed.getByRole("alert")).toHaveText(
+    /Operation evidence is incomplete/,
+  );
+  await expect(button(renamed, "Run reassign")).toBeDisabled();
+  expect((await get(annotation)).image.annotation_revision).toBe(
+    before.image.annotation_revision,
+  );
   await button(renamed, "Preview reassign").click();
   await expect(button(renamed, "Run reassign")).toBeEnabled();
+  const frozenWarning = renamed.getByText(
+    "Immutable dataset versions keep their original class map for reproducibility.",
+    { exact: true },
+  );
+  await expect(frozenWarning).toHaveCount(1);
+  await expect(frozenWarning).toBeVisible();
   const destination = row(target.name);
   await destination
     .getByLabel(`Description for ${target.name}`)
@@ -209,6 +241,7 @@ test("reviews class edits and preserves frozen exports after reopening", async (
     renamed.getByText("Latest operation", { exact: true }),
   ).toBeVisible();
   await expect(otherPlan).toHaveCount(0);
+  await expect(frozenWarning).toBeVisible();
   await expect(button(renamed, "Run Reassign and Delete")).toBeDisabled();
   await button(renamed, "Preview reassign").click();
   await expect(
