@@ -158,6 +158,12 @@ def test_standalone_and_saved_workflow_parity(client: TestClient) -> None:
     assert node["optional_parameters"]["observation_id"] is None
     assert node["optional_parameters"]["observed_at_utc"] is None
     assert node["optional_parameters"]["coordinate_frame_id"] is None
+    # Both bounded preview policies are first-class typed, persisted graph options.
+    # They must be discoverable alongside their executable runtime implementation.
+    assert node["optional_parameters"]["preserve_largest_axis_gap_boundaries_in_preview"] is False
+    assert (
+        node["optional_parameters"]["preserve_largest_axis_gap_boundary_loci_in_preview"] is False
+    )
     graph = {
         "graph_id": "point-cloud-v14",
         "name": "Point cloud extents",
