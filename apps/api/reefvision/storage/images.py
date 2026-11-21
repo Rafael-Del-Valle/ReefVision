@@ -705,7 +705,11 @@ def create_browser_display(source: Path, destination: Path) -> None:
             display.save(temporary, format="PNG", optimize=True)
         _replace_rendition(temporary, destination)
     except Exception:
-        temporary.unlink(missing_ok=True)
+        # Windows antivirus or WebView2 can briefly hold a generated rendition.
+        # Preserve the actual decode/publish failure; only the temporary file
+        # (never the immutable camera source or existing rendition) is eligible
+        # for cleanup. Failed cleanup is logged for later inspection.
+        _cleanup_incomplete_import(temporary)
         raise
 
 
@@ -734,5 +738,9 @@ def create_thumbnail(source: Path, destination: Path, *, max_width: int, max_hei
             oriented.save(temporary, format="JPEG", quality=85, optimize=True)
         _replace_rendition(temporary, destination)
     except Exception:
-        temporary.unlink(missing_ok=True)
+        # Windows antivirus or WebView2 can briefly hold a generated rendition.
+        # Preserve the actual decode/publish failure; only the temporary file
+        # (never the immutable camera source or existing rendition) is eligible
+        # for cleanup. Failed cleanup is logged for later inspection.
+        _cleanup_incomplete_import(temporary)
         raise
