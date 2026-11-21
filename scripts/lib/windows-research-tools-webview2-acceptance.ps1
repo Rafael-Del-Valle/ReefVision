@@ -96,6 +96,63 @@ function Assert-ReefVisionInstalledResearchToolsResults {
     }
 }
 
+function Assert-ReefVisionInstalledDomainReceipt($Report, $Paired, $SourceImagePins) {
+    $digest = '^[0-9a-f]{64}$'
+    $declaration = $Report.snapshot.declaration
+    $cohorts = @($Report.snapshot.summary.groups | Where-Object status -eq 'included')
+    $missing = @($Report.snapshot.summary.groups | Where-Object status -eq 'missing')
+    if ($Paired.surface -cne 'tauri-webview2' -or $Paired.fixture_source -cne 'local_cpu_training' -or
+        $Report.content_sha256 -cnotmatch $digest -or $Report.snapshot.project_id -cne $Paired.project_id -or
+        $declaration.comparison_id -cne $Paired.comparison_id -or
+        $declaration.comparison_sha256 -cne $Paired.report_sha256 -or
+        $Report.snapshot.reference.manifest_sha256 -cne $Paired.reference_sha256 -or
+        $Report.snapshot.reference.split -cne 'test' -or
+        $Report.snapshot.summary.lineage -cne 'held_out' -or $Report.snapshot.summary.status -cne 'scored' -or
+        $declaration.preprocessing -cne 'adjusted' -or $Report.snapshot.preprocessing_executed -cne 'adjusted' -or
+        -not $declaration.independent_unit -or $missing.Count -ne 1 -or
+        $missing[0].group_id -cne 'Unobserved validation acquisition' -or
+        @($Report.snapshot.models).Count -ne 2 -or
+        ($Report.snapshot.models.checkpoint_sha256 -join ',') -cne ($Paired.checkpoint_sha256 -join ',') -or
+        @($cohorts.domain | Sort-Object -Unique).Count -ne 2 -or
+        (Compare-Object -ReferenceObject @($Paired.groups.id) -DifferenceObject @($cohorts.group_id) -CaseSensitive)) {
+        throw 'Domain shift lost the checked paired detector report, independent held-out project groups, or adjusted-input design.'
+    }
+    $adjustments = @($declaration.adjustments)
+    if ($adjustments.Count -ne $SourceImagePins.Count -or
+        @($adjustments.image_id | Sort-Object -Unique).Count -ne $SourceImagePins.Count) {
+        throw 'Domain shift must declare one retained correction per exact held-out original.'
+    }
+    foreach ($pin in $adjustments) {
+        if ($SourceImagePins[$pin.image_id] -cne $pin.original_sha256 -or
+            -not $pin.recipe_id -or $pin.content_sha256 -cnotmatch $digest -or
+            $pin.original_sha256 -cnotmatch $digest -or $pin.rendition_sha256 -cnotmatch $digest) {
+            throw 'Domain shift has an unmatched original/checksum or missing adjusted-rendition pin.'
+        }
+    }
+}
+
+function Assert-ReefVisionInstalledDomainEvidence {
+    param($Proof, $Report, $Paired, $Exports, [string]$Version, [string]$Revision)
+    Assert-ReefVisionResearchToolsReplays $Proof.replays 'id' 'payloadSha256' 'domain shift'
+    $digest = '^[0-9a-f]{64}$'
+    $inference = @($Report.snapshot.observed_evidence.inference_job_ids)
+    if ($Proof.surface -cne 'tauri-webview2' -or $Proof.applicationVersion -cne $Version -or
+        $Proof.schemaRevision -cne $Revision -or $Proof.projectId -cne $Paired.project_id -or
+        $Proof.comparisonId -cne $Paired.comparison_id -or $Proof.comparisonSha256 -cne $Paired.report_sha256 -or
+        $Proof.referenceSha256 -cne $Paired.reference_sha256 -or
+        ($Proof.checkpointSha256 -join ',') -cne ($Paired.checkpoint_sha256 -join ',') -or
+        -not $Proof.reportId -or $Proof.reportSha256 -cne $Report.content_sha256 -or
+        -not $Proof.graphId -or $Proof.graphSha256 -cnotmatch $digest -or
+        $Proof.jsonSha256 -cnotmatch $digest -or $Proof.csvSha256 -cnotmatch $digest -or
+        $Proof.jsonSha256 -cne $Exports.domain_json -or $Proof.csvSha256 -cne $Exports.domain_csv -or
+        $inference.Count -ne (2 * @($Paired.original_images).Count) -or
+        @($inference | Where-Object { -not $_ }).Count -ne 0 -or
+        @($inference | Sort-Object -Unique).Count -ne $inference.Count -or
+        ($Proof.inferenceJobIds -join ',') -cne ($inference -join ',')) {
+        throw 'Domain shift lost the exact installed project, generated evaluations, downloaded bytes, or saved graph.'
+    }
+}
+
 function Invoke-ReefVisionInstalledResearchToolsAcceptance {
     param(
         [string]$NodePath, [string]$RepositoryRoot, [string]$EvidenceRoot, [string]$Profile,
@@ -111,9 +168,12 @@ function Invoke-ReefVisionInstalledResearchToolsAcceptance {
         BackendExecutable=$BackendExecutable; Profile=$Profile; Version=$Version; Revision=$Revision
     }
     $backend = Get-ReefVisionInstalledScheduleBackend @backendPins
-    $prior = Get-ReefVisionResearchToolsArtifact (Join-Path $EvidenceRoot 'research-playwright') 'ordinary-detector-evidence.json'
+    $priorResearchDirectory = Join-Path $EvidenceRoot 'research-playwright'
+    $prior = Get-ReefVisionResearchToolsArtifact $priorResearchDirectory 'ordinary-detector-evidence.json'
+    $paired = Get-ReefVisionResearchToolsArtifact $priorResearchDirectory 'paired-model-comparison-evidence.json'
+    $pairedProof = Get-Content -LiteralPath $paired.FullName -Raw | ConvertFrom-Json
     $specs = @('taxonomy-detectability-live.spec.ts','bioacoustics-live.spec.ts','multispectral-live.spec.ts',
-        'underwater-adjustment-live.spec.ts')
+        'underwater-adjustment-live.spec.ts','domain-shift-live.spec.ts')
     $driver = @{
         NodePath=$NodePath; RepositoryRoot=$RepositoryRoot; EvidenceRoot=$EvidenceRoot
         Api="http://127.0.0.1:$BackendPort/api/v1"; DebugPort=$DebugPort; DesktopProcessId=$DesktopProcessId
@@ -125,6 +185,7 @@ function Invoke-ReefVisionInstalledResearchToolsAcceptance {
             REEFVISION_RESEARCH_TEST_SCHEMA=$Revision
             REEFVISION_UNDERWATER_TEST_FIXTURE=''
             REEFVISION_RESEARCH_TOOLS_DETECTOR_RECEIPT=$prior.FullName
+            REEFVISION_RESEARCH_TOOLS_PAIRED_RECEIPT=$paired.FullName
         }
     }
     $output = Invoke-ReefVisionInstalledPlaywrightSuite @driver
@@ -133,6 +194,7 @@ function Invoke-ReefVisionInstalledResearchToolsAcceptance {
         audio='bioacoustics-evidence.json'
         spectral='multispectral-evidence.json'
         underwater='underwater-adjustment-evidence.json'
+        domain='domain-shift-evidence.json'
     }
     $receipts = [ordered]@{}
     $hashes = [ordered]@{}
@@ -147,12 +209,20 @@ function Invoke-ReefVisionInstalledResearchToolsAcceptance {
         audio='reviewed-bioacoustic-report.json'
         spectral_json='spectral-index.json'
         spectral_tiff='spectral-index.tif'
+        domain_json='domain-shift-report.json'
+        domain_csv='domain-shift-report.csv'
     }
     foreach ($key in $exportNames.Keys) {
         $file = Get-ReefVisionResearchToolsArtifact $output $exportNames[$key]
         $exports[$key] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
         $hashes[$exportNames[$key]] = $exports[$key]
     }
+    $domainExport = Get-ReefVisionResearchToolsArtifact $output $exportNames.domain_json
+    $domain = Get-Content -LiteralPath $domainExport.FullName -Raw | ConvertFrom-Json
+    $pairedOriginals = @{}
+    foreach ($original in @($pairedProof.original_images)) { $pairedOriginals[$original.id] = $original.sha256 }
+    Assert-ReefVisionInstalledDomainReceipt $domain $pairedProof $pairedOriginals
+    Assert-ReefVisionInstalledDomainEvidence $receipts.domain $domain $pairedProof $exports $Version $Revision
     $arguments = @{
         Taxonomy=$receipts.taxonomy; Audio=$receipts.audio; Spectral=$receipts.spectral; Underwater=$receipts.underwater
         Exports=$exports; Version=$Version; Revision=$Revision
@@ -161,5 +231,6 @@ function Invoke-ReefVisionInstalledResearchToolsAcceptance {
     return [ordered]@{
         surface='tauri-webview2'; completed_journeys=$specs.Length; desktop_pid=$DesktopProcessId; debug_port=$DebugPort
         backend=$backend; generated_fixtures=$true; evidence_sha256=$hashes; journeys=$receipts
+        paired_fixture_receipt_sha256=(Get-FileHash -LiteralPath $paired.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
     }
 }

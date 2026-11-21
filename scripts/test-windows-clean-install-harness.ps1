@@ -151,6 +151,62 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
     Assert-Throws { Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema } 'A duplicate workflow run cannot qualify for replay.'
 }
 
+& {
+    $sha = 'a' * 64
+    $weights = @($sha, ('b' * 64))
+    $sources = @{imageA=$sha;imageB=('c'*64)}
+    $paired = @{
+        surface='tauri-webview2';fixture_source='local_cpu_training';project_id='paired-project'
+        comparison_id='paired-report';report_sha256=$sha;reference_sha256=$sha;checkpoint_sha256=$weights
+        groups=@(@{id='known-A'},@{id='known-B'})
+    }
+    $report = @{content_sha256=$sha;snapshot=@{
+        project_id='paired-project'; reference=@{manifest_sha256=$sha;split='test'}; preprocessing_executed='adjusted'
+        declaration=@{
+            comparison_id='paired-report';comparison_sha256=$sha;independent_unit='colony';preprocessing='adjusted'
+            adjustments=@(
+                @{image_id='imageA';recipe_id='recipeA';content_sha256=$sha;original_sha256=$sources.imageA;rendition_sha256=('e'*64)},
+                @{image_id='imageB';recipe_id='recipeB';content_sha256=$sha;original_sha256=$sources.imageB;rendition_sha256=('d'*64)}
+            )
+        }
+        models=@(@{checkpoint_sha256=$weights[0]},@{checkpoint_sha256=$weights[1]})
+        summary=@{lineage='held_out';status='scored';groups=@(
+            @{group_id='known-A';domain='reference';status='included'},
+            @{group_id='known-B';domain='target';status='included'},
+            @{group_id='Unobserved validation acquisition';domain='target';status='missing'}
+        )}
+    }}
+    Assert-ReefVisionInstalledDomainReceipt $report $paired $sources
+    Assert-True $true 'The domain export must retain both exact held-out cohorts and adjustments.'
+    $report.snapshot.summary.lineage='exploratory'
+    Assert-Throws { Assert-ReefVisionInstalledDomainReceipt $report $paired $sources } 'Unverified training separation cannot qualify as held-out.'
+    $report.snapshot.summary.lineage='held_out'
+    $report.snapshot.declaration.adjustments[1].original_sha256=$sources.imageA
+    Assert-Throws { Assert-ReefVisionInstalledDomainReceipt $report $paired $sources } 'A replaced source original cannot qualify as a checked correction.'
+    $report.snapshot.declaration.adjustments[1].original_sha256=$sources.imageB
+    $report.snapshot.declaration.comparison_id='alternate-paired-run'
+    Assert-Throws { Assert-ReefVisionInstalledDomainReceipt $report $paired $sources } 'The selected comparison must come from the previous proven local CPU fixture.'
+
+    $report.snapshot.declaration.comparison_id='paired-report'
+    $paired.original_images=@(@{id='imageA';sha256=$sources.imageA},@{id='imageB';sha256=$sources.imageB})
+    $report.snapshot.observed_evidence=@{inference_job_ids=@('left-a','left-b','right-a','right-b')}
+    $proof=@{
+        surface='tauri-webview2';applicationVersion='1.8.0';schemaRevision='b18_spectral_0002';projectId='paired-project'
+        comparisonId='paired-report';comparisonSha256=$sha;referenceSha256=$sha;checkpointSha256=$weights
+        reportId='domain-report';reportSha256=$sha;graphId='domain-graph';graphSha256=$sha
+        jsonSha256=$sha;csvSha256=$sha;inferenceJobIds=@('left-a','left-b','right-a','right-b')
+        replays=@(@{id='run-first';payloadSha256=$sha},@{id='run-replay';payloadSha256=$sha})
+    }
+    $exports=@{domain_json=$sha;domain_csv=$sha}
+    Assert-ReefVisionInstalledDomainEvidence $proof $report $paired $exports '1.8.0' 'b18_spectral_0002'
+    Assert-True $true 'Exact domain job identities and two replay receipts qualify.'
+    $proof.inferenceJobIds[3]='right-a'
+    Assert-Throws { Assert-ReefVisionInstalledDomainEvidence $proof $report $paired $exports '1.8.0' 'b18_spectral_0002' } 'A repeated child cannot be counted as a distinct model-by-original evaluation.'
+    $proof.inferenceJobIds[3]='right-b'
+    $proof.csvSha256='d' * 64
+    Assert-Throws { Assert-ReefVisionInstalledDomainEvidence $proof $report $paired $exports '1.8.0' 'b18_spectral_0002' } 'A replaced domain CSV cannot qualify.'
+}
+
 $slot = [datetimeoffset]'2026-11-20T15:00:10Z'
 $clockWitness = @{ schedule = @{ next_due_at = $slot.ToString('o'); interval_seconds = 20 } }
 $restart = Get-ReefVisionScheduleRestartTime $clockWitness $slot.AddSeconds(-5)
@@ -712,7 +768,8 @@ foreach ($monitoringArtifact in @('monitoring-workflow-evidence.json','monitorin
 Assert-True ($cleanInstallStep.Contains('-ResearchToolsAcceptance')) 'The clean role must run the 1.8 research tools.'
 foreach ($researchArtifact in @('research-tools-evidence.json','research-tools-playwright.json',
     'research-tools-playwright/**/taxonomy-detectability-proof.json','research-tools-playwright/**/bioacoustics-evidence.json',
-    'research-tools-playwright/**/multispectral-evidence.json','research-tools-playwright/**/underwater-adjustment-evidence.json')) {
+    'research-tools-playwright/**/multispectral-evidence.json','research-tools-playwright/**/underwater-adjustment-evidence.json',
+    'research-tools-playwright/**/domain-shift-evidence.json','research-tools-playwright/**/domain-shift-report.csv')) {
     Assert-True ($cleanInstallStep.Contains(".artifacts/windows-clean-acceptance-*/$researchArtifact")) "Missing installed evidence retention for $researchArtifact."
 }
 
