@@ -146,3 +146,114 @@ def test_zero_area_mesh_has_undefined_render_area_fraction() -> None:
     assert result["preview_sampled_surface_area_m2"] == 0.0
     assert result["preview_surface_area_fraction"] is None
     assert "degenerate_triangles_present" in result["qc_warnings"]
+
+
+def test_extrema_pinning_recovers_hidden_coral_tip_without_changing_science() -> None:
+    """Retain an otherwise unseen tip face; keep full-mesh metrics unchanged."""
+    params = _mesh_parameters(513)
+    # Uniform 512/513 face sampling omits face 511, which carries this tip.
+    params["vertices"][3 * 511 + 2][1] = 100_000.0
+    uniform = measure_mesh_preview(**params)
+    pinned = measure_mesh_preview(**params, preserve_axis_extrema_in_preview=True)
+
+    assert uniform["preview_sampling_strategy"] == "uniform_face_index"
+    assert 511 not in uniform["preview_face_indices"]
+    assert "y_max" in uniform["preview_omitted_axis_extremum_sides"]
+    assert pinned["preview_sampling_strategy"] == "uniform_face_index_extrema_preserving"
+    assert pinned["preview_face_count"] == 512
+    assert pinned["preview_is_decimated"] is True
+    assert 511 in pinned["preview_face_indices"]
+    assert len(set(pinned["preview_face_indices"])) == 512
+    assert pinned["preview_omitted_axis_extremum_sides"] == []
+    assert pinned["preview_surface_area_fraction"] > 0.99
+    assert uniform["preview_surface_area_fraction"] < 0.01
+    assert pinned["surface_area_m2"] == uniform["surface_area_m2"]
+    assert pinned["axis_aligned_dimensions_m"] == uniform["axis_aligned_dimensions_m"]
+    assert pinned["provenance"]["geometry_sha256"] == uniform["provenance"]["geometry_sha256"]
+    assert pinned["preview_camera_fit_basis"] == "all_referenced_vertices"
+    assert pinned["preview_referenced_bounds_in_source_frame_m"] == (
+        uniform["preview_referenced_bounds_in_source_frame_m"]
+    )
+    assert pinned["provenance"]["calibration_verified"] is False
+    assert pinned["measurement_status"] == "caller_supplied_unverified"
+
+
+def test_extrema_pinning_standalone_and_twice_replayed_saved_workflow(
+    client: TestClient,
+) -> None:
+    """Display policy is saved, typed, deterministic and never a calibrated claim."""
+    project_id = str(create_project(client, "Mesh extrema preview replay")["id"])
+    params = _mesh_parameters(513)
+    params["vertices"][3 * 511 + 2][1] = 100_000.0
+    params["preserve_axis_extrema_in_preview"] = True
+    base = f"/api/v1/projects/{project_id}"
+
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["preview_omitted_axis_extremum_sides"] == []
+    assert expected["preview_sampling_strategy"] == "uniform_face_index_extrema_preserving"
+    assert expected["provenance"]["calibration_verified"] is False
+    assert expected["provenance"]["specimen_identity_verified"] is False
+    assert expected["measurement_status"] == "caller_supplied_unverified"
+
+    graph = {
+        "graph_id": "mesh-extrema-preserving-v14",
+        "name": "Scientific mesh with source-tip-aware display sample",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    assert saved.json()["graph_json"]["nodes"][1]["parameters"][
+        "preserve_axis_extrema_in_preview"
+    ] is True
+
+    hashes = []
+    for _ in range(2):
+        run = client.post(
+            f"{base}/workflow-runs",
+            json={"graph_record_id": saved.json()["id"]},
+        )
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        )
+        assert artifact["payload_json"] == expected
+        assert len(artifact["payload_sha256"]) == 64
+        hashes.append(artifact["payload_sha256"])
+    assert hashes[0] == hashes[1]
+
+
+@pytest.mark.parametrize("invalid", [1, "true", None])
+def test_mesh_extrema_pinning_requires_an_explicit_boolean(
+    client: TestClient, invalid: object
+) -> None:
+    params = _mesh_parameters(1)
+    params["preserve_axis_extrema_in_preview"] = invalid
+    project_id = str(create_project(client, "Strict mesh preview sampling option")["id"])
+    response = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
+    assert response.status_code == 422, response.text
