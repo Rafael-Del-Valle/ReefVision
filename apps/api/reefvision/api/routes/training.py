@@ -271,11 +271,18 @@ def _safe_terminal_log_text(payload: bytes) -> str:
     # Retain ordinary SGR color and leading progress-bar clear sequences, but
     # quarantine any physical record edited between two printable fragments.
     def omit_rewritten_record(record: str) -> str:
-        # Dropping zero-width, directional, or Unicode separator characters
-        # inside a metric token would splice fragments into fabricated losses.
-        # Quarantine the entire display record, never change the source log.
+        # Removing invisible Unicode controls *or* stray C0/C1/DEL bytes
+        # between loss digits can splice fragments into fabricated metrics
+        # (for example, 0.2 + NUL + 5 would display as a false 0.25).
+        # Keep tabs as visible separators; CR/LF are split into records.
+        # Quarantine only affected display records, never the source log.
         for offset, char in enumerate(record):
-            if unicodedata.category(char) not in {"Cf", "Zl", "Zp"}:
+            codepoint = ord(char)
+            invisible_unicode = unicodedata.category(char) in {"Cf", "Zl", "Zp"}
+            stripped_terminal_byte = (
+                (codepoint < 32 and char != "\t") or 127 <= codepoint <= 159
+            )
+            if not invisible_unicode and not stripped_terminal_byte:
                 continue
             before = record[offset - 1 : offset]
             after = record[offset + 1 : offset + 2]
