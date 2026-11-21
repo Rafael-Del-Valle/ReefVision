@@ -230,7 +230,7 @@ function Invoke-ReefVisionInstalledPlaywrightSuite {
         [Parameter(Mandatory)][string]$Api,
         [Parameter(Mandatory)][int]$DebugPort,
         [Parameter(Mandatory)][int]$DesktopProcessId,
-        [Parameter(Mandatory)][ValidateSet('first-use', 'workspace', 'schedule-before', 'schedule-after', 'monitoring')][string]$Suite,
+        [Parameter(Mandatory)][ValidateSet('first-use', 'workspace', 'schedule-before', 'schedule-after', 'monitoring', 'research-tools')][string]$Suite,
         [Parameter(Mandatory)][string[]]$Specs,
         [string]$ExpectedBrowserSid,
         [string]$BrowserArtifactsDirectory,
@@ -260,7 +260,8 @@ function Invoke-ReefVisionInstalledPlaywrightSuite {
             $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
             [Environment]::SetEnvironmentVariable($name, $variables[$name], 'Process')
         }
-        & $NodePath 'node_modules/@playwright/test/cli.js' test @Specs --workers=1 --retries=0 --reporter=list,json --output=$output *> $log
+        $trace = if ($Suite -eq 'research-tools') { @('--trace=off') } else { @() }
+        & $NodePath 'node_modules/@playwright/test/cli.js' test @Specs @trace --workers=1 --retries=0 --reporter=list,json --output=$output *> $log
         if ($LASTEXITCODE -ne 0) {
             $tail = Get-Content -LiteralPath $log -Tail 25 | Out-String
             throw "Installed $Suite journeys failed with exit code $LASTEXITCODE. $tail"

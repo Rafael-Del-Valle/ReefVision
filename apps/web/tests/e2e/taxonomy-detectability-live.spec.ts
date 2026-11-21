@@ -481,6 +481,7 @@ test("Review a named taxon and replay an effort-aware independent-unit detectabi
         surface,
         application_version: isolated.application_version,
         schema_revision: isolated.schema_revision,
+        generated_fixture: true,
         project_id: project.id,
         two_fixture_role_revisions: [managerRole.id, reviewerRole.id],
         originals,

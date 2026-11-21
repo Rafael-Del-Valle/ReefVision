@@ -302,6 +302,28 @@ def _check_split_workflow(workflow: str, version: str) -> list[str]:
                 "Clean-install job is missing the hosted schedule restart acceptance",
             )
         )
+    if version == "1.8.0":
+        errors.extend(
+            _missing(
+                clean,
+                (
+                    "-HostedStandardUserWebView2",
+                    "-ResearchWorkflowAcceptance",
+                    "-ResearchToolsAcceptance",
+                    ".artifacts/windows-clean-acceptance-*/research-tools-evidence.json",
+                    ".artifacts/windows-clean-acceptance-*/research-tools-playwright.json",
+                    ".artifacts/windows-clean-acceptance-*/research-tools-playwright/**/taxonomy-detectability-proof.json",
+                    ".artifacts/windows-clean-acceptance-*/research-tools-playwright/**/bioacoustics-evidence.json",
+                    ".artifacts/windows-clean-acceptance-*/research-tools-playwright/**/multispectral-evidence.json",
+                    ".artifacts/windows-clean-acceptance-*/research-tools-playwright/**/underwater-adjustment-evidence.json",
+                    ".artifacts/windows-clean-acceptance-*/research-tools-playwright/**/detectability-assessment.json",
+                    ".artifacts/windows-clean-acceptance-*/research-tools-playwright/**/reviewed-bioacoustic-report.json",
+                    ".artifacts/windows-clean-acceptance-*/research-tools-playwright/**/spectral-index.json",
+                    ".artifacts/windows-clean-acceptance-*/research-tools-playwright/**/spectral-index.tif",
+                ),
+                "Clean-install job is missing the hosted 1.8 research tools acceptance",
+            )
+        )
     for name, job in ((_BUILD_JOB, build), (_CLEAN_JOB, clean), (_UPGRADE_JOB, upgrade)):
         errors.extend(
             _missing(

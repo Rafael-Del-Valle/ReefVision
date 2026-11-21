@@ -326,6 +326,7 @@ test("reviews original audio and replays an explicitly aligned report", async ({
         review_id: review.id,
         anchor_id: anchor.id,
         report_sha256: report.report_sha256,
+        export_sha256: hash(exported),
         replays,
       },
       null,

@@ -225,7 +225,8 @@ test("imports original bands, reopens their calibrated index and runs the saved 
   await writeFile(
     info.outputPath("multispectral-evidence.json"),
     JSON.stringify({
-      ...runtime,
+      application_version: runtime.application_version,
+      schema_revision: runtime.schema_revision,
       surface,
       project_id: project.id,
       acquisition_sha256: capture.content_sha256,

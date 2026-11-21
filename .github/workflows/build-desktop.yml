@@ -235,7 +235,7 @@ jobs:
             -ExpectedVersion '1.8.0' -ExpectedSchemaRevision 'b18_spectral_0002' `
             -AcceptanceRoot 'C:\reefvision-1-8-0-disposable-acceptance' `
             -SpatialWorkflowNodePath $playwrightNode -HostedStandardUserWebView2 -FirstUseAcceptance -ResearchWorkflowAcceptance -WorkspaceWorkflowAcceptance `
-            -ScheduleWorkflowAcceptance -MonitoringWorkflowAcceptance `
+            -ScheduleWorkflowAcceptance -MonitoringWorkflowAcceptance -ResearchToolsAcceptance `
             -SkipUpgrade -DisposableTest -KeepArtifacts
 
       - name: Upload isolated Windows acceptance report and MSI logs
@@ -259,6 +259,16 @@ jobs:
             .artifacts/windows-clean-acceptance-*/monitoring-playwright.json
             .artifacts/windows-clean-acceptance-*/monitoring-playwright/**/acquisition-source-evidence.json
             .artifacts/windows-clean-acceptance-*/monitoring-playwright/**/monitoring-proof.json
+            .artifacts/windows-clean-acceptance-*/research-tools-evidence.json
+            .artifacts/windows-clean-acceptance-*/research-tools-playwright.json
+            .artifacts/windows-clean-acceptance-*/research-tools-playwright/**/taxonomy-detectability-proof.json
+            .artifacts/windows-clean-acceptance-*/research-tools-playwright/**/detectability-assessment.json
+            .artifacts/windows-clean-acceptance-*/research-tools-playwright/**/bioacoustics-evidence.json
+            .artifacts/windows-clean-acceptance-*/research-tools-playwright/**/reviewed-bioacoustic-report.json
+            .artifacts/windows-clean-acceptance-*/research-tools-playwright/**/multispectral-evidence.json
+            .artifacts/windows-clean-acceptance-*/research-tools-playwright/**/spectral-index.json
+            .artifacts/windows-clean-acceptance-*/research-tools-playwright/**/spectral-index.tif
+            .artifacts/windows-clean-acceptance-*/research-tools-playwright/**/underwater-adjustment-evidence.json
             .artifacts/windows-clean-acceptance-*/research-evidence.json
             .artifacts/windows-clean-acceptance-*/research-playwright.json
             .artifacts/windows-clean-acceptance-*/research-playwright/**/*-evidence.json

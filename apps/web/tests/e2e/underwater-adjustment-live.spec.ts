@@ -4,6 +4,7 @@ import { expect, type APIResponse, type Response } from "@playwright/test";
 import type { ImageAdjustmentRecord } from "../../src/features/annotation-editor/imageAdjustmentApi";
 import { verifyResearchDesktop } from "./disposableResearchDesktop";
 import { test } from "./spatialDesktop";
+import { loadResearchScratchDetector } from "./researchToolsFixtures";
 
 const sha256 = (bytes: Buffer) =>
   createHash("sha256").update(bytes).digest("hex");
@@ -23,21 +24,58 @@ test("previews and reopens a raw-axis adjustment, runs a local model, and replay
   test.setTimeout(150_000);
   page.setDefaultTimeout(10_000);
   const fixturePath = process.env.REEFVISION_UNDERWATER_TEST_FIXTURE;
+  const detectorReceipt =
+    process.env.REEFVISION_RESEARCH_TOOLS_DETECTOR_RECEIPT;
   test.skip(
-    !fixturePath,
-    "Requires the verified generated RGB image and local model fixture",
+    !fixturePath && !detectorReceipt,
+    "Requires a verified generated RGB image and scratch model.",
   );
   const runtime = await verifyResearchDesktop(page, api);
-  const fixture = JSON.parse(await readFile(fixturePath!, "utf8")) as {
-    image: string;
+  let fixture: {
+    image: string | URL;
     image_sha256: string;
-    weights: string;
     weights_sha256: string;
     width_px: number;
     height_px: number;
   };
+  let weights: Buffer;
+  let fixtureSource:
+    | "installed_scratch_detector"
+    | "source_scratch_detector"
+    | "external_generated_fixture";
+  let sourceTrainingRun: string | undefined;
+  if (detectorReceipt) {
+    const detector = await loadResearchScratchDetector(
+      page,
+      api,
+      detectorReceipt,
+    );
+    expect(detector.surface).toBe(surface);
+    fixtureSource =
+      surface === "tauri-webview2"
+        ? "installed_scratch_detector"
+        : "source_scratch_detector";
+    fixture = {
+      // Synthetic asymmetric RGB. Orientation=6 is retained while editing raw 104×96 axes.
+      image: new URL("fixtures/underwater-oriented-rgb.png", import.meta.url),
+      image_sha256:
+        "e65802a6cf481877ec81d2c32011aab11f1ea3bc1e77814f9e04b0b4999b4262",
+      width_px: 104,
+      height_px: 96,
+      weights_sha256: detector.sha256,
+    };
+    weights = detector.bytes;
+    sourceTrainingRun = detector.training_run_id;
+  } else {
+    const donor = JSON.parse(await readFile(fixturePath!, "utf8")) as Omit<
+      typeof fixture,
+      "image"
+    > & { image: string; weights: string };
+    fixture = donor;
+    weights = await readFile(donor.weights);
+    fixtureSource = "external_generated_fixture";
+  }
   const original = await readFile(fixture.image);
-  const weights = await readFile(fixture.weights);
   expect(sha256(original)).toBe(fixture.image_sha256);
   expect(sha256(weights)).toBe(fixture.weights_sha256);
   expect(fixture.width_px).not.toBe(fixture.height_px);
@@ -400,6 +438,8 @@ test("previews and reopens a raw-axis adjustment, runs a local model, and replay
         application_version: runtime.application_version,
         schema_revision: runtime.schema_revision,
         project_id: project.id,
+        fixture_source: fixtureSource,
+        source_training_run_id: sourceTrainingRun,
         image_id: imageId,
         recipe,
         original_sha256: fixture.image_sha256,
