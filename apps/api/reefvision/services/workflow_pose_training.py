@@ -60,6 +60,8 @@ POSE_TRAINING_WORKFLOW_NODE_TYPES = {
     "pose_model_training",
 }
 
+POSE_WORKFLOW_TRAINING_SNAPSHOT_SCHEMA = "pose-workflow-training-snapshot-0001"
+
 
 DEFAULT_POSE_TRAINING_CONFIG: dict[str, Any] = {
     "epochs": 50,
@@ -354,6 +356,33 @@ def _reused_pose_training_result(
     experiment = session.scalar(
         select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
     )
+    snapshot = run.draft_snapshot_json or {}
+    requires_experiment = (
+        snapshot.get("schema_version") == POSE_WORKFLOW_TRAINING_SNAPSHOT_SCHEMA
+        or "pose_training_dataset_manifest_sha256" in snapshot
+    )
+    if experiment is None:
+        # Historical snapshots without a frozen manifest pin may lack this record.
+        if requires_experiment:
+            raise ValidationError("Recovered pose-training experiment registry record is missing")
+    elif (
+        experiment.project_id != run.project_id
+        or experiment.dataset_version_id != run.dataset_version_id
+        or experiment.dataset_manifest_sha256 != run.dataset_manifest_sha256
+        or experiment.split_manifest_sha256 != run.split_manifest_sha256
+        or experiment.task != run.task
+        or experiment.provider_id != run.provider_id
+        or experiment.architecture != run.architecture
+        or (
+            requires_experiment
+            and (
+                experiment.summary_metrics_json != run.metrics_json
+                or experiment.comparison_warnings_json != run.warnings_json
+                or experiment.artifact_manifest_json != run.artifact_manifest_json
+            )
+        )
+    ):
+        raise ValidationError("Recovered pose-training experiment provenance changed")
 
     validation_mode = str(dict(run.evaluation_config_json or {}).get("validation_mode") or "none")
 
@@ -715,7 +744,7 @@ def create_pose_workflow_training_result(
             "validation_mode": (split_manifest["validation_mode"]),
         },
         draft_snapshot_json={
-            "schema_version": ("pose-workflow-training-snapshot-0001"),
+            "schema_version": POSE_WORKFLOW_TRAINING_SNAPSHOT_SCHEMA,
             "pose_training_dataset_id": (dataset.id),
             "pose_training_dataset_manifest_sha256": (dataset.manifest_sha256),
             "pose_validation_dataset_id": (
