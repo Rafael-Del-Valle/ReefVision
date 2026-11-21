@@ -52,7 +52,7 @@ describe("LocalMeshPreview", () => {
     expect(screen.getByText(/Standalone preview only/)).toBeInTheDocument();
   });
 
-  it("sends render sampling choices and invalidates in-flight previews", async () => {
+  it("sends sampling flags and rejects stale previews", async () => {
     const deferred: {
       resolve?: (value: Record<string, unknown>) => void;
     } = {};
@@ -80,13 +80,17 @@ describe("LocalMeshPreview", () => {
     await act(async () => {
       deferred.resolve?.({ measurement_status: "caller_supplied_unverified" });
     });
-    expect(screen.queryByText("Saved preview rendered")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Saved preview rendered"),
+    ).not.toBeInTheDocument();
 
     vi.mocked(previewLocalMeshFile).mockResolvedValue({
       measurement_status: "caller_supplied_unverified",
     });
     fireEvent.click(screen.getByRole("button", { name: "Preview mesh" }));
-    expect(await screen.findByText("Saved preview rendered")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Saved preview rendered"),
+    ).toBeInTheDocument();
     expect(previewLocalMeshFile).toHaveBeenLastCalledWith(
       "reef-project",
       file,
@@ -96,7 +100,9 @@ describe("LocalMeshPreview", () => {
       }),
     );
     fireEvent.click(patches);
-    expect(screen.queryByText("Saved preview rendered")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Saved preview rendered"),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Preview mesh" }));
     expect(previewLocalMeshFile).toHaveBeenLastCalledWith(
       "reef-project",
@@ -108,7 +114,7 @@ describe("LocalMeshPreview", () => {
     );
   });
 
-  it("reports an import failure without displaying fabricated geometry", async () => {
+  it("reports import errors without fabricated geometry", async () => {
     vi.mocked(previewLocalMeshFile).mockRejectedValue(
       new Error("Malformed PLY"),
     );
@@ -172,7 +178,7 @@ describe("LocalMeshPreview", () => {
     );
   });
 
-  it("isolates provisional geometry and pending results across project changes", async () => {
+  it("isolates provisional previews across project changes", async () => {
     const deferred: {
       resolve?: (value: Record<string, unknown>) => void;
     } = {};
