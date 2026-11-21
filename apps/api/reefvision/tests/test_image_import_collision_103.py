@@ -669,3 +669,44 @@ def test_corrupted_duplicate_does_not_block_another_camera_image_in_batch(
     assert client.get(f"/api/v1/images/{new_id}/content").content == new_exposure
     assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 2
     assert managed.read_bytes() == tampered
+
+@pytest.mark.parametrize("rendition", ["display", "thumbnail"])
+def test_locked_camera_rendition_cleanup_preserves_original_publish_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    rendition: str,
+) -> None:
+    """Antivirus-held temporary previews must not hide a real publish failure."""
+    source = tmp_path / "sony-exposure.jpeg"
+    original = image_bytes("JPEG", size=(64, 48))
+    source.write_bytes(original)
+    destination = tmp_path / ("display.png" if rendition == "display" else "thumbnail.jpg")
+
+    def failed_publish(temporary: Path, target: Path) -> None:
+        assert temporary.exists()
+        assert target == destination
+        raise OSError(errno.EIO, "camera rendition volume disconnected")
+
+    original_unlink = Path.unlink
+
+    def locked_temporary_unlink(path: Path, *args: object, **kwargs: object) -> None:
+        if path.parent == tmp_path and path.name.startswith(f".{destination.name}.") and path.suffix == ".part":
+            raise PermissionError("Windows scanner holds generated image temporary")
+        original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(image_storage, "_replace_rendition", failed_publish)
+    monkeypatch.setattr(Path, "unlink", locked_temporary_unlink)
+
+    with pytest.raises(OSError, match="camera rendition volume disconnected"):
+        if rendition == "display":
+            image_storage.create_browser_display(source, destination)
+        else:
+            image_storage.create_thumbnail(source, destination, max_width=32, max_height=32)
+
+    # The unregistered temporary may survive while the OS lock is held, but
+    # no false success or mutation of immutable source bytes is permitted.
+    assert source.read_bytes() == original
+    assert not destination.exists()
+    assert len(list(tmp_path.glob(f".{destination.name}.*.part"))) == 1
+    assert "Could not remove incomplete camera import artifact" in caplog.text
