@@ -304,3 +304,31 @@ Release remains **HOLD** for complete exact-head backend/frontend/E2E CI,
 independent 1.1/1.6 Alembic-0038 reconciliation, representative biology and
 saved Workflow Builder acceptance, genuine Windows MSI/CAB clean-install,
 upgrade/rollback and installed-GUI usability, and explicit researcher approval.
+
+## Explicit invalid-geometry feedback without false save revisions (Track D, 2026-11-21)
+
+The previous 1.6 scientific geometry guards correctly refused moving or resizing
+malformed imported observations, but the full editor still dispatched a
+`commitDocument` action after a refused gesture. That created a misleading
+local dirty/undo state and could schedule a redundant save even though the
+original biological coordinates had not changed. Researchers also received no
+explanation of why dragging had no effect.
+
+The editor now detects the existing guard's **unchanged reference** return
+without reimplementing its bounds checks: rejected group moves and single-box
+resizes do **not** dispatch a document commit. The toolbar instead displays an
+accessible `role="alert"` explaining that invalid imported geometry or image
+bounds blocked the edit and that the original observation was retained. A
+successful subsequent move or resize clears the alert, as does switching
+images or projects. The source records, class IDs, QC decisions, original
+pixels, measurement data and saved executable Workflow Builder runs, typed
+outputs, provenance, retry policy and researcher approval gates remain
+unchanged. This editor-only usability and scientific-integrity correction is
+not a separate Workflow Builder analysis node or schema migration.
+
+A React integration regression loads a deliberately out-of-image imported
+annotation and performs both a move and resize. It requires both warnings,
+unchanged original geometry, no attempted PUT, and the clean **All changes
+synced** state after each rejection. Full exact-head frontend, Playwright,
+backend, Windows MSI/CAB installed-GUI, and representative biological
+acceptance are still release gates; no release approval is inferred.
