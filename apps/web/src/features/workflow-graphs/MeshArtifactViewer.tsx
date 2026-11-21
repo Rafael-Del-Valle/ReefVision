@@ -597,6 +597,7 @@ export function parseMeshRenderArtifact(
   const radius = data.preview_camera_radius_m;
   const fraction = data.preview_face_fraction;
   const areaFraction = data.preview_surface_area_fraction;
+  const persistedQcWarnings = data.qc_warnings;
   if (
     !Array.isArray(vertices) ||
     vertices.length < 3 ||
@@ -645,9 +646,9 @@ export function parseMeshRenderArtifact(
     decimated: data.preview_is_decimated,
     faceFraction: fraction,
     areaFraction: areaFraction as number | null,
-    previewQcWarnings: Array.isArray(data.qc_warnings)
+    previewQcWarnings: Array.isArray(persistedQcWarnings)
       ? Object.keys(PREVIEW_QC_MESSAGES).filter((code) =>
-          data.qc_warnings.includes(code),
+          persistedQcWarnings.includes(code),
         )
       : [],
     relativeScaleUncertainty:
