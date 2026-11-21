@@ -1445,6 +1445,54 @@ def _native_pose_workflow_graph(dataset_id: str) -> dict[str, object]:
     }
 
 
+@pytest.mark.parametrize("cancel_parent", [True, False], ids=["workflow", "training-job"])
+def test_cancelling_before_pose_worker_claim_closes_the_training_and_graph(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    cancel_parent: bool,
+) -> None:
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    url = f"/api/v1/projects/{project['id']}"
+    saved = client.post(
+        url + "/workflow-graphs", json={"graph": _native_pose_workflow_graph(str(dataset["id"]))}
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(url + "/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert queued.status_code == 202, queued.text
+    parent_id = queued.json()["job_id"]
+
+    def cancel_before_claim(
+        settings: Settings, factory: sessionmaker[Session], job_id: str
+    ) -> bool:
+        with factory() as session:
+            child = session.get(Job, job_id)
+            assert child is not None and child.status == "queued"
+        target = parent_id if cancel_parent else job_id
+        cancelled = client.post(f"/api/v1/jobs/{target}/cancel")
+        assert cancelled.status_code == 200, cancelled.text
+        return process_pose_training_job(settings, factory, job_id)
+
+    monkeypatch.setattr(
+        "reefvision.jobs.reefpose_training.process_reefpose_training_job", cancel_before_claim
+    )
+    assert not process_workflow_run_job(app.state.settings, app.state.session_factory, parent_id)
+    (training,) = client.get(url + "/training-runs").json()
+    assert training["status"] == training["stage"] == "cancelled"
+    assert training["completed_at"] and training["result_checkpoint_path"] is None
+    assert client.get(f"/api/v1/jobs/{training['job_id']}").json()["status"] == "cancelled"
+    detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json()
+    assert detail["run"]["status"] == "cancelled"
+    assert {n["node_id"]: n["status"] for n in detail["nodes"]} == {
+        "dataset": "succeeded",
+        "train": "cancelled",
+        "register": "cancelled",
+    }
+    assert all(n["completed_at"] for n in detail["nodes"])
+    assert len(detail["artifacts"]) == 1
+    assert detail["artifacts"][0]["payload_json"]["manifest_sha256"] == dataset["manifest_sha256"]
+
+
 def test_saved_native_reefpose_workflow_executes_and_replays(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
