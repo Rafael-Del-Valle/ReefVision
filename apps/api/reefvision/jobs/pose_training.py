@@ -236,6 +236,15 @@ def _safe_extract_zip(
         if corrupt_member is not None:
             raise ValidationError("Pose training export contains a corrupt archive member")
 
+        # Missing the exported dataset header is an invalid frozen bundle.
+        # Reject it before claiming the immutable run directory so a corrected
+        # export can be retried without overwriting any prior scientific data.
+        if not any(
+            item.filename == "data.yaml" and not item.is_dir()
+            for item in archive.infolist()
+        ):
+            raise ValidationError("Ultralytics pose export is missing data.yaml")
+
         # Invalid or ambiguous archives must not leave even an empty run
         # directory behind: that would block a corrected frozen export retry.
         # Keep the destination absent until every member passes preflight.
