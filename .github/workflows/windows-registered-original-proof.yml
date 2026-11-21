@@ -28,6 +28,9 @@ jobs:
       SIDECAR_DRIVER_BLOB: f7bbfa040913e075b33b37d910c33b4f0f02de39
       SIDECAR_DRIVER_COMMIT: fa521bd4c78d9e6f34d7a564feefe93b4bcf3b79
       SIDECAR_DRIVER_PATH: scripts/acceptance-windows-clean-install.ps1
+      FIRST_USE_DRIVER_PATH: apps/web/tests/e2e/ordinary-project-live.spec.ts
+      FIRST_USE_DRIVER_COMMIT: ded802cfbccb138d1af367089bc3639cdc2ddb33
+      FIRST_USE_DRIVER_BLOB: e4592e5d1d66ab7552e903f41296e6fbdb526039
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,8 +58,8 @@ jobs:
           if ($receipt.build_job_id -ne [long]$env:ORIGINAL_BUILD_JOB -or $receipt.original_msi_sha256 -cnotmatch '^[a-f0-9]{64}$') {
             throw 'The original MSI transport must bind to the exact manufacturing job and its verified MSI digest.'
           }
-          $patches = @('sidecar-path.patch')
-          $expected = @($env:SIDECAR_DRIVER_PATH)
+          $patches = @('sidecar-path.patch', 'first-use-coordinates.patch')
+          $expected = @($env:SIDECAR_DRIVER_PATH, $env:FIRST_USE_DRIVER_PATH)
           if ($env:APPLY_ARGV_OVERLAY -ceq '1') {
             $patches += 'native-arguments.patch'
             $expected += $env:DRIVER_PATH
@@ -71,8 +74,9 @@ jobs:
           $files = @(git -C source diff --name-only)
           if ($files.Count -ne $expected.Count -or (Compare-Object $expected $files -CaseSensitive) -or
               (git -C source hash-object $env:DRIVER_PATH).Trim() -cne $env:DRIVER_BLOB -or
-              (git -C source hash-object $env:SIDECAR_DRIVER_PATH).Trim() -cne $env:SIDECAR_DRIVER_BLOB) {
-            throw 'The retest must use only the verified native argv and sidecar path driver changes.'
+              (git -C source hash-object $env:SIDECAR_DRIVER_PATH).Trim() -cne $env:SIDECAR_DRIVER_BLOB -or
+              (git -C source hash-object $env:FIRST_USE_DRIVER_PATH).Trim() -cne $env:FIRST_USE_DRIVER_BLOB) {
+            throw 'The retest must use only the verified native driver corrections and first-use diagnostic.'
           }
           [ordered]@{
             source_commit=$env:SOURCE_COMMIT; workflow_run_id=[long]$env:ORIGINAL_BUILD_RUN; build_job_id=[long]$env:ORIGINAL_BUILD_JOB
@@ -81,6 +85,8 @@ jobs:
             driver_sha256=(Get-FileHash -LiteralPath (Join-Path ./source $env:DRIVER_PATH)).Hash.ToLowerInvariant()
             sidecar_driver_commit=$env:SIDECAR_DRIVER_COMMIT; sidecar_driver_git_blob=$env:SIDECAR_DRIVER_BLOB
             sidecar_driver_sha256=(Get-FileHash -LiteralPath (Join-Path ./source $env:SIDECAR_DRIVER_PATH)).Hash.ToLowerInvariant()
+            first_use_driver_commit=$env:FIRST_USE_DRIVER_COMMIT; first_use_driver_git_blob=$env:FIRST_USE_DRIVER_BLOB
+            first_use_driver_sha256=(Get-FileHash -LiteralPath (Join-Path ./source $env:FIRST_USE_DRIVER_PATH)).Hash.ToLowerInvariant()
           } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath "$env:PROOF_ROOT/evidence/registered-retest-provenance.json"
           npm --prefix source/apps/web ci --no-audit --no-fund
           if ($LASTEXITCODE) { throw 'Could not stage pinned installed acceptance drivers.' }
