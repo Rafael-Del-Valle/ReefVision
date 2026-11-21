@@ -993,7 +993,9 @@ describe("AnnotationEditor", () => {
       clientY: -10000,
     });
     expect(screen.getByText("All changes synced")).toBeInTheDocument();
-    expect(screen.queryByTestId("editor-gesture-status")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("editor-gesture-status"),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("annotation-annotation-1")).toHaveAttribute(
       "x",
       "0",
