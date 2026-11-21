@@ -20,6 +20,7 @@ _VALIDATED_15_UPGRADE_JOB = "windows-validated-15-upgrade-acceptance"
 _VALIDATED_16_UPGRADE_JOB = "windows-validated-16-upgrade-acceptance"
 _VALIDATED_17_UPGRADE_JOB = "windows-validated-17-upgrade-acceptance"
 _VALIDATED_18_UPGRADE_JOB = "windows-validated-18-upgrade-acceptance"
+_VALIDATED_19_UPGRADE_JOB = "windows-validated-19-upgrade-acceptance"
 _BASELINE_VERSION = "1.0.3"
 _BASELINE_REPOSITORY = "Rafael-Del-Valle/ReefVision"
 _BASELINE_COMMIT = "e94dad6a3bece7b776bf45776bc5d06cfbc2c0dc"
@@ -87,6 +88,27 @@ _VALIDATED_BASELINES = {
         "78d52066848afc6aeac975765359ba13cd3d0e2e8b79ef1b90307eecd03c35ed",
         "136691608332",
     ),
+    _VALIDATED_19_UPGRADE_JOB: _ValidatedBaseline(
+        "1.9.0",
+        "44884655409",
+        "6334bcbb81a19638d9803bca0217b042a3cb3047",
+        "d1f77867dc5410db5c62b395206fa6a03ddf6ab3bf710a1bd738f4dbc55acb91",
+        "b19_registration_0001",
+        6,
+        "8155f626ea99b5052658d81fc6d6b6300ce66eb7d479bda48a161b1c51ea9c35",
+        "136787200988",
+    ),
+}
+
+_VALIDATED_TRANSPORT_PINS = {
+    _VALIDATED_18_UPGRADE_JOB: (
+        ("14687728605", "daeb01a281e413c02d3d3d31d3d4e135502137dfe1c98f6c98d3dca21d11edd0"),
+        ("14687484229", "fc577bc4f464e33f2b46725ec6501831f968af5daa060f1149a2513f61cb3310"),
+    ),
+    _VALIDATED_19_UPGRADE_JOB: (
+        ("14704455436", "4520262d24de8e86bc0a91effa4eb999c8a91c744464ab2eebdebe0e176458e2"),
+        ("14703732977", "5031d01128f0dcc6df0aac90af4fd784e160390f714f877c79074531bbeba841"),
+    ),
 }
 
 _VALIDATED_UPGRADE_JOBS = {
@@ -99,7 +121,8 @@ _VALIDATED_UPGRADE_JOBS = {
         _VALIDATED_16_UPGRADE_JOB,
         _VALIDATED_17_UPGRADE_JOB,
     ),
-    "1.9.0": tuple(_VALIDATED_BASELINES),
+    "1.9.0": tuple(name for name in _VALIDATED_BASELINES if name != _VALIDATED_19_UPGRADE_JOB),
+    "2.0.0": tuple(_VALIDATED_BASELINES),
 }
 _CANDIDATE_REVISION = {
     "1.5.0": "b15_integrated_0002",
@@ -107,6 +130,7 @@ _CANDIDATE_REVISION = {
     "1.7.0": "b17_monitor_0003",
     "1.8.0": "b18_spectral_0002",
     "1.9.0": "b19_registration_0001",
+    "2.0.0": "b20_appearance_0001",
 }
 
 
@@ -192,7 +216,7 @@ def _check_validated_upgrade(
         ),
         f"{name} is missing the verified {previous.version} to {version} upgrade contract",
     )
-    if previous.manufacturing_job is None:
+    if previous.manufacturing_job is None or name == _VALIDATED_19_UPGRADE_JOB:
         errors.extend(
             _missing(
                 job,
@@ -200,7 +224,7 @@ def _check_validated_upgrade(
                 f"{name} requires a successful predecessor run",
             )
         )
-    else:
+    if previous.manufacturing_job is not None:
         # The original build succeeded. A separate run repeated the clean-install
         # test after a Playwright selector failed on these same installer bytes.
         errors.extend(
@@ -243,18 +267,18 @@ def _check_validated_upgrade(
             harness
         ):
             errors.append(f"{name} must check the pinned original MSI digest before installation")
-    if name == _VALIDATED_18_UPGRADE_JOB:
+    if pins := _VALIDATED_TRANSPORT_PINS.get(name):
         transport_check = "$partMatches[0].digest -cne $pin.digest"
+        expected_parts = tuple(
+            f"id = {identifier}; digest = 'sha256:{sha256}'" for identifier, sha256 in pins
+        )
         errors.extend(
             _missing(
                 job,
                 (
-                    "14687728605",
-                    "daeb01a281e413c02d3d3d31d3d4e135502137dfe1c98f6c98d3dca21d11edd0",
-                    "14687484229",
-                    "fc577bc4f464e33f2b46725ec6501831f968af5daa060f1149a2513f61cb3310",
+                    *expected_parts,
                     "$partMatches[0].id -ne $pin.id",
-                    "$partMatches[0].workflow_run.head_sha -cne $env:REEFVISION_1_8_SOURCE",
+                    f"$partMatches[0].workflow_run.head_sha -cne $env:{env}_SOURCE",
                     transport_check,
                     "baseline_artifact_transport = $previousTransport",
                 ),
@@ -304,7 +328,7 @@ def _check_split_workflow(workflow: str, version: str) -> list[str]:
     errors = _check_preflight_order(build, f"- name: Build weight-free {version} desktop installer")
     for name in _VALIDATED_UPGRADE_JOBS.get(version, ()):
         errors.extend(_check_validated_upgrade(workflow, name, version, verified_candidate))
-    if version in ("1.6.0", "1.7.0", "1.8.0", "1.9.0"):
+    if version in ("1.6.0", "1.7.0", "1.8.0", "1.9.0", "2.0.0"):
         errors.extend(
             _missing(
                 clean,
@@ -327,7 +351,7 @@ def _check_split_workflow(workflow: str, version: str) -> list[str]:
                 "Clean-install job is missing installed workspace acceptance",
             )
         )
-    if version in ("1.7.0", "1.8.0", "1.9.0"):
+    if version in ("1.7.0", "1.8.0", "1.9.0", "2.0.0"):
         errors.extend(
             _missing(
                 clean,
@@ -340,7 +364,7 @@ def _check_split_workflow(workflow: str, version: str) -> list[str]:
                 "Clean-install job is missing the hosted schedule restart acceptance",
             )
         )
-    if version in ("1.8.0", "1.9.0"):
+    if version in ("1.8.0", "1.9.0", "2.0.0"):
         errors.extend(
             _missing(
                 clean,

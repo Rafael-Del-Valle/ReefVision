@@ -14,6 +14,7 @@ from reefvision.desktop import (
     parse_args,
     project_root,
     require_scale_assistant_marker_runtime,
+    require_wasmtime_runtime,
     resolve_alembic_paths,
     resolve_server_port,
     watch_shutdown_stream,
@@ -159,6 +160,7 @@ def test_write_self_test_result_records_packaged_version(tmp_path: Path) -> None
         tmp_path,
         version="1.0.1",
         openapi_path_count=147,
+        wasmtime_runtime_version="51.0.0",
     )
 
     payload = json.loads(result.read_text(encoding="utf-8"))
@@ -166,4 +168,9 @@ def test_write_self_test_result_records_packaged_version(tmp_path: Path) -> None
         "application_version": "1.0.1",
         "openapi_path_count": 147,
         "status": "PASS",
+        "wasmtime_runtime_version": "51.0.0",
     }
+
+
+def test_desktop_self_test_executes_known_answer_with_pinned_wasmtime() -> None:
+    assert require_wasmtime_runtime() == "51.0.0"

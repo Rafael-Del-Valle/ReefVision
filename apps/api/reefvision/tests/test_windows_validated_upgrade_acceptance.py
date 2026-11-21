@@ -20,7 +20,32 @@ VALIDATED_15_JOB = "windows-validated-15-upgrade-acceptance"
 VALIDATED_16_JOB = "windows-validated-16-upgrade-acceptance"
 DIRECT_PREDECESSOR_JOB = "windows-validated-17-upgrade-acceptance"
 VALIDATED_18_JOB = "windows-validated-18-upgrade-acceptance"
-VERSION = "1.9.0"
+VALIDATED_19_JOB = "windows-validated-19-upgrade-acceptance"
+VERSION = "2.0.0"
+
+
+@pytest.mark.parametrize(
+    "required",
+    [
+        'REEFVISION_1_9_RUN: "44884655409"',
+        'REEFVISION_1_9_BUILD_JOB: "136787200988"',
+        "6334bcbb81a19638d9803bca0217b042a3cb3047",
+        "d1f77867dc5410db5c62b395206fa6a03ddf6ab3bf710a1bd738f4dbc55acb91",
+        "8155f626ea99b5052658d81fc6d6b6300ce66eb7d479bda48a161b1c51ea9c35",
+        "14704455436",
+        "5031d01128f0dcc6df0aac90af4fd784e160390f714f877c79074531bbeba841",
+        "$run.conclusion -ne 'success'",
+        "-ExpectedInitialSchemaRevision 'b19_registration_0001'",
+        "-VerifyPreviousInstallerRejectsUpgradedProfile",
+    ],
+)
+def test_20_direct_upgrade_requires_original_19_msi_and_rollback(required: str) -> None:
+    job = PREFLIGHT._job(WORKFLOW, VALIDATED_19_JOB)
+    assert job, "Windows must exercise the exact qualified 1.9 original MSI"
+    assert required in job
+    assert PREFLIGHT.check_workflow(WORKFLOW, VERSION) == []
+    changed = WORKFLOW.replace(job, job.replace(required, "altered-1.9-upgrade-contract"))
+    assert any(VALIDATED_19_JOB in error for error in PREFLIGHT.check_workflow(changed, VERSION))
 
 
 @pytest.mark.parametrize(
@@ -36,17 +61,17 @@ VERSION = "1.9.0"
         "$partMatches[0].digest -cne $pin.digest",
         ".Count -ne 6",
         "-ExpectedInitialSchemaRevision 'b18_spectral_0002'",
-        "-ExpectedSchemaRevision 'b19_registration_0001'",
+        "-ExpectedSchemaRevision 'b20_appearance_0001'",
         "-VerifyPreviousInstallerRejectsUpgradedProfile",
     ],
 )
-def test_19_direct_upgrade_requires_original_18_msi_and_rollback(required: str) -> None:
+def test_original_18_upgrade_requires_exact_payload_and_rollback(required: str) -> None:
     job = PREFLIGHT._job(WORKFLOW, VALIDATED_18_JOB)
-    assert job, "Windows must exercise a direct original 1.8 to 1.9 upgrade"
+    assert job, "Windows must keep the original 1.8 predecessor available"
     assert required in job
-    assert PREFLIGHT.check_workflow(WORKFLOW, "1.9.0") == []
+    assert PREFLIGHT.check_workflow(WORKFLOW, VERSION) == []
     changed = WORKFLOW.replace(job, job.replace(required, "altered-1.8-upgrade-contract"))
-    assert any(VALIDATED_18_JOB in error for error in PREFLIGHT.check_workflow(changed, "1.9.0"))
+    assert any(VALIDATED_18_JOB in error for error in PREFLIGHT.check_workflow(changed, VERSION))
 
 
 @pytest.mark.parametrize(
@@ -81,7 +106,7 @@ def test_direct_validated_16_upgrade_is_pinned_and_exercises_rollback() -> None:
     assert "d4e53ebfebdf8201526fa7f58acd31392eceba6cdee12b5145e55313452ffb3c" in job
     assert "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be" in job
     assert "-ExpectedInitialSchemaRevision 'b16_integrated_0001'" in job
-    assert "-ExpectedSchemaRevision 'b19_registration_0001'" in job
+    assert "-ExpectedSchemaRevision 'b20_appearance_0001'" in job
     assert "-VerifyPreviousInstallerRejectsUpgradedProfile" in job
     assert PREFLIGHT.check_workflow(WORKFLOW, VERSION) == []
     assert PREFLIGHT.check_cab_artifact_partition(WORKFLOW, VERSION) == []
@@ -110,7 +135,7 @@ def test_direct_validated_14_upgrade_is_separate_from_existing_roles() -> None:
             "draft-1.4-0039",
         )
     )
-    assert "name: Installed 1.9 lineage" in lineage
+    assert "name: Installed 2.0 lineage" in lineage
     assert PREFLIGHT._job(WORKFLOW, "windows-qc-history-acceptance")
     assert "*.reefvision.zip" not in upgrade and "*.pt" not in upgrade
 
@@ -126,7 +151,7 @@ def test_direct_validated_14_upgrade_is_separate_from_existing_roles() -> None:
             "-ExpectedInitialSchemaRevision '0039'",
         ),
         (
-            "-ExpectedSchemaRevision 'b19_registration_0001'",
+            "-ExpectedSchemaRevision 'b20_appearance_0001'",
             "-ExpectedSchemaRevision 'b16_integrated_0001'",
         ),
         ("foreach ($part in 1..2)", "foreach ($part in 1..1)"),
@@ -191,7 +216,7 @@ def test_validated_upgrade_requires_independent_rollback(job_name: str) -> None:
             "-ExpectedInitialSchemaRevision '0039'",
         ),
         (
-            "-ExpectedSchemaRevision 'b19_registration_0001'",
+            "-ExpectedSchemaRevision 'b20_appearance_0001'",
             "-ExpectedSchemaRevision 'b16_integrated_0001'",
         ),
     ],

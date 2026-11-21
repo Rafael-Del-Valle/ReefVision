@@ -220,7 +220,7 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
     const method = request.method();
 
     if (url.pathname.endsWith("/health")) {
-      await route.fulfill({ json: { status: "ok", version: "1.9.0" } });
+      await route.fulfill({ json: { status: "ok", version: "2.0.0" } });
       return;
     }
     if (url.pathname.endsWith("/project-summaries") && method === "GET") {
