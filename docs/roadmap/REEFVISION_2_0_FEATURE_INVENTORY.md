@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T00:20:35Z`
+Updated: `2026-11-21T00:40:03Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1336,7 +1336,9 @@ Acceptance checks:
 Evidence:
 
 - `source`: The source checks exercised immutable audio originals, half-open sample intervals, linked recording clocks, independent decisions and report checksums. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-bioacoustics-a82cc730e-source`)
+- `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-bioacoustics-managed-restore-542254b8a`)
 - `browser`: A stereo PCM recording was played and a source sample range was reviewed and explicitly time-aligned. Two saved graph runs reproduced the same report. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-bioacoustics-a82cc730e-browser`)
+- `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-bioacoustics-frozen-desktop-542254b8a`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1356,7 +1358,10 @@ Acceptance checks:
 Evidence:
 
 - `source`: The frozen roster preserves missing groups and pinning for both registered models, with original or checked adjusted input per eligible image. Numerical tests exercise group-weighted effects, Welch uncertainty, excluded or overlapping units and withheld intervals. A partial source page still finds an eligible older comparison. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv18-domain-shift-group-scores-bdcec01e3`)
+- `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-domain-shift-managed-restore-542254b8a`)
+- `source`: Two real local instance segmenters evaluated six held-out stills in twelve adjusted jobs. Two weight-free archive hops retained the frozen mask and detector reports, CSV and replay hashes. A separate provider-boundary check rejected an omitted mandatory raster before project creation. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-domain-shift-real-mask-exchange-542254b8a`)
 - `browser`: The five-workflow Windows source trial compared two actual locally trained CPU checkpoints across two generated held-out acquisition groups, kept the third group missing, ran six adjusted evaluations on three original images, withheld intervals at one independent unit per domain, exported JSON and CSV and replayed the report twice. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv18-domain-shift-adjusted-evaluation-bdcec01e3`)
+- `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-domain-shift-frozen-desktop-542254b8a`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1376,7 +1381,9 @@ Acceptance checks:
 Evidence:
 
 - `source`: Two successive archives reproduced the analysis from the original band pixels. Import rejected a fabricated index and a changed workflow report before project creation. Calibration, alignment or usable samples can withhold an estimate. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-multispectral-a82cc730e-source`)
+- `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-multispectral-managed-restore-542254b8a`)
 - `browser`: Two aligned generated bands produced the expected composite pixel and a 0.5 normalized reflectance index on three of eight reference pixels. JSON, float TIFF and two saved runs agreed. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-multispectral-a82cc730e-browser`)
+- `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-multispectral-frozen-desktop-542254b8a`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1396,7 +1403,9 @@ Acceptance checks:
 Evidence:
 
 - `source`: Two successive project imports retained the immutable visit and reviewer evidence. The public importer refused a rehashed inconsistent estimate. Concurrent reviews and repeated-original withholding have dedicated regression checks. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-taxonomy-detectability-a82cc730e-source`)
+- `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-taxonomy-detectability-managed-restore-542254b8a`)
 - `browser`: Separate fixture role revisions and five generated tanks yielded ten eligible visits, 300 seconds of effort and 50% detection. The downloaded assessment reopened and two saved runs agreed. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-taxonomy-detectability-a82cc730e-browser`)
+- `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-taxonomy-detectability-frozen-desktop-542254b8a`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1416,7 +1425,9 @@ Acceptance checks:
 Evidence:
 
 - `source`: The saved graph ran against the original image and registered model on two restored project copies. All copies reproduced the rendition bytes and original receipt. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-underwater-correction-a82cc730e-source`)
+- `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-underwater-correction-managed-restore-542254b8a`)
 - `browser`: The editor reopened the original pixel grid in box, polygon and raster annotation. Its explicitly selected CPU detector emitted pending proposals on the saved rendition. Two saved workflow runs reproduced the adjustment receipt. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-underwater-correction-a82cc730e-browser`)
+- `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-underwater-correction-frozen-desktop-542254b8a`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded

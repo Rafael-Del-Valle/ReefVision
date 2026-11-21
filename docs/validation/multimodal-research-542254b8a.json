@@ -1,0 +1,198 @@
+{
+  "version": "1.8.0",
+  "product_source": "542254b8aa0d896fb630282d70f263a74a65b99f",
+  "schema": "b18_spectral_0002",
+  "fixture_scope": "Generated scientific inputs with an actual Windows source runtime, offline local training, registrations, job execution and saved runs.",
+  "exact_browser": {
+    "two_training_and_registration_journeys": {
+      "startTime": "2026-11-21T00:33:24.232Z",
+      "duration": 61838.998,
+      "expected": 2,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "five_research_journeys": {
+      "startTime": "2026-11-21T00:34:26.483Z",
+      "duration": 39297.909,
+      "expected": 5,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "additional_help_qc_classes": {
+      "startTime": "2026-11-21T00:30:05.298Z",
+      "duration": 35007.797,
+      "expected": 3,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "five_receipt": {
+      "file": "1.8/checkpoints/542254b8a/source/research-journeys/source-research-tools-rehearsal.json",
+      "sha256": "011dee503222b95a5f0c540ac36e93febb9450ecf7299506697d14f8408e57ed"
+    },
+    "help_qc_classes_receipt": {
+      "file": "1.8/checkpoints/542254b8a/source/preserved-journeys/playwright.json",
+      "sha256": "385c80a59889c9431b4bac8f8f8eb97893fd207d3ccfbe96b324709786a4fc50"
+    },
+    "feature_receipts": {
+      "rv18-taxonomy-detectability": {
+        "file": "1.8/checkpoints/542254b8a/source/research-journeys/taxonomy-detectability-proof.json",
+        "sha256": "46983a5028460129d59ddf51db6965146517cd7afae054c156776f48e0fbf71c"
+      },
+      "rv18-bioacoustics": {
+        "file": "1.8/checkpoints/542254b8a/source/research-journeys/bioacoustics-evidence.json",
+        "sha256": "89a047ebfdb2272373eba9184fb972bccc4a58216d707ff2fc345373f2e23a69"
+      },
+      "rv18-multispectral": {
+        "file": "1.8/checkpoints/542254b8a/source/research-journeys/multispectral-evidence.json",
+        "sha256": "e13e9447eefc52066667a823b8262af3c138c2dba5c4c524f2e9ad5b806c35f2"
+      },
+      "rv18-underwater-correction": {
+        "file": "1.8/checkpoints/542254b8a/source/research-journeys/underwater-adjustment-evidence.json",
+        "sha256": "2b8c03b9c5466e1dd47e411719678a8586d62b43f517c102022bde56572a1696"
+      },
+      "rv18-domain-shift": {
+        "file": "1.8/checkpoints/542254b8a/source/research-journeys/domain-shift-evidence.json",
+        "sha256": "6c81c2a6f83b122191cff1c5273fa765a98e531cbc027251ef0ab1c3e75dba5b"
+      }
+    }
+  },
+  "process_closure": {
+    "five": "owned-process termination",
+    "owned_endpoints_closed": true,
+    "older_reader_did_not_publish": true
+  },
+  "recovery": {
+    "projects": 6,
+    "observed_original_stills": 37,
+    "rows": 822,
+    "populated_tables": 39,
+    "verified_files": 212,
+    "verified_bytes": 60553774,
+    "preserved_saved_artifacts": 10,
+    "older_1_7_refused_without_writing_database_source_or_checkpoints": true,
+    "evidence": {
+      "file": "1.8/checkpoints/542254b8a/source/managed-recovery/five-modality-managed-recovery.json",
+      "sha256": "ac0ba4b2723132266ea52949eb5fc76b2db30ebc3958ea5c2ddfbc096464f59b"
+    }
+  },
+  "gates": {
+    "rust_tests": 8,
+    "rust_fmt": true,
+    "alembic_states": [
+      133,
+      1,
+      133
+    ],
+    "physical_native_cuda_opt_ins": 3,
+    "standard_browser": {
+      "startTime": "2026-11-21T00:33:21.684Z",
+      "duration": 11982.409,
+      "expected": 15,
+      "skipped": 49,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "typescript": true,
+    "frontend_production": true,
+    "frontend_unit_original": {
+      "passed": 923,
+      "failed": 1,
+      "reason": "Workspace inspection test expected 25 workspaces; the product registers 27."
+    },
+    "frontend_test_correction": {
+      "source": "64b0c01554c96fe67d29fbea734ed9636050f340",
+      "changed_files": [
+        "apps/web/src/components/layout/ScientistWorkspaceInspector.test.tsx"
+      ],
+      "passed": 925,
+      "failed": 0,
+      "dedicated_general_ci": 44845142599
+    },
+    "receipts": {
+      "exact-browser.json": {
+        "file": "1.8/checkpoints/542254b8a/source/boundary/web/exact-browser.json",
+        "sha256": "92da268cc17b4446e5dc502d213a4c3854eb88f0958de6d69a584b18de4dc3b8"
+      },
+      "exact-ui-build.log": {
+        "file": "1.8/checkpoints/542254b8a/source/boundary/web/exact-ui-build.log",
+        "sha256": "25e195c5283bc29bb9dc33c41230eb19b89deffc7e812f98b6ecef61a0e680fe"
+      },
+      "unit.log": {
+        "file": "1.8/checkpoints/542254b8a/source/boundary/web/unit.log",
+        "sha256": "1afe42fd0bc8b60735def9b3e18f6becd4f38dffbdcc3756994d65480c538b52"
+      },
+      "corrected-test-format.log": {
+        "file": "1.8/checkpoints/542254b8a/source/boundary/web/corrected-test-format.log",
+        "sha256": "f20510a9da4717c51c4cffee6d0dd88d6c9a723d0a83711d01216f5b48961283"
+      },
+      "corrected-test-typecheck.log": {
+        "file": "1.8/checkpoints/542254b8a/source/boundary/web/corrected-test-typecheck.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "corrected-test-units.log": {
+        "file": "1.8/checkpoints/542254b8a/source/boundary/web/corrected-test-units.log",
+        "sha256": "3338145c445edd044b74af2592f730c5529349c089ac3b70b3dda4de68a56646"
+      },
+      "lockfile.log": {
+        "file": "1.8/checkpoints/542254b8a/source/boundary/web/lockfile.log",
+        "sha256": "a4f05eb0e0f8c59dc774dbcc0f960075269991f0bb58fa76735a0f21b6e87b56"
+      },
+      "format.log": {
+        "file": "1.8/checkpoints/542254b8a/source/boundary/web/format.log",
+        "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+      },
+      "typecheck.log": {
+        "file": "1.8/checkpoints/542254b8a/source/boundary/web/typecheck.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "rust/fmt.log": {
+        "file": "1.8/checkpoints/542254b8a/source/boundary/rust/fmt.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "rust/test.log": {
+        "file": "1.8/checkpoints/542254b8a/source/boundary/rust/test.log",
+        "sha256": "0eca55e689a4d0e4c708ec9448dc18b9d759fdf71ba714d1f7c8fc5d82e4c6da"
+      },
+      "rust/checks.json": {
+        "file": "1.8/checkpoints/542254b8a/source/boundary/rust/checks.json",
+        "sha256": "4fcfcf89d6142ce6ae8ec28b4496e07aa23fec92d9607fd8de267eaec8321734"
+      }
+    }
+  },
+  "transfers": {
+    "detector": {
+      "stored_report_two_hops": true,
+      "frozen_replays": 4,
+      "model_weights_omitted": true,
+      "tampered_child_rejected": true,
+      "evidence": {
+        "file": "1.8/checkpoints/542254b8a/source/domain-shift-exchange/evidence-index.json",
+        "sha256": "f9e4c0c57ffa0ac882853dd1949b8f7defa51954edbe3221304e8eb58ebe15d9"
+      }
+    },
+    "masks": {
+      "instance_checkpoints": 2,
+      "generated_stills": 6,
+      "adjusted_jobs": 12,
+      "archive_hops": 2,
+      "separate_semantic_raster_fixture": true,
+      "omitted_required_png_refused": true,
+      "evidence": {
+        "file": "1.8/checkpoints/542254b8a/source/domain-shift-masks/evidence-index.json",
+        "sha256": "4031f11b8db872ce18f982ff0070a61a5b00570c756f0711f5ce9e9e0730dd3c"
+      }
+    }
+  },
+  "migration": {
+    "file": "1.8/checkpoints/542254b8a/source/boundary/migration-roundtrip.json",
+    "sha256": "a61cb2ebbdc662002c42604a090020edeccdc05cc3ad014fd84f371c19d7b119"
+  },
+  "native_reefpose_on_rtx_3090": {
+    "file": "1.8/checkpoints/542254b8a/source/boundary/native-reefpose-rtx.json",
+    "sha256": "f079d7bf6387ab83f852f5df99ee0de59bc211c33bfae8c567bf6d5b2a0055a2"
+  },
+  "scientific_acceptance": "Independent field reviews, sensor calibrations and labeled held-out observations remain open."
+}
