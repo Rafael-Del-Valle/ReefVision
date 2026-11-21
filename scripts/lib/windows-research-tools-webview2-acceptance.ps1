@@ -59,7 +59,7 @@ function Assert-ReefVisionInstalledResearchToolsResults {
 
     Assert-ReefVisionResearchToolsReplays $Audio.replays 'run_id' 'payload_sha256' 'reviewed audio'
     if (-not $Audio.recording_id -or -not $Audio.review_id -or -not $Audio.anchor_id -or
-        $Audio.fixture -notlike '*.wav' -or $Audio.source_sha256 -cnotmatch $digest -or
+        $Audio.fixture -cne 'generated-wav' -or $Audio.source_sha256 -cnotmatch $digest -or
         $Audio.report_sha256 -cnotmatch $digest -or $Audio.export_sha256 -cnotmatch $digest -or
         $Audio.export_sha256 -cne $Exports.audio -or $Audio.export_sha256 -cne $Audio.replays[0].payload_sha256) {
         throw 'The reviewed audio receipt lost its recording, clock, local review, or verified JSON download.'
