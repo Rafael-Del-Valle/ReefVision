@@ -70,3 +70,28 @@ checks, plus explicit researcher approval. No unrelated version changes.
 A fresh read of exact-head [Actions #44909736559](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44909736559) identified two independently blocking format gates: backend Ruff format in the Phase 11C token-binding contract test, and frontend Prettier in the class-reassignment panel and its regression tests. The native Windows research-preservation check passed. Applied only the formatter's exact reported source changes in these three files; **no** scientific operation, reference/category inventory, human approval, Workflow Builder execution, MSI behavior or database migration semantics changed. These isolated formatting corrections are needed before the existing backend pytest and frontend TypeScript/unit/E2E/build gates can execute. Source-level substitutions and branch readback are not a replacement for those tests; require a new exact-commit CI pass before making a release claim.
 
 Status: **RELEASE HOLD** pending CI, 1.1/1.6 Alembic-0038 reconciliation, native Windows MSI/CAB installed GUI/upgrade/rollback, representative biological saved-workflow validation and researcher sign-off.
+
+## Class-reassignment blocking-inventory regression (2026-11-21)
+
+After the 1.6 preview safety checks began enforcing the backend's exact
+scientific reference categories, [CI #44914871500](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44914871500)
+completed backend and native-Windows preservation successfully but failed
+**two frontend tests**. Their synthetic `blocking_records` used the unsupported
+key `archived_annotation`; the UI correctly classified that as incomplete
+scientific evidence rather than displaying a complete blocked preview.
+
+Updated those two fixture variants to the supported
+`review_queue_items_workflow` category so they test the intended valid,
+**blocked** preview with a nonempty inventory, while preserving disabled
+execution and zero mutation requests. Added separate reassignment and
+reassign-and-delete regressions for an unknown blocking category: these must
+show *incomplete evidence*, refuse execution, and issue no mutation requests.
+This intentionally changes no production behavior or backend scientific
+contract; full category validation and researcher review gates remain intact.
+
+The updated tests require exact-head CI confirmation; no local full repository
+checkout is possible here while github.com DNS remains unavailable. This is
+**not** Windows installed-MSI/GUI acceptance. Version 1.6 remains on release
+HOLD for full CI/scientific acceptance, 1.1/1.6 Alembic-0038 reconciliation,
+representative biological saved workflows, real installed MSI/CAB validation,
+and researcher approval.
