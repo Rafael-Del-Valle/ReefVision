@@ -21,9 +21,9 @@ from reefvision import __version__
 from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
 from reefvision.storage.datasets import canonical_json_bytes, canonical_json_sha256
-from reefvision.storage.projects import filesystem_io_path as backup_io_path
-from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.projects import filesystem_io_path, resolve_managed_project_path
 
+backup_io_path = filesystem_io_path
 BACKUP_FORMAT_VERSION = "1.0"
 BACKUP_MANIFEST_FILENAME = "backup-manifest.json"
 BACKUP_COMPLETION_MARKER_FILENAME = "backup-complete.json"
