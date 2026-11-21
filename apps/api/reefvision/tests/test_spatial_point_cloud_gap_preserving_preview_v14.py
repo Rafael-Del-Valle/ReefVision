@@ -195,10 +195,7 @@ def test_pinned_gap_boundary_replays_in_saved_executable_workflow(
 def _repeated_boundary_points() -> list[list[float]]:
     # 600 acquisition rows, but only 300 distinct XYZ locations across
     # the boundary levels of the largest projected scan-coordinate gaps.
-    return [
-        [0.0 if i < 300 else 100.0, float(i % 150), float(i % 5)]
-        for i in range(600)
-    ]
+    return [[0.0 if i < 300 else 100.0, float(i % 150), float(i % 5)] for i in range(600)]
 
 
 def test_all_gap_boundary_xyz_loci_can_be_pinned_without_preserving_duplicate_rows() -> None:
@@ -220,9 +217,7 @@ def test_all_gap_boundary_xyz_loci_can_be_pinned_without_preserving_duplicate_ro
     assert preserved["unique_point_count"] == 300
     assert preserved["preview_unique_coordinate_count"] == 300
     assert len(preserved["preview_point_indices"]) == 512
-    assert set(range(150)) | set(range(300, 450)) <= set(
-        preserved["preview_point_indices"]
-    )
+    assert set(range(150)) | set(range(300, 450)) <= set(preserved["preview_point_indices"])
     assert preserved["preview_sampling_strategy"] == (
         "uniform_index_largest_gap_boundary_loci_preserving"
     )
@@ -234,12 +229,8 @@ def test_all_gap_boundary_xyz_loci_can_be_pinned_without_preserving_duplicate_ro
         "y",
         "z",
     ]
-    assert "preview_omits_largest_axis_gap_boundary_acquisition_rows" in preserved[
-        "qc_warnings"
-    ]
-    assert "preview_omits_largest_axis_gap_boundary_xyz_loci" not in preserved[
-        "qc_warnings"
-    ]
+    assert "preview_omits_largest_axis_gap_boundary_acquisition_rows" in preserved["qc_warnings"]
+    assert "preview_omits_largest_axis_gap_boundary_xyz_loci" not in preserved["qc_warnings"]
     for axis in ("x", "y", "z"):
         support = preserved["preview_largest_axis_gap_boundary_locus_support"][axis]
         assert support["source_distinct_xyz_loci"] == 300
@@ -248,8 +239,9 @@ def test_all_gap_boundary_xyz_loci_can_be_pinned_without_preserving_duplicate_ro
         assert support["preview_acquisition_rows"] == 512
     assert baseline["provenance"] == preserved["provenance"]
     assert baseline["axis_aligned_dimensions_m"] == preserved["axis_aligned_dimensions_m"]
-    assert baseline["axis_largest_adjacent_coordinate_gaps"] == (
-        preserved["axis_largest_adjacent_coordinate_gaps"]
+    assert (
+        baseline["axis_largest_adjacent_coordinate_gaps"]
+        == (preserved["axis_largest_adjacent_coordinate_gaps"])
     )
     assert preserved["surface_area_m2"] is None
     assert preserved["branch_length_m"] is None
