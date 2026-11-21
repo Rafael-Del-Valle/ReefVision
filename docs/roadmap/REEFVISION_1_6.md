@@ -1,3 +1,10 @@
+## 2026-11-21 — No-op rotated-mask scientific revisions (Track D)
+
+- **Overlap/scope audit:** earlier 1.0–1.5 annotation tools and the current 1.6 class/QC editor already support genuine geometry edits, with saved, executable typed QC Workflow Builder and human approval gates. The rotated-box tool still dispatched `onUpdate` on selecting an existing box or releasing a rotation/resize with unchanged source coordinates, producing unnecessary biological revision and autosave activity.
+- **Fix:** compare ordered source-pixel vertices and label identity before committing an existing rotated box, tolerating only 1e-9 pixel floating-point rotation noise. Click-only gestures, image-edge clamping and motion returning to its original geometry do not create revisions; actual moves still commit. Intentional creation, original source media, scientific review and saved workflows are unchanged.
+- **Regression:** React tests cover move/rotate/resize no-op releases, clamped and return-to-start moves, original coordinates, and a subsequent valid edit. This local gesture correction does not duplicate a Workflow Builder scientific operation; existing typed saved graphs/runs, provenance, units, retries and explicit review gates remain intact.
+- **HOLD:** exact-head CI, independent 1.1/1.6 Alembic-0038 reconciliation, representative scientific/persisted-workflow acceptance, real MSI/CAB clean-install/upgrade/rollback and installed-GUI checks, explicit researcher approval. No cross-version merge, release, unapproved model download or user-asset deletion.
+
 ## 2026-11-21 — Cancel unapproved raster/rotated mask pointer gestures (Track D)
 
 - **Scope audit:** 1.0–1.5 image/mask operations and current 1.6 dense class/QC editor and saved, typed executable Workflow Builder were inspected. The polygon layer already handled cancellation and initiating-pointer identity; separate raster brush and rotated-box layers still committed the in-progress mask on `pointercancel`, and a second pointer could replace active preview state.
