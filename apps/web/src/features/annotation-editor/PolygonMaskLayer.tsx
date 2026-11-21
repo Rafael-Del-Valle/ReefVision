@@ -276,6 +276,10 @@ export function PolygonMaskLayer({
     if (event.target !== event.currentTarget) {
       return;
     }
+    // Do not clear a captured selection from a second touch/pen pointer.
+    if (vertexDrag !== null || polygonDrag !== null) {
+      return;
+    }
     svgRef.current?.focus();
     if (tool === "select") {
       onSelectionChange([]);
@@ -290,6 +294,13 @@ export function PolygonMaskLayer({
   }
 
   function handlePointerMove(event: PointerEvent<SVGSVGElement>) {
+    // Only the initiating pointer may change a biological mask preview.
+    if (
+      (vertexDrag !== null && event.pointerId !== vertexDrag.pointerId) ||
+      (polygonDrag !== null && event.pointerId !== polygonDrag.pointerId)
+    ) {
+      return;
+    }
     const point = imagePoint(event);
     if (vertexDrag !== null) {
       const sourceMask =
@@ -361,6 +372,22 @@ export function PolygonMaskLayer({
       (matchingVertexDrag || (matchingPolygonDrag && polygonDrag?.moved))
     ) {
       onUpdate(dragPreview);
+    }
+    setVertexDrag(null);
+    setPolygonDrag(null);
+    setDragPreview(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function handlePointerCancel(event: PointerEvent<SVGSVGElement>) {
+    // Pointer cancellation must never approve the in-flight geometry.
+    const ownsDrag =
+      (vertexDrag !== null && event.pointerId === vertexDrag.pointerId) ||
+      (polygonDrag !== null && event.pointerId === polygonDrag.pointerId);
+    if (!ownsDrag) {
+      return;
     }
     setVertexDrag(null);
     setPolygonDrag(null);
@@ -447,7 +474,7 @@ export function PolygonMaskLayer({
       onPointerDown={handleBackgroundPointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       onKeyDown={handleKeyDown}
       style={{
         position: "absolute",
@@ -537,7 +564,11 @@ export function PolygonMaskLayer({
               }}
               onPointerDown={(event) => {
                 event.stopPropagation();
-                if (tool !== "select") {
+                if (
+                  tool !== "select" ||
+                  vertexDrag !== null ||
+                  polygonDrag !== null
+                ) {
                   return;
                 }
                 selectMask(mask.id, event.shiftKey);
@@ -579,6 +610,13 @@ export function PolygonMaskLayer({
                   style={{ cursor: "move" }}
                   onPointerDown={(event) => {
                     event.stopPropagation();
+                    if (
+                      event.button !== 0 ||
+                      vertexDrag !== null ||
+                      polygonDrag !== null
+                    ) {
+                      return;
+                    }
                     if (event.altKey) {
                       const nextPoints = removePolygonVertex(
                         mask.points ?? [],
