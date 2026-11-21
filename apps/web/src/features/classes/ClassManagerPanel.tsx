@@ -13,7 +13,9 @@ import {
   previewLabelClassReassignDelete,
   restoreLabelClass,
   updateLabelClass,
+  type ClassOperationClassSnapshot,
   type ClassOperationRecord,
+  type ClassOperationRecordGroup,
   type LabelClass,
   type Project,
 } from "../../api/client";
@@ -45,18 +47,61 @@ type MergeClassApproval = {
   expectedSourceIdentity: MergeTargetIdentity;
 };
 
+function hasReviewText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasReviewTextList(values: unknown): boolean {
+  return Array.isArray(values) && values.every(hasReviewText);
+}
+
+function hasRecordGroups(groups: ClassOperationRecordGroup[]): boolean {
+  return (
+    Array.isArray(groups) &&
+    groups.every(
+      (group) =>
+        hasReviewText(group?.key) &&
+        hasReviewText(group.label) &&
+        hasReviewTextList(group.record_ids) &&
+        group.count === group.record_ids.length,
+    )
+  );
+}
+
+function hasClassSnapshot(
+  snapshot: ClassOperationClassSnapshot | null,
+  id: string,
+): boolean {
+  return (
+    hasReviewText(id) &&
+    snapshot?.id === id &&
+    hasReviewText(snapshot.name) &&
+    Number.isInteger(snapshot.class_index)
+  );
+}
+
 function hasClassReviewReport(operation: ClassOperationRecord): boolean {
   const plan = operation.plan;
   return (
-    typeof operation.source_class?.name === "string" &&
-    Array.isArray(plan?.mutable_records) &&
-    Array.isArray(plan.protected_records) &&
-    plan.mutable_records.every((group) => Array.isArray(group?.record_ids)) &&
-    plan.protected_records.every((group) => Array.isArray(group?.record_ids)) &&
+    Boolean(plan) &&
+    hasClassSnapshot(operation.source_class, operation.source_class_id) &&
+    (operation.target_class_id === null
+      ? operation.target_class === null
+      : hasClassSnapshot(operation.target_class, operation.target_class_id)) &&
+    hasRecordGroups(plan.mutable_records) &&
+    hasRecordGroups(plan.protected_records) &&
+    hasRecordGroups(plan.blocking_records) &&
     Array.isArray(plan.compatibility_impacts) &&
-    Array.isArray(plan.blocking_records) &&
-    Array.isArray(plan.blockers) &&
-    Array.isArray(operation.failures)
+    plan.compatibility_impacts.every(
+      (impact) =>
+        hasReviewText(impact?.key) &&
+        hasReviewText(impact.label) &&
+        hasReviewText(impact.status) &&
+        hasReviewText(impact.message) &&
+        hasReviewTextList(impact.record_ids),
+    ) &&
+    hasReviewTextList(plan.blockers) &&
+    hasReviewTextList(operation.failures)
   );
 }
 
@@ -65,10 +110,9 @@ function previewHasNoBlockingEvidence(
 ): boolean {
   return (
     hasClassReviewReport(operation) &&
-    typeof operation.id === "string" &&
-    operation.id.trim().length > 0 &&
+    hasReviewText(operation.id) &&
     typeof operation.preview_checksum === "string" &&
-    /^[0-9a-f]{64}$/i.test(operation.preview_checksum) &&
+    /^[0-9a-f]{64}$/.test(operation.preview_checksum) &&
     operation.plan.blockers.length === 0 &&
     operation.plan.blocking_records.length === 0 &&
     operation.failures.length === 0

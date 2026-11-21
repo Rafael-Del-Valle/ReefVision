@@ -113,6 +113,7 @@ describe("ClassManagerPanel", () => {
         ["blank operation identity", { id: " " }],
         ["missing checksum", { preview_checksum: null }],
         ["malformed checksum", { preview_checksum: "invalid-sha256" }],
+        ["noncanonical checksum", { preview_checksum: "A".repeat(64) }],
         [
           "missing record groups",
           { plan: { blockers: [], blocking_records: [] } },
@@ -127,6 +128,26 @@ describe("ClassManagerPanel", () => {
               ],
             },
           },
+        ],
+        [
+          "reported record missing its identifier",
+          {
+            plan: {
+              ...report,
+              mutable_records: [
+                {
+                  key: "annotations",
+                  label: "Annotations",
+                  count: 1,
+                  record_ids: [],
+                },
+              ],
+            },
+          },
+        ],
+        [
+          "truncated compatibility entry",
+          { plan: { ...report, compatibility_impacts: [null] } },
         ],
         ["missing source snapshot", { source_class: null }],
       ] as const)(

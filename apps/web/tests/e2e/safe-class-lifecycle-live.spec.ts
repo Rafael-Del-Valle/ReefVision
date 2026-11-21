@@ -169,8 +169,14 @@ test("reviews class edits and preserves frozen exports after reopening", async (
       const response = await route.fetch();
       expect(response.ok()).toBeTruthy();
       const preview = await response.json();
-      expect(preview.plan.mutable_records.length).toBeGreaterThan(0);
-      delete preview.plan.protected_records;
+      const affected = preview.plan.mutable_records.find(
+        (group: { record_ids: string[] }) => group.record_ids.includes(box.id),
+      );
+      expect(affected).toBeDefined();
+      expect(affected.count).toBe(affected.record_ids.length);
+      affected.record_ids = affected.record_ids.filter(
+        (id: string) => id !== box.id,
+      );
       await route.fulfill({ response, json: preview });
     },
     { times: 1 },
