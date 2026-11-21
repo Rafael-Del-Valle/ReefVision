@@ -58,6 +58,9 @@ def test_phase11c_track16_report_is_bound_to_the_child_invocation() -> None:
     assert "-ReportedDataRoot ([string]$Report.isolated_data_root)" in wrapper
     assert "GetFileName(" not in wrapper
     assert '"reefvision-clean-$EvidenceToken"' in helper
+    assert r"^[A-Za-z]:[\\/](?![\\/])" in helper
+    assert "fully qualified local Windows drive paths" in helper
+    assert "IsPathRooted($ReportedDataRoot)" not in helper
     assert "[string]$EvidenceToken = ''" in child
     assert "Assert-ReefVisionPhase11CEvidenceToken -Token $EvidenceToken" in child
     assert "Test-Path -LiteralPath $EvidenceRoot" in child

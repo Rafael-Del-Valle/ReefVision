@@ -56,6 +56,37 @@ foreach ($bad in @(
     }
 }
 
+# IsPathRooted alone accepts C:folder and \folder on Windows. Neither
+# is an absolute local path; their meaning depends on the process CWD.
+foreach ($unqualifiedPath in @(
+    'C:reefvision-disposable-acceptance',
+    '\reefvision-disposable-acceptance',
+    '/reefvision-disposable-acceptance',
+    '\\server\share\reefvision-disposable-acceptance',
+    '\\?\C:\reefvision-disposable-acceptance'
+)) {
+    foreach ($position in @('expected-root', 'reported-root', 'reported-data')) {
+        $case = @{
+            Expected = $acceptanceRoot
+            Root = $acceptanceRoot
+            Data = $expectedData
+        }
+        switch ($position) {
+            'expected-root' { $case.Expected = $unqualifiedPath }
+            'reported-root' { $case.Root = $unqualifiedPath }
+            'reported-data' { $case.Data = $unqualifiedPath }
+        }
+        Assert-Rejected -MessagePattern 'fully qualified local Windows drive paths' -Action {
+            Assert-ReefVisionPhase11CReportDataRoot -ExpectedAcceptanceRoot $case.Expected `
+                -ReportedAcceptanceRoot $case.Root -ReportedDataRoot $case.Data -EvidenceToken $validToken
+        }
+    }
+}
+# Normal forward-slash Windows separators remain fully qualified.
+[void](Assert-ReefVisionPhase11CReportDataRoot -ExpectedAcceptanceRoot $acceptanceRoot `
+    -ReportedAcceptanceRoot ($acceptanceRoot.Replace('\', '/')) `
+    -ReportedDataRoot ($expectedData.Replace('\', '/')) -EvidenceToken $validToken)
+
 $old = 'C:\disposable\windows-clean-acceptance-old'
 $own = 'C:\disposable\windows-clean-acceptance-own'
 $other = 'C:\disposable\windows-clean-acceptance-other'

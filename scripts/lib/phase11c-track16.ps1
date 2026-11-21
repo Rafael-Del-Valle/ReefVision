@@ -54,11 +54,17 @@ function Assert-ReefVisionPhase11CReportDataRoot {
     )
 
     [void](Assert-ReefVisionPhase11CEvidenceToken -Token $EvidenceToken)
-    if ([string]::IsNullOrWhiteSpace($ReportedAcceptanceRoot) -or
-        [string]::IsNullOrWhiteSpace($ReportedDataRoot) -or
-        -not [System.IO.Path]::IsPathRooted($ReportedAcceptanceRoot) -or
-        -not [System.IO.Path]::IsPathRooted($ReportedDataRoot)) {
-        throw 'Phase 11C acceptance report roots must be nonempty absolute paths.'
+    # Path.IsPathRooted() accepts Windows drive-relative (C:folder) and
+    # current-drive-rooted (\folder) forms. GetFullPath() would silently
+    # expand those through process working-directory state, letting an
+    # unqualified report path accidentally match this invocation's root.
+    # Require an ordinary, fully qualified local-drive path on BOTH sides
+    # before doing any normalization or evidence comparison.
+    foreach ($candidate in @($ExpectedAcceptanceRoot, $ReportedAcceptanceRoot, $ReportedDataRoot)) {
+        if ([string]::IsNullOrWhiteSpace($candidate) -or
+            $candidate -cnotmatch '^[A-Za-z]:[\\/](?![\\/])') {
+            throw 'Phase 11C acceptance report roots must be fully qualified local Windows drive paths.'
+        }
     }
     $expectedRoot = [System.IO.Path]::GetFullPath($ExpectedAcceptanceRoot).TrimEnd([char[]]@('\', '/'))
     $reportedRoot = [System.IO.Path]::GetFullPath($ReportedAcceptanceRoot).TrimEnd([char[]]@('\', '/'))
