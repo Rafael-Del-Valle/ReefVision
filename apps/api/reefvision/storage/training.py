@@ -1,8 +1,13 @@
-"""Read-only integrity checks for managed training artifacts."""
+"""Read-only storage checks for managed training."""
 
+import shutil
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 from zlib import error as ZlibError
+
+
+def free_training_space_gib(data_dir: Path) -> float:
+    return shutil.disk_usage(data_dir).free / (1024**3)
 
 
 def intact_torch_checkpoint(path: Path) -> bool:
