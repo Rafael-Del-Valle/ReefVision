@@ -263,3 +263,40 @@ source-pixel annotation geometry. The preceding exact-head frontend CI
 identified Prettier differences in the two pointer-identity tests; the same
 increment formats those tests. Acceptance still requires full exact-head
 frontend/backend/E2E CI and genuine installed-Windows pen/touch/mouse testing.
+
+
+## Filtered and repeated selection pin recovery (Track D, 2026-11-21)
+
+Audited the implemented 1.0–1.5 annotation selection and existing 1.6
+bounded dense-object browser, rather than adding a separate scientific
+Workflow Builder node. The sidebar's 200 off-page pin budget previously
+counted selected **ID entries**, including duplicates and IDs excluded by the
+class-name filter or deleted from a working session. A tail containing 200
+stale IDs or 200 repeats of one object could therefore conceal another
+currently selected, matching coral observation farther back in the selection.
+The document still held the observation, but the sidebar incorrectly made it
+inaccessible without a positional jump.
+
+The browser now fills its existing 200-pin budget per modality with **distinct
+IDs actually present in the filtered off-page collection**. It scans recent
+selection IDs in bounded batches and consults earlier selections only when
+a batch contains missing or duplicate records. Each candidate batch and the
+result list stay limited to 200; the usual all-valid selection still reads
+only the newest 200 selected IDs and avoids a full selection copy. A rare
+pathological tail of many stale IDs can require repeated filtered-document
+scans; native performance profiling on representative dense coral images
+remains an acceptance requirement.
+
+Vitest coverage adds repeated selected IDs, deleted/filtered-out annotation
+and mask IDs followed by valid older selections, and a full 200 matching-row
+budget after 800 stale selected IDs. The existing 50,000-object bounded
+selection-read regression remains in place. No bounding boxes, masks, class
+identities, review decisions, original pixels, saved graphs, typed workflow
+results, provenance, units, retries, or mandatory human approval are changed.
+No migration or new biological-workflow operation is necessary for this
+display-only navigation correction.
+
+Release remains **HOLD** for complete exact-head backend/frontend/E2E CI,
+independent 1.1/1.6 Alembic-0038 reconciliation, representative biology and
+saved Workflow Builder acceptance, genuine Windows MSI/CAB clean-install,
+upgrade/rollback and installed-GUI usability, and explicit researcher approval.
