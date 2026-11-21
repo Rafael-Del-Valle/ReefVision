@@ -71,9 +71,6 @@ function validReviewGroup(value: unknown): boolean {
   );
 }
 
-// Reassignment preview groups are a typed inventory, not arbitrary display
-// rows. An unfamiliar or repeated category could conceal scientific references
-// while still passing checks on individual record counts and identifiers.
 // The backend cannot yet reassign these source-class modalities during Merge.
 // Do not offer a misleading operation that would archive the class but strand them.
 const UNSUPPORTED_MERGE_CATEGORIES = [
@@ -84,6 +81,9 @@ const UNSUPPORTED_MERGE_CATEGORIES = [
   "image_labels_deleted",
 ] as const;
 
+// Reassignment preview groups are a typed inventory, not arbitrary display
+// rows. An unfamiliar or repeated category could conceal scientific references
+// while still passing checks on individual record counts and identifiers.
 const MUTABLE_PREVIEW_KEYS = new Set([
   "annotations_active",
   "prediction_proposals_pending",
@@ -135,10 +135,7 @@ function deletionBlockersMatchProtectedInventory(
 ): boolean {
   if (operation.operation_type !== "reassign_delete") return true;
   const blocked = new Map(
-    operation.plan.blocking_records.map((group) => [
-      group.key,
-      group.record_ids,
-    ]),
+    operation.plan.blocking_records.map((group) => [group.key, group.record_ids]),
   );
   return operation.plan.protected_records.every((group) => {
     if (!DELETION_BLOCKER_KEYS.has(group.key)) return true;
