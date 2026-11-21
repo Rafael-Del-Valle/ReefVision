@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T05:07:35.598109+00:00",
+  "updated_utc": "2026-11-21T05:15:23.123262+00:00",
   "candidate_pr": 131,
   "scope": "Generated research projects. Registered installer trials identify their own package.",
   "reviewed_predecessors": {
@@ -210,6 +210,13 @@
         "file": "1.9/checkpoints/96476bc46/source-compatibility-and-long-video/evidence-index.json",
         "sha256": "4401fb97c2b3f8de2e51adf19f5a313781d3bc0f767597d8ac38cac7475e1bc9"
       }
+    },
+    "source_preserved_workflows": {
+      "result": "Twelve source-browser journeys exercised still/video detection, optional adjusted-mask inference, archived datasets, paired detectors, backup and recovery, calibrated growth and spatial review. Three new detector runs used CPU and scratch initialization. Both comparison replays returned the same report digest; adjusted-image segmentation left both proposals pending on the selected source.",
+      "raw": {
+        "file": "1.9/checkpoints/96476bc46/source-detector-segmentation/index.json",
+        "sha256": "0fb1589431e8b15c8a2f2021d2cfb4241933797449291c13901e9497d6bcbe1d"
+      }
     }
   },
   "performance_budgets_before_candidate_trial": {
@@ -299,5 +306,54 @@
     "registered_storage_run": 44868688751,
     "registered_storage_draft": 137,
     "registered_storage_job": 136738091375
+  },
+  "local_windows_package": {
+    "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+    "version": "1.9.0",
+    "msi_sha256": "84b5369f98a19009de85efbdffbb6767c16a0dbd47a5ac410f4ec4e09debe343",
+    "external_cabinets": 5,
+    "payload_bytes": 2979676357,
+    "policy_state": "Windows 11 Smart App Control off; unsigned MSI, shell and backend",
+    "distribution_entries": {
+      "distribution_metadata": 59,
+      "entry_point_files": 14,
+      "model_manifest_assets": 0,
+      "model_manifest_provider_assets": 0,
+      "msi_cab_files": 19206,
+      "pyinstaller_outer_entries": 14,
+      "pyinstaller_pyz_archives": 1,
+      "pyinstaller_pyz_entries": 12427,
+      "zip_containers": 1,
+      "zip_members": 155
+    },
+    "package": {
+      "file": "1.9/checkpoints/96476bc46/local-production/verified-payload.json",
+      "sha256": "d4fefd649de2308913947e52bebe856c7a2e919a3a444acd9cce8f2f43b09382"
+    },
+    "payload_audit": {
+      "file": "1.9/checkpoints/96476bc46/local-production/payload-audit.json",
+      "sha256": "4e09d5d4b2e06655f3000d1c1d26498557d8506e127078746a879d5d8e916671"
+    },
+    "signature": {
+      "file": "1.9/checkpoints/96476bc46/local-production/physical-signing-policy.json",
+      "sha256": "d5e338c7b2aa61bedf4a979571a4ec3186db50f497810ddabc7ae460833fd195"
+    },
+    "gui": {
+      "file": "1.9/checkpoints/96476bc46/local-production/evidence/physical-guided-rtx3090/evidence-index.json",
+      "sha256": "b0047907cf15c243d7fa77a39d3d4dd35c29f8a92e03a4940d8f6e30110cdce7"
+    },
+    "performance": {
+      "file": "1.9/checkpoints/96476bc46/local-production/evidence/native-performance/index.json",
+      "sha256": "827b919554ccc5255dea0a9048766286e53bea92b3272d606a3654e5ffec3573"
+    },
+    "observed_ms": {
+      "cold_launcher_upper_bound_ms": 7101,
+      "first_decoded_gallery_ms": 261.09999999403954,
+      "dense_editor_full_source_ms": 282.29309999999987,
+      "video_ready_ms": 1693.2460999999998,
+      "video_presented_seek_ms": 134.29999999701977,
+      "extracted_review_seek_ms": 275.60129999999845
+    },
+    "surface": "Administrative extraction of the local production MSI and all matching cabinets on physical Windows 11"
   }
 }

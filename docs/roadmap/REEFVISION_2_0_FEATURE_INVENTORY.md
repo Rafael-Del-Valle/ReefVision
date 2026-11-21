@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T04:56:53Z`
+Updated: `2026-11-21T05:15:23Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1550,6 +1550,7 @@ Evidence:
 - `browser`: An ordinary imported historical model reports Unavailable in Model Hub with its retained bytes and hash. The native frame and temporal models report Ready, and removing then restoring a copied native checkpoint shows Model required then Ready. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-compatibility-matrix-historic-model-127`)
 - `windows_installed`: none recorded
 - `physical_hardware`: Help and System status showed Windows 11 build 26300, source runtime and local formats. Separate keyboard-driven browser launches detected this physical RTX 3090 and a CPU-only masked runtime. The prior package is identified individually. — `docs/validation/1.9-frozen-research.json` (`rv19-compatibility-matrix-live-host-621e20b34`)
+- `physical_hardware`: The local MSI and five cabinets verified against the media table and manifest. The native WebView2, packaged backend, physical RTX 3090 and H.264 decode were exercised. Windows 11 reported Smart App Control off and the three inspected binaries were unsigned. — `docs/validation/1.9-frozen-research.json` (`rv19-compatibility-matrix-local-package-platform-96476bc46`)
 - `representative_data`: none recorded
 
 ### rv19-end-to-end-workflows: End-to-end detection, segmentation, pose, tracking, and scientific workflows
@@ -1571,8 +1572,10 @@ Evidence:
 - `browser`: Opening Training in a project created by saved workflows shows completed runs and experiments before creating a training draft. Three real source-browser profiles exercised the historical and corrected cases. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-historical-training-0b5e0f1d7`)
 - `browser`: Two ordinary CPU runs of the same saved 14-node revision trained and registered distinct models, ran held-out inference and completed all four human review gates. Both downloaded native ZIPs contained frame 14 with the human-reviewed source-pixel landmarks and three skipped items. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-guided-96476bc46`)
 - `browser`: Generated coral acquired two days apart measured 9.75 to 10.75 mm. Held-out event testing covered 120 frames from five recordings. Frame-only matched 0, missed 7 and added 15 events. Temporal matched 3, missed 4 and added 16. The reviewed video workflow reopened the downloaded archive and retained its original files. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-source-coral-temporal-96476bc46`)
+- `browser`: Twelve source-browser journeys exercised still/video detection, optional adjusted-mask inference, archived datasets, paired detectors, backup and recovery, calibrated growth and spatial review. Three new detector runs used CPU and scratch initialization. Both comparison replays returned the same report digest; adjusted-image segmentation left both proposals pending on the selected source. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-twelve-preserved-workflows-96476bc46`)
 - `windows_installed`: none recorded
 - `physical_hardware`: The original 1.8 MSI payload ran the same 14-node graph twice in native WebView2 on the RTX 3090. Each separately trained, registered and inferred on actual CUDA, paused for two ordinary reviews and downloaded the audited pose and training ZIP. The generated held-out video and source-pixel landmarks are pinned in both receipts. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-end-to-end-workflows-cuda-two-saved-e3e8`)
+- `physical_hardware`: The local 1.9 production WebView2 ran one saved 14-node graph twice on the RTX 3090. Each run trained and registered its checkpoint, inferred the held-out recording, stopped for both human decisions and exported the confirmed source points. The retained record includes 132 process-bound GPU samples. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-local-native-rtx-96476bc46`)
 - `representative_data`: none recorded
 
 ### rv19-performance-resilience: Large-project/video performance and restart/resume resilience
@@ -1596,6 +1599,7 @@ Evidence:
 - `browser`: Keyboard navigation exposed the source host and CPU-only fallback. A generated 362 MB, 18,000-frame H.264 recording imported in 2.42 seconds. Seeking to 1709.3 seconds presented a matching source frame in 48.7 ms. The reviewed frame-17,100 box reopened after sparse analysis. — `docs/validation/1.9-frozen-research.json` (`rv19-performance-resilience-long-recording-96476bc46`)
 - `windows_installed`: none recorded
 - `physical_hardware`: On original 1.8 the generated 5,000-image gallery decoded a first thumbnail in 232 ms. The 1,500-box editor drew in 271 ms and preserved all original boxes. A 30-minute 720p fixture opened for playback in 1.39 s and decoded a near-end seek in 240 ms. A source-pixel annotation saved at frame 17,100 reopened after restart. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-performance-resilience-5000-gallery-long-video-1-8`)
+- `physical_hardware`: On physical Windows 11, the local package reached keyboard interaction in 7.101 seconds, showed the decoded 5,000-image gallery in 0.261 seconds and loaded a 1,500-box image editor in 0.282 seconds. The half-hour clip became playable in 1.693 seconds and presented its seek frame in 0.134 seconds. — `docs/validation/1.9-frozen-research.json` (`rv19-performance-resilience-local-package-timing-96476bc46`)
 - `representative_data`: none recorded
 
 ### rv20-cli-sdk-headless: CLI, Python SDK, and headless infer/benchmark/export
