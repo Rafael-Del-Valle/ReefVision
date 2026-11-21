@@ -848,6 +848,7 @@ def test_camera_rendition_nontransient_io_failure_is_not_retried(
     assert destination.read_bytes() == previous
     assert list(tmp_path.glob(f".{destination.name}.*.part")) == []
 
+
 @pytest.mark.parametrize("rendition", ["display", "thumbnail"])
 @pytest.mark.parametrize("winerror", [5, 53, 112])
 def test_permanent_windows_camera_rendition_error_does_not_retry(
