@@ -15,8 +15,16 @@ when numerically representable. Each largest-gap boundary also reports its
 acquisition rows cannot be mistaken for independent spatial observations.
 Reordering rows does not change the diagnostics; adding duplicate rows
 increases only the reported raw-row support, not the distinct-locus counts
-or source-coordinate gap geometry. Constant axes have no adjacent gap and
-report `null`, not fabricated support or a zero-length sampling observation.
+or source-coordinate gap geometry. If several adjacent intervals share the
+exact same largest represented source-coordinate gap, the report now includes
+`equally_largest_adjacent_gap_count` and emits
+`axis_sampling_multiple_equally_largest_gaps`. The endpoint pair is the
+lowest-coordinate representative, **not** the sole gap. A non-constant axis
+with one largest interval reports count 1; a constant axis reports count 0
+and no endpoints. Exact binary64 tie counting is not an uncertainty-based
+equivalence test for near-tied physical sampling gaps.
+Constant axes have no adjacent gap and report `null`, not fabricated
+support or a zero-length sampling observation.
 If a positive gap or its scale-only interval is below binary64 resolution,
 the converted quantity is `null` with a specific QC warning.
 
@@ -31,7 +39,7 @@ between standalone API responses and two executions of the same persisted,
 typed `point_cloud_preview` Workflow Builder graph, including artifact
 SHA-256 parity, for both XYZ arrays and imported ASCII PLY. Regression:
 `test_spatial_point_cloud_axis_gaps_v14.py` (including row-versus-distinct-locus
-boundary support, order invariance, direct service and saved-workflow replay).
+boundary support, exact maximal-gap ties, order invariance, direct service and saved-workflow replay).
 These synthetic fixtures do not replace representative scans, independent
 scientific reviewers, or Windows installed-GUI/GPU release acceptance.
 
