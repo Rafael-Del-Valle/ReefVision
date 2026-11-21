@@ -109,7 +109,7 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
     }
     $audio = @{surface='tauri-webview2'; version=$version; schema=$schema; generated_fixture=$true;
         recording_id='original.wav'; review_id='audio-review'; anchor_id='clock';
-        fixture='generated.wav'; source_sha256=$hash; report_sha256=$hash; export_sha256=$hash; replays=$reported }
+        fixture='generated-wav'; source_sha256=$hash; report_sha256=$hash; export_sha256=$hash; replays=$reported }
     $spectral = $owned + @{
         project_id='spectral-project'; acquisition_sha256=$hash; graph_sha256=$hash; runs=$typed
         export_sha256=$hash; tiff_sha256=$second
@@ -141,6 +141,9 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
     $taxonomy.two_fixture_role_revisions = @('author-role','author-role')
     Assert-Throws { Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema } 'A repeated role revision cannot qualify as independent.'
     $taxonomy.two_fixture_role_revisions = @('author-role','reviewer-role')
+    $audio.fixture = 'unverified.wav'
+    Assert-Throws { Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema } 'A filename cannot substitute for the generated WAV receipt.'
+    $audio.fixture = 'generated-wav'
     $exports.audio = $second
     Assert-Throws { Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema } 'A substituted downloaded report cannot qualify.'
     $exports.audio = $hash
