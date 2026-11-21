@@ -792,6 +792,38 @@
         "sha256": "7f29644f34f27278743549af1de9532056b8217e3a0205eb1ad1f417ce28cce1"
       },
       "result": "On three incomplete preview cases the page stayed mounted, Run stayed disabled and the reviewed annotation stayed at revision 2. A fresh complete preview displayed the actual record ID. Only confirmation sent the single accepted request, advancing the annotation to revision 3. The frozen export and protected records reopened intact."
+    },
+    "visible_warnings": {
+      "upstream_reviewed": "7f8a99d86a982ce9cb50f099161320fac066b307",
+      "source": "549750d9570756b78436aaa8b76c7a2782cb20bc",
+      "reviewed_integration": "17955d2392ed82076cefbf20d3c9cef3bb7721ad",
+      "normal_journey": "Data & annotation > Classes > Preview reassign > confirm > Latest operation > reopen frozen export",
+      "observed": "Existing source omitted a real frozen-class warning in a generated project. The corrected UI displayed it once both before confirmation and after execution. Truncated warning lists disabled Run. The prior published class dataset and reviewed annotation relations remained intact.",
+      "frontend_unit_tests": 952,
+      "frontend_files": 140,
+      "browser_runs": 1,
+      "files": [
+        {
+          "file": "1.8/checkpoints/549750d95/source/class-warnings/previous-missing-warning.json",
+          "sha256": "900e1b8eb1e7fc154afc2e219f5ec0fc30756e02d62b38362df395291fbae690"
+        },
+        {
+          "file": "1.8/checkpoints/549750d95/source/class-warnings/integrated-normal-class-browser.json",
+          "sha256": "67b18fc2e2b19e15e144a47e1598993a689aeb43dda5b5d597d2b5f912722d51"
+        },
+        {
+          "file": "1.8/checkpoints/549750d95/source/class-warnings/full-frontend.log",
+          "sha256": "95f47078d09a033edbeeadf893ae2330131c6456dcfbd463b18f270e1f5c2d8c"
+        },
+        {
+          "file": "1.8/checkpoints/549750d95/source/class-warnings/integrated-source.json",
+          "sha256": "ce7a244af5c0486a023c43f751d4c95141ee1b9b2356b15434bbfb0b7e48ad47"
+        },
+        {
+          "file": "1.8/checkpoints/549750d95/source/class-warnings/closed-processes.json",
+          "sha256": "91fd454a716a4ace284d1b8b3de3f1824cbc850ad3a1a337b0696f31f082b26e"
+        }
+      ]
     }
   },
   "original_hosted_package": {
@@ -944,6 +976,129 @@
         "run_readback_count": 10
       },
       "backup_scope": "The default backup excluded 16 derived detector export files. All 206 non-export managed model and project files matched. The five scientific reports remained available through their normal export paths."
+    },
+    "registered_offline": {
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/official/offline/attempt-44857726714/offline-index.json",
+        "sha256": "11cb13a517153aad035a611352c955eb3a58d967cb31e0683746b23a19be642c"
+      },
+      "workflow": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44857726714",
+      "fresh": {
+        "artifact": {
+          "id": 14689560926,
+          "sha256": "62727d3a68bb59686f35b428843cff69fbe97f88e564665d4199935bbc0fd9dc",
+          "retained_members": 19
+        },
+        "report": "offline-fresh-14689560926\\evidence\\offline-install-report.json",
+        "report_status": "PASS",
+        "actual_error": null,
+        "msi_sha256": "78d52066848afc6aeac975765359ba13cd3d0e2e8b79ef1b90307eecd03c35ed",
+        "offline_seconds": 201.4969727,
+        "offline_controls": {
+          "ordinary": 519,
+          "system": 517
+        },
+        "control_gap_seconds": {
+          "ordinary": 4.857101,
+          "system": 4.8414687
+        },
+        "actual_registered_install": true,
+        "actual_uninstall": true,
+        "reviewed_source_sha256": "11da437ad33072b11627e77994f869a1f92c4c0b94e0b64f920567853ff0674b",
+        "cross_checked_against_original_payload": true
+      },
+      "cached_upgrade": {
+        "artifact": {
+          "id": 14688738190,
+          "sha256": "a9cac73b71ffa94610649665e0397637d8652995d49cefb83e52bf7b560c2e88",
+          "retained_members": 24
+        },
+        "report": "offline-cached-upgrade-14688738190\\evidence\\offline-upgrade-report.json",
+        "report_status": "PASS",
+        "actual_error": null,
+        "msi_sha256": "78d52066848afc6aeac975765359ba13cd3d0e2e8b79ef1b90307eecd03c35ed",
+        "offline_seconds": 368.2743626,
+        "offline_controls": {
+          "ordinary": 870,
+          "system": 873
+        },
+        "control_gap_seconds": {
+          "ordinary": 8.9816864,
+          "system": 8.9816864
+        },
+        "actual_registered_install": true,
+        "actual_uninstall": true,
+        "reviewed_source_sha256": "11da437ad33072b11627e77994f869a1f92c4c0b94e0b64f920567853ff0674b",
+        "cross_checked_against_original_payload": true,
+        "actual_registered_upgrade": true,
+        "prior_version": "1.7.0",
+        "independent_recovery_while_offline": true,
+        "rollback_backup_id": "552b5e31-b3c4-4d14-b955-182a6e4f2902",
+        "restore_job_id": "88cf03ab-6c16-4793-a639-d1e48436aff7",
+        "verified_recovered_files": 7,
+        "recovered_database_sha256": "d056fc3a910c9a941f0bd67003fc63cbf5170f1fb960dce1c5b6809994e29a55"
+      }
+    },
+    "neutral_pose_roundtrip": {
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/official/evidence/neutral-pose/official-native-pose-coco-verified.json",
+        "sha256": "d6da19a1c5ab5a45d9562493b2cf120dff8e94fd8b65d7235432e90940899c3e"
+      },
+      "surface": "Ordinary original MSI WebView2 export, file-picker import and independent process reopen on copies of generated video.",
+      "landmarks": {
+        "frames": 96,
+        "states": {
+          "visible": 191,
+          "occluded": 1
+        },
+        "maximum_source_pixel_delta": 0,
+        "subpixel_visible": {
+          "semantic_label": "Jaw A",
+          "occurrence_index": 0,
+          "x": 31.125,
+          "y": 46.25,
+          "status": "visible"
+        },
+        "subpixel_occluded": {
+          "semantic_label": "Jaw B",
+          "occurrence_index": 0,
+          "x": 55.375,
+          "y": 46.625,
+          "status": "occluded"
+        }
+      },
+      "live_imported_review_state": "imported_review_required",
+      "limitations": "The canonical source export preserved explicit per-frame times in its manifest. Imported observations retained frame indices and positions but lacked live timestamp_seconds. A separate mixed-status source exported both verified and machine-generated tracks without identifying source status."
     }
+  },
+  "reviewed_retirement_predecessor": {
+    "source": "67b8c1feb3ffe1ceb8f506d0e4997de203f8e67b",
+    "draft": 122,
+    "receipt": {
+      "file": "1.8/checkpoints/67b8c1feb/sleap-runtime-retirement/evidence-index.json",
+      "sha256": "ec0cfbe6dc03b21046ef73f98741db9cc8466ae225a1c28bf14265d4bfc04821"
+    },
+    "pytest": {
+      "passed": 71,
+      "failed": 0,
+      "skipped": 0,
+      "time_seconds": 73.78,
+      "nwb_runtime_cases": 5,
+      "nwb_codec_version": "0.9.2"
+    },
+    "description": "A rebuilt production sidecar removed the callable retired provider and tracking adapter. Model Hub showed its historical data and the unavailable state, and byte-identical historical registrations and optional neutral NWB interchange remained readable."
+  },
+  "prior_9cde_second_build": {
+    "receipt": {
+      "file": "1.8/checkpoints/9cde9e6e7/second-build/workflow-disposition.json",
+      "sha256": "0d1a250d958fb3160b1c89795eec7ea86e01d466b9bad531873d23073b6071cf"
+    },
+    "run": 44847408196,
+    "skipped_windows_job": 136708747216,
+    "linux_backend_job": 136670423314,
+    "linux_pass": 6017,
+    "linux_skips": 18,
+    "linux_failures": 2,
+    "cause": "Two tests used the deprecated Pillow Image.getdata on the newest supported Pillow, which raises with warnings treated as errors. The independent compatibility correction is in 54a89896c484fc0525d9c8e73323d5f5706d3522."
   }
 }
