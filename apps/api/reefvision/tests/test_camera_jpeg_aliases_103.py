@@ -250,7 +250,6 @@ def test_camera_unverifiable_exif_never_fabricates_utc_exposure(
     assert path.read_bytes() == original
 
 
-
 @pytest.mark.parametrize(
     ("suffix", "offset", "expected_utc"),
     [
