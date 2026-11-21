@@ -2,7 +2,7 @@ name: Windows Offline Original MSI Proof
 
 on:
   pull_request:
-    branches: [codex/reefvision-1.8-research-qualification]
+    branches: [codex/reefvision-1.8-stable-annotation-candidate]
     paths:
       - '.github/workflows/windows-offline-install-proof.yml'
       - '.github/offline-proof/**'
@@ -11,11 +11,11 @@ on:
       build_run:
         description: Successful original Windows build workflow run ID
         required: true
-        default: '44847408180'
+        default: '44853957856'
       source_sha:
         description: Exact original build source commit
         required: true
-        default: '9cde9e6e730d4065f4223ea92baea7091f118b0b'
+        default: 'e3e8ffb6395c9f2675ffc10397c2401388e63ee8'
       version:
         description: Exact application and MSI version
         required: true
@@ -93,7 +93,7 @@ jobs:
           ./proof/.github/offline-proof/stage-original.ps1 -RepositoryRoot ./source -RunId $env:RV_BUILD_RUN -SourceCommit $env:RV_SOURCE_SHA -Version $env:RV_VERSION -Root $env:RV_PROOF_ROOT
           if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
             $transport = Get-Content -LiteralPath "$env:RV_PROOF_ROOT/evidence/verified-transport.json" -Raw | ConvertFrom-Json
-            if ($transport.build_job_id -ne 136670423050) { throw 'Transport differs from the pinned #115 manufacturing job.' }
+            if ($transport.build_job_id -ne 136691608332) { throw 'Transport differs from the pinned repaired 1.8 manufacturing job.' }
           }
       - name: Verify and cache the qualified original 1.7 package online
         if: matrix.scenario == 'cached-upgrade'
