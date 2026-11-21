@@ -26,6 +26,7 @@ import {
   saveWorkflowGraph,
   validateWorkflowGraph,
   type WorkflowArtifact,
+  type WorkflowGraphRecord,
   type WorkflowNodeRun,
 } from "./workflowGraphApi";
 import {
@@ -56,6 +57,7 @@ interface WorkflowGraphWorkspaceProps {
   initialPoseArchitecture?: string | null;
   initialRunId?: string | null;
   initialGraph?: Record<string, unknown>;
+  onSelectSavedRevision?: (record: WorkflowGraphRecord) => void;
   onOpenScience?: (
     view: "ecology" | "models" | "quality_control" | "video",
   ) => void;
@@ -383,6 +385,7 @@ export function WorkflowGraphWorkspace({
   initialPoseArchitecture,
   initialRunId,
   initialGraph,
+  onSelectSavedRevision,
   onOpenScience,
   onOpenPoseReview,
   onOpenReviewQueue,
@@ -506,7 +509,10 @@ export function WorkflowGraphWorkspace({
   });
   const saveMutation = useMutation({
     mutationFn: () => saveWorkflowGraph(project.id, parsedGraph()),
-    onSuccess: () => void savedGraphsQuery.refetch(),
+    onSuccess: (saved) => {
+      onSelectSavedRevision?.(saved);
+      void savedGraphsQuery.refetch();
+    },
   });
   const saveAndRunMutation = useMutation({
     mutationFn: async () => {
@@ -521,7 +527,8 @@ export function WorkflowGraphWorkspace({
       const run = await queueWorkflowRun(project.id, saved.id);
       return { saved, run };
     },
-    onSuccess: ({ run }) => {
+    onSuccess: ({ saved, run }) => {
+      onSelectSavedRevision?.(saved);
       setSelectedRunId(run.id);
       void savedGraphsQuery.refetch();
       void runsQuery.refetch();
@@ -938,9 +945,10 @@ export function WorkflowGraphWorkspace({
                   <button
                     type="button"
                     className="secondary"
-                    onClick={() =>
-                      setGraphJson(JSON.stringify(record.graph_json, null, 2))
-                    }
+                    onClick={() => {
+                      setGraphJson(JSON.stringify(record.graph_json, null, 2));
+                      onSelectSavedRevision?.(record);
+                    }}
                   >
                     Load
                   </button>
