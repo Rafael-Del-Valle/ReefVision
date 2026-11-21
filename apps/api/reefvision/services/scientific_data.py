@@ -212,9 +212,11 @@ class ScientificDataService:
                 raise ConflictError("Environmental snapshot cache has invalid JSON") from exc
             if not verified_checksum:
                 raise ConflictError("Environmental snapshot cache checksum mismatch")
-            if not verified_identity or (
-                "source_url" in identity and identity["source_url"] != cache.source_url
-            ):
+            # Narrow the provider identity before reading optional source fields.
+            # A missing or non-object identity is a controlled scientific conflict.
+            if not isinstance(identity, dict) or not verified_identity:
+                raise ConflictError("Environmental snapshot cache identity mismatch")
+            if "source_url" in identity and identity["source_url"] != cache.source_url:
                 raise ConflictError("Environmental snapshot cache identity mismatch")
             missing = payload.get("skipped_missing")
             if type(missing) is not int or missing < 0:
