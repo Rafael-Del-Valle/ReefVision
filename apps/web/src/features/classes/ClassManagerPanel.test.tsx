@@ -588,6 +588,20 @@ describe("ClassManagerPanel", () => {
     },
   );
 
+  const protectedDatasetVersion = {
+    key: "dataset_versions",
+    label: "Immutable dataset versions",
+    count: 1,
+    record_ids: ["version-1"],
+  };
+  const datasetCompatibilityImpact = {
+    key: "dataset_versions",
+    label: "Immutable dataset versions",
+    status: "Historical class only",
+    message: "Original dataset class map is preserved.",
+    record_ids: ["version-1"],
+  };
+
   it.each(
     (
       [
@@ -689,6 +703,92 @@ describe("ClassManagerPanel", () => {
                   label: "Historical records",
                   count: 2,
                   record_ids: ["annotation-1", "annotation-1"],
+                },
+              ],
+            },
+          ],
+          [
+            "missing dataset compatibility disclosure",
+            { protected_records: [protectedDatasetVersion] },
+          ],
+          [
+            "mismatched dataset compatibility reference IDs",
+            {
+              protected_records: [protectedDatasetVersion],
+              compatibility_impacts: [
+                {
+                  ...datasetCompatibilityImpact,
+                  record_ids: ["another-version"],
+                },
+              ],
+            },
+          ],
+          [
+            "partial dataset compatibility reference IDs",
+            {
+              protected_records: [protectedDatasetVersion],
+              compatibility_impacts: [
+                {
+                  ...datasetCompatibilityImpact,
+                  record_ids: [],
+                },
+              ],
+            },
+          ],
+          [
+            "extra dataset compatibility reference IDs",
+            {
+              protected_records: [protectedDatasetVersion],
+              compatibility_impacts: [
+                {
+                  ...datasetCompatibilityImpact,
+                  record_ids: ["version-1", "version-2"],
+                },
+              ],
+            },
+          ],
+          [
+            "orphan registered-model compatibility disclosure",
+            {
+              compatibility_impacts: [
+                {
+                  key: "model_registrations",
+                  label: "Registered model class maps",
+                  status: "Compatible with explicit remapping",
+                  message: "Create a compatibility mapping before inference.",
+                  record_ids: ["model-1"],
+                },
+              ],
+            },
+          ],
+          [
+            "duplicate dataset compatibility categories",
+            {
+              protected_records: [protectedDatasetVersion],
+              compatibility_impacts: [
+                datasetCompatibilityImpact,
+                datasetCompatibilityImpact,
+              ],
+            },
+          ],
+          [
+            "duplicate protected dataset categories",
+            {
+              protected_records: [
+                protectedDatasetVersion,
+                protectedDatasetVersion,
+              ],
+              compatibility_impacts: [datasetCompatibilityImpact],
+            },
+          ],
+          [
+            "duplicate compatibility reference identifiers",
+            {
+              protected_records: [protectedDatasetVersion],
+              compatibility_impacts: [
+                {
+                  ...datasetCompatibilityImpact,
+                  record_ids: ["version-1", "version-1"],
                 },
               ],
             },

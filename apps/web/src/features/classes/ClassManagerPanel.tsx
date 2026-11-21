@@ -79,8 +79,39 @@ function validReviewImpact(value: unknown): boolean {
     validReviewText(item.label) &&
     validReviewText(item.status) &&
     validReviewText(item.message) &&
-    validReviewTextList(item.record_ids)
+    validReviewTextList(item.record_ids) &&
+    new Set(item.record_ids).size === item.record_ids.length
   );
+}
+
+// An immutable class-map warning must name precisely the frozen datasets and
+// registered models in the protected reference inventory. A missing or
+// mismatched impact cannot count as complete researcher-review evidence.
+function compatibilityImpactsMatchProtectedInventory(
+  plan: ClassOperationRecord["plan"],
+): boolean {
+  const compatibilityKeys = ["dataset_versions", "model_registrations"];
+  const protectedByKey = new Map<string, string[]>();
+  for (const group of plan.protected_records) {
+    if (protectedByKey.has(group.key)) return false;
+    protectedByKey.set(group.key, group.record_ids);
+  }
+  const impactsByKey = new Map<string, string[]>();
+  for (const impact of plan.compatibility_impacts) {
+    if (!compatibilityKeys.includes(impact.key) || impactsByKey.has(impact.key)) {
+      return false;
+    }
+    impactsByKey.set(impact.key, impact.record_ids);
+  }
+  return compatibilityKeys.every((key) => {
+    const expected = protectedByKey.get(key);
+    const actual = impactsByKey.get(key);
+    return expected === undefined
+      ? actual === undefined
+      : actual !== undefined &&
+          actual.length === expected.length &&
+          expected.every((id, index) => id === actual[index]);
+  });
 }
 
 function operationHasDisplayEvidence(operation: ClassOperationRecord): boolean {
@@ -94,6 +125,7 @@ function operationHasDisplayEvidence(operation: ClassOperationRecord): boolean {
     plan.protected_records.every(validReviewGroup) &&
     Array.isArray(plan.compatibility_impacts) &&
     plan.compatibility_impacts.every(validReviewImpact) &&
+    compatibilityImpactsMatchProtectedInventory(plan) &&
     Array.isArray(plan.blocking_records) &&
     plan.blocking_records.every(validReviewGroup) &&
     validReviewTextList(plan.warnings) &&
