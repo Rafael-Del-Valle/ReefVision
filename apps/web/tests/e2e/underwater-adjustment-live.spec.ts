@@ -180,6 +180,11 @@ test("previews and reopens a raw-axis adjustment, runs a local model, and replay
     editor.getByText("Image adjustments", { exact: true }).click();
   await expect(background).toHaveAttribute("width", String(fixture.width_px));
   await expect(background).toHaveAttribute("height", String(fixture.height_px));
+  await expect
+    .poll(async () => (await background.getAttribute("href"))?.split("?")[0], {
+      timeout: 30_000,
+    })
+    .toBe(`${source}/display`);
   const transform = await grid.getAttribute("transform");
   const before = await background.getAttribute("href");
   await panel();

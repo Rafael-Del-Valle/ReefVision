@@ -19,6 +19,7 @@ from reefvision.db.models import (
     TrainingDraft,
     TrainingRun,
 )
+from reefvision.db.models.project import utc_now
 from reefvision.domain.errors import NotFoundError, ValidationError
 from reefvision.ml.dependencies import configure_provider_runtime, provider_preflight, provider_spec
 from reefvision.ml.ultralytics_registry import (
@@ -623,14 +624,13 @@ class TrainingService:
         run = self._run(run_id)
         if run.job_id is None:
             raise ValidationError("This training run is not attached to a background job")
-        job = self.jobs.get(run.job_id)
+        job = self.jobs.get_for_update(run.job_id)
         if job is None:
             raise ValidationError("The background job for this training run no longer exists")
         if job.status == "queued":
-            job.status = "cancelled"
-            run.status = "cancelled"
-            run.stage = "cancelled"
-            run.completed_at = run.updated_at
+            job.status = run.status = run.stage = "cancelled"
+            job.completed_at = run.completed_at = utc_now()
+            job.result_json = {**(job.result_json or {}), "stage": "cancelled"}
         elif job.status == "running":
             job.status = "cancel_requested"
             run.status = "cancel_requested"

@@ -16,6 +16,7 @@ from reefvision.db.models import (
     WorkflowRun,
 )
 from reefvision.domain.errors import WorkflowExecutionCancelled
+from reefvision.repositories.jobs import JobRepository
 from reefvision.schemas.workflow_graphs import WorkflowGraphRequest, WorkflowPlanInputBinding
 from reefvision.services.workflow_execution import WorkflowExecutionService
 from reefvision.services.workflow_graphs import WorkflowGraphService
@@ -42,22 +43,38 @@ def _set_terminal(
     error: str | None = None,
 ) -> None:
     with factory() as session:
+        completed_at = _now()
         job = session.get(Job, job_id)
         run = session.get(WorkflowRun, run_id)
         if job is not None:
             job.status = status
             job.error_message = error
-            job.completed_at = _now()
+            job.completed_at = completed_at
             result = dict(job.result_json or {})
             result["stage"] = status
             job.result_json = result
         if run is not None:
             run.status = status
             run.error_message = error
-            run.completed_at = _now()
+            run.completed_at = completed_at
             result = dict(run.result_json or {})
             result["stage"] = status
             run.result_json = result
+        if status == "cancelled":
+            session.execute(
+                update(WorkflowNodeRun)
+                .where(
+                    WorkflowNodeRun.workflow_run_id == run_id,
+                    WorkflowNodeRun.status.in_(
+                        ("pending", "running", "waiting_for_review", "review_approved")
+                    ),
+                )
+                .values(
+                    status="cancelled",
+                    completed_at=completed_at,
+                    error_message=error or "Workflow run was cancelled",
+                )
+            )
         session.commit()
 
 
@@ -129,24 +146,6 @@ def _cancel_requested(factory: sessionmaker[Session], job_id: str) -> bool:
     with factory() as session:
         job = session.get(Job, job_id)
         return job is None or job.status == "cancel_requested"
-
-
-def _cancel_remaining_nodes(factory: sessionmaker[Session], run_id: str) -> None:
-    with factory() as session:
-        nodes = list(
-            session.scalars(
-                select(WorkflowNodeRun).where(
-                    WorkflowNodeRun.workflow_run_id == run_id,
-                    WorkflowNodeRun.status.in_(("pending", "running", "waiting_for_review")),
-                )
-            )
-        )
-        now = _now()
-        for node in nodes:
-            node.status = "cancelled"
-            node.completed_at = now
-            node.error_message = "Workflow run was cancelled"
-        session.commit()
 
 
 def _input_artifacts(
@@ -286,7 +285,6 @@ def process_workflow_run_job(
             verify_scheduled_run(session, settings, run, plan)
         for step in plan.steps:
             if _cancel_requested(factory, job_id):
-                _cancel_remaining_nodes(factory, run_id)
                 _set_terminal(
                     factory,
                     job_id,
@@ -426,10 +424,9 @@ def process_workflow_run_job(
                 WorkflowRun,
                 run_id,
             )
-            job = session.get(
-                Job,
-                job_id,
-            )
+            job = JobRepository(session).get_for_update(job_id)
+            if job is not None and job.status in {"cancel_requested", "cancelled"}:
+                raise WorkflowExecutionCancelled("Workflow was cancelled before completion")
             now = _now()
 
             if run is None:
@@ -489,20 +486,6 @@ def process_workflow_run_job(
         )
         return True
     except WorkflowExecutionCancelled as exc:
-        with factory() as session:
-            cancelled_node = session.scalar(
-                select(WorkflowNodeRun)
-                .where(
-                    WorkflowNodeRun.workflow_run_id == run_id,
-                    WorkflowNodeRun.status == "running",
-                )
-                .order_by(WorkflowNodeRun.execution_order)
-            )
-            if cancelled_node is not None:
-                cancelled_node.status = "cancelled"
-                cancelled_node.error_message = str(exc)
-                cancelled_node.completed_at = _now()
-            session.commit()
         _set_terminal(factory, job_id, run_id, status="cancelled", error=str(exc))
         return False
     except Exception as exc:

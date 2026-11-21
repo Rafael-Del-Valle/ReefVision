@@ -33,6 +33,15 @@ class JobRepository:
     def get(self, job_id: str) -> Job | None:
         return self.session.get(Job, job_id)
 
+    def get_for_update(self, job_id: str) -> Job | None:
+        """Read the current job and serialize its next state change through commit."""
+        connection = self.session.connection()
+        if connection.dialect.name == "sqlite" and not getattr(
+            connection.connection.driver_connection, "in_transaction", False
+        ):
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
+        return self.session.get(Job, job_id, populate_existing=True, with_for_update=True)
+
     def next_queued(self) -> Job | None:
         statement = (
             select(Job)
