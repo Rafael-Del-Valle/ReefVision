@@ -21,6 +21,21 @@ Status: **development / not release-ready**. This document is an acceptance chec
 
 **Mesh-preview extrema-preserving render option (1.4 development):** An optional strict boolean `preserve_axis_extrema_in_preview` now retains source faces containing each referenced mesh-axis extremum and the deterministic largest-area triangle within the existing 512-triangle render budget. The standalone and saved-workflow artifact includes the largest-area source face index and whether it is visible; a uniform preview that omits it receives `preview_omits_largest_mesh_triangle` QC, even when all axis bounds are represented. For a completely zero-area mesh the largest-face fields are null, not an invented measured surface. The priority is a visualization heuristic, not a new area or tissue measurement. It preserves full-mesh surface measurements, calibration, source fingerprints and unverified specimen status; it changes only deterministic visualization sampling and associated display-coverage QC. An orphan vertex is not a reconstructed tip, and selecting extreme geometry does **not** validate coral-tip identity, branch length, biological surface coverage or reconstruction completeness. Backend tests compare uniform versus tip-aware sampling and exercise the same configuration through the standalone project API and two executions of one persisted typed Workflow Builder graph. Installed-GUI interaction and biological reference validation remain outstanding.
 
+**Patch-preserving preview and typed node parity (1.4 development):** Optional strict
+`preserve_edge_connected_patches_in_preview` prioritizes a representative triangle
+from each disconnected edge-connected surface patch inside the existing 512-face
+**display** budget; patches still omitted by that limit remain visible in
+omission/area-coverage QC. The typed `mesh_surface_preview` node registry must
+advertise this option with the same `false` default as the standalone request
+schema, so the guided UI, graph planner and executable saved graphs share one
+discoverable contract. A backend regression compares the *complete* registry
+parameter set against `MeshPreviewRequest.model_fields` to flag future drift;
+an independent 514-face synthetic fixture checks unchanged full-mesh metrics,
+standalone API results and artifact/hash parity across two executions of the
+persisted graph with patch preservation enabled. This is sampling, not physical
+coverage verification, true biological connectivity, identity or anatomical branch
+length; installed-GUI and coral-reference gates remain open.
+
 ## 1.5: research analysis
 
 The experiment designer must declare treatment assignment, randomization, nesting and **experimental unit** before selecting a model. Tank-level treatment with fragments nested in tanks cannot be treated as independent fragment-level treatment replication. Require documented contrasts, assumptions, missingness handling and multiplicity decisions. ICC must state its model/type and single-versus-average measurement interpretation; Bland–Altman must distinguish repeated measures and report limits of agreement with their uncertainty. Reviewer and model benchmarking must use held-out material and avoid training/test leakage.
