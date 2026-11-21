@@ -373,9 +373,7 @@ def _safe_extract_zip(
                 )
 
 
-def _verify_pose_label_rows(
-    rows: list[str], *, class_count: int, keypoint_count: int
-) -> None:
+def _verify_pose_label_rows(rows: list[str], *, class_count: int, keypoint_count: int) -> None:
     """Validate frozen pose label truth before and after materialization."""
 
     if not rows:
