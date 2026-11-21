@@ -301,9 +301,9 @@ def test_xyz_locus_pinning_standalone_and_persisted_workflow_parity(
     }
     if source_format == "ply":
         params["ply_text"] = (
-            f"ply\\nformat ascii 1.0\\nelement vertex {len(points)}\\n"
-            "property double x\\nproperty double y\\nproperty double z\\nend_header\\n"
-            + "".join(f"{x:g} {y:g} {z:g}\\n" for x, y, z in points)
+            f"ply\nformat ascii 1.0\nelement vertex {len(points)}\n"
+            "property double x\nproperty double y\nproperty double z\nend_header\n"
+            + "".join(f"{x:g} {y:g} {z:g}\n" for x, y, z in points)
         )
     else:
         params["points"] = points
