@@ -23,6 +23,8 @@ from reefvision.ml.providers import (
 from reefvision.ml.reefpose.constants import REEFPOSE_PROVIDER_ID, REEFPOSE_PROVIDER_VERSION
 from reefvision.ml.sleap_nn_provider import (
     SLEAP_IO_SUPPORTED_VERSION,
+    SLEAP_NN_ACTIONABLE_RETIREMENT,
+    SLEAP_NN_PROVIDER_ID,
     SLEAP_NN_RETIREMENT_REASON,
     SLEAP_NN_SUPPORTED_VERSION,
 )
@@ -1126,6 +1128,24 @@ def detection_provider_for_name(provider_name: str) -> DetectionProvider:
             raise ValidationError(f"ReefPose runtime is unavailable: {exc}") from exc
         return ReefPoseRegistrationProvider()
     raise ValidationError(f"Unsupported detection provider: {provider_name}")
+
+
+def require_image_inference_provider(provider_name: str, task: str) -> None:
+    """Check the worker's implemented task/provider combinations without loading weights."""
+    name = provider_name.strip().casefold()
+    if name == SLEAP_NN_PROVIDER_ID:
+        raise ValidationError(SLEAP_NN_ACTIONABLE_RETIREMENT)
+    supported_tasks = {
+        "ultralytics": {"detect", "pose", "segment"},
+        REEFPOSE_PROVIDER_ID: {"pose"},
+        "nnunet": {"semantic_segment"},
+    }
+    if task not in supported_tasks.get(name, set()):
+        raise ValidationError(
+            f"Provider {provider_name!r} is unavailable for {task} inference. "
+            "Open Model Hub and select a compatible registered model. "
+            "The historical model and its predictions remain available for review and export."
+        )
 
 
 def assist_provider_for_name(provider_name: str) -> AnnotationAssistProvider:

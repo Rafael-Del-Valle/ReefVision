@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from reefvision.config import Settings
 from reefvision.db.models import ImageAsset, Job, ModelRegistration, PredictionProposal, Project
 from reefvision.domain.errors import ReefVisionError, ValidationError
-from reefvision.ml.provider_hub import detection_provider_for_name
+from reefvision.ml.provider_hub import detection_provider_for_name, require_image_inference_provider
 from reefvision.ml.providers import (
     DetectionPrediction,
     DetectionProvider,
@@ -36,7 +36,6 @@ from reefvision.ml.semantic_segmentation import (
     SEMANTIC_SEGMENTATION_TASK,
     semantic_provider_for_name,
 )
-from reefvision.ml.sleap_nn_provider import SLEAP_NN_ACTIONABLE_RETIREMENT, SLEAP_NN_PROVIDER_ID
 from reefvision.repositories.images import ImageRepository
 from reefvision.repositories.jobs import paired_owner_active
 from reefvision.repositories.models import ModelRepository
@@ -365,7 +364,9 @@ def process_inference_job(
         request = dict(job.request_json)
         model = _model(session, str(request["model_id"]))
         image_ids = [str(image_id) for image_id in request["image_ids"]]
+        model_task = str(request.get("model_task") or model.task or "detect")
         try:
+            require_image_inference_provider(model.provider_name, model_task)
             verify_queued_selection(session, settings, model.project_id, request)
             if "image_adjustment" in request:
                 if len(image_ids) != 1 or model.project_id != job.project_id:
@@ -393,19 +394,12 @@ def process_inference_job(
             job.completed_at = _utc_now()
             session.commit()
             return False
-        if model.provider_name.strip().casefold() == SLEAP_NN_PROVIDER_ID:
-            job.status = "failed"
-            job.error_message = SLEAP_NN_ACTIONABLE_RETIREMENT
-            job.completed_at = _utc_now()
-            session.commit()
-            return False
         model_path = resolve_managed_project_path(settings, model.managed_path)
         inference_settings = DetectionSettings(
             confidence_threshold=float(request["confidence_threshold"]),
             iou_threshold=float(request["iou_threshold"]),
             device=str(request.get("device", "auto")),
         )
-        model_task = str(request.get("model_task") or model.task or "detect")
         provider_name = model.provider_name
         provider_version = model.provider_version
         model_id = model.id

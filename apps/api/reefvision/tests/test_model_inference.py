@@ -30,7 +30,7 @@ VALID_ASSIST_MASK_PNG_BASE64 = (
 
 
 class FakeDetectorRegistrationProvider:
-    provider_name = "fake_detector"
+    provider_name = "ultralytics"
     provider_version = "test"
 
     def inspect_model(self, model_path: Any) -> DetectionModelMetadata:
@@ -57,7 +57,7 @@ class FakeDetectorRegistrationProvider:
 
 
 class FakeDetectorWorkerProvider:
-    provider_name = "fake_detector"
+    provider_name = "ultralytics"
     provider_version = "test"
 
     def load_model(self, model_path: Any, device: str) -> None:

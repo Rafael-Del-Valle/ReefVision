@@ -26,7 +26,7 @@ from reefvision.schemas.pose_training_datasets import PoseTrainingExportFormat
 from reefvision.services.workflow_pose import _EXTERNAL_POSE_EXPORT_FORMATS
 from reefvision.storage.pose_exchange import load_exchange, save_exchange
 from reefvision.storage.projects import resolve_managed_project_path
-from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_annotations import create_project, import_one
 
 ROOT = Path(__file__).resolve().parents[4]
 RETIREMENT_TEXT = "retired pending an authoritative SLEAP-NN license resolution"
@@ -154,7 +154,15 @@ def test_historical_pose_registration_roundtrips_with_opaque_model_bytes(
     original_path = resolve_managed_project_path(settings, managed_path)
     original_path.parent.mkdir(parents=True, exist_ok=True)
     original_path.write_bytes(original)
-    metadata = {"landmark_labels": ["center", "tip", "tip"], "source": "historical"}
+    metadata = {
+        "landmark_labels": [model_id, "tip", "tip"],
+        "source_dataset_version_id": project_id,
+        "provider_extension": {
+            "project_id": project_id,
+            "external_ids": [model_id, {"sample": str(label["id"])}],
+        },
+        "source": "historical",
+    }
     with app.state.session_factory() as session:
         session.add(
             ModelRegistration(
@@ -171,8 +179,8 @@ def test_historical_pose_registration_roundtrips_with_opaque_model_bytes(
                 provider_name=provider,
                 provider_version="0.3.3",
                 class_map_json={
-                    "labels": [label["name"]],
-                    "mapping": {label["name"]: label["id"]},
+                    "labels": [project_id],
+                    "mapping": {project_id: label["id"]},
                 },
                 metadata_json=metadata,
             )
@@ -219,7 +227,20 @@ def test_historical_pose_registration_roundtrips_with_opaque_model_bytes(
         "pose",
     )
     assert model["metadata_json"] == metadata
+    assert model["class_map_json"] == {
+        "labels": [project_id],
+        "mapping": {project_id: result["package"]["options_json"]["id_map"][label["id"]]},
+    }
     assert resolve_managed_project_path(settings, model["managed_path"]).read_bytes() == original
+    image_id = import_one(client, new_project_id)["successful"][0]["image_id"]
+    inference = client.post(
+        f"/api/v1/projects/{new_project_id}/inference-jobs",
+        json={"model_id": new_id, "image_ids": [image_id], "device": "cpu"},
+    )
+    assert inference.status_code == 400, inference.text
+    assert (RETIREMENT_TEXT if provider == "sleap_nn" else "Model Hub") in inference.json()[
+        "detail"
+    ]
 
     identical = client.post(
         f"/api/v1/projects/{new_project_id}/models/register",
