@@ -365,3 +365,23 @@ scientific operation: stored observations, selection arrays, typed executable
 and saved QC workflows, units, provenance, retries and human-review gates are
 unchanged. Full exact-head CI and installed-Windows GUI responsiveness remain
 unverified; Alembic-0038 lineage and explicit approval remain release HOLD.
+
+## 2026-11-21 — Dense annotation selection and deletion indexing (Track D)
+
+The editor's class reassignment, box-drag snapshot and selection deletion paths
+used per-object `Array.includes` lookups against potentially tens of thousands
+of selected coral observations. Class reassignment also fabricated a dirty
+revision when the selected annotation already had the requested class; stale
+selection IDs could dirty the document on deletion. The 1.6 branch now indexes
+selection membership in sets, performs box/mask deletion through the existing
+persisted-mask tombstone contract, and skips document commits when no matching
+scientific observation changes. A 20,000-box selection regression, mixed
+persisted/unsaved mask deletion cases, stale-ID identity tests and a React
+no-op class/autosave regression have been added. Annotation and mask source
+records, existing QC audit trails and typed saved Workflow Builder approval
+and retry semantics remain unchanged. No duplicate workflow node or database
+migration is necessary for editor-only operations. Full exact-head CI and
+native installed Windows GUI large-image usability validation are required.
+**RELEASE HOLD:** separate 1.1/1.6 Alembic-0038 histories, representative
+biological/saved-workflow acceptance, MSI clean install/upgrade/rollback and
+explicit researcher approval remain outstanding.

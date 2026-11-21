@@ -920,6 +920,53 @@ describe("AnnotationEditor", () => {
     expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
   });
 
+
+  it("does not autosave an already-assigned class when selecting a coral again", async () => {
+    const writes: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(session);
+      }
+      if (init?.method === "PUT") {
+        writes.push(url);
+        throw new Error("Reapplying the same scientific class must not save");
+      }
+      const shared = handleDefaultEditorRequests(url, init);
+      if (shared) return shared;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    stubCanvasRect();
+    const annotation = screen.getByTestId("annotation-annotation-1");
+    fireEvent.pointerDown(annotation, {
+      button: 0,
+      pointerId: 88,
+      clientX: 120,
+      clientY: 130,
+    });
+    fireEvent.pointerUp(window, {
+      pointerId: 88,
+      clientX: 120,
+      clientY: 130,
+    });
+    fireEvent.keyDown(window, { key: "1", code: "Digit1" });
+    expect(screen.getByText("All changes synced")).toBeInTheDocument();
+    expect(screen.getByTestId("annotation-annotation-1")).toHaveAttribute(
+      "x",
+      "100",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(writes).toHaveLength(0);
+  });
+
   it("keeps zero-displacement and edge-clamped gestures out of scientific revision history", async () => {
     const edgeSession: AnnotationSession = {
       ...session,

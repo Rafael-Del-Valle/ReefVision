@@ -61,7 +61,7 @@ import {
   type AnnotationClipboard,
   writeInternalAnnotationClipboard,
 } from "./annotationClipboard";
-import { deleteMaskAnnotations } from "./maskDocumentOperations";
+import { deleteSelectedAnnotations } from "./maskDocumentOperations";
 import {
   boundedDenseObjectRows,
   selectedDenseObjectRowIds,
@@ -1632,15 +1632,23 @@ export function AnnotationEditor({
       if (state.tool !== "select" || state.selectedIds.length === 0) {
         return;
       }
-      const nextDocument = {
-        ...state.document,
-        annotations: state.document.annotations.map((annotation) =>
-          state.selectedIds.includes(annotation.id)
-            ? { ...annotation, label_class_id: classId }
-            : annotation,
-        ),
-      };
-      commitDocument(nextDocument, state.selectedIds);
+      // Dense selections can contain thousands of corals. Index membership
+      // once, and avoid fabricating revisions when the class is unchanged.
+      const selectedIds = new Set(state.selectedIds);
+      let changed = false;
+      const annotations = state.document.annotations.map((annotation) => {
+        if (
+          !selectedIds.has(annotation.id) ||
+          annotation.label_class_id === classId
+        ) {
+          return annotation;
+        }
+        changed = true;
+        return { ...annotation, label_class_id: classId };
+      });
+      if (changed) {
+        commitDocument({ ...state.document, annotations }, state.selectedIds);
+      }
     },
     [commitDocument, state.document, state.selectedIds, state.tool],
   );
@@ -1828,19 +1836,23 @@ export function AnnotationEditor({
     if (state.selectedIds.length === 0 && state.selectedMaskIds.length === 0) {
       return;
     }
-    const withoutBoxes = {
-      ...state.document,
-      annotations: state.document.annotations.filter(
-        (annotation) => !state.selectedIds.includes(annotation.id),
-      ),
-    };
-    const nextDocument = deleteMaskAnnotations(
-      withoutBoxes,
+    const nextDocument = deleteSelectedAnnotations(
+      state.document,
+      state.selectedIds,
       state.selectedMaskIds,
     );
+    if (nextDocument === state.document) {
+      // Retained IDs may refer to filtered/deleted objects. Clear the stale
+      // selection without editing the source document or triggering autosave.
+      setSelection([]);
+      setMaskSelection([]);
+      return;
+    }
     commitDocument(nextDocument, [], []);
   }, [
     commitDocument,
+    setSelection,
+    setMaskSelection,
     state.document,
     state.selectedIds,
     state.selectedMaskIds,
@@ -2691,9 +2703,10 @@ export function AnnotationEditor({
         setMaskSelection([]);
       }
       setSelection(selection);
+      const selectedIds = new Set(selection);
       const snapshot = Object.fromEntries(
         state.document.annotations
-          .filter((annotation) => selection.includes(annotation.id))
+          .filter((annotation) => selectedIds.has(annotation.id))
           .map((annotation) => [annotation.id, annotation]),
       );
       setInteraction({

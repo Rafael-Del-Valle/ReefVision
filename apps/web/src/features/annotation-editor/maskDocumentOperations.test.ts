@@ -4,6 +4,7 @@ import {
   addMaskAnnotation,
   changeMaskAnnotationClass,
   deleteMaskAnnotations,
+  deleteSelectedAnnotations,
   updateMaskAnnotation,
 } from "./maskDocumentOperations";
 import { polygonMaskFromPoints } from "./PolygonMaskLayer";
@@ -132,4 +133,85 @@ describe("mask document operations", () => {
 
     expect(changed.maskAnnotations[0].label_class_id).toBe("class-1");
   });
+
+  it("deletes dense multi-class selections with indexed membership, preserving original evidence", () => {
+    const annotations = Array.from({ length: 20_000 }, (_, index) => ({
+      id: `box-${index}`,
+      label_class_id: "class-1",
+      x_min: index,
+      y_min: 0,
+      x_max: index + 1,
+      y_max: 1,
+    }));
+    const selected = annotations.map((item) => item.id);
+    const guardedSelection = new Proxy(selected, {
+      get(target, key, receiver) {
+        if (key === "includes") {
+          throw new Error("Quadratic per-annotation selection search");
+        }
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const original = { ...emptyDocument, annotations };
+    const deleted = deleteSelectedAnnotations(original, guardedSelection, []);
+    expect(deleted.annotations).toHaveLength(0);
+    expect(deleted.maskAnnotations).toBe(original.maskAnnotations);
+    expect(deleted.deletedMaskAnnotationIds).toBe(
+      original.deletedMaskAnnotationIds,
+    );
+    expect(original.annotations).toHaveLength(20_000);
+    expect(selected).toHaveLength(20_000);
+  });
+
+  it("preserves persisted mask deletion evidence and skips unsaved mask tombstones", () => {
+    const unsavedMask = polygonMaskFromPoints(
+      [
+        { x: 3, y: 3 },
+        { x: 13, y: 3 },
+        { x: 13, y: 13 },
+      ],
+      "class-1",
+      "unsaved-mask",
+    );
+    const original = {
+      ...emptyDocument,
+      annotations: [
+        {
+          id: "box-1",
+          label_class_id: "class-1",
+          x_min: 1,
+          y_min: 1,
+          x_max: 3,
+          y_max: 3,
+        },
+      ],
+      maskAnnotations: [persistedMask, persistedRasterMask, unsavedMask],
+      deletedMaskAnnotationIds: ["prior-delete"],
+    };
+    const deleted = deleteSelectedAnnotations(
+      original,
+      ["box-1", "box-1", "missing-box"],
+      [persistedMask.id, unsavedMask.id, "missing-mask"],
+    );
+    expect(deleted.annotations).toHaveLength(0);
+    expect(deleted.maskAnnotations).toEqual([persistedRasterMask]);
+    expect(deleted.deletedMaskAnnotationIds).toEqual([
+      "prior-delete",
+      persistedMask.id,
+    ]);
+    expect(original.maskAnnotations).toHaveLength(3);
+    expect(original.deletedMaskAnnotationIds).toEqual(["prior-delete"]);
+  });
+
+  it("returns original document for selections containing only stale IDs", () => {
+    const original = {
+      ...emptyDocument,
+      maskAnnotations: [persistedMask],
+    };
+    expect(
+      deleteSelectedAnnotations(original, ["missing-box"], ["missing-mask"]),
+    ).toBe(original);
+    expect(deleteSelectedAnnotations(original, [], [])).toBe(original);
+  });
+
 });

@@ -48,6 +48,37 @@ export function deleteMaskAnnotations(
   };
 }
 
+/** Delete boxes and masks in linear time for dense biological images.
+ * Missing/stale IDs must never create a false scientific revision.
+ * Persisted-mask tombstones remain the responsibility of the existing
+ * mask deletion operation; unsaved masks never acquire tombstones.
+ */
+export function deleteSelectedAnnotations(
+  document: AnnotationDocument,
+  annotationIds: readonly string[],
+  maskIds: readonly string[],
+): AnnotationDocument {
+  if (annotationIds.length === 0 && maskIds.length === 0) {
+    return document;
+  }
+  const selectedBoxes = new Set(annotationIds);
+  const annotations =
+    selectedBoxes.size > 0
+      ? document.annotations.filter((item) => !selectedBoxes.has(item.id))
+      : document.annotations;
+  const selectedMasks = new Set(maskIds);
+  const hasMatchingMask =
+    selectedMasks.size > 0 &&
+    document.maskAnnotations.some((mask) => selectedMasks.has(mask.id));
+  if (annotations.length === document.annotations.length && !hasMatchingMask) {
+    return document;
+  }
+  const nextDocument = { ...document, annotations };
+  return hasMatchingMask
+    ? deleteMaskAnnotations(nextDocument, [...selectedMasks])
+    : nextDocument;
+}
+
 export function changeMaskAnnotationClass(
   document: AnnotationDocument,
   maskIds: string[],
