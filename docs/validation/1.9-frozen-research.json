@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T04:39:30.308927+00:00",
+  "updated_utc": "2026-11-21T05:07:35.598109+00:00",
   "candidate_pr": 131,
   "scope": "Generated research projects. Registered installer trials identify their own package.",
   "reviewed_predecessors": {
@@ -120,6 +120,96 @@
         "owner_file": "1.9/evidence/long-export-source-tests.log",
         "sha256": "450ec7d3263a5e7c4a3ac41586f98cc24db5478c97faa175d391adf54bbfb974"
       }
+    },
+    "guided_cpu_964": {
+      "surface": "ordinary source Chromium",
+      "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+      "graph": {
+        "id": "3eb46863-cb67-4972-9b53-10434e9e7316",
+        "key": "reefpose-native-reviewed-workflow",
+        "name": "Native ReefPose training and reviewed export",
+        "sha256": "1563454e812c8859f3bb7f9f862fcab4af34a12f7e85436667577a8b4e0cfceb",
+        "revision": 1
+      },
+      "dataset_bindings": {
+        "train": {
+          "dataset_id": "89466a4e-b334-4f2e-8b1a-3de745913b26",
+          "manifest_sha256": "27810bdbf50e5c638fcf0855ee81fbe2933b9e466aa5b5167cdd8e6f43cf1dfa"
+        },
+        "validation": {
+          "dataset_id": "aa1592b7-b775-4dc0-8f16-d89564605ea7",
+          "manifest_sha256": "c19d16ee42d7d66106cd486171b4acf4dd79874b7644cf31acd9f8dae6969d91"
+        },
+        "held_out": {
+          "video_id": "fa9237f1-d949-4abf-b275-aa5235657277",
+          "video_sha256": "9f8ec488580412ca17e85a797d910920d44840cf6eb1bd8ea7ee17051bb7095e"
+        }
+      },
+      "runs": [
+        {
+          "run_id": "cfa2302b-94d7-436c-a91d-a2b3209ccb38",
+          "parent_job_id": "ed5e826e-3518-4221-837a-93ee0ca366f6",
+          "device": "cpu",
+          "registration": {
+            "training_run_id": "2045cb92-117e-4233-b1d1-7322cb9ef6c2",
+            "model_id": "c0f3a402-1a1a-45eb-8d32-3270b656a795",
+            "model_original_run_id": "2045cb92-117e-4233-b1d1-7322cb9ef6c2",
+            "display_name": "Generated guided ReefPose benchmark",
+            "original_registered_bytes_sha256": "6685d90976ca5f5708a8b6e2ec7a0f1896f67c3b2ec9ffc9f1207ac372a7b171"
+          }
+        },
+        {
+          "run_id": "7b1ad03f-fa09-42e6-8798-13faa0e82e40",
+          "parent_job_id": "c48b11e0-d26f-440d-9cf6-f18b1bc6cc17",
+          "device": "cpu",
+          "registration": {
+            "training_run_id": "a09fe014-4a7c-4180-9583-b5e152c17199",
+            "model_id": "65b3551c-7a7a-4a3e-821f-4523d1e781bb",
+            "model_original_run_id": "a09fe014-4a7c-4180-9583-b5e152c17199",
+            "display_name": "Generated guided ReefPose benchmark (a09fe014-4a7c-4180-9583-b5e152c17199)",
+            "original_registered_bytes_sha256": "f77691af30a9decc653fe4f9af4cc2f66d080d3bd1935df6a9b98332116774e1"
+          }
+        }
+      ],
+      "result": "Both runs trained for real, explicitly registered their outputs under the same requested display name, ran held-out inference, completed two independent ordinary review actions, and downloaded checksum-verified ZIP and CSV artifacts. Each contained the human-confirmed frame 14, source points (21,26) and (35,26), and three skipped items.",
+      "raw": {
+        "file": "1.9/checkpoints/96476bc46/source-guided-native-pose/evidence-index.json",
+        "sha256": "1d0b491d15fe8695398808b52f7599f54acb0f35531db0e4f61d5d693f4ff031"
+      }
+    },
+    "editor_retry": {
+      "source": "b82305b1362a7f671c4e3de3a3734d7d9b26ee2d",
+      "surface": "ordinary Chromium editor and real file quota on disposable SQLite",
+      "result": "With a real storage limit, 96 draft overlays remained visible and 48 boxes at revision 1 remained stored. The page showed the specific 507 recovery instruction and held the draft until explicit Retry. After release, one identical PUT saved 96 boxes at revision 2. Source image bytes matched.",
+      "raw": {
+        "file": "1.9/checkpoints/96476bc46/source/editor-storage-index.json",
+        "sha256": "a474977a34e8b2d7d0d5470e5dcf50f8cf1d9a5405a033f55f2913940a24a952"
+      }
+    },
+    "migration_rollback": {
+      "source": "701f3b931a77ccded2fa69b5bddd4fc188891c23",
+      "predecessor_msi": "78d52066848afc6aeac975765359ba13cd3d0e2e8b79ef1b90307eecd03c35ed",
+      "result": "The 1.9 source upgraded the original 1.8 study backup, rebound the two historical training results and verified project archive model associations. Original packaged 1.8 refused the newer schema, then restored, wrote and reopened its 112-member backup on a separate disposable copy.",
+      "raw": {
+        "file": "1.9/checkpoints/701f3b931/source/evidence/pose-rollback/original-pose-upgrade-and-rollback.json",
+        "sha256": "3e310f2483c83e2bdff92138d2055942f1a93e77c57aac8be9716647440c22e6"
+      }
+    },
+    "calibrated_coral_and_temporal": {
+      "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+      "result": "Generated coral acquired two days apart measured 9.75 to 10.75 mm. Held-out event testing covered 120 frames from five recordings. Frame-only matched 0, missed 7 and added 15 events. Temporal matched 3, missed 4 and added 16. The reviewed video workflow reopened the downloaded archive and retained its original files.",
+      "raw": {
+        "file": "1.9/checkpoints/96476bc46/preserved-coral-and-temporal/evidence-index.json",
+        "sha256": "6e9dc7cff1322a945a8e65ce57e14f9269990691068090ce5e0218234f063ff8"
+      }
+    },
+    "source_compatibility_and_long_video": {
+      "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+      "result": "Keyboard navigation exposed the source host and CPU-only fallback. A generated 362 MB, 18,000-frame H.264 recording imported in 2.42 seconds. Seeking to 1709.3 seconds presented a matching source frame in 48.7 ms. The reviewed frame-17,100 box reopened after sparse analysis.",
+      "raw": {
+        "file": "1.9/checkpoints/96476bc46/source-compatibility-and-long-video/evidence-index.json",
+        "sha256": "4401fb97c2b3f8de2e51adf19f5a313781d3bc0f767597d8ac38cac7475e1bc9"
+      }
     }
   },
   "performance_budgets_before_candidate_trial": {
@@ -130,8 +220,84 @@
     "seek_half_hour_video_seconds": 2
   },
   "open": [
-    "Qualify the integrated 1.9 original MSI/CABs on all registered roles and physical native workflows.",
-    "Complete guided source and installed replays with both independent human actions on the frozen fixture.",
-    "Independent reference field material, a signed installer on an enforcing Smart App Control machine and authorized historical user data are tracked in the owner evidence matrix."
-  ]
+    "The original Windows package and registered tests, physical GPU workflow and full backend runs retain individual identities in the owner review.",
+    "Independent reference material, signing credentials and an enforcing Smart App Control machine remain open."
+  ],
+  "integrated_source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+  "source_gates": {
+    "frontend_unit": 966,
+    "standard_browser_pass": 15,
+    "standard_browser_opt_in_skipped": 50,
+    "rust": 8,
+    "inventory_and_windows_lineage": 86,
+    "receipts": {
+      "frontend": {
+        "file": "1.9/checkpoints/96476bc46/source/frontend-units.log",
+        "sha256": "ce6a77293b3edc14fd16ff4f83e521c5e1fb72e5f6ca5eb4bf50834226dd13f5"
+      },
+      "production_web": {
+        "file": "1.9/checkpoints/96476bc46/source/production-web.log",
+        "sha256": "0f472fa36d1cf136d7999a8269debad9a5dd3de0a03fbd73f585edaf7e25aaab"
+      },
+      "standard_browser": {
+        "file": "1.9/checkpoints/96476bc46/source/browser-default.log",
+        "sha256": "dcc0ed06613a6d60f9c3c0fb644148752cdf548d03b63777dbd57eb3ec58e0db"
+      },
+      "rust": {
+        "file": "1.9/checkpoints/96476bc46/source/rust-tests.log",
+        "sha256": "48ffb26cb212e860c651a3be7aeded66772b16944c5622defa304bd6bebb54e8"
+      },
+      "lineage_inventory": {
+        "file": "1.9/checkpoints/96476bc46/source/lineage-inventory.log",
+        "sha256": "6752a4b327bf7da34034bed85a48ab4c0d9ec2d0409d16962bbfd21e610b957b"
+      },
+      "cuda_physical_source": {
+        "file": "1.9/checkpoints/96476bc46/source/physical-source-rtx-junit.xml",
+        "sha256": "4e52c866b75da7ab8fba627c38835dc9189012b368dc11dd8dc1f72c5afb3b73"
+      },
+      "migration": {
+        "file": "1.9/checkpoints/96476bc46/source/upgrade-downgrade-upgrade.log",
+        "sha256": "09839064b5b5bb688eb340d7b4bde5d5a5bed0e85b1cb987c0af7fc9d030ad58"
+      },
+      "mypy": {
+        "file": "1.9/checkpoints/96476bc46/source/mypy.log",
+        "sha256": "615b502f7347809330754d6bf605998bc6289a8865aba36c6dec5ab4ab92c53f"
+      },
+      "prettier": {
+        "file": "1.9/checkpoints/96476bc46/source/frontend-prettier.log",
+        "sha256": "f20510a9da4717c51c4cffee6d0dd88d6c9a723d0a83711d01216f5b48961283"
+      }
+    },
+    "full_mypy_source_files": 781,
+    "native_cuda_source_tests": [
+      "test_native_reefpose_cuda_scientific_evaluation",
+      "test_async_two_model_reefpose_cuda_comparison",
+      "test_native_reefpose_cuda_workflow_registration_and_inference"
+    ],
+    "fresh_db_upgrade_downgrade_upgrade": [
+      "upgrade head",
+      "current",
+      "b19_registration_0001 (head)",
+      "downgrade base",
+      "current",
+      "upgrade head",
+      "current",
+      "b19_registration_0001 (head)"
+    ]
+  },
+  "production_run": {
+    "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+    "original_build_run": 44867493658,
+    "original_build_job": 136734331397,
+    "general_ci": 44867493592,
+    "scientific_workflow": 44867493582,
+    "offline_draft": 135,
+    "offline_run": 44867740231,
+    "guided_registered_run": 44869092046,
+    "guided_registered_draft": 136,
+    "superseded_guided_proof": 44868405915,
+    "registered_storage_run": 44868688751,
+    "registered_storage_draft": 137,
+    "registered_storage_job": 136738091375
+  }
 }

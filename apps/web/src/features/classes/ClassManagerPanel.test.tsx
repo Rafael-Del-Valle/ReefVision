@@ -148,6 +148,27 @@ describe("ClassManagerPanel", () => {
             },
           },
         ],
+        ...(
+          ["mutable_records", "protected_records", "blocking_records"] as const
+        ).map(
+          (group) =>
+            [
+              `duplicate identifiers in ${group}`,
+              {
+                plan: {
+                  ...report,
+                  [group]: [
+                    {
+                      key: "annotations",
+                      label: "Annotations",
+                      count: 2,
+                      record_ids: ["reviewed-id", "reviewed-id"],
+                    },
+                  ],
+                },
+              },
+            ] as const,
+        ),
         [
           "truncated compatibility entry",
           { plan: { ...report, compatibility_impacts: [null] } },
@@ -179,11 +200,11 @@ describe("ClassManagerPanel", () => {
           const preview = row.getByRole("button", { name: previewLabel });
           const run = row.getByRole("button", { name: runLabel });
           await userEvent.click(preview);
-          expect(
-            await row.findByText(
-              /Operation evidence is incomplete|Execution disabled/,
-            ),
-          ).toBeVisible();
+          const evidenceMessage =
+            "plan" in incomplete
+              ? /Operation evidence is incomplete/
+              : /Operation evidence is incomplete|Execution disabled/;
+          expect(await row.findByText(evidenceMessage)).toBeVisible();
           expect(run).toBeDisabled();
           await userEvent.click(run);
           expect(screen.queryByRole("alertdialog")).toBeNull();
