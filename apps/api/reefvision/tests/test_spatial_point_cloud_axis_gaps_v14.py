@@ -47,6 +47,10 @@ def test_axis_gap_is_projection_only_duplicate_invariant_and_scale_bounded() -> 
     assert gaps == reversed_rows["axis_largest_adjacent_coordinate_gaps"]
     assert gaps["x"]["distinct_source_coordinate_levels"] == 4
     assert gaps["x"]["source_endpoint_values"] == [2.0, 9.0]
+    assert gaps["x"]["gap_endpoint_support"] == {
+        "lower": {"source_rows": 1, "distinct_xyz_loci": 1},
+        "upper": {"source_rows": 1, "distinct_xyz_loci": 1},
+    }
     assert gaps["x"]["largest_adjacent_source_gap_units"] == 7.0
     assert gaps["x"]["fraction_of_source_axis_span"] == pytest.approx(7 / 9)
     assert gaps["x"]["calibrated_gap_m"] == pytest.approx(1.75)
@@ -71,12 +75,42 @@ def test_collapsed_axis_has_no_invented_sampling_gap() -> None:
     assert gaps["y"] == {
         "distinct_source_coordinate_levels": 1,
         "source_endpoint_values": None,
+        "gap_endpoint_support": None,
         "largest_adjacent_source_gap_units": None,
         "fraction_of_source_axis_span": None,
         "calibrated_gap_m": None,
         "calibrated_gap_scale_interval_m": None,
     }
     assert gaps["x"]["source_endpoint_values"] == [0.0, 2.0]
+
+
+def test_gap_boundary_support_distinguishes_rows_and_distinct_xyz_loci() -> None:
+    # Three scan rows at x=2 represent only two distinct XYZ locations.
+    # These numbers quantify acquisition support, not coral tissue presence.
+    points = [
+        [0.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0],
+        [2.0, 1.0, 0.0],
+        [2.0, 1.0, 0.0],
+        [9.0, 1.0, 0.0],
+    ]
+    original = _direct(points)
+    reordered = _direct(list(reversed(points)))
+    x_gap = original["axis_largest_adjacent_coordinate_gaps"]["x"]
+    assert x_gap["source_endpoint_values"] == [2.0, 9.0]
+    assert x_gap["gap_endpoint_support"] == {
+        "lower": {"source_rows": 3, "distinct_xyz_loci": 2},
+        "upper": {"source_rows": 1, "distinct_xyz_loci": 1},
+    }
+    assert original["axis_largest_adjacent_coordinate_gaps"] == reordered[
+        "axis_largest_adjacent_coordinate_gaps"
+    ]
+    assert original["provenance"]["geometry_sha256"] == reordered["provenance"][
+        "geometry_sha256"
+    ]
+    assert original["provenance"]["calibration_verified"] is False
+    assert original["surface_area_m2"] is None
+    assert original["branch_length_m"] is None
 
 
 def test_positive_axis_gap_below_calibration_resolution_is_not_zero() -> None:
@@ -123,6 +157,12 @@ def test_imported_and_xyz_gap_science_replays_from_saved_typed_graph(
     assert expected["axis_largest_adjacent_coordinate_gaps"]["x"][
         "source_endpoint_values"
     ] == [2.0, 9.0]
+    assert expected["axis_largest_adjacent_coordinate_gaps"]["x"][
+        "gap_endpoint_support"
+    ] == {
+        "lower": {"source_rows": 1, "distinct_xyz_loci": 1},
+        "upper": {"source_rows": 1, "distinct_xyz_loci": 1},
+    }
     assert expected["measurement_status"] == "caller_supplied_unverified"
 
     graph = {
