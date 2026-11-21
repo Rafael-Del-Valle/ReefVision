@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import platform
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 from typing import cast
 
@@ -59,6 +61,21 @@ def test_system_version_reports_paths_and_schema(
     assert payload["database_path"].endswith("test.db")
     assert payload["expected_schema_revision"] == current_head_revision()
     assert payload["current_schema_revision"] is None
+
+
+def test_machine_compatibility_reports_the_backend_host_without_private_paths(
+    client: TestClient,
+) -> None:
+    response = client.get("/api/v1/system/compatibility/machine")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "operating_system": platform.system(),
+        "os_release": platform.release(),
+        "os_version": platform.version(),
+        "architecture": platform.machine(),
+        "packaged_backend": bool(getattr(sys, "frozen", False)),
+    }
 
 
 def test_system_service_uses_resolved_alembic_paths(

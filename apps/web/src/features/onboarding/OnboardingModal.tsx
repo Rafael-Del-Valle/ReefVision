@@ -170,8 +170,8 @@ export function OnboardingModal({
             <h3>Save and return to work</h3>
             <p>
               Use Dataset versions for reproducible exports, Interoperability
-              for project exchange, and System status for backups and recovery.
-              Open Help to return to this guide.
+              for project exchange, and System status for backups, recovery, and
+              compatibility diagnostics. Open Help to return to this guide.
             </p>
             <div className="onboarding-card-actions">
               <button
