@@ -67,6 +67,51 @@ def test_non_windows_process_keeps_default_event_loop_policy(
 
 
 @pytest.mark.parametrize(
+    ("platform", "frozen", "select_locally"),
+    [("win32", False, True), ("win32", True, False), ("linux", False, False)],
+)
+def test_only_windows_source_http_uses_a_local_selector_loop(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    platform: str,
+    frozen: bool,
+    select_locally: bool,
+) -> None:
+    policy = asyncio.get_event_loop_policy()
+    default_factory = Mock(wraps=policy.new_event_loop)
+    selector_factory = Mock(wraps=asyncio.SelectorEventLoop)
+    served: list[asyncio.AbstractEventLoop] = []
+
+    async def serve(_: Settings, _options: desktop.DesktopLaunchOptions) -> int:
+        assert asyncio.get_event_loop_policy() is policy
+        served.append(asyncio.get_running_loop())
+        return 0
+
+    def reject_global_policy_change(_: object) -> None:
+        pytest.fail("The HTTP server must preserve the process event-loop policy")
+
+    monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr(desktop, "is_frozen_bundle", lambda: frozen)
+    monkeypatch.setattr(desktop, "configure_windows_event_loop_policy", lambda: None)
+    monkeypatch.setattr(desktop, "preload_windows_scipy_native", lambda: None)
+    monkeypatch.setattr(desktop, "run_api_server", serve)
+    monkeypatch.setattr(desktop, "build_settings", lambda _: Settings(data_dir=tmp_path))
+    monkeypatch.setattr(policy, "new_event_loop", default_factory)
+    monkeypatch.setattr(asyncio, "SelectorEventLoop", selector_factory)
+    monkeypatch.setattr(asyncio, "set_event_loop_policy", reject_global_policy_change)
+
+    assert desktop.main(["--data-dir", str(tmp_path), "--skip-migrations"]) == 0
+    assert asyncio.get_event_loop_policy() is policy
+    assert len(served) == 1 and served[0].is_closed()
+    if select_locally:
+        selector_factory.assert_called_once_with()
+        default_factory.assert_not_called()
+    else:
+        default_factory.assert_called_once_with()
+        selector_factory.assert_not_called()
+
+
+@pytest.mark.parametrize(
     ("platform", "frozen", "stats_available", "expected_imports"),
     [
         ("win32", False, True, ["scipy.stats"]),
