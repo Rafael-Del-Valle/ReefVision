@@ -9,6 +9,7 @@ weights during inference.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -72,37 +73,11 @@ class ExpandedUltralyticsDetectionProvider(BaseUltralyticsDetectionProvider):
             provider_label="Ultralytics vision",
             allowed_suffixes={".pt", ".pth"},
         )
-        model = _ultralytics_detection_model(model_path)
-        task = str(getattr(model, "task", "detect") or "detect")
-        if task not in {"detect", "segment"}:
-            raise ValidationError(
-                "This ReefVision release currently supports only Ultralytics "
-                "detect and segment checkpoints"
-            )
-        names = (
-            getattr(model, "names", None)
-            or getattr(getattr(model, "model", None), "names", None)
-            or {}
-        )
-        if isinstance(names, dict):
-            class_labels = [str(names[index]) for index in sorted(names)]
-        else:
-            class_labels = [str(item) for item in names]
-        input_size = {"imgsz": getattr(model, "overrides", {}).get("imgsz")}
-        return DetectionModelMetadata(
-            framework="ultralytics",
-            task=task,
-            provider_name=self.provider_name,
-            provider_version=self.provider_version,
-            class_labels=class_labels,
-            input_size=input_size,
+        inspected = self._inspect_loaded_model(_ultralytics_detection_model(model_path))
+        return replace(
+            inspected,
             metadata={
-                "trusted_checkpoint": True,
-                "automatic_downloads_disabled": True,
-                "explicit_checkpoint_required": True,
-                "registered_execution_runtime": "pytorch",
-                "proposal_geometry": "bounding_box",
-                "segmentation_masks_exposed_in_editor": False,
+                **inspected.metadata,
                 "expanded_catalog_runtime": True,
                 "checkpoint_family": model_path.stem,
             },
