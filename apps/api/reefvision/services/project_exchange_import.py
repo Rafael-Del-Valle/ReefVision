@@ -131,6 +131,7 @@ from reefvision.services.project_exchange_reports import remap_report_archive_jo
 from reefvision.services.project_exchange_research_v18 import (
     preserve_research_snapshot,
     validate_research_format,
+    validate_research_images,
 )
 from reefvision.services.project_exchange_reviewer_lab_v15 import (
     restore_reviewer_lab_exchange,
@@ -498,6 +499,8 @@ def import_project_exchange(
             inspection.format_version or "", old_project_id, section_rows, manifest.get("origin")
         )
         validate_frozen_pose_frames(section_rows)
+        if inspection.format_version == "1.8":
+            validate_research_images(old_project_id, section_rows, manifest, archive)
         validate_acquisition_exchange(section_rows)
         validate_computed_exchange_records(old_project_id, section_rows)
         validate_environmental_analysis_exchange(old_project_id, section_rows)

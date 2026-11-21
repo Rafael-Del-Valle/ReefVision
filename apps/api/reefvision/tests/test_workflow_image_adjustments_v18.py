@@ -7,11 +7,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.config import Settings
+from reefvision.jobs.project_exchange import process_project_exchange_export_job
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.ml.providers import DetectionPrediction, DetectionSettings
 from reefvision.services.models import ModelService
 from reefvision.tests.test_image_adjustments_v18 import make_source, save_recipe
 from reefvision.tests.test_model_inference import FakeDetectorRegistrationProvider, register_model
+from reefvision.tests.test_scientific_project_exchange import import_archive
 
 
 def test_saved_adjustment_replays_two_identical_typed_artifacts_and_rejects_wrong_pin(
@@ -103,8 +105,8 @@ def test_saved_adjustment_replays_two_identical_typed_artifacts_and_rejects_wron
     graph_id = save_graph()
     app = cast(FastAPI, client.app)
 
-    def replay(record_id: str) -> dict[str, Any]:
-        queued = client.post(base + "/workflow-runs", json={"graph_record_id": record_id})
+    def replay(record_id: str, project_base: str = base) -> dict[str, Any]:
+        queued = client.post(project_base + "/workflow-runs", json={"graph_record_id": record_id})
         assert queued.status_code == 202, queued.text
         run = queued.json()
         process_workflow_run_job(test_settings, app.state.session_factory, run["job_id"])
@@ -126,3 +128,34 @@ def test_saved_adjustment_replays_two_identical_typed_artifacts_and_rejects_wron
     assert failed["run"]["status"] == "failed"
     assert not any(row["data_type"] == "adjusted_image_reference" for row in failed["artifacts"])
     assert len(worker_inputs) == 2
+
+    image = image_id
+    recipe = saved["id"]
+    project_base = base
+    for _ in range(2):
+        package = client.post(
+            project_base + "/exchange-packages",
+            json={"include_media": True, "include_model_weights": True},
+        ).json()
+        assert process_project_exchange_export_job(
+            test_settings, app.state.session_factory, package["job_id"]
+        )
+        download = client.get("/api/v1/exchange-packages/" + package["package"]["id"] + "/download")
+        assert download.status_code == 200
+        imported = import_archive(client, download.content)
+        assert imported.status_code == 201, imported.text
+        copy = imported.json()
+        project_base = "/api/v1/projects/" + copy["project_id"]
+        mapping = copy["package"]["options_json"]["id_map"]
+        image, recipe, graph_id = mapping[image], mapping[recipe], mapping[graph_id]
+        assert client.get(f"/api/v1/images/{image}/content").content == original
+        record = client.get(f"/api/v1/images/{image}/adjustments/{recipe}").json()
+        assert record["receipt"] == receipt and record["content_sha256"] == saved["content_sha256"]
+        rerun = replay(graph_id, project_base)
+        assert rerun["run"]["status"] == "succeeded", rerun
+        [reference] = [
+            a for a in rerun["artifacts"] if a["data_type"] == "adjusted_image_reference"
+        ]
+        assert reference["payload_json"]["receipt"] == receipt
+        assert reference["payload_json"]["image_ids"] == [image]
+    assert worker_inputs == [receipt["rendition_sha256"]] * 4

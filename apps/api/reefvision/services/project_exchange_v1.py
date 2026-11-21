@@ -51,6 +51,7 @@ from reefvision.db.models import (
     WorkflowRun,
 )
 from reefvision.db.models.field_capture import FieldCaptureObservation
+from reefvision.db.models.multispectral import SpectralAcquisition
 from reefvision.db.models.pose_active_learning import (
     PoseActiveLearningCandidate,
     PoseActiveLearningRound,
@@ -821,6 +822,14 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             .limit(1)
         )
         includes_media = bool(queued_package.options_json.get("include_media", False))
+        if not includes_media and self.session.scalar(
+            select(SpectralAcquisition.id)
+            .where(SpectralAcquisition.project_id == queued_package.project_id)
+            .limit(1)
+        ):
+            raise ValidationError(
+                "Include original band media to export acquisitions and reproduce spectral indices"
+            )
         if not includes_media and has_spatial_sources:
             raise ValidationError(
                 "Project Exchange must include original media when the project has spatial sources"

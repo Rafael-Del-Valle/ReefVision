@@ -27,7 +27,10 @@ from reefvision.services.project_exchange_field_v15 import (
 )
 from reefvision.services.project_exchange_monitoring_v17 import validate_monitoring_exchange
 from reefvision.services.project_exchange_qc_v16 import QC_FORMATS, validate_qc_exchange
-from reefvision.services.project_exchange_research_v18 import validate_research_format
+from reefvision.services.project_exchange_research_v18 import (
+    validate_research_format,
+    validate_research_images,
+)
 from reefvision.services.project_exchange_schedules import validate_schedule_exchange
 from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, validate_v15_exchange
 from reefvision.services.static_comparison import STATIC_COMPARISON_JOB
@@ -357,6 +360,10 @@ def inspect_project_exchange(
                     if version not in FIELD_EXCHANGE_FORMATS and len(ordinary_media) != len(media):
                         raise ValidationError("Field originals require the 1.5 exchange format")
                     media_gaps = _integrated_media_gaps(section_rows, ordinary_media)
+                    if version == "1.8":
+                        validate_research_images(
+                            manifest["project"]["id"], section_rows, manifest, archive
+                        )
                     if version in FIELD_EXCHANGE_FORMATS:
                         project_id = str(manifest["project"]["id"])
                         validate_field_exchange(
