@@ -283,10 +283,10 @@ def inspect_project_exchange(
                                 validate_origin,
                             )
                             from reefvision.services.project_exchange_workflows import (
-                                has_spatial_workflow_history,
+                                has_portable_workflow_history,
                             )
 
-                            if has_spatial_workflow_history(section_rows):
+                            if has_portable_workflow_history(section_rows):
                                 validate_origin(manifest["origin"])
                     except ValidationError as exc:
                         errors.append(str(exc))
