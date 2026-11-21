@@ -116,7 +116,9 @@ def freeze_box(session: Session, project: str, exposure: Exposure) -> dict[str, 
         capture, recovered_fingerprint = explicit
         fingerprints.add(recovered_fingerprint)
     if image.source_metadata_sha256 and image.source_metadata_sha256 not in fingerprints:
-        raise ConflictError("The registered image geometry or acquisition time changed after review")
+        raise ConflictError(
+            "The registered image geometry or acquisition time changed after review"
+        )
     capture_utc = (
         capture.astimezone(UTC).isoformat() if capture and capture.utcoffset() is not None else None
     )
