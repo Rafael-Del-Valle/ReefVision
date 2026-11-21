@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T09:31:24Z`
+Updated: `2026-11-21T10:13:56Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1541,6 +1541,7 @@ Evidence:
 - `windows_installed`: The original 1.9 and original 1.8 packaged backends preserved 37 populated table fingerprints and three model-to-training links. The prior binary refused the upgraded copy and reopened a separate verified restoration of all 112 files and 27,777,736 bytes. — `docs/validation/1.9-frozen-research.json` (`rv19-ancestry-integration-original-rollback-96476bc46`)
 - `windows_installed`: The local 1.9 and original 1.8 executables preserved 37 populated table fingerprints and three original training/model links. The older binary refused the upgraded copy and safely wrote to a separately restored 112-file, 27,777,736-byte backup. — `docs/validation/1.9-frozen-research.json` (`rv19-ancestry-integration-matched-media-restore-15be85268`)
 - `windows_installed`: The packaged 1.9 application preserved the 37 populated tables and three model links of the generated 1.8 study. The older application refused the newer profile, then reopened a separate restoration of all 112 files. Two transfers of a mixed-history study also preserved the six checkpoint identities, four validation-bound runs and matching local file hashes. — `docs/validation/1.9-frozen-research.json` (`rv19-ancestry-integration-rich-upgrade-rollback-and-transfer-6334bcbb8`)
+- `windows_installed`: All eleven registered Windows scenarios passed on the original #131 MSI. The direct 1.8 upgrade preserved the study, rejected the newer schema without changing the database, reopened a separate ten-file backup with the old application, then removed program binaries and retained project data. The eleven scenario artifacts contained 225 independently rehashed members. — `docs/validation/1.9-frozen-research.json` (`rv19-original-matrix-96476bc46`)
 - `physical_hardware`: The original 1.8 and joined local 1.9 backends preserved 37 populated table fingerprints and three training/model links. The older binary refused the newer copy, then reopened and wrote to the restored study after all 112 backup files and 27,777,736 bytes were rehashed. — `docs/validation/1.9-frozen-research.json` (`rv19-ancestry-integration-local-rollback-7797efad6`)
 - `representative_data`: none recorded
 

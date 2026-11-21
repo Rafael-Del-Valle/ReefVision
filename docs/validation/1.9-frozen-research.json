@@ -1,7 +1,16 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T09:15:12.328311+00:00",
-  "candidate_pr": 131,
+  "updated_utc": "2026-11-21T10:13:55.968706+00:00",
+  "candidate_pr": 150,
+  "integrated_source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
+  "selected_qualification": "exchanged_pose_training",
+  "initial_candidate_pr": 131,
+  "initial_integrated_source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+  "initial_qualification_sections": [
+    "source_gates",
+    "production_run",
+    "local_windows_package"
+  ],
   "scope": "Generated research projects. Registered installer trials identify their own package.",
   "reviewed_predecessors": {
     "product_pr": 119,
@@ -247,7 +256,6 @@
     "The original Windows package and registered tests, physical GPU workflow and full backend runs retain individual identities in the owner review.",
     "Independent reference material, signing credentials and an enforcing Smart App Control machine remain open."
   ],
-  "integrated_source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
   "source_gates": {
     "frontend_unit": 966,
     "standard_browser_pass": 15,
@@ -1164,9 +1172,16 @@
       "sha256": "e6753b92c5a2a26838582a5732bec186c00aca50acb77c9e8a211422a9233f26"
     },
     "bounded_storage_next_attempt": {
-      "qa_source": "cec3744bb7442bb591f3b7b34e512d1e8cc78764",
-      "run": 44879955097,
-      "job": 136772839520
+      "qa_branch": "codex/reefvision-1.9-original-storage-proof",
+      "qa_commit": "df22d467861efa030f8c7626b1a51080bc62f535",
+      "pr": 137,
+      "run": 44892936947,
+      "job": 136812458336,
+      "original_msi_sha256": "86bc21d9bffbafd514b355e9d57266cfea5d93df7e6ee46fb653e15f599e2f5f",
+      "journal_mode_rehearsal": {
+        "file": "1.9/checkpoints/96476bc46/official/evidence/bounded-volume-recovery/journal-rehearsal/index.json",
+        "sha256": "67fa0fd3a869a8df69745adc4c8d58ada91a7473d99bf2d84ed89e1b0a4d6fdd"
+      }
     },
     "offline_after_producer_available": {
       "run": 44867740231,
@@ -1187,7 +1202,83 @@
         "file": "1.9/checkpoints/96476bc46/official/first-clean-verified-snapshot.json",
         "sha256": "6c3e166c8d67c1ee4ae1ce0752cb745bfe7f1beac238c64d5843d16351c085fb"
       }
-    }
+    },
+    "registered_matrix": {
+      "product_pr": 131,
+      "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+      "run": 44867493658,
+      "msi_sha256": "86bc21d9bffbafd514b355e9d57266cfea5d93df7e6ee46fb653e15f599e2f5f",
+      "registered_scenarios": 11,
+      "rehashed_artifact_members": 225,
+      "ordinary_desktop_journeys": 31,
+      "scheduler_restart_phases": 2,
+      "scenarios": [
+        "clean",
+        "published-1.0.3",
+        "validated-1.3",
+        "validated-1.4",
+        "validated-1.5",
+        "validated-1.6",
+        "validated-1.7",
+        "validated-1.8",
+        "draft-1.4-0038",
+        "draft-1.4-0039",
+        "historical-qc"
+      ],
+      "direct_1_8_rollback": {
+        "job": 136770245553,
+        "artifact": {
+          "id": 14702811925,
+          "sha256": "57c4fb01204e9a210af2ac17429213aa972636f2be36fd9bd8ee38be322dd27e",
+          "files_rehashed": 11
+        },
+        "older_backup_files": 10,
+        "historical_schema_rejection": "Historical 1.8.0 rejected schema b19_registration_0001 (backend explicitly rejected migration revision b19_registration_0001); database SHA-256 remained 6532957781bc6193d3eef76d0153e3a4a2d90ae54f0c6fc144661c827dcb0122.",
+        "historical_backup_reopen": "Historical 1.8.0 reopened a separate b18_spectral_0002 recovery of 10 verified files; project, original SHA-256 431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460 and annotation coordinates matched. Backup manifest SHA-256 a8d430411ef6bf40eeaa21ed94883c4bef898544a5fdd9fd80a371319c765799."
+      },
+      "receipt": {
+        "file": "1.9/checkpoints/96476bc46/official/full-hosted-role-validation.json",
+        "sha256": "ca97cf020bb22f0f468217f41b7ff02f4e7a1f1300e8ba419e3f4a5501b9b006"
+      }
+    },
+    "bounded_storage_attempts": [
+      {
+        "attempt": "attempt-1",
+        "result": "failed-before-application-launch",
+        "job_id": 136738091375,
+        "artifact_id": 14697840077,
+        "receipt": {
+          "file": "1.9/checkpoints/96476bc46/official/evidence/bounded-volume-recovery/attempt-1/index.json",
+          "sha256": "e6753b92c5a2a26838582a5732bec186c00aca50acb77c9e8a211422a9233f26"
+        },
+        "actual_editor_recovery_verified": false,
+        "cleanup": {
+          "success_before_cleanup": false,
+          "listener_closed": false,
+          "sidecar_closed": false,
+          "mounted_volume_detached": true,
+          "uninstalled": true
+        }
+      },
+      {
+        "attempt": "attempt-2",
+        "result": "incomplete",
+        "job_id": 136772839520,
+        "artifact_id": 14702442640,
+        "receipt": {
+          "file": "1.9/checkpoints/96476bc46/official/evidence/bounded-volume-recovery/attempt-2/index.json",
+          "sha256": "db517043f09c27b15d44a37e8ab6e9c803d3905d1751bccaf6c86570103aafe2"
+        },
+        "actual_editor_recovery_verified": false,
+        "cleanup": {
+          "success_before_cleanup": false,
+          "listener_closed": true,
+          "sidecar_closed": true,
+          "mounted_volume_detached": true,
+          "uninstalled": true
+        }
+      }
+    ]
   },
   "active_product_pr": 150,
   "exchanged_pose_training": {
