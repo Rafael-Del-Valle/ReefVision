@@ -32,6 +32,10 @@ from reefvision.ml.ultralytics_registry import (
 from reefvision.services import (
     workflow_runtime_adapters as runtime_adapters,
 )
+from reefvision.services.workflow_pose_sources import (
+    resolve_frozen_pose_dataset,
+    verify_pose_dataset_separation,
+)
 from reefvision.storage.datasets import (
     canonical_json_sha256,
 )
@@ -167,42 +171,6 @@ def _optional_payload(
         raise ValidationError(f"Pose Model Training accepts at most one '{port_id}' artifact")
 
     return dict(artifacts[0].payload_json or {})
-
-
-def _pose_dataset(
-    session: Session,
-    *,
-    project_id: str,
-    payload: dict[str, Any],
-    role: str,
-) -> PoseTrainingDataset:
-    payload_project = payload.get("project_id")
-
-    if payload_project is not None and str(payload_project) != project_id:
-        raise ValidationError(f"Pose {role} dataset belongs to another project")
-
-    dataset_id = str(payload.get("dataset_id") or "")
-
-    if not dataset_id:
-        raise ValidationError(f"Pose {role} dataset artifact is missing dataset_id")
-
-    dataset = session.get(
-        PoseTrainingDataset,
-        dataset_id,
-    )
-
-    if dataset is None or dataset.project_id != project_id:
-        raise ValidationError(f"Pose {role} dataset does not belong to this project")
-
-    if dataset.status != "complete":
-        raise ValidationError(f"Pose {role} dataset must be complete")
-
-    advertised_manifest = str(payload.get("manifest_sha256") or "")
-
-    if advertised_manifest and advertised_manifest != dataset.manifest_sha256:
-        raise ValidationError(f"Pose {role} dataset manifest no longer matches persisted truth")
-
-    return dataset
 
 
 def _seed_pose_model(
@@ -457,7 +425,7 @@ def create_pose_workflow_training_result(
     if project is None:
         raise ValidationError("Pose training project was not found")
 
-    dataset = _pose_dataset(
+    dataset = resolve_frozen_pose_dataset(
         session,
         project_id=project_id,
         payload=dataset_payload,
@@ -465,7 +433,7 @@ def create_pose_workflow_training_result(
     )
 
     validation_dataset = (
-        _pose_dataset(
+        resolve_frozen_pose_dataset(
             session,
             project_id=project_id,
             payload=(validation_dataset_payload or {}),
@@ -497,6 +465,8 @@ def create_pose_workflow_training_result(
         raise ValidationError(
             "This pose retraining configuration requires a separate frozen validation dataset"
         )
+    if require_validation and validation_dataset is not None:
+        verify_pose_dataset_separation(session, dataset, validation_dataset)
 
     provider_id = str(parameters.get("provider_id") or "ultralytics").strip().casefold()
     if provider_id not in SUPPORTED_POSE_TRAINING_PROVIDERS:
@@ -940,7 +910,9 @@ def execute_pose_training_dataset_adapter(
     parameters: dict[str, Any],
     inputs: dict[str, list[WorkflowArtifact]],
 ) -> list[dict[str, Any]]:
-    dataset = _pose_dataset(session, project_id=project_id, payload=parameters, role="training")
+    dataset = resolve_frozen_pose_dataset(
+        session, project_id=project_id, payload=parameters, role="training"
+    )
     return [
         {
             "port_id": "dataset",

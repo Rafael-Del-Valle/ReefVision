@@ -1077,6 +1077,34 @@ export function WorkflowVisualEditor({
                           }
                         />
                       </label>
+                      {(
+                        [
+                          ["base_channels", "Base channels", 1, 32],
+                          ["fpn_channels", "Feature pyramid channels", 4, ""],
+                        ] as const
+                      ).map(([key, label, minimum, fallback]) => (
+                        <label key={key}>
+                          {label}
+                          <input
+                            type="number"
+                            min={minimum}
+                            value={String(
+                              selectedTrainingConfig[key] ?? fallback,
+                            )}
+                            placeholder={
+                              key === "fpn_channels" ? "Automatic" : undefined
+                            }
+                            onChange={(event) =>
+                              setTrainingConfigParameter(
+                                key,
+                                event.target.value === ""
+                                  ? null
+                                  : Number(event.target.value),
+                              )
+                            }
+                          />
+                        </label>
+                      ))}
                     </>
                   ) : (
                     <label>
@@ -1102,6 +1130,42 @@ export function WorkflowVisualEditor({
                     initial_model. Remove that connection when choosing from
                     scratch; modes never switch automatically.
                   </p>
+                </div>
+              )}
+
+              {selectedNode.node_type === "pose_inference" && (
+                <div className="workflow-parameter-grid">
+                  <label>
+                    Inference device
+                    <select
+                      value={String(selectedNode.parameters?.device ?? "auto")}
+                      onChange={(event) =>
+                        setSelectedParameter("device", event.target.value)
+                      }
+                    >
+                      <option value="auto">Automatic</option>
+                      <option value="cpu">CPU</option>
+                      <option value="cuda">CUDA</option>
+                    </select>
+                  </label>
+                  <label>
+                    Pose confidence threshold
+                    <input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={Number(
+                        selectedNode.parameters?.confidence ?? 0.25,
+                      )}
+                      onChange={(event) =>
+                        setSelectedParameter(
+                          "confidence",
+                          Number(event.target.value),
+                        )
+                      }
+                    />
+                  </label>
                 </div>
               )}
 
@@ -1216,6 +1280,8 @@ export function WorkflowVisualEditor({
                 (!projectId ||
                   (!hasScientificNodeControls(selectedNode.node_type) &&
                     selectedNode.node_type !== "qc_review_queue" &&
+                    selectedNode.node_type !== "pose_training_dataset" &&
+                    selectedNode.node_type !== "project_video_source" &&
                     !temporalKind(selectedNode.node_type))) && (
                   <div className="workflow-parameter-grid">
                     {parameterKeys
@@ -1235,6 +1301,16 @@ export function WorkflowVisualEditor({
                             "device",
                             "precision",
                             "training_config",
+                            "require_validation_dataset",
+                          ].includes(key),
+                      )
+                      .filter(
+                        (key) =>
+                          selectedNode.node_type !== "pose_inference" ||
+                          ![
+                            "device",
+                            "confidence",
+                            "require_held_out_recording",
                           ].includes(key),
                       )
                       .filter(

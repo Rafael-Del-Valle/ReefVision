@@ -285,6 +285,10 @@ export function VideoTrackingWorkspace({
   >([]);
   const [showMovementLines, setShowMovementLines] = useState(true);
   const [sourceOverlayEnabled, setSourceOverlayEnabled] = useState(false);
+  const [workflowReviewRound, setWorkflowReviewRound] = useState<{
+    videoId: string;
+    roundId?: string;
+  } | null>(null);
   const [previewFrameIndex, setPreviewFrameIndex] = useState(0);
 
   const [groundTruthTrackIds, setGroundTruthTrackIds] = useState<string[]>([]);
@@ -1437,7 +1441,8 @@ export function VideoTrackingWorkspace({
     if (
       (workspaceCommand.type === "select_video" ||
         workspaceCommand.type === "open_comparison_frame" ||
-        workspaceCommand.type === "open_pose_evidence") &&
+        workspaceCommand.type === "open_pose_evidence" ||
+        workspaceCommand.type === "open_workflow_pose_review") &&
       videosQuery.data === undefined
     ) {
       return;
@@ -1445,7 +1450,8 @@ export function VideoTrackingWorkspace({
 
     if (
       workspaceCommand.type === "open_pose_evidence" ||
-      workspaceCommand.type === "open_comparison_frame"
+      workspaceCommand.type === "open_comparison_frame" ||
+      workspaceCommand.type === "open_workflow_pose_review"
     ) {
       const targetExists = videosQuery.data?.some(
         (video) => video.id === workspaceCommand.videoId,
@@ -1456,8 +1462,9 @@ export function VideoTrackingWorkspace({
       }
       if (
         targetExists &&
-        workspaceCommand.type === "open_pose_evidence" &&
-        workspaceCommand.sourceTrackId &&
+        (workspaceCommand.type === "open_workflow_pose_review" ||
+          (workspaceCommand.type === "open_pose_evidence" &&
+            workspaceCommand.sourceTrackId)) &&
         !tracksQuery.data
       )
         return;
@@ -1506,6 +1513,19 @@ export function VideoTrackingWorkspace({
         setSelectedTrackId(workspaceCommand.sourceTrackId ?? "");
       }
       setPoseEvidence(workspaceCommand);
+    }
+
+    if (
+      workspaceCommand.type === "open_workflow_pose_review" &&
+      selectedVideo?.id === workspaceCommand.videoId &&
+      tracksQuery.data?.some((track) => track.id === workspaceCommand.trackId)
+    ) {
+      setSelectedTrackId(workspaceCommand.trackId);
+      setSourceOverlayEnabled(true);
+      setWorkflowReviewRound({
+        videoId: workspaceCommand.videoId,
+        roundId: workspaceCommand.roundId,
+      });
     }
 
     if (workspaceCommand.type === "select_video") {
@@ -2049,8 +2069,14 @@ export function VideoTrackingWorkspace({
               </>
             )}
             <PoseActiveLearningPanel
+              key={`${selectedVideo.id}/${workflowReviewRound?.roundId ?? ""}`}
               projectId={project.id}
               videoId={selectedVideo.id}
+              initialRoundId={
+                workflowReviewRound?.videoId === selectedVideo.id
+                  ? workflowReviewRound.roundId
+                  : undefined
+              }
               activeCandidateId={activePoseActiveLearningCandidate?.id ?? null}
               selectedTrack={selectedTrack ?? undefined}
               onOpenCandidate={(candidate) => {

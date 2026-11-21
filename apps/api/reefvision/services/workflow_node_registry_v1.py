@@ -214,6 +214,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
                     "device": "auto",
                     "confidence": 0.25,
                     "allow_zero_detections": False,
+                    "require_held_out_recording": False,
                 },
                 execution_state="executable_pose_workflow",
                 executable=True,
@@ -763,7 +764,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             )
         ],
         required_parameters=["dataset_id"],
-        optional_parameters={},
+        optional_parameters={"manifest_sha256": None},
         execution_state="executable_pose_dataset",
         executable=True,
         implementation_notes=["Preserves the frozen dataset manifest and landmark schema."],
