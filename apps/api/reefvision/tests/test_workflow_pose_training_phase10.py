@@ -1410,7 +1410,7 @@ def test_saved_native_reefpose_workflow_executes_and_replays(
 
 
 @pytest.mark.parametrize(
-    "fault", ["missing", "provider", "artifact", "metrics", "intact", "historical"]
+    "fault", ["missing", "provider", "artifact", "metrics", "intact", "historical", "checkpoint"]
 )
 def test_saved_pose_retry_requires_its_current_experiment_lineage(
     client: TestClient,
@@ -1424,10 +1424,41 @@ def test_saved_pose_retry_requires_its_current_experiment_lineage(
     )
     project, dataset = _frozen_dataset(client, monkeypatch)
     app = cast(FastAPI, client.app)
+    factory = app.state.session_factory
     url = f"/api/v1/projects/{project['id']}"
-    saved = client.post(
-        url + "/workflow-graphs", json={"graph": _native_pose_workflow_graph(str(dataset["id"]))}
-    )
+    graph = _native_pose_workflow_graph(str(dataset["id"]))
+    prior_checkpoint: bytes | None = None
+    prior_training_id: str | None = None
+    if fault == "checkpoint":
+        prior = client.post(url + "/workflow-graphs", json={"graph": graph})
+        assert prior.status_code == 201, prior.text
+        prior_queued = client.post(
+            url + "/workflow-runs", json={"graph_record_id": prior.json()["id"]}
+        )
+        assert prior_queued.status_code == 202, prior_queued.text
+        assert process_workflow_run_job(app.state.settings, factory, prior_queued.json()["job_id"])
+        prior_detail = client.get(f"/api/v1/workflow-runs/{prior_queued.json()['id']}").json()
+        prior_artifact = next(
+            row["payload_json"]
+            for row in prior_detail["artifacts"]
+            if row["data_type"] == "training_result"
+        )
+        prior_training_id = prior_artifact["training_run_id"]
+        prior_path = resolve_managed_project_path(
+            app.state.settings, prior_artifact["result_checkpoint_path"]
+        )
+        prior_checkpoint = prior_path.read_bytes()
+        assert (
+            hashlib.sha256(prior_checkpoint).hexdigest()
+            == prior_artifact["result_checkpoint_sha256"]
+        )
+        assert ReefPoseRegistrationProvider().inspect_model(prior_path).task == "pose"
+        # Reproduce using a training-only graph so registration cannot mask an incorrect result.
+        nodes, edges = graph["nodes"], graph["edges"]
+        assert isinstance(nodes, list) and isinstance(edges, list)
+        graph["nodes"], graph["edges"] = nodes[:2], edges[:1]
+
+    saved = client.post(url + "/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     queued = client.post(url + "/workflow-runs", json={"graph_record_id": saved.json()["id"]})
     assert queued.status_code == 202, queued.text
@@ -1443,7 +1474,6 @@ def test_saved_pose_retry_requires_its_current_experiment_lineage(
             raise OSError("Synthetic interruption after durable training completion")
         return outputs
 
-    factory = app.state.session_factory
     with monkeypatch.context() as interrupted:
         interrupted.setattr(
             WorkflowExecutionService, "execute_node", interrupt_after_completed_child
@@ -1454,12 +1484,18 @@ def test_saved_pose_retry_requires_its_current_experiment_lineage(
     assert "training_result" not in {row["data_type"] for row in before["artifacts"]}
 
     with factory() as session:
-        child = session.scalar(select(TrainingRun).where(TrainingRun.project_id == project["id"]))
+        child = session.scalar(
+            select(TrainingRun).where(
+                TrainingRun.project_id == project["id"], TrainingRun.id != prior_training_id
+            )
+        )
         assert child is not None and child.status == "completed" and child.result_checkpoint_path
         child_id = child.id
         child_job_id = child.job_id
         checkpoint = resolve_managed_project_path(app.state.settings, child.result_checkpoint_path)
-        sha = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+        original_checkpoint = checkpoint.read_bytes()
+        sha = hashlib.sha256(original_checkpoint).hexdigest()
+        assert child.artifact_manifest_json["result_checkpoint_sha256"] == sha
         experiment = session.scalar(
             select(ExperimentRecord).where(ExperimentRecord.training_run_id == child_id)
         )
@@ -1472,6 +1508,18 @@ def test_saved_pose_retry_requires_its_current_experiment_lineage(
                 snapshot.pop("schema_version")
                 snapshot.pop("pose_training_dataset_manifest_sha256")
                 child.draft_snapshot_json = snapshot
+                manifest = dict(child.artifact_manifest_json)
+                for key in (
+                    "result_checkpoint_path",
+                    "result_checkpoint_sha256",
+                    "best_checkpoint_sha256",
+                ):
+                    manifest.pop(key, None)
+                manifest["artifacts"] = [
+                    {key: value for key, value in artifact.items() if key != "sha256"}
+                    for artifact in manifest["artifacts"]
+                ]
+                child.artifact_manifest_json = manifest
         elif fault == "provider":
             experiment.provider_id = "unrelated-provider"
         elif fault == "artifact":
@@ -1483,6 +1531,12 @@ def test_saved_pose_retry_requires_its_current_experiment_lineage(
             experiment.summary_metrics_json = {**experiment.summary_metrics_json, "train_loss": -1}
         session.commit()
 
+    if prior_checkpoint is not None:
+        assert prior_checkpoint != original_checkpoint
+        checkpoint.write_bytes(prior_checkpoint)
+        denied = client.post(url + "/models/register-from-run", json={"training_run_id": child_id})
+        assert denied.status_code == 400, denied.text
+        assert "checkpoint checksum changed after completion" in denied.json()["detail"]
     retry = client.post(f"/api/v1/jobs/{job_id}/retry")
     assert retry.status_code == 200, retry.text
     processed = process_workflow_run_job(app.state.settings, factory, job_id)
@@ -1491,24 +1545,50 @@ def test_saved_pose_retry_requires_its_current_experiment_lineage(
         row["payload_json"] for row in detail["artifacts"] if row["data_type"] == "training_result"
     ]
     with factory() as session:
-        assert session.scalars(select(TrainingRun.id)).all() == [child_id]
+        expected_runs = {child_id, prior_training_id} if prior_training_id else {child_id}
+        assert set(session.scalars(select(TrainingRun.id))) == expected_runs
         child_job = session.get(Job, child_job_id)
         assert child_job is not None and child_job.status == "succeeded"
-    assert hashlib.sha256(checkpoint.read_bytes()).hexdigest() == sha
+    assert checkpoint.read_bytes() == (prior_checkpoint or original_checkpoint)
     if fault in {"intact", "historical"}:
         assert processed and detail["run"]["status"] == "succeeded", detail["run"]
         assert len(training) == 1
         assert training[0]["experiment_id"] == (experiment_id if fault == "intact" else None)
         assert training[0]["result_checkpoint_sha256"] == sha
+        if fault == "historical":
+            assert "result_checkpoint_sha256" not in training[0]["artifact_manifest"]
     else:
-        expected = (
-            "experiment registry record is missing"
-            if fault == "missing"
-            else "experiment provenance changed"
-        )
-        assert not processed, detail["run"]
+        expected = {
+            "missing": "experiment registry record is missing",
+            "checkpoint": "checkpoint checksum changed after completion",
+        }.get(fault, "experiment provenance changed")
+        assert not processed, {
+            "run": detail["run"]["status"],
+            "completed_checkpoint_sha256": sha,
+            "replacement_checkpoint_sha256": hashlib.sha256(prior_checkpoint).hexdigest()
+            if prior_checkpoint is not None
+            else None,
+            "published_checkpoint_sha256": [row["result_checkpoint_sha256"] for row in training],
+        }
         assert detail["run"]["status"] == "failed" and expected in detail["run"]["error_message"]
         assert training == []
+    if fault == "checkpoint":
+        checkpoint.write_bytes(original_checkpoint)
+        assert client.post(f"/api/v1/jobs/{job_id}/retry").status_code == 200
+        assert process_workflow_run_job(app.state.settings, factory, job_id)
+        recovered = client.get(f"/api/v1/workflow-runs/{run_id}").json()
+        output = next(
+            row["payload_json"]
+            for row in recovered["artifacts"]
+            if row["data_type"] == "training_result"
+        )
+        assert output["training_run_id"] == child_id
+        assert output["result_checkpoint_sha256"] == sha
+        registered = client.post(
+            url + "/models/register-from-run", json={"training_run_id": child_id}
+        )
+        assert registered.status_code == 200, registered.text
+        assert registered.json()["sha256"] == sha
 
 
 @pytest.mark.integration
