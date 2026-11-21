@@ -28,7 +28,7 @@ export interface PoseLandmarkGroup {
 }
 
 export interface PoseLandmarkSchema {
-  schema_version: "pose-landmarks-0001";
+  schema_version: "pose-landmarks-0001" | "pose-anatomy-0002";
   schema_id?: string;
   schema_revision?: number;
   content_hash?: string;
@@ -55,7 +55,10 @@ export function poseLandmarkSchemaFromMetadata(
   const raw = metadata?.pose_landmark_schema;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const schema = raw as Record<string, unknown>;
-  if (schema.schema_version !== "pose-landmarks-0001") return null;
+  const version = schema.schema_version;
+  if (version !== "pose-landmarks-0001" && version !== "pose-anatomy-0002") {
+    return null;
+  }
   if (!Array.isArray(schema.groups) || !Array.isArray(schema.expanded_labels)) {
     return null;
   }
@@ -123,8 +126,24 @@ export function poseLandmarkSchemaFromMetadata(
       )
     : undefined;
 
+  if (
+    version === "pose-anatomy-0002" &&
+    (!schemaId ||
+      !schemaRevision ||
+      !contentHash ||
+      !/^[0-9a-f]{64}$/i.test(contentHash) ||
+      keypointCount === 0 ||
+      keypointCount !== expandedLabels.length ||
+      landmarks?.length !== keypointCount ||
+      !edges ||
+      !Array.isArray(schema.edges) ||
+      edges.length !== schema.edges.length)
+  ) {
+    return null;
+  }
+
   return {
-    schema_version: "pose-landmarks-0001",
+    schema_version: version,
     schema_id: schemaId,
     schema_revision: schemaRevision,
     content_hash: contentHash,
