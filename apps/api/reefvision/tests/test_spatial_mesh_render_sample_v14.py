@@ -418,6 +418,121 @@ def test_patch_preserving_display_recovers_small_hidden_component(
     assert hashes[0] == hashes[1]
 
 
+def test_patch_only_preview_prefers_largest_patches_over_arbitrary_end_faces(
+    client: TestClient,
+) -> None:
+    """When 513 patches compete for 512 display slots, keep 512 largest patches."""
+    vertices: list[list[float]] = []
+    faces: list[list[int]] = []
+    for index in range(513):
+        x = float(index * 3)
+        # The first and last faces have less reconstructed area than all
+        # interior patches. Face order is not a scientific area ranking.
+        height = 0.2 if index in (0, 512) else 2.0
+        vertices.extend([[x, 0.0, 0.0], [x + 1.0, 0.0, 0.0], [x, height, 0.0]])
+        faces.append([3 * index, 3 * index + 1, 3 * index + 2])
+    params = {
+        "vertices": vertices,
+        "faces": faces,
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic unreviewed patch-ranking reference",
+        "relative_scale_uncertainty": 0.1,
+    }
+    uniform = measure_mesh_preview(**params)
+    patch_only = measure_mesh_preview(
+        **params, preserve_edge_connected_patches_in_preview=True
+    )
+    combined = measure_mesh_preview(
+        **params,
+        preserve_axis_extrema_in_preview=True,
+        preserve_edge_connected_patches_in_preview=True,
+    )
+    assert patch_only["edge_connected_patch_count"] == 513
+    assert patch_only["preview_face_count"] == 512
+    assert patch_only["preview_sampling_strategy"] == "uniform_face_index_patch_preserving"
+    assert len(set(patch_only["preview_face_indices"])) == 512
+    assert 511 not in uniform["preview_face_indices"]
+    assert 511 in patch_only["preview_face_indices"]
+    assert 512 not in patch_only["preview_face_indices"]
+    assert patch_only["preview_omitted_edge_connected_patch_indices"] == [512]
+    assert patch_only["preview_surface_area_fraction"] > uniform["preview_surface_area_fraction"]
+    assert "preview_omits_edge_connected_mesh_patches" in patch_only["qc_warnings"]
+    # The combined policy deliberately prioritizes source-axis extrema and
+    # therefore may omit an additional high-area patch at fixed display size.
+    assert 512 in combined["preview_face_indices"]
+    assert combined["preview_omitted_axis_extremum_sides"] == []
+    assert combined["preview_omitted_edge_connected_patch_indices"] == [511]
+    for key in (
+        "surface_area_m2",
+        "surface_area_scale_interval_m2",
+        "axis_aligned_dimensions_m",
+        "edge_connected_patch_geometry_sha256",
+        "enclosed_volume_m3",
+    ):
+        assert patch_only[key] == uniform[key] == combined[key]
+    assert patch_only["provenance"]["geometry_sha256"] == uniform["provenance"][
+        "geometry_sha256"
+    ]
+    assert patch_only["provenance"]["calibration_verified"] is False
+    assert patch_only["measurement_status"] == "caller_supplied_unverified"
+
+    project_id = str(create_project(client, "Largest reconstructed patch first")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    request_params = {**params, "preserve_edge_connected_patches_in_preview": True}
+    response = client.post(f"{base}/spatial/mesh-preview", json=request_params)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    assert expected["preview_face_indices"] == patch_only["preview_face_indices"]
+    assert expected["surface_area_m2"] == patch_only["surface_area_m2"]
+    assert expected["provenance"]["calibration_verified"] is False
+    assert expected["provenance"]["specimen_identity_verified"] is False
+
+    graph = {
+        "graph_id": "area-ranked-over-capacity-patches-v14",
+        "name": "Conservative area-ranked mesh display",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": request_params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == expected
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
+
+
 @pytest.mark.parametrize("invalid", [1, "true", None])
 def test_patch_preserving_preview_requires_strict_boolean(
     client: TestClient, invalid: object
