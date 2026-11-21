@@ -704,13 +704,27 @@ def measure_point_cloud_preview(
         or preserve_largest_axis_gap_boundary_loci_in_preview
         or preserve_distinct_xyz_loci_in_preview
     ) and len(vertices) > preview_count:
-        protected = {0, len(vertices) - 1}
+        # Complete distinct-locus retention has priority over the otherwise
+        # conventional last acquisition row. With exactly 512 unique XYZ loci
+        # and a duplicate final row, pinning that duplicate first would reject
+        # a scientifically feasible 512-locus preview as "over budget".
+        protected = (
+            set(distinct_locus_indices)
+            if preserve_distinct_xyz_loci_in_preview
+            else {0, len(vertices) - 1}
+        )
         if preserve_axis_extrema_in_preview:
             protected.update(extrema_indices)
         if pin_chords:
             protected.update(selected_endpoint_indices)
         protected.update(gap_boundary_indices)
-        protected.update(distinct_locus_indices)
+        if len(protected) > preview_count:
+            raise ValueError("Protected point indices exceed the display budget")
+        # First acquisition row is already the first occurrence of one XYZ
+        # locus. Preserve the last row when a display slot remains, but never
+        # sacrifice a distinct observed locus to retain a duplicate endpoint.
+        if preserve_distinct_xyz_loci_in_preview and len(protected) < preview_count:
+            protected.add(len(vertices) - 1)
         # Fill remaining slots evenly across the entire source index range.
         # Taking the first N candidates biases the sample toward early rows.
         candidates = [index for index in range(len(vertices)) if index not in protected]
@@ -729,6 +743,10 @@ def measure_point_cloud_preview(
     # not a biological sampling or tissue-coverage estimate.
     preview_unique_coordinate_count = len({vertices[index] for index in preview_indices})
     preview_unique_coordinate_coverage_fraction = preview_unique_coordinate_count / unique_count
+    preview_source_acquisition_endpoint_support = {
+        "first_row_displayed": 0 in preview_indices,
+        "last_row_displayed": len(vertices) - 1 in preview_indices,
+    }
     # An exact display-sample fingerprint binds source-row indices and raw
     # normalized XYZ locations. Changing preview sampling can change this
     # digest without changing the full source cloud. It is NOT a biological
@@ -866,6 +884,9 @@ def measure_point_cloud_preview(
         "preview_unique_coordinate_count": preview_unique_coordinate_count,
         "preview_unique_coordinate_coverage_fraction": (
             preview_unique_coordinate_coverage_fraction
+        ),
+        "preview_source_acquisition_endpoint_support": (
+            preview_source_acquisition_endpoint_support
         ),
         "preview_extrema_source_indices": extrema_indices,
         "preview_sampling_strategy": (
@@ -1006,6 +1027,11 @@ def measure_point_cloud_preview(
             + (
                 ["preview_omits_unique_coordinate_loci"]
                 if preview_unique_coordinate_count < unique_count
+                else []
+            )
+            + (
+                ["preview_omits_acquisition_endpoint_row"]
+                if not all(preview_source_acquisition_endpoint_support.values())
                 else []
             )
             + (["preview_omits_axis_extrema"] if preview_omitted_axis_extrema else [])
