@@ -56,50 +56,57 @@ def _safe_extract_zip(
 ) -> None:
     """Extract an in-memory pose dataset without allowing path traversal."""
 
-    destination.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+    try:
+        destination.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as error:
+        raise ValidationError(
+            f"Pose export stage {destination.name} already exists; "
+            "refusing to overwrite prior scientific data"
+        ) from error
 
-    root = destination.resolve()
+    try:
+        root = destination.resolve()
 
-    with zipfile.ZipFile(io.BytesIO(content)) as archive:
-        for item in archive.infolist():
-            normalized = item.filename.replace(
-                "\\",
-                "/",
-            )
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            for item in archive.infolist():
+                normalized = item.filename.replace(
+                    "\\",
+                    "/",
+                )
 
-            relative = Path(normalized)
+                relative = Path(normalized)
 
-            if relative.is_absolute() or ".." in relative.parts:
-                raise ValidationError("Pose training export contains an unsafe archive path")
+                if relative.is_absolute() or ".." in relative.parts:
+                    raise ValidationError("Pose training export contains an unsafe archive path")
 
-            target = (destination / relative).resolve()
+                target = (destination / relative).resolve()
 
-            if not target.is_relative_to(root):
-                raise ValidationError("Pose training export escaped the managed dataset root")
+                if not target.is_relative_to(root):
+                    raise ValidationError("Pose training export escaped the managed dataset root")
 
-            if item.is_dir():
-                target.mkdir(
+                if item.is_dir():
+                    target.mkdir(
+                        parents=True,
+                        exist_ok=True,
+                    )
+                    continue
+
+                target.parent.mkdir(
                     parents=True,
                     exist_ok=True,
                 )
-                continue
 
-            target.parent.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
-
-            with (
-                archive.open(item) as source,
-                target.open("wb") as output,
-            ):
-                shutil.copyfileobj(
-                    source,
-                    output,
-                )
+                with (
+                    archive.open(item) as source,
+                    target.open("wb") as output,
+                ):
+                    shutil.copyfileobj(
+                        source,
+                        output,
+                    )
+    except BaseException:
+        shutil.rmtree(destination)
+        raise
 
 
 def _copy_split(
@@ -154,10 +161,14 @@ def materialize_pose_training_exports(
 ) -> dict[str, object]:
     """Materialize immutable pose exports without reusing train frames as validation."""
 
-    shutil.rmtree(
-        destination,
-        ignore_errors=True,
-    )
+    validation_stage = destination.parent / f".{destination.name}-validation"
+    if validation_content is not None and (
+        validation_stage.exists() or validation_stage.is_symlink()
+    ):
+        raise ValidationError(
+            f"Pose export stage {validation_stage.name} already exists; "
+            "refusing to overwrite prior scientific data"
+        )
 
     _safe_extract_zip(
         training_content,
@@ -179,29 +190,20 @@ def materialize_pose_training_exports(
     validation_mode = "none"
 
     if validation_content is not None:
-        validation_stage = destination.parent / f".{destination.name}-validation"
-
-        shutil.rmtree(
+        # The exclusive directory claim can fail after the precheck.
+        # Its cleanup belongs to the worker that actually acquired it.
+        _safe_extract_zip(
+            validation_content,
             validation_stage,
-            ignore_errors=True,
         )
-
         try:
-            _safe_extract_zip(
-                validation_content,
-                validation_stage,
-            )
-
             _copy_split(
                 validation_stage,
                 destination,
                 split_name="val",
             )
         finally:
-            shutil.rmtree(
-                validation_stage,
-                ignore_errors=True,
-            )
+            shutil.rmtree(validation_stage)
 
         if "val: images/train" in yaml_text:
             yaml_text = yaml_text.replace(
