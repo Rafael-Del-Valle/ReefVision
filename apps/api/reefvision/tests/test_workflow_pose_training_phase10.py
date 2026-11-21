@@ -1301,7 +1301,10 @@ def test_pose_materialization_rejects_ambiguous_frozen_class_names(
         destination=destination,
     )
     assert result["training_image_count"] == 1
-    assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed-science-frame"
+    assert (
+        (destination / "images/train/frame_00000001.png").read_bytes()
+        == b"reviewed-science-frame"
+    )
 
 
 def test_pose_materialization_missing_header_allows_corrected_frozen_export(
