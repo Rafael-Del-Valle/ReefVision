@@ -307,6 +307,86 @@ def test_rehashed_environmental_cache_rejects_malformed_missingness_and_source_e
 @pytest.mark.parametrize(
     ("alteration", "error_fragment"),
     [
+        ("missingness", "invalid missing-observation count"),
+        ("provider_response", "malformed provider evidence"),
+        ("identity", "identity mismatch"),
+        ("duplicate_lineage", "duplicate scientific record IDs"),
+        ("missing_lineage", "missing or foreign scientific records"),
+    ],
+)
+def test_environmental_lookup_and_threshold_reject_rehashed_bad_provider_cache(
+    client, alteration, error_fragment
+):
+    """Neither spatial matches nor threshold events may use corrupt cached evidence."""
+    from sqlalchemy import select
+
+    from reefvision.db.models.scientific_record import EnvironmentalCacheEntry
+    from reefvision.domain.errors import ConflictError
+    from reefvision.schemas.environmental_context import (
+        EnvironmentalLookup,
+        EnvironmentalThresholdRequest,
+        NOAAImportRequest,
+    )
+    from reefvision.services.environmental_context import EnvironmentalContextService
+    from reefvision.services.scientific_data import content_hash
+
+    project = create_project(client, "Cached environmental lookup QC")
+    request = NOAAImportRequest(station_id="8665530", day="2026-04-03")
+    with (
+        client.app.state.session_factory() as session,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=noaa_fixture()))
+        ) as http,
+    ):
+        service = EnvironmentalContextService(
+            session, http=http, now=datetime(2026, 4, 4, tzinfo=UTC)
+        )
+        imported = service.import_noaa(project["id"], request)
+        original_ids = {str(item.id) for item in imported.items}
+        lookup = EnvironmentalLookup(
+            variable="water_temperature",
+            location={"latitude": 32.75, "longitude": -79.93},
+            observed_at=datetime(2026, 4, 3, 13, tzinfo=UTC),
+            max_distance_m=1000,
+            max_time_delta_s=60,
+        )
+        assert len(service.lookup(project["id"], lookup).matches) == 1
+
+        entry = session.scalar(select(EnvironmentalCacheEntry))
+        assert entry is not None
+        payload = deepcopy(entry.payload_json)
+        if alteration == "missingness":
+            payload["skipped_missing"] = -1
+        elif alteration == "provider_response":
+            payload["provider_response"] = ["invalid", "provider", "payload"]
+        elif alteration == "identity":
+            payload["cache_identity"]["source_url"] += "&foreign=1"
+        elif alteration == "duplicate_lineage":
+            payload["record_ids"] = [payload["record_ids"][0]] * 2
+        else:
+            payload["record_ids"][1] = "missing-scientific-record"
+        entry.payload_json = payload
+        entry.content_sha256 = content_hash(payload)
+        session.commit()
+
+        with pytest.raises(ConflictError, match=error_fragment):
+            service.lookup(project["id"], lookup)
+        threshold = EnvironmentalThresholdRequest.model_validate(
+            {**lookup.model_dump(), "threshold_value": 19, "threshold_unit": "degC"}
+        )
+        with pytest.raises(ConflictError, match=error_fragment):
+            service.threshold_samples(project["id"], threshold)
+
+    # Retain immutable historic records for audit even when the provider cache
+    # is unusable for new environmental inference or event detection.
+    records = client.get(f"/api/v1/projects/{project['id']}/scientific-records")
+    assert records.status_code == 200, records.text
+    assert {item["id"] for item in records.json()["items"]} == original_ids
+
+
+@pytest.mark.parametrize(
+    ("alteration", "error_fragment"),
+    [
         ("cache_identity", "identity mismatch"),
         ("source_url", "source identity mismatch"),
     ],
