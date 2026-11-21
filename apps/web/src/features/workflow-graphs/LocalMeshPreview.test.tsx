@@ -52,6 +52,62 @@ describe("LocalMeshPreview", () => {
     expect(screen.getByText(/Standalone preview only/)).toBeInTheDocument();
   });
 
+  it("sends render sampling choices and invalidates in-flight previews", async () => {
+    const deferred: {
+      resolve?: (value: Record<string, unknown>) => void;
+    } = {};
+    vi.mocked(previewLocalMeshFile).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          deferred.resolve = resolve;
+        }),
+    );
+    render(<LocalMeshPreview projectId="reef-project" />);
+    const file = new File(["v 0 0 0"], "reef.obj");
+    fireEvent.change(screen.getByLabelText("Mesh file"), {
+      target: { files: [file] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview mesh" }));
+    const extrema = screen.getByLabelText(
+      "Preserve source-axis extrema faces in preview",
+    );
+    const patches = screen.getByLabelText(
+      "Preserve disconnected mesh patches in preview",
+    );
+    fireEvent.click(extrema);
+    fireEvent.click(patches);
+    expect(screen.getByRole("button", { name: "Preview mesh" })).toBeEnabled();
+    await act(async () => {
+      deferred.resolve?.({ measurement_status: "caller_supplied_unverified" });
+    });
+    expect(screen.queryByText("Saved preview rendered")).not.toBeInTheDocument();
+
+    vi.mocked(previewLocalMeshFile).mockResolvedValue({
+      measurement_status: "caller_supplied_unverified",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview mesh" }));
+    expect(await screen.findByText("Saved preview rendered")).toBeInTheDocument();
+    expect(previewLocalMeshFile).toHaveBeenLastCalledWith(
+      "reef-project",
+      file,
+      expect.objectContaining({
+        preserve_axis_extrema_in_preview: true,
+        preserve_edge_connected_patches_in_preview: true,
+      }),
+    );
+    fireEvent.click(patches);
+    expect(screen.queryByText("Saved preview rendered")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Preview mesh" }));
+    expect(previewLocalMeshFile).toHaveBeenLastCalledWith(
+      "reef-project",
+      file,
+      expect.objectContaining({
+        preserve_axis_extrema_in_preview: true,
+        preserve_edge_connected_patches_in_preview: false,
+      }),
+    );
+  });
+
   it("reports an import failure without displaying fabricated geometry", async () => {
     vi.mocked(previewLocalMeshFile).mockRejectedValue(
       new Error("Malformed PLY"),
