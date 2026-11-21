@@ -231,12 +231,15 @@ describe("RotatedBoxLayer pointer integrity", () => {
       points?.map((point) => `${point.x},${point.y}`).join(" "),
     );
 
-    fireEvent.pointerDown(canvas.querySelector("polygon") as SVGPolygonElement, {
-      button: 0,
-      pointerId: 44,
-      clientX: 150,
-      clientY: 100,
-    });
+    fireEvent.pointerDown(
+      canvas.querySelector("polygon") as SVGPolygonElement,
+      {
+        button: 0,
+        pointerId: 44,
+        clientX: 150,
+        clientY: 100,
+      },
+    );
     fireEvent.pointerMove(canvas, {
       pointerId: 44,
       clientX: 175,
@@ -257,12 +260,15 @@ describe("RotatedBoxLayer pointer integrity", () => {
     const onUpdate = vi.fn();
     const canvas = renderLayer([original], vi.fn(), onUpdate);
 
-    fireEvent.pointerDown(canvas.querySelector("polygon") as SVGPolygonElement, {
-      button: 0,
-      pointerId: 51,
-      clientX: 350,
-      clientY: 135,
-    });
+    fireEvent.pointerDown(
+      canvas.querySelector("polygon") as SVGPolygonElement,
+      {
+        button: 0,
+        pointerId: 51,
+        clientX: 350,
+        clientY: 135,
+      },
+    );
     fireEvent.pointerMove(canvas, {
       pointerId: 51,
       clientX: 395,
@@ -270,12 +276,15 @@ describe("RotatedBoxLayer pointer integrity", () => {
     });
     fireEvent.pointerUp(canvas, { pointerId: 51 });
 
-    fireEvent.pointerDown(canvas.querySelector("polygon") as SVGPolygonElement, {
-      button: 0,
-      pointerId: 52,
-      clientX: 350,
-      clientY: 135,
-    });
+    fireEvent.pointerDown(
+      canvas.querySelector("polygon") as SVGPolygonElement,
+      {
+        button: 0,
+        pointerId: 52,
+        clientX: 350,
+        clientY: 135,
+      },
+    );
     fireEvent.pointerMove(canvas, {
       pointerId: 52,
       clientX: 325,
