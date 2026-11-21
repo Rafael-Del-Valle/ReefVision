@@ -670,6 +670,7 @@ def test_corrupted_duplicate_does_not_block_another_camera_image_in_batch(
     assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 2
     assert managed.read_bytes() == tampered
 
+
 @pytest.mark.parametrize("rendition", ["display", "thumbnail"])
 def test_locked_camera_rendition_cleanup_preserves_original_publish_failure(
     tmp_path: Path,
