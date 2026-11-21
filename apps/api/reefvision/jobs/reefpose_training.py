@@ -27,6 +27,7 @@ from reefvision.ml.reefpose.training import (
     ReefPoseTrainingResult,
 )
 from reefvision.services.pose_training_exports import PoseTrainingExportService
+from reefvision.services.workflow_pose_sources import verify_pose_dataset_separation
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
@@ -184,11 +185,8 @@ def process_reefpose_training_job(
                 if validation_id
                 else None
             )
-            if validation_dataset is not None and (
-                validation_dataset.pose_schema_content_hash
-                != training_dataset.pose_schema_content_hash
-            ):
-                raise ValidationError("Pose validation landmark schema does not match training")
+            if validation_dataset is not None:
+                verify_pose_dataset_separation(session, training_dataset, validation_dataset)
 
             base_relative = f"{project.storage_root}/training/{run.id}/reefpose"
             native_root = resolve_managed_project_path(settings, base_relative)
