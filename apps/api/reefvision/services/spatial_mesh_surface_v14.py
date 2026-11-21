@@ -97,27 +97,40 @@ def _sample_mesh_display_geometry(
     scale: float,
     preserve_axis_extrema: bool = False,
     largest_face_index: int | None = None,
+    patch_representative_faces: list[int] | None = None,
 ) -> dict[str, Any]:
     """Bounded render-only triangle sample; scientific metrics use all faces."""
     count = min(len(faces), MAX_PREVIEW_TRIANGLES)
     last = len(faces) - 1
     face_indices = [0] if count == 1 else [index * last // (count - 1) for index in range(count)]
-    if preserve_axis_extrema and count < len(faces):
-        # Choose the first referenced vertex at each source-axis extremum,
-        # then preserve a source face containing it. Orphan vertices must not
-        # affect the display or the full-reconstruction camera frame.
-        referenced = sorted({index for face in faces for index in face})
-        extremal_vertices: set[int] = set()
-        for axis in range(3):
-            extremal_vertices.add(min(referenced, key=lambda index: (points[index][axis], index)))
-            extremal_vertices.add(max(referenced, key=lambda index: (points[index][axis], -index)))
-        # An area-dominant face need not contain a coordinate extremum.
-        # Preserve it for visual fidelity without changing full-mesh science.
+    if (preserve_axis_extrema or patch_representative_faces is not None) and count < len(faces):
         protected = {0, last}
-        if largest_face_index is not None:
-            protected.add(largest_face_index)
-        for vertex_index in sorted(extremal_vertices):
-            protected.add(next(index for index, face in enumerate(faces) if vertex_index in face))
+        if preserve_axis_extrema:
+            # Source-axis extrema and the area-dominant face aid visual
+            # interpretation but are not specimen landmarks or tissue coverage.
+            referenced = sorted({index for face in faces for index in face})
+            extremal_vertices: set[int] = set()
+            for axis in range(3):
+                extremal_vertices.add(
+                    min(referenced, key=lambda index: (points[index][axis], index))
+                )
+                extremal_vertices.add(
+                    max(referenced, key=lambda index: (points[index][axis], -index))
+                )
+            if largest_face_index is not None:
+                protected.add(largest_face_index)
+            for vertex_index in sorted(extremal_vertices):
+                protected.add(
+                    next(index for index, face in enumerate(faces) if vertex_index in face)
+                )
+        if patch_representative_faces is not None:
+            # Area-ranked edge-connected patches receive one display face each
+            # while capacity remains. More than 512 patches cannot all fit;
+            # downstream QC explicitly reports any still-omitted patches.
+            for face_index in patch_representative_faces:
+                if len(protected) >= count:
+                    break
+                protected.add(face_index)
         remaining = [index for index in range(len(faces)) if index not in protected]
         slots = count - len(protected)
         if slots == 1:
@@ -146,11 +159,12 @@ def _sample_mesh_display_geometry(
             [coordinate * scale for coordinate in points[index]] for index in vertex_indices
         ],
         "preview_is_decimated": count < len(faces),
-        "preview_sampling_strategy": (
-            "uniform_face_index_extrema_preserving"
-            if preserve_axis_extrema
-            else "uniform_face_index"
-        ),
+        "preview_sampling_strategy": {
+            (False, False): "uniform_face_index",
+            (True, False): "uniform_face_index_extrema_preserving",
+            (False, True): "uniform_face_index_patch_preserving",
+            (True, True): "uniform_face_index_extrema_patch_preserving",
+        }[(preserve_axis_extrema, patch_representative_faces is not None)],
         "preview_face_count": count,
         "preview_face_fraction": count / len(faces),
         # Render-only sampling coverage, not biological area coverage.
@@ -169,6 +183,7 @@ def measure_mesh_preview(
     surface_path_vertex_pairs: list[list[int]] | None = None,
     surface_trace_vertex_paths: list[list[int]] | None = None,
     preserve_axis_extrema_in_preview: bool = False,
+    preserve_edge_connected_patches_in_preview: bool = False,
 ) -> dict[str, Any]:
     if (
         not 3 <= len(vertices) <= spatial_mesh_obj_v14.MAX_VERTICES
@@ -200,6 +215,8 @@ def measure_mesh_preview(
         raise ValueError("relative_scale_uncertainty must be between 0 and 1")
     if type(preserve_axis_extrema_in_preview) is not bool:
         raise ValueError("preserve_axis_extrema_in_preview must be a boolean")
+    if type(preserve_edge_connected_patches_in_preview) is not bool:
+        raise ValueError("preserve_edge_connected_patches_in_preview must be a boolean")
 
     points: list[tuple[float, float, float]] = []
     for vertex in vertices:
@@ -685,6 +702,17 @@ def measure_mesh_preview(
         scale,
         preserve_axis_extrema_in_preview,
         largest_face_index=largest_triangle_face_index,
+        patch_representative_faces=(
+            [
+                max(patch_face_indices[patch], key=face_areas.__getitem__)
+                for patch in sorted(
+                    ordered_patches,
+                    key=lambda patch: (-patch_area_mesh_units[patch], patch_first_face[patch]),
+                )
+            ]
+            if preserve_edge_connected_patches_in_preview
+            else None
+        ),
     )
     preview_largest_triangle_displayed = (
         largest_triangle_face_index in display_geometry["preview_face_indices"]
@@ -1245,6 +1273,9 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
         surface_path_vertex_pairs=payload.surface_path_vertex_pairs,
         surface_trace_vertex_paths=payload.surface_trace_vertex_paths,
         preserve_axis_extrema_in_preview=payload.preserve_axis_extrema_in_preview,
+        preserve_edge_connected_patches_in_preview=(
+            payload.preserve_edge_connected_patches_in_preview
+        ),
     )
     source_byte_count = len(source_bytes) if source_bytes is not None else None
     result["provenance"].update(
