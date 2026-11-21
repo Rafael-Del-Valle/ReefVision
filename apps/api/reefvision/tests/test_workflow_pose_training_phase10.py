@@ -811,7 +811,22 @@ def test_pose_materialization_rejects_identical_frames_in_independent_validation
             validation_content=holdout.getvalue(),
             destination=destination,
         )
-    assert not (destination / "images" / "val").exists()
+    # A held-out frame collision must not strand this immutable run ID.
+    assert not destination.exists()
+    assert not (destination.parent / f".{destination.name}-validation").exists()
+
+    # Correcting the independent frozen export should succeed at the same path.
+    corrected = materialize_pose_training_exports(
+        training_content=reviewed,
+        validation_content=_pose_export_zip(b"separately-reviewed-holdout-frame"),
+        destination=destination,
+    )
+    assert corrected["validation_mode"] == "separate_frozen_pose_dataset"
+    assert (destination / "images/train/frame_00000001.png").read_bytes() == b"same-reviewed-frame"
+    assert (
+        (destination / "images/val/frame_00000001.png").read_bytes()
+        == b"separately-reviewed-holdout-frame"
+    )
 
 
 @pytest.mark.parametrize(
