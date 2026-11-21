@@ -47,6 +47,7 @@ from reefvision.services.pose_training_exports import (
     EXPORT_MANIFEST_FILENAME,
     PoseTrainingExportService,
 )
+from reefvision.services.workflow_pose_sources import verify_pose_dataset_separation
 from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import (
     resolve_managed_project_path,
@@ -417,6 +418,8 @@ def _process_ultralytics_pose_training_job(
                 validation_dataset is None or validation_dataset.project_id != run.project_id
             ):
                 raise ValidationError("Pose validation dataset is unavailable")
+            if validation_dataset is not None:
+                verify_pose_dataset_separation(session, training_dataset, validation_dataset)
 
             project = session.get(
                 Project,
