@@ -40,11 +40,13 @@ from reefvision.repositories.images import ImageRepository
 from reefvision.repositories.jobs import paired_owner_active
 from reefvision.repositories.models import ModelRepository
 from reefvision.schemas.image_adjustments_v18 import ImageAdjustmentPin
+from reefvision.schemas.models import InferenceSourcePins
 from reefvision.services.annotations import _polygon_area, _polygon_self_intersects
 from reefvision.services.image_adjustments_v18 import (
     ImageAdjustmentService,
     adjusted_input_provenance,
 )
+from reefvision.services.inference_pins import verify_inference_pins
 from reefvision.services.model_runtime import verify_checkpoint, verify_queued_selection
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -368,6 +370,13 @@ def process_inference_job(
         try:
             require_image_inference_provider(model.provider_name, model_task)
             verify_queued_selection(session, settings, model.project_id, request)
+            if "source_pins" in request:
+                verify_inference_pins(
+                    settings,
+                    model,
+                    ImageRepository(session).list_by_ids(image_ids),
+                    InferenceSourcePins.model_validate(request["source_pins"]),
+                )
             if "image_adjustment" in request:
                 if len(image_ids) != 1 or model.project_id != job.project_id:
                     raise ValidationError(
