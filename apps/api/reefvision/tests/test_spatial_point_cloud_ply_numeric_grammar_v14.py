@@ -129,9 +129,7 @@ def test_untrusted_point_cloud_ply_is_validated_before_provenance_encoding(
     remain fail-closed even if an older artifact or direct caller supplies text
     containing unpaired surrogate code points. No source digest is published.
     """
-    payload = PointCloudPreviewRequest.model_construct(
-        **{**PARAMS, "ply_text": invalid}
-    )
+    payload = PointCloudPreviewRequest.model_construct(**{**PARAMS, "ply_text": invalid})
     with pytest.raises(ValueError, match=diagnostic):
         preview_point_cloud_from_request(payload)
 
