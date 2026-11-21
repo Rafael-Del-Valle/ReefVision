@@ -63,7 +63,8 @@ function hasRecordGroups(groups: ClassOperationRecordGroup[]): boolean {
         hasReviewText(group?.key) &&
         hasReviewText(group.label) &&
         hasReviewTextList(group.record_ids) &&
-        group.count === group.record_ids.length,
+        group.count === group.record_ids.length &&
+        new Set(group.record_ids).size === group.count,
     )
   );
 }
