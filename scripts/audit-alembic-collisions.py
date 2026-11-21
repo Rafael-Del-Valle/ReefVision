@@ -5,8 +5,9 @@ Usage (from a checkout with both remote refs fetched):
     python scripts/audit-alembic-collisions.py \
         origin/develop/reefvision-1.1 origin/develop/reefvision-1.6
 
-The output is JSON. Exit 2 means conflicting revision identities; exit 1 means
-an unreadable ref or migration declaration. No checkout, migrations or writes.
+The output is JSON. Exit 2 means colliding or branch-only revisions require
+reviewed integration; exit 1 means an unreadable ref or migration declaration.
+No checkout, migrations or writes.
 """
 
 from __future__ import annotations
@@ -20,7 +21,11 @@ from collections import defaultdict
 from pathlib import Path
 
 MIGRATION_DIR = "apps/api/migrations/versions"
-DEFAULT_REFS = ("origin/develop/reefvision-1.1", "origin/develop/reefvision-1.6")
+DEFAULT_REFS = (
+    "origin/develop/reefvision-1.1",
+    "origin/develop/reefvision-1.6",
+    "origin/fix/reefvision-1.9-pose-planner-20261018",
+)
 
 
 def _git(*args: str) -> bytes:
@@ -101,13 +106,30 @@ def audit(refs: list[str]) -> dict[str, object]:
         fingerprints = {entry["file_sha256"] for entry in entries}
         if len(fingerprints) > 1 or len({entry["ref"] for entry in entries}) != len(entries):
             collisions.append({"revision": revision, "declarations": entries})
+    # A revision present on only some refs must also be reviewed before
+    # integrating branches: distinct IDs can form multiple heads without any
+    # duplicate-ID collision. Record the missing ref(s) rather than treating
+    # that union as a clean, automatically mergeable history.
+    branch_only = []
+    for revision, entries in sorted(by_revision.items()):
+        present = {str(entry["ref"]) for entry in entries}
+        if len(present) != len(refs):
+            branch_only.append(
+                {
+                    "revision": revision,
+                    "present_in": sorted(present),
+                    "absent_in": sorted(set(refs) - present),
+                }
+            )
     return {
-        "schema_version": "reefvision-cross-branch-alembic-audit-0001",
+        "schema_version": "reefvision-cross-branch-alembic-audit-0002",
         "scope": MIGRATION_DIR,
         "refs": records,
         "collision_count": len(collisions),
         "collisions": collisions,
-        "requires_reviewed_data_preserving_reconciliation": bool(collisions),
+        "branch_only_revision_count": len(branch_only),
+        "branch_only_revisions": branch_only,
+        "requires_reviewed_data_preserving_reconciliation": bool(collisions or branch_only),
     }
 
 
@@ -119,7 +141,7 @@ def main() -> int:
         print(json.dumps({"error": str(exc), "refs": refs}), file=sys.stderr)
         return 1
     print(json.dumps(result, indent=2, sort_keys=True))
-    return 2 if result["collision_count"] else 0
+    return 2 if result["requires_reviewed_data_preserving_reconciliation"] else 0
 
 
 if __name__ == "__main__":
