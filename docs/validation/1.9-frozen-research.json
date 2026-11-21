@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T08:28:58.206121+00:00",
+  "updated_utc": "2026-11-21T08:50:43.896851+00:00",
   "candidate_pr": 131,
   "scope": "Generated research projects. Registered installer trials identify their own package.",
   "reviewed_predecessors": {
@@ -1307,6 +1307,86 @@
     "retained_record": {
       "file": "1.9/checkpoints/6334bcbb8/source/qualification.json",
       "sha256": "3231df6efe8fd3da1db0842420f53877a66e75c2d1b3626726cdb8cad01d692b"
+    },
+    "local_media_and_source": {
+      "file": "1.9/checkpoints/6334bcbb8/local-production/media-and-source-checks.json",
+      "sha256": "bb344c937123586aa2c6aad97b8afb4afb191d6abd6012c664add17aa7b81bba"
+    },
+    "windows_affected": {
+      "passed": 103,
+      "skipped": 1,
+      "receipt": {
+        "file": "1.9/checkpoints/6334bcbb8/source/checks/windows-affected-suite.json",
+        "sha256": "e39c4e5efb938036371804050736ca242f6126ba34bff205ef9b60b276a9ddd2"
+      }
+    },
+    "concurrent_heads": {
+      "file": "1.9/evidence/concurrent-prs-20261121-083315-utc.json",
+      "sha256": "4cf98511d3962521eb98da0c7ffbe32eaf012e6e3829a8a775a5d289fbf47c30"
+    },
+    "verified_locally_packaged_workflows": {
+      "product_pr": 150,
+      "source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
+      "msi_sha256": "3c5231737f44232f017fcddd24f01c7ad334cf8addae4667622947e298c0dd04",
+      "schema": "b19_registration_0001",
+      "surface": "Windows 11 local MSI administrative extraction, native WebView2 and packaged API on disposable studies",
+      "generated_fixture_only": true,
+      "media": {
+        "file": "1.9/checkpoints/6334bcbb8/local-production/media-and-source-checks.json",
+        "sha256": "bb344c937123586aa2c6aad97b8afb4afb191d6abd6012c664add17aa7b81bba"
+      },
+      "evidence": {
+        "guided_rtx": {
+          "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/physical-guided-rtx3090/evidence-index.json",
+          "sha256": "36b4d76f9bfc311cbe656a793169e15c836a9260f0730653eeab66cc75327d58"
+        },
+        "mixed_transfer": {
+          "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/fresh-mixed-two-hop/index.json",
+          "sha256": "18ab415774b50f7c366ee75ca160570cc7e5022a43812947981fcbec2ac4391e"
+        },
+        "rich_rollback": {
+          "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/pose-rollback/installed-backends-1.8-to-1.9-and-restore.json",
+          "sha256": "81ef563a02f2b4afd7601085e5ba0416de54024ca9af07c15358220b7b30455d"
+        },
+        "registration": {
+          "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/native-transfer-registration/index.json",
+          "sha256": "16c6cca146fa2c3f69bb09431339bfc0afd11f6b0fc0a0640ce7e8b3c27af8a2"
+        },
+        "segmentation": {
+          "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/native-reviewed-segmentation/index.json",
+          "sha256": "f86d237ba9ee28bdb5d3f740ec7aaee3c73e1f744f205ce1b1ae18442033c148"
+        }
+      },
+      "cuda_runs": [
+        {
+          "id": "2d7a69be-d1e8-41cc-8e9f-04b4e075932e",
+          "model": "65aebeaa-20aa-4d4c-af4f-7e15d2754dde",
+          "weights_sha256": "9bd59f8143c9dcbd4ca839440e3939ca4bca9db6aca9703a376e180d766abd22",
+          "training_gpu_samples": 4,
+          "inference_gpu_samples": 1
+        },
+        {
+          "id": "4db8b22c-b9ba-4fdc-800d-ac4194445b50",
+          "model": "c7e17496-46ca-4b32-b84b-b249c4ea4675",
+          "weights_sha256": "f802b63421d4a1dd6568f0f15e1a3f2f5e5ae2f05dfac5e8b5422db588f46b8f",
+          "training_gpu_samples": 4,
+          "inference_gpu_samples": 1
+        }
+      ],
+      "rollback": {
+        "source_tables": 37,
+        "backup_files": 112,
+        "bytes": 27777736,
+        "original_msi": "78d52066848afc6aeac975765359ba13cd3d0e2e8b79ef1b90307eecd03c35ed"
+      },
+      "hosted_registered_windows": {
+        "run": 44884655409,
+        "producer_job": 136787200988
+      },
+      "retained_record": {
+        "file": "1.9/checkpoints/6334bcbb8/local-production/verified-workflows.json",
+        "sha256": "903c06c81f68b7dfaf7d4e3c5e7a53cf2a8e3dfa248dd473dc717d30034862ca"
+      }
     }
   }
 }
