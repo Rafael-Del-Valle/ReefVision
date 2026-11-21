@@ -245,6 +245,30 @@ function rotationHandle(points: Point[]): Point {
   };
 }
 
+// Rotated scientific observations should be revised only when their source-pixel
+// geometry changes; floating-point roundoff during rotation is not an edit.
+function unchangedRotatedBoxGeometry(
+  before: EditorMaskAnnotation,
+  after: EditorMaskAnnotation,
+): boolean {
+  const original = before.points;
+  const edited = after.points;
+  return (
+    before.label_class_id === after.label_class_id &&
+    original !== null &&
+    edited !== null &&
+    original.length === edited.length &&
+    original.every((point, index) => {
+      const next = edited[index];
+      return (
+        next !== undefined &&
+        Math.abs(point.x - next.x) <= 1e-9 &&
+        Math.abs(point.y - next.y) <= 1e-9
+      );
+    })
+  );
+}
+
 export function RotatedBoxLayer({
   width,
   height,
@@ -336,9 +360,16 @@ export function RotatedBoxLayer({
     if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
     if (preview?.points && (preview.area_pixels ?? 0) >= 4) {
-      if (drag.kind === "create") onCreate(preview);
-      else onUpdate(preview);
-      onSelectionChange([preview.id]);
+      if (drag.kind === "create") {
+        onCreate(preview);
+        onSelectionChange([preview.id]);
+      } else if (
+        drag.mask &&
+        !unchangedRotatedBoxGeometry(drag.mask, preview)
+      ) {
+        onUpdate(preview);
+        onSelectionChange([preview.id]);
+      }
     }
     setDrag(null);
     setPreview(null);
