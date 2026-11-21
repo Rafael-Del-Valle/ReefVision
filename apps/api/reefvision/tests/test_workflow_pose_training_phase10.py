@@ -445,6 +445,32 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
     assert exploratory["validation_image_count"] == 0
 
 
+def test_pose_holdout_rejects_a_repeated_frame_at_a_different_index(tmp_path: Path) -> None:
+    training = _pose_export_zip(b"reviewed training frame")
+    disjoint = _pose_export_zip(b"independent validation frame")
+    overlapping = io.BytesIO(disjoint)
+    with zipfile.ZipFile(overlapping, "a") as archive:
+        archive.writestr("images/train/frame_00000042.png", b"reviewed training frame")
+        archive.writestr("labels/train/frame_00000042.txt", "0 0.5 0.5 0.5 0.5 0.5 0.5 2\n")
+
+    output = tmp_path / "pose-dataset"
+    with pytest.raises(ValidationError, match="frozen frame"):
+        materialize_pose_training_exports(
+            training_content=training, validation_content=overlapping.getvalue(), destination=output
+        )
+    assert list(tmp_path.iterdir()) == []
+
+    recovered = materialize_pose_training_exports(
+        training_content=training, validation_content=disjoint, destination=output
+    )
+    assert recovered["training_image_count"] == recovered["validation_image_count"] == 1
+    assert recovered["frame_content_separation"] == {
+        "method": "exact-lossless-png-sha256-v1",
+        "training_export_sha256": hashlib.sha256(training).hexdigest(),
+        "validation_export_sha256": hashlib.sha256(disjoint).hexdigest(),
+    }
+
+
 def test_pose_holdout_uses_training_ordinal_for_the_same_stable_class(tmp_path: Path) -> None:
     training = _pose_export_zip(
         b"train", classes=(("assigned", "animal"), ("unassigned", "neutral"))

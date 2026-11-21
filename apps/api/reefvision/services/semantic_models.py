@@ -37,11 +37,13 @@ from reefvision.schemas.models import (
 from reefvision.services.image_adjustments_v18 import adjusted_inference_binding
 from reefvision.services.model_runtime import ModelRuntimeService, pinned_job_settings
 from reefvision.services.pose_schemas import definition_for_revision
+from reefvision.services.pose_training_exports import PoseTrainingExportService
 from reefvision.services.project_exchange_pose_training import (
     checkpoint_schema_matches,
     recover_imported_pose_training,
 )
 from reefvision.services.segmentation_models import SegmentationModelService
+from reefvision.services.workflow_pose_sources import verify_pose_dataset_separation
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import copy_model_file, hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
@@ -247,6 +249,12 @@ class SemanticModelService(SegmentationModelService):
                     "Pose validation dataset landmark schema no longer "
                     "matches the trained model schema"
                 )
+            verify_pose_dataset_separation(self.session, training_dataset, validation_dataset)
+            PoseTrainingExportService(
+                self.session, self.settings
+            ).verify_completed_frame_separation(
+                training_dataset.id, validation_dataset.id, artifact_manifest
+            )
 
         source_path = resolve_managed_project_path(
             self.settings,

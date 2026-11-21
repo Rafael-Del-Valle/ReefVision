@@ -33,6 +33,7 @@ from reefvision.ml.ultralytics_registry import (
 from reefvision.services import (
     workflow_runtime_adapters as runtime_adapters,
 )
+from reefvision.services.pose_training_exports import PoseTrainingExportService
 from reefvision.services.project_exchange_pose_training import recover_imported_pose_training
 from reefvision.services.workflow_pose_sources import (
     resolve_frozen_pose_dataset,
@@ -389,6 +390,10 @@ def _reused_pose_training_result(
     ):
         raise ValidationError("Recovered pose-training experiment provenance changed")
 
+    if validation_dataset is not None:
+        PoseTrainingExportService(session, settings).verify_completed_frame_separation(
+            dataset.id, validation_dataset.id, run.artifact_manifest_json or {}
+        )
     validation_mode = str(dict(run.evaluation_config_json or {}).get("validation_mode") or "none")
 
     return {

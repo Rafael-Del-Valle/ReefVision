@@ -46,6 +46,7 @@ from reefvision.ml.providers import resolve_torch_device
 from reefvision.services.pose_training_exports import (
     EXPORT_MANIFEST_FILENAME,
     PoseTrainingExportService,
+    verify_pose_export_frame_separation,
 )
 from reefvision.services.workflow_pose_sources import verify_pose_dataset_separation
 from reefvision.storage.models import hash_model_file
@@ -219,6 +220,7 @@ def materialize_pose_training_exports(
         )
 
     class_projection: list[tuple[str, int, int]] = []
+    frame_separation = None
     if validation_content is not None:
         training_classes = _frozen_pose_class_indices(training_content)
         validation_classes = _frozen_pose_class_indices(validation_content)
@@ -232,6 +234,7 @@ def materialize_pose_training_exports(
             (label_id, index, training_classes[label_id])
             for label_id, index in validation_classes.items()
         ]
+        frame_separation = verify_pose_export_frame_separation(training_content, validation_content)
 
     _safe_extract_zip(
         training_content,
@@ -294,6 +297,7 @@ def materialize_pose_training_exports(
     )
 
     return {
+        "frame_content_separation": frame_separation,
         "validation_class_projection": [
             {
                 "label_class_id": label_id,
@@ -554,6 +558,7 @@ def _process_ultralytics_pose_training_job(
                 "pose_schema_content_hash": (training_dataset.pose_schema_content_hash),
                 "validation_mode": (materialized["validation_mode"]),
                 "validation_class_projection": materialized["validation_class_projection"],
+                "frame_content_separation": materialized["frame_content_separation"],
                 "training_export_bundle_sha256": (training_export.bundle_sha256),
                 "validation_export_bundle_sha256": (
                     validation_export.bundle_sha256 if validation_export is not None else None
