@@ -8,6 +8,7 @@ from collections import Counter
 from datetime import UTC
 from decimal import Decimal
 from fractions import Fraction
+from itertools import pairwise
 from math import dist, fsum, isfinite
 from re import fullmatch
 from typing import Any
@@ -714,17 +715,23 @@ def measure_point_cloud_preview(
     # omitted boundary elsewhere in the display. Count every maximal interval
     # using distinct source levels (not duplicated acquisition rows).
     preview_largest_axis_gap_interval_coverage: dict[str, dict[str, int] | None] = {}
+    preview_largest_axis_gap_boundary_locus_support: dict[
+        str, dict[str, int | float] | None
+    ] = {}
     for axis, label in enumerate(("x", "y", "z")):
         maximum_gap = axis_sampling_gaps[label]["largest_adjacent_source_gap_units"]
         if maximum_gap is None:
             preview_largest_axis_gap_interval_coverage[label] = None
+            preview_largest_axis_gap_boundary_locus_support[label] = None
             continue
         source_levels = sorted({vertex[axis] for vertex in vertices})
         sampled_levels = {vertices[index][axis] for index in preview_indices}
         full = partial = hidden = 0
-        for lower, upper in zip(source_levels, source_levels[1:], strict=False):
+        largest_gap_boundary_levels: set[float] = set()
+        for lower, upper in pairwise(source_levels):
             if upper - lower != maximum_gap:
                 continue
+            largest_gap_boundary_levels.update((lower, upper))
             visible_count = int(lower in sampled_levels) + int(upper in sampled_levels)
             if visible_count == 2:
                 full += 1
@@ -738,11 +745,36 @@ def measure_point_cloud_preview(
             "partially_displayed_intervals": partial,
             "hidden_intervals": hidden,
         }
+        # Axis-level presence alone can conceal omitted, distinct 3D
+        # acquisitions at the same projected gap boundary. Union all tied
+        # boundary coordinate levels; do not count duplicated scan rows as
+        # independent XYZ loci or infer biological completeness.
+        source_boundary_loci = {
+            vertex for vertex in vertices if vertex[axis] in largest_gap_boundary_levels
+        }
+        preview_boundary_loci = {
+            vertices[index]
+            for index in preview_indices
+            if vertices[index][axis] in largest_gap_boundary_levels
+        }
+        preview_largest_axis_gap_boundary_locus_support[label] = {
+            "source_distinct_xyz_loci": len(source_boundary_loci),
+            "preview_distinct_xyz_loci": len(preview_boundary_loci),
+            "fraction_of_source_loci_displayed": (
+                len(preview_boundary_loci) / len(source_boundary_loci)
+            ),
+        }
     preview_omitted_largest_gap_boundary_axes = [
         label
         for label, coverage in preview_largest_axis_gap_interval_coverage.items()
         if coverage is not None
         and coverage["fully_displayed_intervals"] != coverage["total_intervals"]
+    ]
+    preview_omitted_largest_gap_boundary_locus_axes = [
+        label
+        for label, support in preview_largest_axis_gap_boundary_locus_support.items()
+        if support is not None
+        and support["preview_distinct_xyz_loci"] < support["source_distinct_xyz_loci"]
     ]
     preview_points = []
     for index in preview_indices:
@@ -780,7 +812,13 @@ def measure_point_cloud_preview(
         # consumers; the interval coverage and warning consider *all* ties.
         "preview_largest_axis_gap_endpoint_support": preview_largest_axis_gap_endpoint_support,
         "preview_largest_axis_gap_interval_coverage": preview_largest_axis_gap_interval_coverage,
+        "preview_largest_axis_gap_boundary_locus_support": (
+            preview_largest_axis_gap_boundary_locus_support
+        ),
         "preview_omitted_largest_gap_boundary_axes": preview_omitted_largest_gap_boundary_axes,
+        "preview_omitted_largest_gap_boundary_locus_axes": (
+            preview_omitted_largest_gap_boundary_locus_axes
+        ),
         "preview_points_in_source_frame_m": preview_points,
         "preview_point_scale_intervals_m": (
             [coordinate_scale_intervals(point) for point in preview_points]
@@ -878,6 +916,11 @@ def measure_point_cloud_preview(
             + (
                 ["preview_omits_largest_axis_gap_endpoint"]
                 if preview_omitted_largest_gap_boundary_axes
+                else []
+            )
+            + (
+                ["preview_omits_largest_axis_gap_boundary_xyz_loci"]
+                if preview_omitted_largest_gap_boundary_locus_axes
                 else []
             )
             + (
