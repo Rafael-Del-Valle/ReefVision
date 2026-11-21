@@ -1123,7 +1123,7 @@ def test_pose_materialization_missing_header_allows_corrected_frozen_export(
                 altered.writestr(member, original.read(member))
 
     destination = tmp_path / "pose-missing-header"
-    with pytest.raises(ValidationError, match=r"missing data\\.yaml"):
+    with pytest.raises(ValidationError, match=r"missing data\.yaml"):
         materialize_pose_training_exports(
             training_content=incomplete.getvalue(),
             validation_content=None,
