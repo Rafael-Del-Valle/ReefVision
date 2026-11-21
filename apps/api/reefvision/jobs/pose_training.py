@@ -736,7 +736,9 @@ def materialize_pose_training_exports(
                 # immutable training directory. Frame checks alone never read
                 # unrelated members, which might be corrupt.
                 if validation_archive.testzip() is not None:
-                    raise ValidationError("Pose training export contains a corrupt archive member")
+                    raise ValidationError(
+                        "Pose training export contains a corrupt archive member"
+                    )
                 if training_archive.read("data.yaml") != validation_archive.read("data.yaml"):
                     raise ValidationError(
                         "Ultralytics pose validation export has incompatible data.yaml"
