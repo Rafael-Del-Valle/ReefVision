@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T01:35:24Z`
+Updated: `2026-11-21T01:53:43Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -766,6 +766,7 @@ Evidence:
 - `source`: The signed volume matched 448 independently evaluated tetrahedral permutations and a bounded 3,996-face bipyramid. The source fixture covers four vertex origins, both windings, exact planar zero, calibrated recovery of a positive source underflow and a true overflow. — `docs/validation/mesh-volume-8821ed9a1.json` (`rv14-volume-winding-rational-8821`)
 - `source`: The four finite-volume cancellation examples from hourly #79 at e9e8afbd4 passed on the existing exact-sum candidate. All 79 standalone, arithmetic, topology and saved-workflow controls passed on source 93c5faba0. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv14-geometric-measurements-cancelled-shell-volume-bdcec01e3`)
 - `source`: The three additional translated or reflected XY, YZ and XZ frame cases from hourly #79 passed unchanged on the 542254b8a candidate, including standalone and saved area measurements. Six related checks passed. — `docs/validation/reviewed-operations-dd3c7207e.json` (`rv14-geometric-measurements-axis-frames-dd3c7207e`)
+- `source`: Eight regression cases from the current spatial donor passed on the 1.8 product, including calibrated oblique triangles, normal project measurement and saved replay. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv14-eight-oblique-3654a781a-on-9cde9e6e7`)
 - `browser`: Workflow Builder exposes a project-owned original picker, scale, calibration evidence, uncertainty, specimen/observation/frame context, and an explicit warning that geometric routes are not anatomical branch lengths. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-geometric-guided-ui`)
 - `browser`: The ordinary source desktop imported all three generated OBJs, exercised four calibrated previews, reopened both saved graphs, repeated each and downloaded the Exchange package. All three originals and six typed artifacts verified against the source-browser receipt with SHA-256 c46681c4df9075abb7bbdb17c228b05107fce72174eb236c16255428542ef388. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv14-geometry-project-replay-1d3942662`)
 - `browser`: From the project's 3D assets, the researcher imported the same OBJ, measured both windings, supplied scale uncertainty, reopened the graph, ran it twice and downloaded the project. Both measurements now match the exact volume, the planar control withholds volume, and the exports preserve the three originals and six saved artifacts. — `docs/validation/mesh-volume-8821ed9a1.json` (`rv14-volume-winding-guided-8821`)
@@ -1208,6 +1209,7 @@ Evidence:
 - `windows_installed`: The original installer completed clean ordinary-user annotation, review, export and recovery, with separate upgrade and rollback checks across the supported historical profiles. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-original-installed-3a9`)
 - `windows_installed`: An ordinary user installed the original MSI under measured outbound denial, reviewed a box, exported it, reopened it in a fresh desktop process and uninstalled successfully. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-offline-original-3a9`)
 - `windows_installed`: The genuine hosted MSI installed and launched in a clean disposable standard-user Windows environment under 201 seconds of outbound denial. The project reopened and retained its data after uninstall. The verifier sampled both ordinary and SYSTEM identities 511 times. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv16-onboarding-installer-offline-install-542254b8a`)
+- `windows_installed`: The 1.8 hosted MSI completed fresh and cached 1.7 upgrade runs under enforced network denial for both Windows identities. The restored seven-file backup reopened under the original 1.7 standard-user desktop. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv16-registered-offline-9cde9e6e7`)
 - `physical_hardware`: The native packaged first launch at 960 by 640 CSS pixels and emulated 150% scaling preserved keyboard focus and dismissal. The researcher imported image and video, edited, undid and redid, reviewed, exported YOLO and reopened. The browser attempted zero external HTTP requests. A separate eight-project 1.5 backup reopened with all 303 project files. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-onboarding-installer-physical-83b0`)
 - `physical_hardware`: The locally built Windows desktop restored both generations, preserved both historical metadata digests and reopened all seven projects in a separate launch. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-repeated-recovery-local-production-3a9`)
 - `physical_hardware`: The desktop extracted from the original GitHub MSI restored both generations from System status and reopened the existing QC project on physical Windows. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-repeated-recovery-original-windows-3a9`)
@@ -1351,6 +1353,7 @@ Evidence:
 - `browser`: On the separately manufactured six-cabinet 542254b8a MSI, a standard Windows account opened the real administratively extracted WebView2 application, completed both CPU training controls and all five ordinary research actions. A separate staged upgrade from 1.7 and restored writable 1.7 copy retained the verified project contents. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-bioacoustics-msi-extracted-local-9cde9e6e7`)
 - `browser`: A standard Windows account used the hosted five-cabinet MSI's administratively extracted WebView2 application on the physical RTX workstation. Its ordinary controls trained two fixture models and completed the five research journeys. An independent validation rehashed 13 outputs. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-bioacoustics-hosted-msi-native-542254b8a`)
 - `browser`: The corrected locally manufactured 1.8 MSI's ordinary, administratively extracted WebView2 completed two real CPU training controls, all five research journeys and their saved replay checks. The verified Windows profile and all owned listeners closed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-bioacoustics-corrected-local-package-9cde9e6e7`)
+- `browser`: The hosted 1.8 MSI's administratively extracted WebView2 completed all five research workflows and two real CPU training controls on generated fixtures. Corresponding reports and saved runs were independently rehashed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-bioacoustics-official-extracted-9cde9e6e7`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1381,6 +1384,7 @@ Evidence:
 - `browser`: A standard Windows account used the hosted five-cabinet MSI's administratively extracted WebView2 application on the physical RTX workstation. Its ordinary controls trained two fixture models and completed the five research journeys. An independent validation rehashed 13 outputs. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-domain-shift-hosted-msi-native-542254b8a`)
 - `browser`: The corrected locally manufactured 1.8 MSI's ordinary, administratively extracted WebView2 completed two real CPU training controls, all five research journeys and their saved replay checks. The verified Windows profile and all owned listeners closed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-domain-shift-corrected-local-package-9cde9e6e7`)
 - `browser`: Using eight generated reviewed observations across six independent fixture groups and two locally trained detectors, Models → Model comparison → Domain shift displayed group-level intervals. Ten intervals matched a separate calculation within 1e-10, one planned group was missing, and two saved graph outputs agreed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-domain-shift-six-group-intervals-9cde9e6e7`)
+- `browser`: The hosted 1.8 MSI's administratively extracted WebView2 completed all five research workflows and two real CPU training controls on generated fixtures. Corresponding reports and saved runs were independently rehashed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-domain-shift-official-extracted-9cde9e6e7`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1409,6 +1413,7 @@ Evidence:
 - `browser`: On the separately manufactured six-cabinet 542254b8a MSI, a standard Windows account opened the real administratively extracted WebView2 application, completed both CPU training controls and all five ordinary research actions. A separate staged upgrade from 1.7 and restored writable 1.7 copy retained the verified project contents. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-multispectral-msi-extracted-local-9cde9e6e7`)
 - `browser`: A standard Windows account used the hosted five-cabinet MSI's administratively extracted WebView2 application on the physical RTX workstation. Its ordinary controls trained two fixture models and completed the five research journeys. An independent validation rehashed 13 outputs. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-multispectral-hosted-msi-native-542254b8a`)
 - `browser`: The corrected locally manufactured 1.8 MSI's ordinary, administratively extracted WebView2 completed two real CPU training controls, all five research journeys and their saved replay checks. The verified Windows profile and all owned listeners closed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-multispectral-corrected-local-package-9cde9e6e7`)
+- `browser`: The hosted 1.8 MSI's administratively extracted WebView2 completed all five research workflows and two real CPU training controls on generated fixtures. Corresponding reports and saved runs were independently rehashed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-multispectral-official-extracted-9cde9e6e7`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1437,6 +1442,7 @@ Evidence:
 - `browser`: On the separately manufactured six-cabinet 542254b8a MSI, a standard Windows account opened the real administratively extracted WebView2 application, completed both CPU training controls and all five ordinary research actions. A separate staged upgrade from 1.7 and restored writable 1.7 copy retained the verified project contents. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-taxonomy-detectability-msi-extracted-local-9cde9e6e7`)
 - `browser`: A standard Windows account used the hosted five-cabinet MSI's administratively extracted WebView2 application on the physical RTX workstation. Its ordinary controls trained two fixture models and completed the five research journeys. An independent validation rehashed 13 outputs. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-taxonomy-detectability-hosted-msi-native-542254b8a`)
 - `browser`: The corrected locally manufactured 1.8 MSI's ordinary, administratively extracted WebView2 completed two real CPU training controls, all five research journeys and their saved replay checks. The verified Windows profile and all owned listeners closed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-taxonomy-detectability-corrected-local-package-9cde9e6e7`)
+- `browser`: The hosted 1.8 MSI's administratively extracted WebView2 completed all five research workflows and two real CPU training controls on generated fixtures. Corresponding reports and saved runs were independently rehashed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-taxonomy-detectability-official-extracted-9cde9e6e7`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1465,6 +1471,7 @@ Evidence:
 - `browser`: On the separately manufactured six-cabinet 542254b8a MSI, a standard Windows account opened the real administratively extracted WebView2 application, completed both CPU training controls and all five ordinary research actions. A separate staged upgrade from 1.7 and restored writable 1.7 copy retained the verified project contents. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-underwater-correction-msi-extracted-local-9cde9e6e7`)
 - `browser`: A standard Windows account used the hosted five-cabinet MSI's administratively extracted WebView2 application on the physical RTX workstation. Its ordinary controls trained two fixture models and completed the five research journeys. An independent validation rehashed 13 outputs. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-underwater-correction-hosted-msi-native-542254b8a`)
 - `browser`: The corrected locally manufactured 1.8 MSI's ordinary, administratively extracted WebView2 completed two real CPU training controls, all five research journeys and their saved replay checks. The verified Windows profile and all owned listeners closed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-underwater-correction-corrected-local-package-9cde9e6e7`)
+- `browser`: The hosted 1.8 MSI's administratively extracted WebView2 completed all five research workflows and two real CPU training controls on generated fixtures. Corresponding reports and saved runs were independently rehashed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-underwater-correction-official-extracted-9cde9e6e7`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1706,7 +1713,7 @@ Evidence:
 
 - `source`: none recorded
 - `browser`: none recorded
-- `windows_installed`: none recorded
+- `windows_installed`: A registered 1.8 first-use run saved a box at source row 60 after requesting row 40. Controlled WebView2 reproduction traced it to the full image arriving during a drag. This 1.8 baseline identifies a regression to retest on the integrated candidate. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv20-compact-box-baseline-9cde9e6e7`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 

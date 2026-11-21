@@ -327,7 +327,7 @@
     },
     "reproducer": {
       "file": "1.8/checkpoints/9cde9e6e7/source/provider-history/regression-design.json",
-      "sha256": "ed8e82bddb13f3a423886dca2706449b5729a8b3f9b1f8919b27c8aa1a044377"
+      "sha256": "e8dbdc32f6b26ce4aaa677d0df3c6d112054df2d4dd23f7b9b7bd1c157f88888"
     }
   },
   "grouped_interval_fixture": {
@@ -392,5 +392,144 @@
         "sha256": "38caaf1e5bb0690450768c137879e27f046e89f4d43948636ca7f9d9184aa0c2"
       }
     }
+  },
+  "corrected_original_hosted_package": {
+    "source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "run": 44847408180,
+    "build_job": 136670423050,
+    "msi_sha256": "7d8a5d4d4b0eebd2274a17de6676204eac724ebe06ffc3c87d7cbef353532511",
+    "cab_count": 5,
+    "sha256sums": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/installer/SHA256SUMS.txt",
+      "sha256": "208aee663b937ef67487f4486a58041f2ddfbebc094d45415cbabab906d22cb6"
+    },
+    "authenticated_transport": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/verified-transport.json",
+      "sha256": "d38ba441be913db41b5b3470bcf38bcadfbaef8db0976f8c82a53513b56765e3"
+    },
+    "build_smoke": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/build-diagnostics/receipt.json",
+      "sha256": "ca81d64c39a09aaf047d52075fdc9e981da4a51c6c2c7a78c2756ed48672f72d"
+    },
+    "extracted_file_count": 19154,
+    "migration_files": 83,
+    "bundled_weights": 0,
+    "audited_cab_members": 19153,
+    "frozen_python_modules": 12112,
+    "payload_audit": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/payload-audit.json",
+      "sha256": "babb404127f77c10cec34c3f3eb736e049c0651bbe2e697e66c1eeac79be2a06"
+    },
+    "signature_and_policy": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/smart-app-control.json",
+      "sha256": "5069529d8104c4a3913802c4df4230b9e35d2283d78faf922e41eb68de3b0f4b"
+    },
+    "extracted_native_corrections": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/evidence/native-corrections/evidence-index.json",
+      "sha256": "40ac9790bc51af764ecce7ac49013f1a55fd46ca77c71e580bcaa8ac15f0172c"
+    },
+    "five_project_upgrade_and_recovered_write": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/evidence/rich-direct-rollback/rich-upgrade-and-rollback.json",
+      "sha256": "1b7f099f288a86237ff797311db8688507a767c25f1611e941ad2f4ceada2b53"
+    },
+    "registered_offline": {
+      "run": 44849140656,
+      "fresh_job": 136676062672,
+      "upgrade_job": 136676062878,
+      "network_denial_seconds": [
+        196.32,
+        266.695
+      ],
+      "fresh_blocked_control_counts_ordinary_system": [
+        492,
+        492
+      ],
+      "upgrade_blocked_control_counts_ordinary_system": [
+        625,
+        627
+      ],
+      "rollback_members": 7,
+      "receipt": {
+        "file": "1.8/checkpoints/9cde9e6e7/official/offline/attempt-44849140656/offline-index.json",
+        "sha256": "0e2c8012bdfe996c44c7ef39f44bef6c6f8cb88dfd1e28f6615cee44f7c85f56"
+      }
+    },
+    "extracted_native_research": {
+      "cpu_training_controls": 2,
+      "research_journeys": 5,
+      "receipt": {
+        "file": "1.8/checkpoints/9cde9e6e7/official/evidence/native-research-tools/evidence-index.json",
+        "sha256": "8d319e83741ed5fb09e758692b40796a4a5fdbb6f7ec819694bdbaa6b701b630"
+      }
+    },
+    "physical_cuda": {
+      "device": "NVIDIA GeForce RTX 3090",
+      "distinct_saved_jobs": 2,
+      "replay_result_sha256": "ab5a0050a94f04ba14af6a71f515a6f4d428dc07390df6b118726a729d79ccbb",
+      "receipt": {
+        "file": "1.8/checkpoints/9cde9e6e7/official/evidence/physical-rtx3090/evidence-index.json",
+        "sha256": "45592b9ef49c9b6bc7f113ce6798d3038d58ac4e34b2eb3b4259852c400ce175"
+      }
+    },
+    "independent_native_file_verification": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/evidence/9cde-official-independent-native-validation.json",
+      "sha256": "f137998a2aa97aad1b752515ebdebc9830e99218f3da0b1acc616048c8f90232"
+    }
+  },
+  "predecessor_recheck": {
+    "donor79": "3654a781adf1774b8b16ab03993404ea2c70c143",
+    "lineage89": "36c80224a627e8fe1c1d8ffb5a704ffa9f90c701",
+    "validated13": "f44053a90286ce57cc6f7356be922bcf8ba41e22",
+    "unchanged_product": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "latest_geometry": {
+      "general_ci": 44850159339,
+      "pose_ci": 44850159293,
+      "windows_ci": 44850159273,
+      "outcome": "Eight donor cases passed on the unchanged 1.8 source, including near-parallel oblique XYZ variants, standalone parsing and saved replay.",
+      "test_source": "8b400a2afc70574647e51a1c396d66751e96f772",
+      "test_file_sha256": "c0785b6581b3a628662ea9f3a553d797562c849a6ab6aa0a227cac33a70a89ff",
+      "junit": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/predecessors/oblique-areas.xml",
+        "sha256": "684117233625b90768a04edda5ff80f64bc7602358839919222655bccb768747"
+      }
+    },
+    "donor77": {
+      "source": "ab7f33baa123bbe8faeb827e0a4dd92158ad01e9",
+      "frontend_failure_job": 136662221872,
+      "scope": "Donor Prettier flagged ClassManagerPanel.test.tsx. The integrated version passed targeted and complete Prettier, and the corrected class workflow passed on the two native Windows payloads.",
+      "log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/predecessors/donor-77-format.log",
+        "sha256": "92e52a1872984ea3af730d9776506e6098d931489f276a2bd26a7c4ca700bb30"
+      }
+    },
+    "donor78": {
+      "source": "cda67a688bb67341cde2a5b4b2fa440f41c53f16",
+      "pose_ci": 44846725526,
+      "general_ci": 44846725408,
+      "windows_ci": 44846725378,
+      "scope": "Inspection identified a corrupted frozen ZIP member preflight on the optional Ultralytics pose training path. Native ReefPose loads its own frozen-recording data. Evaluate the optional worker's retry and cleanup in the 1.9 resilience milestone."
+    }
+  },
+  "open_compact_box_regression": {
+    "source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "hosted_msi_sha256": "7d8a5d4d4b0eebd2274a17de6676204eac724ebe06ffc3c87d7cbef353532511",
+    "registered_run": 44850071433,
+    "registered_job": 136679063819,
+    "observed": "At 960 × 640 CSS pixels and DPR 1.5, drawing from source (20, 15) to (55, 40) sometimes stored a lower edge at row 60 after Undo, Redo, review and Save.",
+    "controlled_native_reproduction": "Delivering the full-resolution image after pointerdown removed the loading notice. The canvas moved from y=427.140625 to 261.296875 CSS pixels with unchanged scroll. The fixed screen endpoint mapped to source y=112.124 and clipped to 60. With the image already loaded it saved y=39.977.",
+    "original_registered_failure": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/registered-retest/attempt-44850071433/first-use-coordinate-discrepancy.json",
+      "sha256": "fbb7470899fff762195104f3123640d98b099f3a11283af92b9f2e732d1dfd8a"
+    },
+    "controlled_native": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/evidence/first-use-geometry/evidence-index.json",
+      "sha256": "3b53af0de332310bf828a67d65729476e5538be15782b404c6272e94a3df63ff"
+    },
+    "diagnostic_only_source": "ded802cfbccb138d1af367089bc3639cdc2ddb33",
+    "stable_source_browser": {
+      "file": "1.8/checkpoints/9cde9e6e7/source/compact-box/first-use-box-evidence.json",
+      "sha256": "61d918c5a738cf6ebd58aa551161476f72e82da0ab4324de0eb5f400ac32fdc3"
+    },
+    "next": "Keep the canvas anchored across thumbnail, original and error status changes. Repeat the forced mid-drag case, ordinary image and video journey, registered installation and offline proof on the repaired build."
   }
 }
