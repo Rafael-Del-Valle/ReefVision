@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T07:34:42.385327+00:00",
+  "updated_utc": "2026-11-21T08:28:58.206121+00:00",
   "candidate_pr": 131,
   "scope": "Generated research projects. Registered installer trials identify their own package.",
   "reviewed_predecessors": {
@@ -1176,5 +1176,137 @@
     },
     "generated_fixture_only": true
   },
-  "active_product_pr": 149
+  "active_product_pr": 150,
+  "exchanged_pose_training": {
+    "source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
+    "version": "1.9.0",
+    "database_head": "b19_registration_0001",
+    "product_pr": 150,
+    "parent": "15be85268fc0cf4f801152fa79b4901adffddc3d",
+    "branch": "codex/reefvision-1.9-exchanged-pose-provenance",
+    "worktree": "C:\\rv19-exchange-pins",
+    "generated_fixture_only": true,
+    "source_evidence": {
+      "legacy_export_and_reimport": {
+        "file": "1.9/checkpoints/6334bcbb8/source/evidence/legacy-pose-exchange/exchange-and-atomicity.json",
+        "sha256": "4eb8d420e34f06a7db86db17c5e73c5327e385788b12cac439e6a3ad75fe888c"
+      },
+      "registered_native_seed": {
+        "file": "1.9/checkpoints/6334bcbb8/source/evidence/legacy-pose-exchange/registered-native-seed.json",
+        "sha256": "5676ffcddf9914b453f32d2b355f0f1b7277ff3fe977d769014f844a12a112c0"
+      },
+      "two_fresh_transfers": {
+        "file": "1.9/checkpoints/6334bcbb8/source/evidence/fresh-mixed-two-hop/index.json",
+        "sha256": "ea61c54c640a417cbfdc19d48c1d5f1ebf62f35aad24c39b25f7c73b1b438fd0"
+      },
+      "ordinary_training_ui": {
+        "file": "1.9/checkpoints/6334bcbb8/source/transfer-registration/index.json",
+        "sha256": "2feff41ad27b574c546c5159fafee52062542e55fade39cc28a3d97807ff5bde"
+      }
+    },
+    "source_gates": {
+      "focused_implementation": {
+        "passed": 6,
+        "junit": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/exchange-integrated-checks-stacked.xml",
+          "sha256": "61eb635e096d776a22c302f0c383332dfbe340c63dbf9a46cf7a903202bef750"
+        }
+      },
+      "final_shared_registration_and_export": {
+        "passed": 2,
+        "junit": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/exchange-integrated-checks-shared-registration.xml",
+          "sha256": "6682a6eed07fd82a0ae17aa5c359f089ca9fcfffec8ed7a7336a4e22d038b916"
+        }
+      },
+      "canonical_inventory_tests": {
+        "passed": 22,
+        "junit": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/exchange-integrated-checks-inventory.xml",
+          "sha256": "fa710adbda64dafa1ec80efd5615364bd86a408ac262bad0a9290875db800851"
+        }
+      },
+      "physical_cuda": {
+        "passed": 5,
+        "junit": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/6334-cuda-results.xml",
+          "sha256": "525856981ddfe263b0411d11bf25230d9ee553581a2ee1730779dd823e4a64dc"
+        }
+      },
+      "mypy": {
+        "file": "1.9/checkpoints/6334bcbb8/source/checks/final-types.log",
+        "sha256": "18ec172b5be8236c8d902039fbe3212d1bc6498b22b1f7459ad9d1498238a0ff"
+      },
+      "alembic_upgrade_base_upgrade": {
+        "file": "1.9/checkpoints/6334bcbb8/source/checks/roundtrip.log",
+        "sha256": "09839064b5b5bb688eb340d7b4bde5d5a5bed0e85b1cb987c0af7fc9d030ad58"
+      },
+      "rust_tests": {
+        "file": "1.9/checkpoints/6334bcbb8/source/checks/6334-rust.log",
+        "sha256": "b367ec931b3e99183301a7ace63b4ea42a675f1f5292b7eb485bfbbaeb1772e8"
+      },
+      "frontend": {
+        "ci---no-audit---no-fund.log": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/frontend-ci---no-audit---no-fund.log",
+          "sha256": "d51066973db63eaecdac51bc41b0981e79f66e4940603c1458ad0070afdb2293"
+        },
+        "run-build.log": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/frontend-run-build.log",
+          "sha256": "63f71659041df6a6c4798eb28b0b2164df640ed7d51070bca28dcbe30d4c0b48"
+        },
+        "run-format-check.log": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/frontend-run-format-check.log",
+          "sha256": "4666969f85835307e8d360234a1877ad8ae96cd6cecd0f578932384d65aa6967"
+        },
+        "run-lockfile-check.log": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/frontend-run-lockfile-check.log",
+          "sha256": "c705de73d6d0224a5dc8b71369ec3ae3aa1ee6d5a97b559658b97954413d495a"
+        },
+        "run-test-e2e.log": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/frontend-run-test-e2e.log",
+          "sha256": "7c68c09e806c0dab9a0c83647002dc2a4573d6a52ab45c082ef38183a607b7e9"
+        },
+        "run-typecheck.log": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/frontend-run-typecheck.log",
+          "sha256": "9a53ffb62f6e9f9632ad62a970c0e93c7f82dc97e021622cbf8c53cd61a7ce34"
+        },
+        "test.log": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/frontend-test.log",
+          "sha256": "b4ec5f5ecb6d0502ba4912a7d20f2820e2e665b92b2c832bd9ee2e5e32bbdfff"
+        }
+      }
+    },
+    "migration_changes": [],
+    "suite_collection": {
+      "full": 6094,
+      "affected": 104,
+      "full_identity_sha256": "5c18a0d41a904b9edcfab4395ca243c9764edac7667630310ab22831729b55f4",
+      "affected_identity_sha256": "c7f214c29bac93b59608617011f78a0f42b258715185636ff5194cd8792b8513"
+    },
+    "windows_original": {
+      "run": 44884655409,
+      "producer": 136787200988,
+      "pr": 150
+    },
+    "hosted_ci": {
+      "general": 44884655459,
+      "pose": 44884655423
+    },
+    "local_build_root": "C:/rv19e-6334bcbb",
+    "offline_qa": {
+      "source": "4401080895fa9bf28b823983a664afcd2c1eef29",
+      "folder": "C:/rv19-exchange-offline",
+      "submission": "C:/rv19-starting-point/submit-6334-offline-after-media.py"
+    },
+    "registered_guided_qa": {
+      "source": "94a82a08d37ae946c8216795def2d7fdafff8265",
+      "folder": "C:/rv19-guided-exchange-reg"
+    },
+    "full_windows_folder": "C:/rvb19-6334",
+    "affected_windows_folder": "C:/rvb19-6334-affected",
+    "retained_record": {
+      "file": "1.9/checkpoints/6334bcbb8/source/qualification.json",
+      "sha256": "3231df6efe8fd3da1db0842420f53877a66e75c2d1b3626726cdb8cad01d692b"
+    }
+  }
 }
