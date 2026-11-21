@@ -1,0 +1,7 @@
+diff --git a/scripts/lib/windows-spatial-webview2-acceptance.ps1 b/scripts/lib/windows-spatial-webview2-acceptance.ps1
+index 936bcadee..eda1038ef 100644
+--- a/scripts/lib/windows-spatial-webview2-acceptance.ps1
++++ b/scripts/lib/windows-spatial-webview2-acceptance.ps1
+@@ -263 +263 @@ function Invoke-ReefVisionInstalledPlaywrightSuite {
+-        $trace = if ($Suite -eq 'research-tools') { @('--trace=off') } else { @() }
++        $trace = @(if ($Suite -eq 'research-tools') { '--trace=off' })
