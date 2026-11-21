@@ -16,6 +16,11 @@ from reefvision.services.project_exchange_adjustment_v18 import (
     restore_adjustment_row,
     validate_adjustment_exchange,
 )
+from reefvision.services.project_exchange_bioacoustics_v18 import (
+    AUDIO_SECTION_MODELS,
+    contains_audio_exchange_records,
+    has_audio_assets,
+)
 from reefvision.services.project_exchange_spectral_v18 import BINDINGS, validate_spectral_archive
 from reefvision.services.project_exchange_spectral_v18 import SECTIONS as SPECTRAL_SECTIONS
 from reefvision.services.project_exchange_taxonomy_v18 import (
@@ -30,7 +35,7 @@ SECTIONS = ("image_adjustment_recipes", *TAXONOMY_SECTIONS, *SPECTRAL_SECTIONS)
 
 
 def has_research_records(session: Session, project_id: str) -> bool:
-    return any(
+    return has_audio_assets(session, project_id) or any(
         session.scalar(select(model.id).where(model.project_id == project_id).limit(1)) is not None
         for model in (
             ImageAdjustmentRecipe,
@@ -46,10 +51,14 @@ def validate_research_format(
 ) -> None:
     sections = [name for name in SECTIONS if name in rows]
     if version != FORMAT:
-        if sections:
+        if (
+            sections
+            or set(rows) & AUDIO_SECTION_MODELS.keys()
+            or contains_audio_exchange_records(rows)
+        ):
             raise ValidationError("Multimodal research records require Project Exchange 1.8")
         return
-    if not any(rows[name] for name in sections):
+    if not any(rows.get(name) for name in (*sections, *AUDIO_SECTION_MODELS)):
         raise ValidationError("The 1.8 archive is missing its multimodal research records")
     if any(rows.get(name) for name in TAXONOMY_SECTIONS):
         if not all(name in rows for name in TAXONOMY_SECTIONS):

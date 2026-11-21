@@ -24,6 +24,7 @@ from reefvision.services.coral_graph_geometry import frozen_skeleton_digest, val
 from reefvision.services.coral_growth import calculate_pinned_growth, validate_branch_correspondence
 from reefvision.services.ecology_identity import EcologyIdentityService
 from reefvision.services.project_exchange_acquisition import validate_acquisition_exchange
+from reefvision.services.project_exchange_bioacoustics_v18 import AUDIO_SECTION_MODELS
 from reefvision.services.project_exchange_comparison import validate_comparison_exchange
 from reefvision.services.project_exchange_event_summary import validate_event_summary_exchange
 from reefvision.services.project_exchange_monitoring_v17 import SECTIONS as MONITORING_SECTIONS
@@ -131,6 +132,7 @@ def integrated_models() -> dict[str, type[Base]]:
             *SCHEDULE_SECTIONS,
             *MONITORING_SECTIONS,
             *RESEARCH_SECTIONS,
+            *AUDIO_SECTION_MODELS,
         )
     }
 

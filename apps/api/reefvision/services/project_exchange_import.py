@@ -66,6 +66,18 @@ from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvi
 from reefvision.schemas.spatial_source_asset_v14 import SpatialSourceParseResult
 from reefvision.services.project_exchange_acquisition import validate_acquisition_exchange
 from reefvision.services.project_exchange_alerts_v17 import restore_alert_row
+from reefvision.services.project_exchange_bioacoustics_v18 import (
+    ASSETS as AUDIO_ASSETS,
+)
+from reefvision.services.project_exchange_bioacoustics_v18 import (
+    AUDIO_MEDIA_KIND,
+    AUDIO_ORIGIN,
+    restore_audio_media,
+    restore_audio_origin,
+    restore_audio_row,
+    validate_audio_exchange,
+    validate_audio_origin,
+)
 from reefvision.services.project_exchange_comparison import restore_comparison_jobs
 from reefvision.services.project_exchange_computed import (
     COMPUTED_SECTIONS,
@@ -128,6 +140,7 @@ from reefvision.services.project_exchange_qc_v16 import (
     validate_qc_exchange,
 )
 from reefvision.services.project_exchange_reports import remap_report_archive_job
+from reefvision.services.project_exchange_research_v18 import FORMAT as MULTIMODAL_FORMAT
 from reefvision.services.project_exchange_research_v18 import (
     preserve_research_snapshot,
     validate_research_format,
@@ -483,6 +496,7 @@ def import_project_exchange(
                 section_rows[section_name] = _read_jsonl(archive, member)
 
         field_format = inspection.format_version in FIELD_EXCHANGE_FORMATS
+        research_format = inspection.format_version == MULTIMODAL_FORMAT
         integrated = integrated_models() if inspection.format_version in INTEGRATED_FORMATS else {}
         models = {**SECTION_MODELS, **integrated}
         order = [*SECTION_ORDER, *integrated]
@@ -499,12 +513,20 @@ def import_project_exchange(
             inspection.format_version or "", old_project_id, section_rows, manifest.get("origin")
         )
         validate_frozen_pose_frames(section_rows)
-        if inspection.format_version == "1.8":
-            validate_research_images(old_project_id, section_rows, manifest, archive)
         validate_acquisition_exchange(section_rows)
         validate_computed_exchange_records(old_project_id, section_rows)
         validate_environmental_analysis_exchange(old_project_id, section_rows)
         validate_spatial_exchange_records(old_project_id, section_rows)
+        if research_format:
+            validate_research_images(old_project_id, section_rows, manifest, archive)
+            validate_audio_exchange(
+                old_project_id,
+                source_storage_root,
+                section_rows,
+                list(_media_inventory(manifest).values()),
+                archive,
+            )
+            validate_audio_origin(section_rows, manifest.get(AUDIO_ORIGIN), manifest.get("origin"))
         if field_format:
             validate_field_exchange(
                 old_project_id,
@@ -677,6 +699,8 @@ def import_project_exchange(
                         values = _coerce_row(model, row, id_map)
                     if field_format:
                         restore_field_row(section_name, row, values, id_map)
+                    if research_format:
+                        restore_audio_row(section_name, row, values, id_map, digests)
                     if integrated and section_name in integrated:
                         # Literal text may happen to equal a UUID. Physical
                         # lineage keys remap independently of investigator text.
@@ -887,6 +911,18 @@ def import_project_exchange(
                             )
                             copied_media_count += 1
                         values["managed_path"] = field_destinations[digest]
+                    elif research_format and section_name == AUDIO_ASSETS:
+                        if not isinstance(old_id, str):
+                            raise ValidationError(
+                                "The verified original recording has no source identity"
+                            )
+                        values["managed_path"] = restore_audio_media(
+                            settings,
+                            project.storage_root,
+                            archive,
+                            media[(AUDIO_MEDIA_KIND, old_id)],
+                        )
+                        copied_media_count += 1
                     elif media_kind is not None and isinstance(old_id, str):
                         descriptor = media.get((media_kind, old_id))
                         if descriptor is not None:
@@ -959,6 +995,11 @@ def import_project_exchange(
                 if field_format
                 else {}
             )
+            audio_origin = (
+                restore_audio_origin(section_rows, manifest.get(AUDIO_ORIGIN) or {}, id_map)
+                if research_format
+                else {}
+            )
             package = ProjectExchangePackage(
                 id=package_id,
                 project_id=project.id,
@@ -980,6 +1021,7 @@ def import_project_exchange(
                     ),
                     "copied_media_count": copied_media_count,
                     **({FIELD_ORIGIN: field_origin} if field_origin else {}),
+                    **({AUDIO_ORIGIN: audio_origin} if audio_origin else {}),
                 },
                 completed_at=datetime.now(UTC),
             )

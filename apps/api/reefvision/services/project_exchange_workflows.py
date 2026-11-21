@@ -34,6 +34,7 @@ from reefvision.services.project_exchange_paired_growth import (
 from reefvision.services.project_exchange_paired_models_v15 import remap_paired_models_parameters
 from reefvision.services.project_exchange_schedules import restore_schedule_pins
 from reefvision.services.project_exchange_study_v15 import remap_study_parameters
+from reefvision.services.workflow_bioacoustics import NODE as BIOACOUSTIC_REPORT
 from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
     verify_succeeded_node_artifacts,
@@ -277,8 +278,12 @@ def restore_workflow_provenance(
                     artifact.payload_json = restore_mesh_measurement(
                         original["payload_json"], id_map
                     )
-                elif artifact.data_type not in {"spatial_condition_report", FIELD_DATA_TYPE}:
-                    # Condition and field receipts already use typed remapping during row import.
+                elif artifact.data_type not in {
+                    "spatial_condition_report",
+                    FIELD_DATA_TYPE,
+                    BIOACOUSTIC_REPORT,
+                }:
+                    # The condition, field and audio receipts use typed remapping on row import.
                     artifact.payload_json = map_values(artifact.payload_json, digest_map)
                     if artifact.data_type == "reefpose_validation_report":
                         artifact.payload_json = _restore_report_link(
@@ -328,6 +333,7 @@ def _restore_parameters(
         "acquisition_source_capture": ("source_sha256",),
         "acquisition_capture_replay": ("content_sha256",),
         "monitoring_assessment": ("rule_sha256", "assessment_sha256"),
+        BIOACOUSTIC_REPORT: ("report_sha256",),
     }
     if node_type in portable_pins:
         return {
