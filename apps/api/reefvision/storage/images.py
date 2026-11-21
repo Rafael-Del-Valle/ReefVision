@@ -12,6 +12,7 @@ import re
 import shutil
 import struct
 import tempfile
+import threading
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -25,6 +26,13 @@ from reefvision.domain.errors import ValidationError
 from reefvision.storage.projects import resolve_managed_project_path
 
 LOGGER = logging.getLogger(__name__)
+
+# Serialize the extremely short publish syscall within this process. Two
+# simultaneous Windows replacements of the same JPEG preview can otherwise
+# report WinError 5 even with independently reserved .part files. Keep image
+# encoding outside the lock, and do not reinterpret real access denial as a
+# transient lock (WinError 5 remains non-retryable).
+_RENDITION_PUBLISH_LOCK = threading.Lock()
 
 # Bound each decoded vendor EXIF container before JSON conversion. Camera files
 # remain immutable; oversized advisory fields are unknown, not partial metadata.
@@ -682,7 +690,8 @@ def _replace_rendition(temporary: Path, destination: Path) -> None:
 
     for attempt in range(5):
         try:
-            os.replace(temporary, destination)
+            with _RENDITION_PUBLISH_LOCK:
+                os.replace(temporary, destination)
             return
         except OSError as exc:
             # Windows sharing (32), lock (33), and resource-busy (170)
