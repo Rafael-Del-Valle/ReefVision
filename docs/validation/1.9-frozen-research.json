@@ -1,9 +1,9 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T11:49:10.896338+00:00",
-  "candidate_pr": 151,
-  "integrated_source": "91027e893172d500897058dbb2c1cc5b9de5d50a",
-  "selected_qualification": "frozen_frame_separation",
+  "updated_utc": "2026-11-21T12:06:50.716450+00:00",
+  "candidate_pr": 152,
+  "integrated_source": "272ee64e929bdfd2ebbf5e1f912221862ec5f9d2",
+  "selected_qualification": "workflow_cancellation",
   "initial_candidate_pr": 131,
   "initial_integrated_source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
   "initial_qualification_sections": [
@@ -1292,7 +1292,7 @@
       "sha256": "fdf8ea494b767e63d20b1014a2a56e0ef72a1349690357b890b585d551d89c45"
     }
   },
-  "active_product_pr": 151,
+  "active_product_pr": 152,
   "exchanged_pose_training": {
     "source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
     "version": "1.9.0",
@@ -1853,6 +1853,82 @@
         "test_commit": "9812e67e6804f93ffaf6e2ca4ff5d4c5180958e0",
         "scope": "Honor a cancelled pose child and record the terminal state of unfinished workflow nodes."
       }
+    }
+  },
+  "workflow_cancellation": {
+    "source": "272ee64e929bdfd2ebbf5e1f912221862ec5f9d2",
+    "draft": 152,
+    "branch": "codex/reefvision-1.9-training-cancellation",
+    "ordinary_paths": [
+      "Workflow Builder > running job > Cancel",
+      "Jobs > training job > Cancel",
+      "Training > Runs > Cancel training"
+    ],
+    "reproduced_on": "787e6bc5cdef75c884cb969ba74e7601a221005b",
+    "before_child_publication": "The parent returned cancel_requested with zero training runs, then incorrectly trained and reported success. The correction closes the running node and creates zero training runs.",
+    "before_parent_success": "An accepted Cancel after the last node now preserves the completed node and its exact typed artifact. The parent and job close as cancelled.",
+    "queued_and_preparing": "Queued cancellation synchronizes the child job and training record. During dataset preparation, a cancelled child propagates to its parent and unfinished nodes. Confirmed model failures still report failure.",
+    "source_checks": {
+      "publication-and-queued.xml": {
+        "file": "1.9/checkpoints/272ee64e9/source/checks/publication-and-queued.xml",
+        "sha256": "8d56fdc532b410a82051d34dcaba5c1fcbf13075dc5d310cde8ae1e59021209c",
+        "tests": 3,
+        "failures": 0
+      },
+      "preparation-second.xml": {
+        "file": "1.9/checkpoints/272ee64e9/source/checks/preparation-second.xml",
+        "sha256": "85730cad094613e66eea9068bade8f72e8e020951bfbde3a5a2c678e83e50756",
+        "tests": 5,
+        "failures": 0
+      },
+      "queued-training-red.xml": {
+        "file": "1.9/checkpoints/272ee64e9/source/checks/queued-training-red.xml",
+        "sha256": "7bbb35c3a10c7e8bc7f11e301144b5fec6a88b037988a4ea01eef76d93b172bd",
+        "tests": 1,
+        "failures": 1
+      },
+      "selected-boundaries.xml": {
+        "file": "1.9/checkpoints/272ee64e9/source/checks/selected-boundaries.xml",
+        "sha256": "2fd5dca45b12a028c8261c9e1831397eb1fdd1becf6360abc824d94f30450930",
+        "tests": 2,
+        "failures": 0
+      },
+      "exact-787e-red.log": {
+        "file": "1.9/checkpoints/272ee64e9/source/checks/exact-787e-red.log",
+        "sha256": "9caf1b3169c03fccb4d40e80b5ed4b1e4a0816921cae3a43fdabfa9bdd8e52dd"
+      },
+      "exact-787e-two-boundaries.log": {
+        "file": "1.9/checkpoints/272ee64e9/source/checks/exact-787e-two-boundaries.log",
+        "sha256": "b37a50f6d3a9bee74be6d41a79f187e1559ceac832733900e012f8a2d1a407ea"
+      }
+    },
+    "intermediate_source_browser": {
+      "file": "1.9/checkpoints/787e6bc5c/source/evidence/dataset-preparation-cancellation/index.json",
+      "sha256": "0526fc4a1ec2e6ab3172ed330b187905d59b5bf53944278b658dcb8747d6c4be"
+    },
+    "earlier_registered_bounded_volume": {
+      "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+      "msi_sha256": "86bc21d9bffbafd514b355e9d57266cfea5d93df7e6ee46fb653e15f599e2f5f",
+      "receipt": {
+        "file": "1.9/checkpoints/96476bc46/official/evidence/bounded-volume-recovery/attempt-3/index.json",
+        "sha256": "a03fe00207e49b2311a1e0f8935f25add7fa227346d1b89abc80ebaaf2c4c8d1"
+      },
+      "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44892936947/job/136812458336",
+      "source_lineage": {
+        "file": "1.9/checkpoints/272ee64e9/source/checks/annotation-storage-lineage.json",
+        "sha256": "626857a5f2fd6452865a2fbad343f85229709ffc2faa2ee1917da4657a636e88"
+      },
+      "retained_draft": 192,
+      "prior_saved": 96,
+      "reopened_after_identical_retry": 192
+    },
+    "migration": "Inherited b19_registration_0001. The cancellation repair uses the existing job, training and workflow rows.",
+    "selected_desktop_source": {
+      "receipt": {
+        "file": "1.9/checkpoints/272ee64e9/source/evidence/dataset-preparation-cancellation/index.json",
+        "sha256": "d1c2f75c8507d479eb3abfc26b9328963cccb02e063d490cc406afe524c7f57c"
+      },
+      "outcome": "Workflow Builder and Training each cancelled during dataset preparation. Each stopped at epoch zero and retained 240 training frames, 72 disjoint validation frames and the original files. Re-running the same saved revision registered one checkpoint in each study."
     }
   }
 }
