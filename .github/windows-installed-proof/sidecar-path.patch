@@ -1,0 +1,14 @@
+diff --git a/scripts/acceptance-windows-clean-install.ps1 b/scripts/acceptance-windows-clean-install.ps1
+index 460ce3c1d..f7bbfa040 100644
+--- a/scripts/acceptance-windows-clean-install.ps1
++++ b/scripts/acceptance-windows-clean-install.ps1
+@@ -634 +634,2 @@ try {
+-    if (-not (Test-Path (Join-Path $InstallRoot 'backend\reefvision-api\reefvision-api.exe'))) { throw 'Installed reefvision-api.exe is missing.' }
++    $installedSidecarPath = Join-Path $InstallRoot 'backend/reefvision-api/reefvision-api.exe'
++    if (-not (Test-Path -LiteralPath $installedSidecarPath -PathType Leaf)) { throw 'Installed reefvision-api.exe is missing.' }
+@@ -695 +696 @@ try {
+-                            BackendExecutable=(Join-Path $InstallRoot 'backendeefvision-apieefvision-api.exe')
++                            BackendExecutable=$installedSidecarPath
+@@ -726 +727 @@ try {
+-                            -BackendExecutable (Join-Path $InstallRoot 'backend\reefvision-api\reefvision-api.exe') `
++                            -BackendExecutable $installedSidecarPath `

@@ -1,0 +1,90 @@
+diff --git a/apps/web/tests/e2e/ordinary-project-live.spec.ts b/apps/web/tests/e2e/ordinary-project-live.spec.ts
+index 087cb8a88..e4592e5d1 100644
+--- a/apps/web/tests/e2e/ordinary-project-live.spec.ts
++++ b/apps/web/tests/e2e/ordinary-project-live.spec.ts
+@@ -1 +1 @@
+-import { expect } from "@playwright/test";
++import { expect, type Locator } from "@playwright/test";
+@@ -5,0 +6,47 @@ import { test } from "./spatialDesktop";
++async function observeBoxGesture(canvas: Locator) {
++  return canvas.evaluateHandle((svg) => {
++    const controller = new AbortController();
++    const frame = () => {
++      const matrix = svg.querySelector("g")?.getScreenCTM();
++      return {
++        canvas: svg.getBoundingClientRect().toJSON(),
++        sourceToScreen: matrix
++          ? [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f]
++          : null,
++        viewport: [innerWidth, innerHeight],
++        scroll: [scrollX, scrollY],
++        devicePixelRatio,
++        fullImageLoading: !!document.querySelector(".rv-media-load-status"),
++      };
++    };
++    const initial = frame();
++    const events: {
++      type: string;
++      client: number[];
++      buttons: number;
++      ms: number;
++      frame: ReturnType<typeof frame>;
++    }[] = [];
++    const observe = (event: PointerEvent) => {
++      if (event.type === "pointermove" && !event.buttons) return;
++      events.push({
++        type: event.type,
++        client: [event.clientX, event.clientY],
++        buttons: event.buttons,
++        ms: event.timeStamp,
++        frame: frame(),
++      });
++    };
++    for (const type of ["pointerdown", "pointermove", "pointerup"] as const)
++      window.addEventListener(type, observe, {
++        capture: true,
++        passive: true,
++        signal: controller.signal,
++      });
++    return () => {
++      controller.abort();
++      return { initial, events };
++    };
++  });
++}
++
+@@ -153,0 +201 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
++  const observer = firstUse ? await observeBoxGesture(canvas) : null;
+@@ -164,0 +213,11 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
++  const gesture = observer
++    ? {
++        surface: desktop.surface,
++        intendedSource: [20, 15, 55, 40],
++        requestedScreen: { start, end },
++        observed: await observer.evaluate((finish) => finish()),
++      }
++    : null;
++  await observer?.dispose();
++  const gesturePath = info.outputPath("first-use-box-evidence.json");
++  if (gesture) await writeFile(gesturePath, JSON.stringify(gesture, null, 2));
+@@ -211,0 +271,20 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
++  if (gesture) {
++    await writeFile(
++      gesturePath,
++      JSON.stringify(
++        {
++          ...gesture,
++          savedSource: saved.annotations.map(
++            (box: {
++              x_min: number;
++              y_min: number;
++              x_max: number;
++              y_max: number;
++            }) => [box.x_min, box.y_min, box.x_max, box.y_max],
++          ),
++        },
++        null,
++        2,
++      ),
++    );
++  }
