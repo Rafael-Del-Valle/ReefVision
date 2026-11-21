@@ -222,7 +222,7 @@ export function PoseIdentityReviewPanel({
       ),
   });
   const cancelMutation = useMutation({
-    mutationFn: () => cancelPoseIdentityJob(cancellableJobId ?? ""),
+    mutationFn: (jobId: string) => cancelPoseIdentityJob(jobId),
     onSuccess: () => setMessage("Identity association cancellation requested."),
     onError: (error) =>
       setMessage(
@@ -322,7 +322,10 @@ export function PoseIdentityReviewPanel({
           Associate individuals
         </button>
         {cancellableJobId && (
-          <button type="button" onClick={() => cancelMutation.mutate()}>
+          <button
+            type="button"
+            onClick={() => cancelMutation.mutate(cancellableJobId)}
+          >
             Cancel association
           </button>
         )}
