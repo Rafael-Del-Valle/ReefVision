@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.schemas.spatial_mesh_preview_v14 import MeshPreviewRequest
 from reefvision.services.spatial_mesh_surface_v14 import measure_mesh_preview
 from reefvision.tests.test_annotations import create_project
 
@@ -294,6 +295,26 @@ def _hidden_small_patch_parameters() -> dict:
         "calibration_evidence": "Synthetic mesh, physical scale not reviewed",
         "relative_scale_uncertainty": 0.1,
     }
+
+
+def test_mesh_preview_registry_matches_executable_request_schema(client: TestClient) -> None:
+    """Guided and saved workflows must advertise all strict standalone request fields."""
+    response = client.get("/api/v1/workflow-graphs/node-registry")
+    assert response.status_code == 200, response.text
+    definition = next(
+        item for item in response.json() if item["node_type"] == "mesh_surface_preview"
+    )
+    declared_fields = set(definition["required_parameters"]) | set(
+        definition["optional_parameters"]
+    )
+    assert declared_fields == set(MeshPreviewRequest.model_fields)
+    assert definition["optional_parameters"]["preserve_axis_extrema_in_preview"] is False
+    assert (
+        definition["optional_parameters"]["preserve_edge_connected_patches_in_preview"]
+        is False
+    )
+    assert definition["executable"] is True
+    assert definition["execution_state"] == "executable_analysis"
 
 
 def test_patch_preserving_display_recovers_small_hidden_component(
