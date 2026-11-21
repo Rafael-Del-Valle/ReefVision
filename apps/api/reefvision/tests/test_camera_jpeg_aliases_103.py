@@ -159,6 +159,35 @@ def test_camera_local_exposure_reports_uncertainty_without_discarding_exif(
 
 
 @pytest.mark.parametrize(
+    ("orphan_tag", "orphan_value", "tag_name"),
+    [
+        (36881, "+00:00", "OffsetTimeOriginal"),
+        (37521, "123", "SubsecTimeOriginal"),
+    ],
+)
+def test_orphaned_camera_exposure_exif_reports_uncertain_capture_time(
+    tmp_path, orphan_tag: int, orphan_value: str, tag_name: str
+) -> None:
+    """An offset/fraction alone cannot authenticate a camera exposure instant."""
+    path = tmp_path / "orphaned_exposure.JPG"
+    exif = Image.Exif()
+    exif[306] = "2026:04:04 18:00:00"  # Later file-modification time.
+    exif[orphan_tag] = orphan_value
+    Image.new("RGB", (37, 21), (12, 34, 56)).save(path, format="JPEG", exif=exif)
+    original = path.read_bytes()
+
+    inspected = inspect_staged_image(path, hashlib.sha256(original).hexdigest(), len(original))
+
+    assert inspected.capture_timestamp is None
+    assert inspected.metadata["exif"][tag_name] == orphan_value
+    assert "offset or fractional seconds without DateTimeOriginal" in (
+        inspected.metadata["capture_time_warning"]
+    )
+    assert "UTC capture timestamp not inferred" in inspected.metadata["capture_time_warning"]
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize(
     ("suffix", "offset", "expected_utc"),
     [
         (".JPG", "+02:30", "2026-04-03T11:55:30+00:00"),
