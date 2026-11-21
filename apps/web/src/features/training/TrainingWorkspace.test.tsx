@@ -302,6 +302,80 @@ describe("TrainingWorkspace launch", () => {
 });
 
 describe("TrainingWorkspace progress freshness", () => {
+  it("opens completed workflow runs and experiments in a project without a draft", async () => {
+    const completedRun = {
+      ...run,
+      draft_id: null,
+      provider_id: "reefpose",
+      task: "pose",
+      run_name: "Frozen workflow training",
+      status: "completed",
+      stage: "completed",
+      progress_epoch: 3,
+    } satisfies api.TrainingRun;
+    vi.mocked(api.getTrainingWorkspaceBootstrap).mockResolvedValue({
+      providers: [],
+      catalog: { models: [] },
+      draft_summaries: [],
+      selected_draft: null,
+    } as unknown as api.TrainingWorkspaceBootstrapResponse);
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([completedRun]);
+    vi.mocked(api.getModels).mockResolvedValue([
+      {
+        id: "model-1",
+        project_id: project.id,
+        purpose: "detector",
+        task: "pose",
+        display_name: "Frozen ReefPose checkpoint",
+        source_filename: "best.pt",
+        managed_path: "models/best.pt",
+        sha256: "a".repeat(64),
+        file_size_bytes: 128,
+        framework: "pytorch",
+        provider_name: "reefpose",
+        provider_version: "1",
+        class_map_json: {},
+        input_size_json: null,
+        metadata_json: { source_training_run_id: completedRun.id },
+        notes: null,
+        created_at: completedRun.created_at,
+        updated_at: completedRun.created_at,
+      },
+    ]);
+    vi.mocked(api.getExperiments).mockResolvedValue([
+      {
+        id: "experiment-1",
+        training_run_id: completedRun.id,
+        provider_id: "reefpose",
+        architecture: "reefpose-s",
+        summary_metrics_json: {},
+      } as api.ExperimentRecord,
+    ]);
+    renderWorkspace();
+
+    await screen.findByRole("heading", { name: "No training draft selected" });
+    fireEvent.click(screen.getByRole("tab", { name: "Runs" }));
+    await screen.findByRole("heading", { name: "Active and completed runs" });
+    expect(
+      await screen.findByText(
+        "Best model registered as Frozen ReefPose checkpoint",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText("No training draft selected")).toBeNull();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Experiments" }));
+    expect(
+      await screen.findByRole("checkbox", { name: /reefpose-s/ }),
+    ).toBeVisible();
+    expect(screen.queryByText("No training draft selected")).toBeNull();
+    expect(api.getModels).toHaveBeenCalledWith(
+      project.id,
+      "detector",
+      expect.anything(),
+    );
+    expect(api.getTrainingDraft).not.toHaveBeenCalled();
+  });
+
   it("polls active runs across sections, refreshes completion data, and stops at N/N", async () => {
     vi.useFakeTimers();
     vi.mocked(api.getTrainingRuns)
