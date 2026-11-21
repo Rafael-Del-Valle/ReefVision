@@ -50,6 +50,9 @@ class PointCloudPreviewRequest(BaseModel):
     # Pin one source row per distinct coordinate level bordering every
     # equally largest axis-projected gap; reject oversubscribed displays.
     preserve_largest_axis_gap_boundaries_in_preview: StrictBool = False
+    # Retain the first acquisition row for every distinct XYZ locus at all
+    # maximal projected-gap boundary levels, rejecting previews over 512 points.
+    preserve_largest_axis_gap_boundary_loci_in_preview: StrictBool = False
 
     @field_validator("meters_per_unit", "relative_scale_uncertainty", mode="before")
     @classmethod
