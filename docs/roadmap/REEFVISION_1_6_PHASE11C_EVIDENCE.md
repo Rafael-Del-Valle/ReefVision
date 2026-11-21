@@ -24,3 +24,21 @@ Native PowerShell regressions reject five unsafe path forms independently
 at all three validation positions and accept a standard forward-slash path.
 The independent Python verifier remains the final installed-science gate.
 No user data, schema, model, or Workflow Builder node is changed.
+
+## Independent installed-science token binding (2026-11-21)
+
+The standalone Python installed-Windows verifier now checks the report
+`evidence_run_token` against its exact `reefvision-clean-<token>/data`
+directory, even when called without the PowerShell wrapper. For Track D 1.6,
+the wrapper supplies `--expected-evidence-token`, binding the independent
+class-visibility, QC and saved executable Workflow Builder PASS decision to
+the invocation that actually launched the disposable MSI test. Missing,
+malformed, replayed and substituted tokens fail closed. Historical direct
+install reports with no invocation token remain supported without this
+explicit option.
+
+Python regression cases cover matching, missing, invalid/case-changed and
+different-run tokens plus the parent-to-verifier CLI contract. This is an
+evidence integrity improvement, not proof of a completed MSI installation;
+full exact-head CI, cross-track 0038 reconciliation, representative biology,
+installed-GUI upgrade/rollback, and researcher approval remain outstanding.

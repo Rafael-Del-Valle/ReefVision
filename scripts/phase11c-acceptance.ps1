@@ -251,7 +251,9 @@ if ($TrackD16) {
         throw "Track D 1.6 installed acceptance requires an existing Python interpreter for offline evidence verification."
     }
     $expectedUpgrade = if ($PreviousInstallerPath) { "passed" } else { "skipped" }
-    & $python.Source $verifier --report $ReportPath --expected-version $MsiProductVersion --expected-upgrade $expectedUpgrade --installer $Msi.FullName
+    & $python.Source $verifier --report $ReportPath --expected-version $MsiProductVersion `
+        --expected-upgrade $expectedUpgrade --installer $Msi.FullName `
+        --expected-evidence-token $EvidenceToken
     if ($LASTEXITCODE -ne 0) {
         throw "Track D 1.6 installed class visibility, QC, and saved Workflow Builder evidence failed independent validation."
     }

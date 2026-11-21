@@ -63,6 +63,7 @@ CAUSAL_GATE_ORDER = (
 MSI_VERSION = re.compile(r"\d{1,3}\.\d{1,3}\.\d{1,5}\Z")
 SHA256 = re.compile(r"[0-9a-fA-F]{64}\Z")
 ACCEPTANCE_RUN = re.compile(r"reefvision-clean-[0-9a-fA-F]{12}\Z")
+EVIDENCE_TOKEN = re.compile(r"[0-9a-f]{12}\Z")
 WINDOWS_RESERVED_NAME = re.compile(
     r"(?:CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\..*)?", re.IGNORECASE
 )
@@ -205,6 +206,7 @@ def validate_report(
     expected_version: str,
     expected_upgrade: str = "skipped",
     installer: Path | None = None,
+    expected_evidence_token: str | None = None,
 ) -> None:
     """Validate report claims without changing the MSI or research data."""
     _require(isinstance(report, dict), "Acceptance report must be a JSON object")
@@ -218,6 +220,31 @@ def validate_report(
         _require(isinstance(report.get(flag), bool), f"Missing explicit {flag} evidence flag")
     _require(report.get("failure_reason") is None, "Acceptance report records a failure")
     _isolated_acceptance_root(report)
+    # Historical direct-install reports lack a token. Whenever one is
+    # explicitly present, bind it to the actual isolated run, independently
+    # of the PowerShell wrapper's parent-invocation checks.
+    reported_token = report.get("evidence_run_token")
+    if reported_token is not None:
+        _require(
+            isinstance(reported_token, str)
+            and EVIDENCE_TOKEN.fullmatch(reported_token) is not None,
+            "Invalid installed acceptance evidence_run_token",
+        )
+        _require(
+            PureWindowsPath(report["isolated_data_root"]).parts[-2]
+            == f"reefvision-clean-{reported_token}",
+            "Installed acceptance token does not match its isolated run",
+        )
+    if expected_evidence_token is not None:
+        _require(
+            isinstance(expected_evidence_token, str)
+            and EVIDENCE_TOKEN.fullmatch(expected_evidence_token) is not None,
+            "Invalid expected evidence token",
+        )
+        _require(
+            reported_token == expected_evidence_token,
+            "Installed acceptance token does not match invoking test",
+        )
     start = _utc(report.get("started_at_utc"), "started_at_utc")
     end = _utc(report.get("completed_at_utc"), "completed_at_utc")
     _require(end >= start, "Acceptance completion precedes start")
@@ -425,6 +452,7 @@ def main() -> int:
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--expected-upgrade", choices=("passed", "skipped"), default="skipped")
     parser.add_argument("--installer", type=Path, required=True)
+    parser.add_argument("--expected-evidence-token")
     args = parser.parse_args()
     try:
         report = json.loads(args.report.read_text(encoding="utf-8-sig"))
@@ -433,6 +461,7 @@ def main() -> int:
             expected_version=args.expected_version,
             expected_upgrade=args.expected_upgrade,
             installer=args.installer,
+            expected_evidence_token=args.expected_evidence_token,
         )
     except (OSError, json.JSONDecodeError, AcceptanceEvidenceError) as exc:
         parser.exit(2, f"INVALID INSTALLED-WINDOWS ACCEPTANCE: {exc}\n")

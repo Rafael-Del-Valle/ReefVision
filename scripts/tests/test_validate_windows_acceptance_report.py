@@ -80,6 +80,55 @@ def good_report() -> dict:
 
 
 class AcceptanceEvidenceTests(unittest.TestCase):
+    def test_invocation_token_is_bound_to_the_installed_science_report(self) -> None:
+        # Old direct-install reports remain valid, but Track D 1.6 supplies
+        # an invocation token that must survive independent Python validation.
+        legacy = good_report()
+        MODULE.validate_report(legacy, expected_version="1.0.2")
+        report = copy.deepcopy(legacy)
+        report["evidence_run_token"] = "a1b2c3d4e5f6"
+        MODULE.validate_report(report, expected_version="1.0.2")
+        MODULE.validate_report(
+            report, expected_version="1.0.2",
+            expected_evidence_token="a1b2c3d4e5f6",
+        )
+
+        for bad in (None, "", "A1B2C3D4E5F6", "a1b2c3d4e5f", "b1b2c3d4e5f6", ["a1b2c3d4e5f6"]):
+            with self.subTest(reported_token=bad):
+                altered = copy.deepcopy(report)
+                if bad is None:
+                    altered.pop("evidence_run_token")
+                else:
+                    altered["evidence_run_token"] = bad
+                with self.assertRaisesRegex(
+                    MODULE.AcceptanceEvidenceError, "token|evidence_run_token",
+                ):
+                    MODULE.validate_report(
+                        altered, expected_version="1.0.2",
+                        expected_evidence_token="a1b2c3d4e5f6",
+                    )
+
+        # Independently reject a substituted run even with no parent token.
+        substituted = copy.deepcopy(report)
+        substituted["isolated_data_root"] = (
+            "C:/disposable/reefvision-acceptance/"
+            "reefvision-clean-b1b2c3d4e5f6/data"
+        )
+        with self.assertRaisesRegex(
+            MODULE.AcceptanceEvidenceError, "token does not match its isolated run",
+        ):
+            MODULE.validate_report(substituted, expected_version="1.0.2")
+
+        for expected in ("", "A1B2C3D4E5F6", "a1b2c3d4e5"):
+            with self.subTest(expected_token=expected):
+                with self.assertRaisesRegex(
+                    MODULE.AcceptanceEvidenceError, "Invalid expected evidence token",
+                ):
+                    MODULE.validate_report(
+                        report, expected_version="1.0.2",
+                        expected_evidence_token=expected,
+                    )
+
     def test_clean_install_passes_but_does_not_claim_upgrade(self) -> None:
         clean = good_report()
         MODULE.validate_report(clean, expected_version="1.0.2")
