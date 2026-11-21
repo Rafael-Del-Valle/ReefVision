@@ -1,0 +1,11 @@
+# Original Windows storage recovery proof
+
+This QA workflow uses the original 1.9 installer from manufacturing run `44867493658`, job `136734331397`, and source `96476bc462aeed0137a55b02ded6d66b1d4a2c72`. It verifies the archive transport, installer media and provenance before registering the MSI on a disposable GitHub-hosted Windows 2022 runner. The stock desktop and API run under a temporary ordinary account. Only the QA launcher copy changes, so it can accept the independently verified scratch volume as the allowed profile root.
+
+The API data profile uses a newly attached VHD capped at 256 MiB. The WebView2 data directory, installer, drivers and evidence stay outside that volume. The test identifies the volume by its backing file, disk and partition identities, NTFS label and ownership marker. It checks those identifiers before allocating or removing its padding file. The VHD is detached after the test and the original MSI is uninstalled. The driver refuses to run off the dedicated hosted job.
+
+The browser imports a generated original and opens its normal annotation editor. A controlled seed provides 96 existing boxes for the editor's ordinary Duplicate operation. After the test checkpoints the idle disposable SQLite WAL, the broker allocates space on the VHD and reports its measured remaining capacity. The unmodified sidecar must return HTTP 507 from the actual annotation PUT. The entire draft remains visible, its stored revision and boxes stay unchanged, and no automatic PUT follows that failure.
+
+The broker then removes only the designated capacity file. The browser clicks Retry save and verifies that the exact same payload gets one successful response, committing revision 2 with 192 boxes. The original is downloaded and hashed again after reopening the editor. After closing the stock app, a separate read-only SQLite audit checks the committed revision, annotation events and the original file hash before the owned volume is detached.
+
+The artifact retains transport and binary identity, volume capacity and pressure, Playwright outcomes and screenshots, the closed database audit, and cleanup. Source-level SQLite page quotas and OS-level volume exhaustion are separate proofs. The hosted test makes no changes to the product checkout's tracked source or the original installer.
