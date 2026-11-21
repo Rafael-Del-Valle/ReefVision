@@ -27,6 +27,33 @@ from reefvision.tests.test_annotations import create_project
             [[0, 0, 0], [99999990, 99999991, 0], [99999993, 99999994, 0]],
             1.5,
         ),
+        (
+            "translated-and-reflected-xy",
+            [
+                [100000000, -200000000, 70000000],
+                [200000001, -300000000, 70000000],
+                [200000000, -299999999, 70000000],
+            ],
+            0.5,
+        ),
+        (
+            "nearly-parallel-yz-plane",
+            [
+                [300000000, 0, 0],
+                [300000000, 100000001, 100000000],
+                [300000000, 100000000, 99999999],
+            ],
+            0.5,
+        ),
+        (
+            "nearly-parallel-xz-plane",
+            [
+                [0, -300000000, 0],
+                [99999990, -300000000, 99999991],
+                [99999993, -300000000, 99999994],
+            ],
+            1.5,
+        ),
     ],
 )
 def test_exact_triangle_area_replays_standalone_and_saved_graph(
@@ -36,6 +63,18 @@ def test_exact_triangle_area_replays_standalone_and_saved_graph(
     expected_area: float,
 ) -> None:
     """Exact integer XY determinants are -1 and -3, independent of vertex ordering."""
+    # Independent integer arithmetic is exact for these source coordinates;
+    # each adversarial triangle lies in an orthogonal plane.
+    first_edge = [vertices[1][axis] - vertices[0][axis] for axis in range(3)]
+    second_edge = [vertices[2][axis] - vertices[0][axis] for axis in range(3)]
+    integer_cross = [
+        first_edge[1] * second_edge[2] - first_edge[2] * second_edge[1],
+        first_edge[2] * second_edge[0] - first_edge[0] * second_edge[2],
+        first_edge[0] * second_edge[1] - first_edge[1] * second_edge[0],
+    ]
+    assert sum(component != 0 for component in integer_cross) == 1
+    assert max(abs(component) for component in integer_cross) / 2 == expected_area
+
     points = [(vertex[0], vertex[1], vertex[2]) for vertex in vertices]
     assert triangle_area(points[0], points[1], points[2]) == expected_area
     assert triangle_area(points[0], points[2], points[1]) == expected_area
