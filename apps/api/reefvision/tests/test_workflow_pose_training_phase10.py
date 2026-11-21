@@ -1445,11 +1445,11 @@ def _native_pose_workflow_graph(dataset_id: str) -> dict[str, object]:
     }
 
 
-@pytest.mark.parametrize("cancel_parent", [True, False], ids=["workflow", "training-job"])
+@pytest.mark.parametrize("cancel_from", ["workflow", "training-job", "training-run"])
 def test_cancelling_before_pose_worker_claim_closes_the_training_and_graph(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
-    cancel_parent: bool,
+    cancel_from: str,
 ) -> None:
     project, dataset = _frozen_dataset(client, monkeypatch)
     app = cast(FastAPI, client.app)
@@ -1468,8 +1468,13 @@ def test_cancelling_before_pose_worker_claim_closes_the_training_and_graph(
         with factory() as session:
             child = session.get(Job, job_id)
             assert child is not None and child.status == "queued"
-        target = parent_id if cancel_parent else job_id
-        cancelled = client.post(f"/api/v1/jobs/{target}/cancel")
+            training_id = child.request_json["training_run_id"]
+        cancel_url = {
+            "workflow": f"/api/v1/jobs/{parent_id}/cancel",
+            "training-job": f"/api/v1/jobs/{job_id}/cancel",
+            "training-run": f"/api/v1/training-runs/{training_id}/cancel",
+        }[cancel_from]
+        cancelled = client.post(cancel_url)
         assert cancelled.status_code == 200, cancelled.text
         return process_pose_training_job(settings, factory, job_id)
 
@@ -1482,6 +1487,7 @@ def test_cancelling_before_pose_worker_claim_closes_the_training_and_graph(
     assert training["completed_at"] and training["result_checkpoint_path"] is None
     child_job = client.get(f"/api/v1/jobs/{training['job_id']}").json()
     assert child_job["status"] == child_job["result_json"]["stage"] == "cancelled"
+    assert child_job["completed_at"]
     detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}").json()
     assert detail["run"]["status"] == "cancelled"
     assert {n["node_id"]: n["status"] for n in detail["nodes"]} == {
