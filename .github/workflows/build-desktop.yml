@@ -56,6 +56,14 @@ jobs:
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
 
+      - name: Check native arguments and the installed research sidecar path
+        shell: pwsh
+        run: |
+          . ./scripts/lib/node-tools.ps1
+          $node = Find-ReefVisionExecutable -Names 'node.exe'
+          ./scripts/test-windows-playwright-native-arguments.ps1 -NodePath $node -Scratch (Join-Path $env:RUNNER_TEMP 'research-native-arguments')
+          ./scripts/test-windows-research-sidecar-path.ps1 -NodePath $node -Scratch (Join-Path $env:RUNNER_TEMP 'research-sidecar-path')
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
