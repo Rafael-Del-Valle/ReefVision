@@ -412,10 +412,10 @@ class SemanticModelService(SegmentationModelService):
             )
 
         model_metadata = dict(model.metadata_json or {})
-
-        model_metadata.update(metadata_overrides)
-
-        model.metadata_json = model_metadata
+        # The registry deduplicates identical checkpoint bytes across runs. Its
+        # original training record remains the source of the model in Model Hub.
+        if model_metadata.get("source_training_run_id") is None:
+            model.metadata_json = {**model_metadata, **metadata_overrides}
 
         self.session.commit()
         self.session.refresh(model)

@@ -297,6 +297,12 @@ def register_workflow_trained_model(
         ),
     )
     metadata = dict(registered.metadata_json or {})
+    experiment_id = session.scalar(
+        select(ExperimentRecord.id).where(ExperimentRecord.training_run_id == run.id)
+    )
+    manifest = run.artifact_manifest_json or {}
+    split = manifest.get("pose_split_manifest")
+    pose_split = split if run.task == "pose" and isinstance(split, dict) else {}
     pose_schema = metadata.get("pose_landmark_schema")
     pose_schema = (
         dict(pose_schema)
@@ -318,18 +324,22 @@ def register_workflow_trained_model(
         "provider_version": registered.provider_version,
         "framework": registered.framework,
         "source_training_run_id": run.id,
-        "source_experiment_id": metadata.get("source_experiment_id"),
-        "source_dataset_version_id": metadata.get("source_dataset_version_id"),
-        "source_dataset_manifest_sha256": metadata.get("source_dataset_manifest_sha256"),
-        "source_split_manifest_sha256": metadata.get("source_split_manifest_sha256"),
-        "source_pose_training_dataset_id": metadata.get("source_pose_training_dataset_id"),
-        "source_pose_training_dataset_manifest_sha256": metadata.get(
-            "source_pose_training_dataset_manifest_sha256"
-        ),
-        "source_pose_validation_dataset_id": metadata.get("source_pose_validation_dataset_id"),
-        "source_pose_validation_dataset_manifest_sha256": metadata.get(
-            "source_pose_validation_dataset_manifest_sha256"
-        ),
+        "model_source_training_run_id": metadata.get("source_training_run_id"),
+        "source_experiment_id": experiment_id,
+        "source_dataset_version_id": run.dataset_version_id,
+        "source_dataset_manifest_sha256": run.dataset_manifest_sha256,
+        "source_split_manifest_sha256": run.split_manifest_sha256,
+        "source_pose_training_dataset_id": manifest.get("pose_training_dataset_id")
+        or pose_split.get("training_dataset_id"),
+        "source_pose_training_dataset_manifest_sha256": run.dataset_manifest_sha256
+        if run.task == "pose"
+        else None,
+        "source_pose_validation_dataset_id": manifest.get("pose_validation_dataset_id")
+        or pose_split.get("validation_dataset_id"),
+        "source_pose_validation_dataset_manifest_sha256": manifest.get(
+            "pose_validation_dataset_manifest_sha256"
+        )
+        or pose_split.get("validation_dataset_manifest_sha256"),
         "pose_schema_id": pose_schema.get("schema_id"),
         "pose_schema_revision": pose_schema.get("schema_revision"),
         "pose_schema_content_hash": pose_schema.get("content_hash"),
