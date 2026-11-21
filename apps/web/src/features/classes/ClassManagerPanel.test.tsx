@@ -589,6 +589,146 @@ describe("ClassManagerPanel", () => {
   );
 
   it.each([
+    [
+      "reassign",
+      "reassign",
+      "Preview reassign",
+      "Run reassign",
+      "blank operation identity",
+      { id: " " },
+    ],
+    [
+      "reassign-delete",
+      "reassign_delete",
+      "Preview Reassign and Delete",
+      "Run Reassign and Delete",
+      "blank operation identity",
+      { id: " " },
+    ],
+    [
+      "reassign",
+      "reassign",
+      "Preview reassign",
+      "Run reassign",
+      "missing review checksum",
+      { preview_checksum: null },
+    ],
+    [
+      "reassign-delete",
+      "reassign_delete",
+      "Preview Reassign and Delete",
+      "Run Reassign and Delete",
+      "missing review checksum",
+      { preview_checksum: null },
+    ],
+    [
+      "reassign",
+      "reassign",
+      "Preview reassign",
+      "Run reassign",
+      "malformed review checksum",
+      { preview_checksum: "not-a-sha256" },
+    ],
+    [
+      "reassign-delete",
+      "reassign_delete",
+      "Preview Reassign and Delete",
+      "Run Reassign and Delete",
+      "malformed review checksum",
+      { preview_checksum: "not-a-sha256" },
+    ],
+    [
+      "reassign",
+      "reassign",
+      "Preview reassign",
+      "Run reassign",
+      "truncated scientific reference report",
+      { plan: { blockers: [], blocking_records: [] } },
+    ],
+    [
+      "reassign-delete",
+      "reassign_delete",
+      "Preview Reassign and Delete",
+      "Run Reassign and Delete",
+      "truncated scientific reference report",
+      { plan: { blockers: [], blocking_records: [] } },
+    ],
+  ] as const)(
+    "does not execute %s with %s",
+    async (
+      endpoint,
+      operationType,
+      previewLabel,
+      runLabel,
+      defect,
+      invalidEvidence,
+    ) => {
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async (input, init) => {
+          const url = String(input);
+          if (
+            url.endsWith(
+              `/projects/${project.id}/classes/class-1/${endpoint}/preview`,
+            ) &&
+            init?.method === "POST"
+          ) {
+            return jsonResponse({
+              id: "preview-with-missing-evidence",
+              project_id: project.id,
+              source_class_id: "class-1",
+              target_class_id: "class-2",
+              operation_type: operationType,
+              status: "previewed",
+              preview_checksum: "a".repeat(64),
+              plan: {
+                mutable_records: [],
+                protected_records: [],
+                blocking_records: [],
+                compatibility_impacts: [],
+                blockers: [],
+              },
+              failures: [],
+              ...invalidEvidence,
+            });
+          }
+          throw new Error(
+            `Unexpected class request: ${init?.method ?? "GET"} ${url}`,
+          );
+        });
+
+      renderPanel();
+      const row = sourceClassRow();
+      const execute = within(row).getByRole("button", { name: runLabel });
+      expect(execute).toBeDisabled();
+      await userEvent.click(
+        within(row).getByRole("button", { name: previewLabel }),
+      );
+      expect(
+        await within(row).findByText(
+          operationType === "reassign"
+            ? "Reassign preview"
+            : "Reassign and Delete preview",
+        ),
+      ).toBeInTheDocument();
+      if (defect === "truncated scientific reference report") {
+        expect(
+          within(row).getByText(/Operation evidence is incomplete/),
+        ).toBeInTheDocument();
+      }
+      expect(execute).toBeDisabled();
+      await userEvent.click(execute);
+      expect(
+        fetchMock.mock.calls.filter(
+          ([input, init]) =>
+            String(input).endsWith(`/classes/class-1/${endpoint}`) &&
+            init?.method === "POST",
+        ),
+      ).toHaveLength(0);
+    },
+  );
+
+  it.each([
     ["reassign", "blockers"],
     ["reassign", "blocking_records"],
     ["reassign", "failures"],
