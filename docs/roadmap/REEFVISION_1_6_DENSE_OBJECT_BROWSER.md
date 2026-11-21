@@ -278,20 +278,22 @@ The document still held the observation, but the sidebar incorrectly made it
 inaccessible without a positional jump.
 
 The browser now fills its existing 200-pin budget per modality with **distinct
-IDs actually present in the filtered off-page collection**. It scans recent
-selection IDs in bounded batches and consults earlier selections only when
-a batch contains missing or duplicate records. Each candidate batch and the
-result list stay limited to 200; the usual all-valid selection still reads
-only the newest 200 selected IDs and avoids a full selection copy. Empty or
-fully mounted filtered modalities return without traversing retained selection
-IDs. A rare
-pathological tail of many stale IDs can require repeated filtered-document
-scans; native performance profiling on representative dense coral images
-remains an acceptance requirement.
+IDs actually present in the filtered off-page collection**. The usual path
+reads at most the newest 200 distinct selected IDs, scans only until the
+matching rows are found, and avoids a copy of the whole selection. When recent
+IDs are deleted, duplicated, or excluded by a class filter, a temporary
+off-page ID-to-index lookup is constructed **only on that exceptional path**;
+earlier selected IDs are then traversed once, rather than rescanning thousands
+of coral observations after every batch of stale selections. The fallback
+uses O(filtered off-page object count) additional memory but linear time.
+Empty or fully mounted modalities return without traversing retained
+selection IDs. Profiling on genuine Windows dense images remains required.
 
 Vitest coverage adds repeated selected IDs, deleted/filtered-out annotation
 and mask IDs followed by valid older selections, and a full 200 matching-row
-budget after 800 stale selected IDs. The existing 50,000-object bounded
+budget after 800 stale selected IDs. A 5,000-object/5,000-stale-selection
+Proxy regression caps indexed source reads to a linear bound, guarding against
+quadratic fallback rescanning. The existing 50,000-object bounded
 selection-read regression remains in place. No bounding boxes, masks, class
 identities, review decisions, original pixels, saved graphs, typed workflow
 results, provenance, units, retries, or mandatory human approval are changed.
