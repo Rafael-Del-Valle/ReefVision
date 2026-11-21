@@ -8,6 +8,7 @@ on:
     paths:
       - "apps/api/**"
       - "apps/web/**"
+      - "apps/windows-automation/**"
       - "config/**"
       - "requirements/**"
       - "scripts/**"
@@ -83,14 +84,18 @@ jobs:
           apps/api/reefvision/tests/test_desktop_runtime.py
           apps/api/reefvision/tests/test_model_install.py
           apps/api/reefvision/tests/test_bundled_models.py
+          apps/api/reefvision/tests/test_windows_automation_packaging.py
 
       - name: Verify Rust desktop tests
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path .desktop/release-2.0.0/backend, .desktop/release-2.0.0/bundled-models | Out-Null
+          New-Item -ItemType Directory -Force -Path .desktop/release-2.0.0/backend, .desktop/release-2.0.0/bundled-models, .desktop/release-2.0.0/automation | Out-Null
           npm --prefix apps/web run ui:build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --locked --manifest-path apps/web/src-tauri/Cargo.toml
+
+      - name: Verify the standalone Windows automation console
+        run: cargo test --locked --manifest-path apps/windows-automation/Cargo.toml
 
       - name: Build weight-free 2.0.0 desktop installer
         shell: pwsh

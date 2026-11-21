@@ -31,6 +31,7 @@
     "targets": ["msi"],
     "shortDescription": "Local-first scientific image annotation and computer vision platform.",
     "resources": {
+      "../../../.desktop/release-2.0.0/automation/": "automation/",
       "../../../.desktop/release-2.0.0/backend/": "backend/",
       "../../../.desktop/release-2.0.0/bundled-models/": "bundled-models/"
     },
