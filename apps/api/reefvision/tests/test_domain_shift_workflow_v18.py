@@ -1,14 +1,24 @@
+from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import Job, PredictionProposal
+from reefvision.db.models import Job, PredictionProposal, Project
+from reefvision.db.models.image_adjustment import ImageAdjustmentRecipe
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.schemas.domain_shift_v18 import DomainShiftDraft
+from reefvision.services.domain_shift_metrics_v18 import summarize_domain_shift
 from reefvision.services.domain_shift_v18 import process_domain_shift
 from reefvision.services.paired_models_v15 import process_comparison
+from reefvision.services.project_exchange import _row
+from reefvision.services.project_exchange_domain_shift_v18 import validate_domain_shift_exchange
+from reefvision.services.project_exchange_v1 import ProjectExchangeV1Service
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_model_comparison_stills_v15 import _confirm_runtime, _dataset, _register
 from reefvision.tests.test_model_comparison_stills_v15 import reviewed_runtime as reviewed_runtime
 
@@ -171,3 +181,49 @@ def test_domain_shift_uses_pinned_adjustments_and_replays_with_groups(
     assert process_domain_shift(settings, factory, overlap)
     withhold = client.get(f"{domain}/{overlap}").json()["result_json"]["snapshot"]["summary"]
     assert withhold["lineage"] == "overlap" and withhold["metrics"] == []
+
+    with factory() as session:
+        records = ProjectExchangeV1Service(session, settings)._records(
+            session.get_one(Project, project)
+        )
+        records["image_adjustment_recipes"] = session.scalars(
+            select(ImageAdjustmentRecipe).where(ImageAdjustmentRecipe.project_id == project)
+        ).all()
+        sections = {name: [_row(row) for row in rows] for name, rows in records.items()}
+    validate_domain_shift_exchange(project, sections, {})
+
+    def archived_report(rows: dict[str, Any], target: str) -> dict[str, Any]:
+        return next(row["result_json"] for row in rows["jobs"] if row["id"] == target)
+
+    forged = deepcopy(sections)
+    changed = archived_report(forged, job_id)
+    body = changed["snapshot"]
+    body["observed_evidence"]["groups"][0]["observations"][0]["metrics"][0]["left"] = 42.0
+    body["summary"] = summarize_domain_shift(
+        DomainShiftDraft.model_validate(body["declaration"]),
+        body["observed_evidence"]["groups"],
+        "held_out",
+    )
+    changed["content_sha256"] = canonical_json_sha256(body)
+    with pytest.raises(ValidationError, match="scores no longer match"):
+        validate_domain_shift_exchange(project, forged, {})
+
+    foreign = deepcopy(sections)
+    children = snapshot["observed_evidence"]["inference_job_ids"]
+    child = next(row for row in foreign["jobs"] if row["id"] == children[0])
+    child["request_json"]["paired_owner_run_id"] = baseline_id
+    with pytest.raises(ValidationError, match="belongs to a different domain report"):
+        validate_domain_shift_exchange(project, foreign, {})
+
+    artifact_rows = deepcopy(sections)
+    artifact = next(
+        row
+        for row in artifact_rows["workflow_artifacts"]
+        if row["data_type"] == "domain_shift_report"
+    )
+    artifact["payload_json"]["snapshot"]["reference"]["split"] = "train"
+    artifact["payload_sha256"] = canonical_json_sha256(artifact["payload_json"])
+    with pytest.raises(
+        ValidationError, match="workflow does not produce its declared frozen report"
+    ):
+        validate_domain_shift_exchange(project, artifact_rows, {})

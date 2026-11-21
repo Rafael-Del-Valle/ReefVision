@@ -35,7 +35,7 @@ from reefvision.domain.annotation_comparison import (
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.jobs.inference import process_inference_job
 from reefvision.repositories.jobs import paired_owner_active
-from reefvision.schemas.image_adjustments_v18 import ImageAdjustmentPin
+from reefvision.schemas.image_adjustments_v18 import ImageAdjustmentPin, ImageAdjustmentRecord
 from reefvision.schemas.paired_growth_contrast import Digest
 from reefvision.schemas.static_comparison import (
     ReferenceAnnotation,
@@ -106,6 +106,8 @@ class RecordedImageRuns:
     cutoff: datetime
     legacy_digests: tuple[str, str] | None = None
     started_at: datetime | None = None
+    adjusted_jobs: tuple[Mapping[str, str], Mapping[str, str]] | None = None
+    adjusted_records: Mapping[str, ImageAdjustmentRecord] | None = None
 
 
 class UnverifiedLegacyInference(ValidationError):
@@ -444,6 +446,7 @@ def _run_side(
     reference_sha256: str,
     legacy_digest: bool = False,
     adjustment: ImageAdjustmentPin | None = None,
+    archived_adjustment: ImageAdjustmentRecord | None = None,
 ) -> ModelOutputs:
     choice = model.choice.model_dump(mode="json")
     request = {key: value for key, value in choice.items() if key != "checkpoint_sha256"}
@@ -455,21 +458,33 @@ def _run_side(
     }
     expected_input = None
     if adjustment is not None:
-        assert settings is not None
         if len(image_ids) != 1:
             raise ValidationError("Each adjusted evaluation job requires one original image")
-        checkpoint = session.get(ModelRegistration, str(model.choice.model_id))
-        if checkpoint is None:
-            raise NotFoundError("The reviewed adjustment evaluation model is unavailable")
-        expected_request.update(
-            adjusted_inference_binding(
-                session, settings, project_id, image_ids, adjustment, checkpoint
+        if archived_adjustment is None:
+            assert settings is not None
+            checkpoint = session.get(ModelRegistration, str(model.choice.model_id))
+            if checkpoint is None:
+                raise NotFoundError("The reviewed adjustment evaluation model is unavailable")
+            expected_request.update(
+                adjusted_inference_binding(
+                    session, settings, project_id, image_ids, adjustment, checkpoint
+                )
             )
-        )
-        record = ImageAdjustmentService(session, settings).get(
-            image_ids[0], str(adjustment.recipe_id)
-        )
-        expected_input = adjusted_input_provenance(record)
+            record = ImageAdjustmentService(session, settings).get(
+                image_ids[0], str(adjustment.recipe_id)
+            )
+            expected_input = adjusted_input_provenance(record)
+        else:
+            if not recorded_job_id:
+                raise ValidationError("An archived adjustment requires its actual inference job")
+            expected_request.update(
+                image_adjustment=adjustment.model_dump(mode="json"),
+                checkpoint_sha256=choice["checkpoint_sha256"],
+            )
+            expected_input = adjusted_input_provenance(archived_adjustment)
+            expected_input["recipe_id"] = (original_ids or {}).get(
+                expected_input["recipe_id"], expected_input["recipe_id"]
+            )
     if recorded_job_id is not None:
         job_id = recorded_job_id
     else:
@@ -586,7 +601,18 @@ def _run_side(
                 "invalid_images": sorted(
                     archived.get(identifier, identifier) for identifier in invalid
                 ),
-                **({"image_adjustment": adjustment.model_dump(mode="json")} if adjustment else {}),
+                **(
+                    {
+                        "image_adjustment": {
+                            **adjustment.model_dump(mode="json"),
+                            "recipe_id": archived.get(
+                                str(adjustment.recipe_id), str(adjustment.recipe_id)
+                            ),
+                        }
+                    }
+                    if adjustment
+                    else {}
+                ),
             }
         ),
     )
@@ -594,14 +620,20 @@ def _run_side(
 
 def _run_adjusted_side(
     session: Session,
-    settings: Settings,
+    settings: Settings | None,
     project_id: str,
     model: ModelEvidence,
     targets: list[str],
     pins: Mapping[str, ImageAdjustmentPin],
     owner_run_id: str | None,
     reference_sha256: str,
+    *,
+    archived: RecordedImageRuns | None = None,
+    side: int = 0,
 ) -> ModelOutputs:
+    old_ids = archived.original_ids if archived else {}
+    archive_jobs = archived.adjusted_jobs[side] if archived and archived.adjusted_jobs else {}
+    archive_records = archived.adjusted_records if archived and archived.adjusted_records else {}
     outcomes = [
         _run_side(
             session,
@@ -612,8 +644,11 @@ def _run_adjusted_side(
             owner_run_id=owner_run_id,
             reference_sha256=reference_sha256,
             adjustment=pins[image_id],
+            recorded_job_id=archive_jobs.get(image_id),
+            original_ids=old_ids,
+            archived_adjustment=archive_records.get(image_id),
         )
-        for image_id in targets
+        for image_id in sorted(targets, key=lambda identifier: old_ids.get(identifier, identifier))
     ]
     return ModelOutputs(
         outcomes[0].job_id,
@@ -906,21 +941,35 @@ def compare_image_models(
         )
     targets = [image.item.image_id for image in truth if image.exclusion is None]
     if adjusted_inputs is not None:
-        if recorded is not None or settings is None or set(adjusted_inputs) != set(targets):
+        if set(adjusted_inputs) != set(targets):
             raise ValidationError("Select a pinned adjustment for every usable frozen test image")
-        service = ImageAdjustmentService(session, settings)
+        if recorded is None:
+            assert settings is not None
+            service = ImageAdjustmentService(session, settings)
+            recipe_records = [
+                service.verified_input(project_id, image_id, pin)[1]
+                for image_id, pin in adjusted_inputs.items()
+            ]
+        else:
+            if (
+                recorded.adjusted_jobs is None
+                or recorded.adjusted_records is None
+                or any(set(side) != set(targets) for side in recorded.adjusted_jobs)
+                or set(recorded.adjusted_records) != set(targets)
+            ):
+                raise ValidationError(
+                    "Archived adjusted scores are missing a required recipe or job"
+                )
+            recipe_records = list(recorded.adjusted_records.values())
         parameters = {
-            canonical_json_sha256(
-                service.verified_input(project_id, image_id, pin)[1].receipt.parameters.model_dump()
-            )
-            for image_id, pin in adjusted_inputs.items()
+            canonical_json_sha256(record.receipt.parameters.model_dump())
+            for record in recipe_records
         }
         if len(parameters) != 1:
             raise ValidationError("Both acquisition domains must use the same adjustment settings")
     outputs = []
     for index, model in enumerate((left, right)):
         if adjusted_inputs is not None:
-            assert settings is not None
             outcome = _run_adjusted_side(
                 session,
                 settings,
@@ -930,6 +979,8 @@ def compare_image_models(
                 adjusted_inputs,
                 owner_run_id,
                 reference_sha256,
+                archived=recorded,
+                side=index,
             )
         elif recorded is not None and recorded.job_ids is None:
             if recorded.legacy_digests is None:
