@@ -277,3 +277,132 @@ def test_preview_missing_face_area_underflow_is_flagged_and_replayable(
     assert len(uncalibrated_hashes[0]) == 64
     assert uncalibrated_hashes[0] == uncalibrated_hashes[1]
     assert uncalibrated_hashes[0] != hashes[0]
+
+
+def _hidden_small_patch_parameters() -> dict:
+    """514-face synthetic mesh with a small, non-extreme, display-hidden patch."""
+    vertices = [[0.0, 0.0, 0.0]]
+    vertices.extend([[float(index), 1.0, 0.0] for index in range(514)])
+    faces = [[0, index + 1, index + 2] for index in range(513)]
+    vertices.extend([[10.0, 0.25, 0.0], [10.1, 0.25, 0.0], [10.0, 0.30, 0.0]])
+    faces.insert(256, [515, 516, 517])
+    return {
+        "vertices": vertices,
+        "faces": faces,
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic mesh, physical scale not reviewed",
+        "relative_scale_uncertainty": 0.1,
+    }
+
+
+def test_patch_preserving_display_recovers_small_hidden_component(
+    client: TestClient,
+) -> None:
+    """Show otherwise hidden disconnected patches without changing scientific data."""
+    params = _hidden_small_patch_parameters()
+    uniform = measure_mesh_preview(**params, preserve_axis_extrema_in_preview=True)
+    pinned = measure_mesh_preview(
+        **params,
+        preserve_axis_extrema_in_preview=True,
+        preserve_edge_connected_patches_in_preview=True,
+    )
+    assert uniform["edge_connected_patch_face_counts"] == [513, 1]
+    assert uniform["preview_omitted_edge_connected_patch_indices"] == [1]
+    assert 256 not in uniform["preview_face_indices"]
+    assert uniform["preview_omitted_axis_extremum_sides"] == []
+    assert uniform["preview_largest_triangle_displayed"] is True
+    assert pinned["preview_sampling_strategy"] == "uniform_face_index_extrema_patch_preserving"
+    assert pinned["preview_face_count"] == 512
+    assert len(set(pinned["preview_face_indices"])) == 512
+    assert 256 in pinned["preview_face_indices"]
+    assert pinned["preview_edge_connected_patch_face_counts"][1] == 1
+    assert pinned["preview_omitted_edge_connected_patch_indices"] == []
+    assert "preview_omits_edge_connected_mesh_patches" not in pinned["qc_warnings"]
+    assert pinned["preview_omitted_axis_extremum_sides"] == []
+    assert pinned["surface_area_m2"] == uniform["surface_area_m2"]
+    assert pinned["surface_area_scale_interval_m2"] == uniform["surface_area_scale_interval_m2"]
+    assert pinned["axis_aligned_dimensions_m"] == uniform["axis_aligned_dimensions_m"]
+    assert pinned["edge_connected_patch_geometry_sha256"] == uniform[
+        "edge_connected_patch_geometry_sha256"
+    ]
+    assert pinned["provenance"]["geometry_sha256"] == uniform["provenance"]["geometry_sha256"]
+    assert pinned["provenance"]["calibration_verified"] is False
+    assert pinned["measurement_status"] == "caller_supplied_unverified"
+
+    project_id = str(create_project(client, "Patch-preserving mesh preview")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    request_params = {
+        **params,
+        "preserve_axis_extrema_in_preview": True,
+        "preserve_edge_connected_patches_in_preview": True,
+        "specimen_id": "unverified-patch-specimen",
+        "observation_id": "unverified-patch-observation",
+    }
+    response = client.post(f"{base}/spatial/mesh-preview", json=request_params)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    assert expected["preview_face_indices"] == pinned["preview_face_indices"]
+    assert expected["surface_area_m2"] == pinned["surface_area_m2"]
+    assert expected["provenance"]["specimen_identity_verified"] is False
+    assert expected["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": "patch-preserving-sample-v14",
+        "name": "Bounded patch-preserving unverified mesh preview",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": request_params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    assert (
+        saved.json()["graph_json"]["nodes"][1]["parameters"][
+            "preserve_edge_connected_patches_in_preview"
+        ]
+        is True
+    )
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        )
+        assert artifact["payload_json"] == expected
+        hashes.append(artifact["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
+
+
+@pytest.mark.parametrize("invalid", [1, "true", None])
+def test_patch_preserving_preview_requires_strict_boolean(
+    client: TestClient, invalid: object
+) -> None:
+    params = _mesh_parameters(2)
+    params["preserve_edge_connected_patches_in_preview"] = invalid
+    project_id = str(create_project(client, "Strict patch preview flag")["id"])
+    response = client.post(f"/api/v1/projects/{project_id}/spatial/mesh-preview", json=params)
+    assert response.status_code == 422, response.text
