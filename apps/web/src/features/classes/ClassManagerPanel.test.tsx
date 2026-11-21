@@ -1278,4 +1278,198 @@ describe("ClassManagerPanel", () => {
       ).toBe(false);
     },
   );
+  it.each([
+    ["reassign", "reassign", "Run reassign"],
+    ["reassign-delete", "reassign_delete", "Run Reassign and Delete"],
+  ] as const)(
+    "consumes both researcher previews after a successful %s",
+    async (executedEndpoint, executedType, executedButton) => {
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async (input, init) => {
+          const url = String(input);
+          if (url.endsWith("/preview") && init?.method === "POST") {
+            const isDelete = url.endsWith("/reassign-delete/preview");
+            return jsonResponse({
+              id: isDelete ? "delete-preview" : "reassign-preview",
+              project_id: project.id,
+              source_class_id: "class-1",
+              target_class_id: "class-2",
+              operation_type: isDelete ? "reassign_delete" : "reassign",
+              status: "previewed",
+              preview_checksum: (isDelete ? "b" : "a").repeat(64),
+              plan: {
+                mutable_records: [],
+                protected_records: [],
+                blocking_records: [],
+                compatibility_impacts: [],
+                blockers: [],
+              },
+              failures: [],
+            });
+          }
+          if (
+            url.endsWith("/classes/class-1/" + executedEndpoint) &&
+            init?.method === "POST"
+          ) {
+            return jsonResponse({
+              id: "completed-operation",
+              project_id: project.id,
+              source_class_id: "class-1",
+              target_class_id: "class-2",
+              operation_type: executedType,
+              status: "completed",
+              plan: {
+                mutable_records: [],
+                protected_records: [],
+                blocking_records: [],
+                compatibility_impacts: [],
+                blockers: [],
+              },
+              failures: [],
+            });
+          }
+          throw new Error("Unexpected class operation: " + url);
+        });
+
+      renderPanel();
+      const row = sourceClassRow();
+      const reassignRun = within(row).getByRole("button", {
+        name: "Run reassign",
+      });
+      const deleteRun = within(row).getByRole("button", {
+        name: "Run Reassign and Delete",
+      });
+      await userEvent.click(
+        within(row).getByRole("button", { name: "Preview reassign" }),
+      );
+      await waitFor(() => expect(reassignRun).toBeEnabled());
+      await userEvent.click(
+        within(row).getByRole("button", {
+          name: "Preview Reassign and Delete",
+        }),
+      );
+      await waitFor(() => expect(deleteRun).toBeEnabled());
+
+      await userEvent.click(
+        within(row).getByRole("button", { name: executedButton }),
+      );
+      await waitFor(() =>
+        expect(within(row).getByText("Latest operation")).toBeInTheDocument(),
+      );
+      expect(reassignRun).toBeDisabled();
+      expect(deleteRun).toBeDisabled();
+      const otherEndpoint =
+        executedEndpoint === "reassign" ? "reassign-delete" : "reassign";
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            String(input).endsWith("/classes/class-1/" + otherEndpoint) &&
+            init?.method === "POST",
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it("rejects a late opposite preview without hiding the completed operation", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    let resolveDelayedPreview: ((response: Response) => void) | undefined;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/reassign-delete/preview") && init?.method === "POST") {
+        return new Promise<Response>((resolve) => {
+          resolveDelayedPreview = resolve;
+        });
+      }
+      if (url.endsWith("/reassign/preview") && init?.method === "POST") {
+        return jsonResponse({
+          id: "reassign-preview",
+          project_id: project.id,
+          source_class_id: "class-1",
+          target_class_id: "class-2",
+          operation_type: "reassign",
+          status: "previewed",
+          preview_checksum: "a".repeat(64),
+          plan: {
+            mutable_records: [],
+            protected_records: [],
+            blocking_records: [],
+            compatibility_impacts: [],
+            blockers: [],
+          },
+          failures: [],
+        });
+      }
+      if (url.endsWith("/classes/class-1/reassign") && init?.method === "POST") {
+        return jsonResponse({
+          id: "completed-operation",
+          project_id: project.id,
+          source_class_id: "class-1",
+          target_class_id: "class-2",
+          operation_type: "reassign",
+          status: "completed",
+          plan: {
+            mutable_records: [],
+            protected_records: [],
+            blocking_records: [],
+            compatibility_impacts: [],
+            blockers: [],
+          },
+          failures: [],
+        });
+      }
+      throw new Error("Unexpected class operation: " + url);
+    });
+
+    renderPanel();
+    const row = sourceClassRow();
+    const runReassign = within(row).getByRole("button", {
+      name: "Run reassign",
+    });
+    const runDelete = within(row).getByRole("button", {
+      name: "Run Reassign and Delete",
+    });
+    await userEvent.click(
+      within(row).getByRole("button", {
+        name: "Preview Reassign and Delete",
+      }),
+    );
+    await waitFor(() => expect(resolveDelayedPreview).toBeDefined());
+    await userEvent.click(
+      within(row).getByRole("button", { name: "Preview reassign" }),
+    );
+    await waitFor(() => expect(runReassign).toBeEnabled());
+    await userEvent.click(runReassign);
+    await waitFor(() =>
+      expect(within(row).getByText("Latest operation")).toBeInTheDocument(),
+    );
+    resolveDelayedPreview?.(
+      jsonResponse({
+        id: "stale-delete-preview",
+        project_id: project.id,
+        source_class_id: "class-1",
+        target_class_id: "class-2",
+        operation_type: "reassign_delete",
+        status: "previewed",
+        preview_checksum: "b".repeat(64),
+        plan: {
+          mutable_records: [],
+          protected_records: [],
+          blocking_records: [],
+          compatibility_impacts: [],
+          blockers: [],
+        },
+        failures: [],
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        within(row).getByText(/Reassign-and-delete preview no longer matches/),
+      ).toBeInTheDocument(),
+    );
+    expect(runDelete).toBeDisabled();
+    expect(within(row).getByText("Latest operation")).toBeInTheDocument();
+  });
+
 });

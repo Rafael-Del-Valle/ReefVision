@@ -431,8 +431,8 @@ function ClassRow({
       }),
     onSuccess: (operation, selection) => {
       // Delayed HTTP responses remain non-executable if inputs have changed.
+      // A late preview must never overwrite a completed operation receipt.
       setReassignPreview({ operation, selectionKey: selection.selectionKey });
-      setLatestOperation(operation);
     },
   });
   const runReassign = useMutation({
@@ -450,7 +450,11 @@ function ClassRow({
     },
     onSuccess: async (operation) => {
       setLatestOperation(operation);
+      // Executing either operation changes its scientific reference inventory.
+      // Revoke both prior approvals, including an opposite in-flight preview.
       setReassignPreview(null);
+      setReassignDeletePreview(null);
+      setPreviewEpoch((current) => current + 1);
       await refresh();
     },
   });
@@ -461,11 +465,12 @@ function ClassRow({
         notes: selection.notes || null,
       }),
     onSuccess: (operation, selection) => {
+      // Keep completed scientific operation feedback even if this HTTP preview
+      // finishes after the researcher ran a different approved operation.
       setReassignDeletePreview({
         operation,
         selectionKey: selection.selectionKey,
       });
-      setLatestOperation(operation);
     },
   });
   const runReassignDelete = useMutation({
@@ -483,7 +488,10 @@ function ClassRow({
     },
     onSuccess: async (operation) => {
       setLatestOperation(operation);
+      // A completed reassign-and-delete consumes approvals for both actions.
+      setReassignPreview(null);
       setReassignDeletePreview(null);
+      setPreviewEpoch((current) => current + 1);
       await refresh();
     },
   });
