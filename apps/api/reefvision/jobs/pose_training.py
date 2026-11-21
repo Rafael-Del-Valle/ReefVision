@@ -45,6 +45,7 @@ from reefvision.ml.providers import resolve_torch_device
 from reefvision.services.pose_training_exports import (
     PoseTrainingExportService,
 )
+from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import (
     resolve_managed_project_path,
 )
@@ -720,6 +721,16 @@ def _process_ultralytics_pose_training_job(
                     (f"[{datetime.now(UTC).isoformat()}] pose training cancelled"),
                 )
             else:
+                if not run.result_checkpoint_path:
+                    raise ValidationError("Completed pose training did not produce a checkpoint")
+                selected = resolve_managed_project_path(settings, run.result_checkpoint_path)
+                checksum, size = hash_model_file(selected)
+                if not size:
+                    raise ValidationError("Completed pose training checkpoint is empty")
+                run.artifact_manifest_json = {
+                    **run.artifact_manifest_json,
+                    "result_checkpoint_sha256": checksum,
+                }
                 _complete_training_run(
                     session,
                     run,
