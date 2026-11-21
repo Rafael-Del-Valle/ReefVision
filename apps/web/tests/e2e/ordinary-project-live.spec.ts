@@ -16,7 +16,13 @@ async function observeBoxGesture(canvas: Locator) {
         viewport: [innerWidth, innerHeight],
         scroll: [scrollX, scrollY],
         devicePixelRatio,
-        fullImageLoading: !!document.querySelector(".rv-media-load-status"),
+        fullImageLoading: Array.from(
+          svg
+            .closest('[data-testid="annotation-editor"]')
+            ?.querySelectorAll('[role="status"]') ?? [],
+        ).some((status) =>
+          status.textContent?.includes("Loading full-resolution image"),
+        ),
       };
     };
     const initial = frame();

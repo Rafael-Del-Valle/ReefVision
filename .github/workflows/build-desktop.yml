@@ -260,6 +260,7 @@ jobs:
             .artifacts/windows-clean-acceptance-*/first-use-playwright/**/*-evidence.json
             .artifacts/windows-clean-acceptance-*/workspace-evidence.json
             .artifacts/windows-clean-acceptance-*/workspace-playwright.json
+            .artifacts/windows-clean-acceptance-*/workspace-playwright/**/source-image-gesture-evidence.json
             .artifacts/windows-clean-acceptance-*/schedule-restart-evidence.json
             .artifacts/windows-clean-acceptance-*/schedule-*-playwright.json
             .artifacts/windows-clean-acceptance-*/schedule-*-playwright/**/schedule-proof.json
