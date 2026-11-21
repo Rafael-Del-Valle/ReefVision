@@ -107,7 +107,7 @@ section defines testable behavior, not a field-validation acceptance claim.
 
 The opt-in, strict-boolean `preserve_distinct_xyz_loci_in_preview` control is
 available in standalone XYZ and imported ASCII PLY point-cloud analysis and in
-the executable typed \`point_cloud_preview\` Workflow Builder node. For source
+the executable typed `point_cloud_preview` Workflow Builder node. For source
 clouds with more than 512 acquisition rows, pin the first original source row
 for **each distinct XYZ coordinate** before allocating the remaining bounded
 preview slots across source indices. When protected rows (including any selected
