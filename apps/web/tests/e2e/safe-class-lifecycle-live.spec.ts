@@ -163,34 +163,42 @@ test("reviews class edits and preserves frozen exports after reopening", async (
   await renamed
     .getByLabel("Operation notes")
     .fill("Reviewed mapping of this generated box");
-  await page.route(
-    `**/classes/${source.id}/reassign/preview`,
-    async (route) => {
-      const response = await route.fetch();
-      expect(response.ok()).toBeTruthy();
-      const preview = await response.json();
-      const affected = preview.plan.mutable_records.find(
-        (group: { record_ids: string[] }) => group.record_ids.includes(box.id),
-      );
-      expect(affected).toBeDefined();
-      expect(affected.count).toBe(affected.record_ids.length);
-      affected.record_ids = affected.record_ids.filter(
-        (id: string) => id !== box.id,
-      );
-      await route.fulfill({ response, json: preview });
-    },
-    { times: 1 },
-  );
-  await button(renamed, "Preview reassign").click();
-  await expect(renamed.getByRole("alert")).toHaveText(
-    /Operation evidence is incomplete/,
-  );
-  await expect(button(renamed, "Run reassign")).toBeDisabled();
-  expect((await get(annotation)).image.annotation_revision).toBe(
-    before.image.annotation_revision,
-  );
-  await button(renamed, "Preview reassign").click();
-  await expect(button(renamed, "Run reassign")).toBeEnabled();
+  for (const fault of ["missing", "duplicate"] as const) {
+    await page.route(
+      `**/classes/${source.id}/reassign/preview`,
+      async (route) => {
+        const response = await route.fetch();
+        expect(response.ok()).toBeTruthy();
+        const preview = await response.json();
+        const affected = preview.plan.mutable_records.find(
+          (group: { record_ids: string[] }) =>
+            group.record_ids.includes(box.id),
+        );
+        expect(affected).toBeDefined();
+        expect(affected.count).toBe(affected.record_ids.length);
+        if (fault === "missing") {
+          affected.record_ids = affected.record_ids.filter(
+            (id: string) => id !== box.id,
+          );
+        } else {
+          affected.record_ids.push(box.id);
+          affected.count = affected.record_ids.length;
+        }
+        await route.fulfill({ response, json: preview });
+      },
+      { times: 1 },
+    );
+    await button(renamed, "Preview reassign").click();
+    await expect(renamed.getByRole("alert")).toHaveText(
+      /Operation evidence is incomplete/,
+    );
+    await expect(button(renamed, "Run reassign")).toBeDisabled();
+    expect((await get(annotation)).image.annotation_revision).toBe(
+      before.image.annotation_revision,
+    );
+    await button(renamed, "Preview reassign").click();
+    await expect(button(renamed, "Run reassign")).toBeEnabled();
+  }
   const frozenWarning = renamed.getByText(
     "Immutable dataset versions keep their original class map for reproducibility.",
     { exact: true },
@@ -337,6 +345,7 @@ test("reviews class edits and preserves frozen exports after reopening", async (
         project_id: project.id,
         original_sha256: digest(image),
         explicit_confirmation: true,
+        incomplete_reference_previews_rejected: ["missing", "duplicate"],
         destination_revision_required_new_preview: true,
         both_plans_consumed_and_completed_receipt_preserved: true,
         reassign: {
