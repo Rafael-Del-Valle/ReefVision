@@ -15,6 +15,13 @@ from reefvision.schemas.project_exchange import (
     ProjectExchangeInspectionResponse,
     ProjectExchangeUnavailableAsset,
 )
+from reefvision.services.project_exchange_bioacoustics_v18 import (
+    AUDIO_MEDIA_KIND,
+    AUDIO_ORIGIN,
+    audio_owned_project_path,
+    validate_audio_exchange,
+    validate_audio_origin,
+)
 from reefvision.services.project_exchange_field_v15 import (
     FIELD_EXCHANGE_FORMATS,
     FIELD_MEDIA_KIND,
@@ -27,6 +34,7 @@ from reefvision.services.project_exchange_field_v15 import (
 )
 from reefvision.services.project_exchange_monitoring_v17 import validate_monitoring_exchange
 from reefvision.services.project_exchange_qc_v16 import QC_FORMATS, validate_qc_exchange
+from reefvision.services.project_exchange_research_v18 import FORMAT as MULTIMODAL_FORMAT
 from reefvision.services.project_exchange_research_v18 import validate_research_format
 from reefvision.services.project_exchange_schedules import validate_schedule_exchange
 from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, validate_v15_exchange
@@ -352,11 +360,31 @@ def inspect_project_exchange(
             if not errors:
                 try:
                     ordinary_media = [
-                        item for item in media if item.get("kind") != FIELD_MEDIA_KIND
+                        item
+                        for item in media
+                        if item.get("kind") not in {FIELD_MEDIA_KIND, AUDIO_MEDIA_KIND}
                     ]
-                    if version not in FIELD_EXCHANGE_FORMATS and len(ordinary_media) != len(media):
+                    if version not in FIELD_EXCHANGE_FORMATS and any(
+                        item.get("kind") == FIELD_MEDIA_KIND for item in media
+                    ):
                         raise ValidationError("Field originals require the 1.5 exchange format")
+                    if version != MULTIMODAL_FORMAT and (
+                        AUDIO_ORIGIN in manifest
+                        or any(item.get("kind") == AUDIO_MEDIA_KIND for item in media)
+                    ):
+                        raise ValidationError("Bioacoustic originals require Project Exchange 1.8")
                     media_gaps = _integrated_media_gaps(section_rows, ordinary_media)
+                    if version == MULTIMODAL_FORMAT:
+                        validate_audio_exchange(
+                            str(manifest["project"]["id"]),
+                            str(source_project_rows[0]["storage_root"]),
+                            section_rows,
+                            media,
+                            archive,
+                        )
+                        validate_audio_origin(
+                            section_rows, manifest.get(AUDIO_ORIGIN), manifest.get("origin")
+                        )
                     if version in FIELD_EXCHANGE_FORMATS:
                         project_id = str(manifest["project"]["id"])
                         validate_field_exchange(
@@ -433,6 +461,11 @@ def inspect_project_exchange(
                 for item in generated
             ):
                 errors.append("Generated files cannot overwrite field originals or staging")
+            if any(
+                audio_owned_project_path(str(item.get("source_relative_path", "")))
+                for item in generated
+            ):
+                errors.append("Generated files cannot overwrite audio originals or staging")
             if is_integrated and not errors:
                 paths = [
                     str(item["source_relative_path"]).replace("\\", "/").casefold()

@@ -50,6 +50,7 @@ from reefvision.db.models import (
     WorkflowNodeRun,
     WorkflowRun,
 )
+from reefvision.db.models.bioacoustics import BioacousticAsset
 from reefvision.db.models.field_capture import FieldCaptureObservation
 from reefvision.db.models.pose_active_learning import (
     PoseActiveLearningCandidate,
@@ -76,6 +77,16 @@ from reefvision.domain.errors import ValidationError
 from reefvision.domain.reproducibility_v15 import HISTORICAL_PROOFS
 from reefvision.schemas.project_exchange import ProjectExchangePackageResponse
 from reefvision.services.project_exchange import MANIFEST_NAME, ProjectExchangeService, _row
+from reefvision.services.project_exchange_bioacoustics_v18 import (
+    ASSETS as AUDIO_ASSETS,
+)
+from reefvision.services.project_exchange_bioacoustics_v18 import (
+    AUDIO_ORIGIN,
+    AUDIO_SECTION_MODELS,
+    audio_owned_project_path,
+    gather_audio_media,
+    has_audio_assets,
+)
 from reefvision.services.project_exchange_field_v15 import (
     FIELD_EXCHANGE_FORMATS,
     FIELD_ORIGIN,
@@ -597,6 +608,9 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         )
 
         integrated = integrated_records(self.session, project.id)
+        if not integrated.get(AUDIO_ASSETS):
+            for name in AUDIO_SECTION_MODELS:
+                integrated.pop(name, None)
         if not any(integrated.get(name) for name in MULTIMODAL_SECTIONS):
             for name in MULTIMODAL_SECTIONS:
                 integrated.pop(name, None)
@@ -753,7 +767,9 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             if relative_to_data.startswith(exchange_prefix):
                 continue
             relative_to_project = path.relative_to(project_root).as_posix()
-            if field_owned_project_path(relative_to_project):
+            if field_owned_project_path(relative_to_project) or audio_owned_project_path(
+                relative_to_project
+            ):
                 continue
             digest = _file_sha256(path)
             if digest in weight_hashes:
@@ -821,6 +837,10 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             .limit(1)
         )
         includes_media = bool(queued_package.options_json.get("include_media", False))
+        if not includes_media and has_audio_assets(self.session, queued_package.project_id):
+            raise ValidationError(
+                "Project Exchange must include original media for bioacoustic recordings"
+            )
         if not includes_media and has_spatial_sources:
             raise ValidationError(
                 "Project Exchange must include original media when the project has spatial sources"
@@ -840,6 +860,7 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         records = self._records(project)
         spatial_sources: list[tuple[dict[str, object], Path]] = []
         field_sources: list[tuple[dict[str, object], Path | None]] = []
+        audio_sources: list[tuple[dict[str, object], Path]] = []
         if bool(package.options_json.get("include_media", False)):
             source_service = SpatialSourceAssetService(self.session, self.settings)
             for asset in cast(Sequence[SpatialSourceAsset], records["spatial_source_assets"]):
@@ -864,6 +885,12 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                 media,
             )
             media.extend(descriptor for descriptor, _ in field_sources)
+            audio_sources = gather_audio_media(
+                self.settings,
+                project.storage_root,
+                cast(Sequence[BioacousticAsset], records.get(AUDIO_ASSETS, [])),
+            )
+            media.extend(descriptor for descriptor, _ in audio_sources)
             manifest["media"] = media
         telemetry_sidecars = self._telemetry_sidecars(
             project,
@@ -938,6 +965,8 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                 }
                 if package.format_version in FIELD_EXCHANGE_FORMATS and source.get(FIELD_ORIGIN):
                     manifest[FIELD_ORIGIN] = source[FIELD_ORIGIN]
+                if source.get(AUDIO_ORIGIN):
+                    manifest[AUDIO_ORIGIN] = source[AUDIO_ORIGIN]
 
         proofs = project_proofs(self.session, project.id)
         if proofs:
@@ -974,6 +1003,8 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                 for descriptor, field_path in field_sources:
                     if field_path is not None:
                         target_archive.write(field_path, arcname=str(descriptor["path"]))
+                for descriptor, source_path in audio_sources:
+                    target_archive.write(source_path, arcname=str(descriptor["path"]))
 
                 for descriptor, source_path in generated:
                     target_archive.write(
