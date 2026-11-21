@@ -571,6 +571,15 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
                             "EXIF camera exposure time or UTC offset is invalid; "
                             "UTC capture timestamp not inferred"
                         )
+                elif any(exif.get(tag) is not None for tag in (36881, 37521)):
+                    # OffsetTimeOriginal or SubsecTimeOriginal without its
+                    # DateTimeOriginal cannot establish the exposure instant.
+                    # Surface the orphaned provenance instead of silently
+                    # treating it as trustworthy acquisition metadata.
+                    metadata["capture_time_warning"] = (
+                        "EXIF contains exposure offset or fractional seconds without "
+                        "DateTimeOriginal; UTC capture timestamp not inferred"
+                    )
                 elif any(exif.get(tag) is not None for tag in (36868, 306)):
                     metadata["capture_time_warning"] = (
                         "EXIF contains digitization or file-modification time but no "
