@@ -240,8 +240,7 @@ def _safe_extract_zip(
         # Reject it before claiming the immutable run directory so a corrected
         # export can be retried without overwriting any prior scientific data.
         if not any(
-            item.filename == "data.yaml" and not item.is_dir()
-            for item in archive.infolist()
+            item.filename == "data.yaml" and not item.is_dir() for item in archive.infolist()
         ):
             raise ValidationError("Ultralytics pose export is missing data.yaml")
 
