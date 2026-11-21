@@ -1,0 +1,96 @@
+"""Scientific record reads fail closed on malformed rehashed environmental caches."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from datetime import UTC, datetime
+
+import httpx
+import pytest
+from sqlalchemy import select
+
+from reefvision.db.models.scientific_record import EnvironmentalCacheEntry, ScientificRecord
+from reefvision.schemas.environmental_context import NOAAImportRequest
+from reefvision.services.environmental_context import EnvironmentalContextService
+from reefvision.services.scientific_data import content_hash
+from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_environmental_context import noaa_fixture
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "missing_record_ids",
+        "record_ids_not_list",
+        "record_ids_non_string",
+        "duplicate_record_ids",
+        "missing_cache_identity",
+        "wrong_cache_identity",
+        "wrong_source_url",
+        "missingness_is_boolean",
+        "missingness_is_negative",
+        "provider_response_not_object",
+        "whole_payload_not_object",
+    ],
+)
+def test_scientific_record_listing_rejects_malformed_rehashed_cache(client, damage):
+    """No false currentness or 500s; original scientific rows remain immutable."""
+    project = create_project(client, "Cache integrity audit")
+    record_url = f"/api/v1/projects/{project['id']}/scientific-records"
+    request = NOAAImportRequest(station_id="8665530", day="2026-04-03")
+    with (
+        client.app.state.session_factory() as session,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=noaa_fixture()))
+        ) as http,
+    ):
+        imported = EnvironmentalContextService(
+            session, http=http, now=datetime(2026, 4, 4, tzinfo=UTC)
+        ).import_noaa(project["id"], request)
+    original_ids = {str(item.id) for item in imported.items}
+    assert len(original_ids) == 2
+    valid = client.get(record_url)
+    assert valid.status_code == 200, valid.text
+    assert {item["id"] for item in valid.json()["items"]} == original_ids
+    assert all(item["environmental_snapshot_current"] for item in valid.json()["items"])
+
+    with client.app.state.session_factory() as session:
+        entry = session.scalar(select(EnvironmentalCacheEntry))
+        assert entry is not None
+        payload = deepcopy(entry.payload_json)
+        if damage == "missing_record_ids":
+            del payload["record_ids"]
+        elif damage == "record_ids_not_list":
+            payload["record_ids"] = {"id": payload["record_ids"][0]}
+        elif damage == "record_ids_non_string":
+            payload["record_ids"][0] = 42
+        elif damage == "duplicate_record_ids":
+            payload["record_ids"][1] = payload["record_ids"][0]
+        elif damage == "missing_cache_identity":
+            del payload["cache_identity"]
+        elif damage == "wrong_cache_identity":
+            payload["cache_identity"]["source_url"] += "&foreign=1"
+        elif damage == "wrong_source_url":
+            entry.source_url += "&foreign=1"
+        elif damage == "missingness_is_boolean":
+            payload["skipped_missing"] = False
+        elif damage == "missingness_is_negative":
+            payload["skipped_missing"] = -1
+        elif damage == "provider_response_not_object":
+            payload["provider_response"] = ["invalid"]
+        else:
+            payload = ["invalid"]
+        entry.payload_json = payload
+        entry.content_sha256 = content_hash(payload)
+        session.commit()
+
+    # Record reads must return a controlled conflict, not a 500 or a false
+    # claim that tampered provider evidence remains scientifically current.
+    invalid = client.get(record_url)
+    assert invalid.status_code == 409, invalid.text
+    with client.app.state.session_factory() as session:
+        rows = session.scalars(
+            select(ScientificRecord).where(ScientificRecord.project_id == project["id"])
+        ).all()
+        assert {row.id for row in rows} == original_ids
+        assert all(content_hash(row.payload_json) == row.content_sha256 for row in rows)
