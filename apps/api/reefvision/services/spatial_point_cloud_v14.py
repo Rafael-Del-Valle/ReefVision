@@ -572,8 +572,7 @@ def measure_point_cloud_preview(
             # the representative lower-coordinate interval is the only one.
             # This does not imply empty 3D space or biological tissue loss.
             tied_count = sum(
-                levels[index + 1] - levels[index] == gap
-                for index in range(len(levels) - 1)
+                levels[index + 1] - levels[index] == gap for index in range(len(levels) - 1)
             )
             gap_details["equally_largest_adjacent_gap_count"] = tied_count
             if tied_count > 1:
@@ -603,9 +602,7 @@ def measure_point_cloud_preview(
                 if relative_scale_uncertainty is not None:
                     lower = gap_m * (1 - relative_scale_uncertainty)
                     upper = gap_m * (1 + relative_scale_uncertainty)
-                    if _scale_interval_unresolved(
-                        gap_m, relative_scale_uncertainty, lower, upper
-                    ):
+                    if _scale_interval_unresolved(gap_m, relative_scale_uncertainty, lower, upper):
                         sampling_gap_interval_unresolved = True
                     else:
                         gap_details["calibrated_gap_scale_interval_m"] = [lower, upper]
@@ -747,6 +744,15 @@ def measure_point_cloud_preview(
         # acquisitions at the same projected gap boundary. Union all tied
         # boundary coordinate levels; do not count duplicated scan rows as
         # independent XYZ loci or infer biological completeness.
+        # Raw acquisition rows must not be conflated with independent XYZ
+        # locations: decimation can remove repeat observations while retaining
+        # every distinct coordinate at a projected gap boundary.
+        source_boundary_rows = sum(
+            vertex[axis] in largest_gap_boundary_levels for vertex in vertices
+        )
+        preview_boundary_rows = sum(
+            vertices[index][axis] in largest_gap_boundary_levels for index in preview_indices
+        )
         source_boundary_loci = {
             vertex for vertex in vertices if vertex[axis] in largest_gap_boundary_levels
         }
@@ -756,6 +762,9 @@ def measure_point_cloud_preview(
             if vertices[index][axis] in largest_gap_boundary_levels
         }
         preview_largest_axis_gap_boundary_locus_support[label] = {
+            "source_acquisition_rows": source_boundary_rows,
+            "preview_acquisition_rows": preview_boundary_rows,
+            "fraction_of_source_rows_displayed": preview_boundary_rows / source_boundary_rows,
             "source_distinct_xyz_loci": len(source_boundary_loci),
             "preview_distinct_xyz_loci": len(preview_boundary_loci),
             "fraction_of_source_loci_displayed": (
@@ -773,6 +782,12 @@ def measure_point_cloud_preview(
         for label, support in preview_largest_axis_gap_boundary_locus_support.items()
         if support is not None
         and support["preview_distinct_xyz_loci"] < support["source_distinct_xyz_loci"]
+    ]
+    preview_omitted_largest_gap_boundary_acquisition_axes = [
+        label
+        for label, support in preview_largest_axis_gap_boundary_locus_support.items()
+        if support is not None
+        and support["preview_acquisition_rows"] < support["source_acquisition_rows"]
     ]
     preview_points = []
     for index in preview_indices:
@@ -816,6 +831,9 @@ def measure_point_cloud_preview(
         "preview_omitted_largest_gap_boundary_axes": preview_omitted_largest_gap_boundary_axes,
         "preview_omitted_largest_gap_boundary_locus_axes": (
             preview_omitted_largest_gap_boundary_locus_axes
+        ),
+        "preview_omitted_largest_gap_boundary_acquisition_axes": (
+            preview_omitted_largest_gap_boundary_acquisition_axes
         ),
         "preview_points_in_source_frame_m": preview_points,
         "preview_point_scale_intervals_m": (
@@ -919,6 +937,11 @@ def measure_point_cloud_preview(
             + (
                 ["preview_omits_largest_axis_gap_boundary_xyz_loci"]
                 if preview_omitted_largest_gap_boundary_locus_axes
+                else []
+            )
+            + (
+                ["preview_omits_largest_axis_gap_boundary_acquisition_rows"]
+                if preview_omitted_largest_gap_boundary_acquisition_axes
                 else []
             )
             + (
