@@ -1,7 +1,16 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T05:07:35.598109+00:00",
-  "candidate_pr": 131,
+  "updated_utc": "2026-11-21T13:27:35.883602+00:00",
+  "candidate_pr": 152,
+  "integrated_source": "272ee64e929bdfd2ebbf5e1f912221862ec5f9d2",
+  "selected_qualification": "workflow_cancellation",
+  "initial_candidate_pr": 131,
+  "initial_integrated_source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+  "initial_qualification_sections": [
+    "source_gates",
+    "production_run",
+    "local_windows_package"
+  ],
   "scope": "Generated research projects. Registered installer trials identify their own package.",
   "reviewed_predecessors": {
     "product_pr": 119,
@@ -40,6 +49,23 @@
       "raw": {
         "owner_file": "1.9/evidence/1.8-local-windows-reviewed-4ac9.json",
         "sha256": "a459fd69f601c757831b1a4896f79f02e1773ec244c72c1e1bda69fb5106a43c"
+      }
+    },
+    "current_sibling_snapshot": {
+      "observed_utc": "2026-11-21T05:17:54.3783389Z",
+      "validated_13": "f44053a90286ce57cc6f7356be922bcf8ba41e22",
+      "integration_14": "36c80224a627e8fe1c1d8ffb5a704ffa9f90c701",
+      "spatial_draft": "7e7c31f939c5cb0fee9310f89d3d7a3f8ca723cd",
+      "spatial_delta": "The latest #79 work adds an opt-in strict preview of disconnected patches. The bounded visualization and full-mesh scientific measurements retain their own controls. The optional preview remains available on its original branch.",
+      "class_draft": "dd3d14cd9736e142aee74f351a67bbedb15b038e",
+      "pose_draft": "dba52a2f93009ec8b1daac74befc3f433f526a24",
+      "integrated_fixes": [
+        138,
+        139
+      ],
+      "evidence": {
+        "file": "1.9/evidence/concurrent-prs-and-runs-0518-utc.json",
+        "sha256": "63e23c8a2ab44d47dc1194ae5d23f58e63edb04fce6e91d16843162994face47"
       }
     }
   },
@@ -210,6 +236,13 @@
         "file": "1.9/checkpoints/96476bc46/source-compatibility-and-long-video/evidence-index.json",
         "sha256": "4401fb97c2b3f8de2e51adf19f5a313781d3bc0f767597d8ac38cac7475e1bc9"
       }
+    },
+    "source_preserved_workflows": {
+      "result": "Twelve source-browser journeys exercised still/video detection, optional adjusted-mask inference, archived datasets, paired detectors, backup and recovery, calibrated growth and spatial review. Three new detector runs used CPU and scratch initialization. Both comparison replays returned the same report digest; adjusted-image segmentation left both proposals pending on the selected source.",
+      "raw": {
+        "file": "1.9/checkpoints/96476bc46/source-detector-segmentation/index.json",
+        "sha256": "0fb1589431e8b15c8a2f2021d2cfb4241933797449291c13901e9497d6bcbe1d"
+      }
     }
   },
   "performance_budgets_before_candidate_trial": {
@@ -223,7 +256,6 @@
     "The original Windows package and registered tests, physical GPU workflow and full backend runs retain individual identities in the owner review.",
     "Independent reference material, signing credentials and an enforcing Smart App Control machine remain open."
   ],
-  "integrated_source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
   "source_gates": {
     "frontend_unit": 966,
     "standard_browser_pass": 15,
@@ -299,5 +331,1780 @@
     "registered_storage_run": 44868688751,
     "registered_storage_draft": 137,
     "registered_storage_job": 136738091375
+  },
+  "local_windows_package": {
+    "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+    "version": "1.9.0",
+    "msi_sha256": "84b5369f98a19009de85efbdffbb6767c16a0dbd47a5ac410f4ec4e09debe343",
+    "external_cabinets": 5,
+    "payload_bytes": 2979676357,
+    "policy_state": "Windows 11 Smart App Control off; unsigned MSI, shell and backend",
+    "distribution_entries": {
+      "distribution_metadata": 59,
+      "entry_point_files": 14,
+      "model_manifest_assets": 0,
+      "model_manifest_provider_assets": 0,
+      "msi_cab_files": 19206,
+      "pyinstaller_outer_entries": 14,
+      "pyinstaller_pyz_archives": 1,
+      "pyinstaller_pyz_entries": 12427,
+      "zip_containers": 1,
+      "zip_members": 155
+    },
+    "package": {
+      "file": "1.9/checkpoints/96476bc46/local-production/verified-payload.json",
+      "sha256": "d4fefd649de2308913947e52bebe856c7a2e919a3a444acd9cce8f2f43b09382"
+    },
+    "payload_audit": {
+      "file": "1.9/checkpoints/96476bc46/local-production/payload-audit.json",
+      "sha256": "4e09d5d4b2e06655f3000d1c1d26498557d8506e127078746a879d5d8e916671"
+    },
+    "signature": {
+      "file": "1.9/checkpoints/96476bc46/local-production/physical-signing-policy.json",
+      "sha256": "d5e338c7b2aa61bedf4a979571a4ec3186db50f497810ddabc7ae460833fd195"
+    },
+    "gui": {
+      "file": "1.9/checkpoints/96476bc46/local-production/evidence/physical-guided-rtx3090/evidence-index.json",
+      "sha256": "b0047907cf15c243d7fa77a39d3d4dd35c29f8a92e03a4940d8f6e30110cdce7"
+    },
+    "performance": {
+      "file": "1.9/checkpoints/96476bc46/local-production/evidence/native-performance/index.json",
+      "sha256": "827b919554ccc5255dea0a9048766286e53bea92b3272d606a3654e5ffec3573"
+    },
+    "observed_ms": {
+      "cold_launcher_upper_bound_ms": 7101,
+      "first_decoded_gallery_ms": 261.09999999403954,
+      "dense_editor_full_source_ms": 282.29309999999987,
+      "video_ready_ms": 1693.2460999999998,
+      "video_presented_seek_ms": 134.29999999701977,
+      "extracted_review_seek_ms": 275.60129999999845
+    },
+    "surface": "Administrative extraction of the local production MSI and all matching cabinets on physical Windows 11",
+    "rich_rollback": {
+      "file": "1.9/checkpoints/96476bc46/local-production/evidence/pose-rollback/local-1.9-original-1.8-pose-upgrade-and-rollback.json",
+      "sha256": "e697c8945601cc0179d1489b623db46111b2f41d31070f2a8110234cf72f1648"
+    },
+    "neutral_pose_compatibility": {
+      "result": "COCO and DeepLabCut archives retained 96 frames, 192 landmarks, subframe timing and visibility. Neutral COCO import preserved the source pixels and required new review. The installed package correctly reported absence of the optional NWB 0.9.2 codec. Its error message points to the Python development extra. COCO and DeepLabCut are available inside the Windows desktop. Historical SLEAP metadata and the disabled execution state reopened.",
+      "raw": {
+        "file": "1.9/checkpoints/96476bc46/local-production/evidence/neutral-pose-compatibility/index.json",
+        "sha256": "131956bfbf18120dd8750f3823287d7ad5d7f70bd1aa479e41f74de402e59837"
+      }
+    }
+  },
+  "reviewed_successor": {
+    "source": "caa6931c2f4a8aefbf4e248d2c46c61ca9c8688b",
+    "product_pr": 140,
+    "parent_pr": 131,
+    "parent": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+    "schema": "b19_registration_0001",
+    "class_reference_pr": 138,
+    "class_source": "49273e9f60d0a70acfd50fb055fed4eaa3ac580b",
+    "class_browser": {
+      "file": "1.9/checkpoints/caa6931c2/source/class-lifecycle-evidence.json",
+      "sha256": "9837fa41a710f56ef3fd151b55b9b3a0d3709eaf97d359f78f59b34c54259e84"
+    },
+    "ultralytics_pr": 139,
+    "ultralytics_source": "98bd3bca5120c244784194d59671ea96d21899fe",
+    "ultralytics_interrupted_log_and_weights": {
+      "file": "1.9/checkpoints/98bd3bca5/pose-output-preservation/evidence-index.json",
+      "sha256": "754ada80547d11188a54fdf65ab02bb253dc7725ee328586c26119a2a9ccf59f"
+    },
+    "joined_ordinary_retry": {
+      "file": "1.9/checkpoints/caa6931c2/source-ordinary-ultralytics/evidence-index.json",
+      "sha256": "d23fbb008a05d7b3b8eea8bdce47c924663b6caa061139327004c50936c770a0"
+    },
+    "prior_package_rich_rollback": {
+      "file": "1.9/checkpoints/96476bc46/local-production/evidence/pose-rollback/local-1.9-original-1.8-pose-upgrade-and-rollback.json",
+      "sha256": "e697c8945601cc0179d1489b623db46111b2f41d31070f2a8110234cf72f1648"
+    },
+    "targeted_checks": {
+      "frontend": {
+        "file": "1.9/checkpoints/caa6931c2/source/caa-web-test.log",
+        "sha256": "490e453506a100df491b5167c2bc1dbca8c974810d312a88c91e5007d40037f7"
+      },
+      "build": {
+        "file": "1.9/checkpoints/caa6931c2/source/caa-web-build.log",
+        "sha256": "ff82bb3da09693249088fbd9e3ea39bdb86dae3869c55d2e4b489d0ff36355be"
+      },
+      "rust": {
+        "file": "1.9/checkpoints/caa6931c2/source/caa-rust.log",
+        "sha256": "244a0d8d4a4ca925f876ffc2b78e289bdea6d1b3dbfcd3f979fa0630f2fb1772"
+      },
+      "browser": {
+        "file": "1.9/checkpoints/caa6931c2/source/caa-standard-browser.log",
+        "sha256": "8f8c036adf8a569d267d87b034ef21f0b38572c685a34f70aad2f964b8346cfe"
+      },
+      "format": {
+        "file": "1.9/checkpoints/caa6931c2/source/caa-web-format-check.log",
+        "sha256": "4666969f85835307e8d360234a1877ad8ae96cd6cecd0f578932384d65aa6967"
+      },
+      "ruff": {
+        "file": "1.9/checkpoints/caa6931c2/source/caa-ruff-api.log",
+        "sha256": "a4443afdcfb6d7363adb285762515ccf7cf50473b1a05c20c1a50f6bed4d26b0"
+      },
+      "ruff_format": {
+        "file": "1.9/checkpoints/caa6931c2/source/caa-ruff-api-format.log",
+        "sha256": "bccbb720d6df896137597d3d834eb492c3cf6e235b1f23fa354a51788e7e79de"
+      },
+      "mypy": {
+        "file": "1.9/checkpoints/caa6931c2/source/caa-mypy.log",
+        "sha256": "615b502f7347809330754d6bf605998bc6289a8865aba36c6dec5ab4ab92c53f"
+      },
+      "migrations": {
+        "file": "1.9/checkpoints/caa6931c2/source/fresh-upgrade-downgrade-upgrade.log",
+        "sha256": "09839064b5b5bb688eb340d7b4bde5d5a5bed0e85b1cb987c0af7fc9d030ad58"
+      },
+      "targeted_api": {
+        "file": "1.9/checkpoints/caa6931c2/source/targeted_api.xml",
+        "sha256": "2fd84960f87ecc7b8f5ea35cda2e3c9021632337d6d4d1be5119a9ad86f65c31"
+      },
+      "actual_cuda": {
+        "file": "1.9/checkpoints/caa6931c2/source/actual_cuda.xml",
+        "sha256": "9f49c36c4b0870956a4b562ba6218216e8e39080322fd46d0dd5933df20316d6"
+      },
+      "neutral_interop_and_retirement": {
+        "file": "1.9/checkpoints/caa6931c2/source/neutral_interop_and_retirement.xml",
+        "sha256": "713627222b3ac659b6c1545d49f02867f517bbdac87e8b82fdb12c0838b94e93"
+      }
+    },
+    "hosted": {
+      "original_build_run": 44870566679,
+      "build_job": 136743919198,
+      "general_ci": 44870566833,
+      "scientific_and_secondary_build": 44870566734
+    },
+    "broader_optional_lint": "Extending the CI command to all historical scripts reported 16 lint diagnostics. The successor changes no scripts. The CI-scoped API lint and format commands both passed.",
+    "local_windows_package": {
+      "source": "caa6931c2f4a8aefbf4e248d2c46c61ca9c8688b",
+      "version": "1.9.0",
+      "msi_sha256": "48e4553adece0984e99263d812b6c60fa26170a89ded1ac75fdf0797c68c1e37",
+      "matching_external_cabs": 5,
+      "total_payload_bytes": 2979676954,
+      "checksums": {
+        "file": "1.9/checkpoints/caa6931c2/local-production/installer/SHA256SUMS.txt",
+        "sha256": "6ef772c8b12dff0c9d139d18b6ae14c3f77c6f2e1389d633e6bcbbe516004b7f"
+      },
+      "administrative_extraction": {
+        "file": "1.9/checkpoints/caa6931c2/local-production/administrative-extraction.json",
+        "sha256": "9a647c95434b3e7c5ff36337fd56484ce44a0610e12d0a6077e8a4c6f127ec45"
+      },
+      "native_class_manager": {
+        "file": "1.9/checkpoints/caa6931c2/local-production/evidence/native-class-manager/index.json",
+        "sha256": "d2157ac20528284ab7327d8335c3160c4041075af14a129cbd7136f2f52f3507"
+      },
+      "packaged_pose_training_and_registration": {
+        "file": "1.9/checkpoints/caa6931c2/local-production/evidence/ultralytics-pose-recovery/evidence-index.json",
+        "sha256": "755fa227d2d70fb830f8c8db8454a1997e73d4ac075bd2785d091345a719d9a4"
+      },
+      "observations": [
+        "The local MSI WebView2 Class Manager refused both malformed receipts and kept annotation revision 2. A fresh confirmed reassignment saved revision 3. Its frozen dataset retained the original class map during YOLO export.",
+        "Ordinary Retry produced a new Ultralytics CPU pose checkpoint on 96 training and 48 validation images. A checkpoint-inclusive Training Results ZIP verified 57 members. Register Trained Model and direct registration both rejected the retained checkpoint. The base inspector read its two landmarks. The active expanded catalog rejected the pose task."
+      ]
+    },
+    "pose_catalog_registration": {
+      "source": "6902e798ec09822872e38596f6b794110ac23ae9",
+      "pr": 141,
+      "from_source": "caa6931c2f4a8aefbf4e248d2c46c61ca9c8688b",
+      "from_msi": "48e4553adece0984e99263d812b6c60fa26170a89ded1ac75fdf0797c68c1e37",
+      "reused_trained_checkpoint": "6629d6c5e738a976986ba699147cc122890a1b3f882ecf0cf0791ab005a08633",
+      "schema": {
+        "id": "905cc36e-6110-4862-b65d-67eec6a177f1",
+        "revision": 1,
+        "sha256": "e3fe3061d51bf87c819db998e67d56287be0b42c05a8a930d801366f78bce6a5"
+      },
+      "ordinary_saved_retry": {
+        "file": "1.9/checkpoints/6902e798e/source-ultralytics-registered-pose/ordinary-retry-inference-review.json",
+        "sha256": "0587fbf539a227254360ce87abc3ce2ca88f22ae6b99e3afd8d5921bc0687c1f"
+      },
+      "different_anatomy_rejected": {
+        "file": "1.9/checkpoints/6902e798e/source-ultralytics-registered-pose/wrong-shape-refusal.json",
+        "sha256": "2dbf9bf88294219b629c7ac2de4107e1e7f19b6be3475f1bd78b4b1e30b5e903"
+      },
+      "registered_tasks": {
+        "file": "1.9/checkpoints/6902e798e/source-ultralytics-registered-pose/three-local-checkpoints.json",
+        "sha256": "8b4aa977d6471ee2c9fce9e7c1390ba71fd4e6d77a109892810ced805433a16b"
+      },
+      "focused_tests": {
+        "file": "1.9/checkpoints/6902e798e/source-ultralytics-registered-pose/31-focused-tests.xml",
+        "sha256": "40ae5629751d711b646da71a3d03b687e63fce7905e893f87a2deaa26fc10653"
+      },
+      "before_fix": {
+        "file": "1.9/checkpoints/6902e798e/source-ultralytics-registered-pose/catalog-before-fix.log",
+        "sha256": "9f96cc6863e18a1b9932237ae4c0b9ebb17baf89ed330a440cc3adfb84d053c3"
+      },
+      "type_checks": {
+        "file": "1.9/checkpoints/6902e798e/source-ultralytics-registered-pose/mypy.log",
+        "sha256": "615b502f7347809330754d6bf605998bc6289a8865aba36c6dec5ab4ab92c53f"
+      },
+      "result": "Recovered the failed saved parent at its Register action, reused the original trained checkpoint, and ran held-out CPU inference. A human-reviewed two-landmark frame reopened in the native pose ZIP. Separate public upload registrations preserved detector boxes, segmentation masks and two-landmark pose geometry. A different 17-landmark checkpoint failed without mutating the project."
+    }
+  },
+  "registration_and_experiment_integration": {
+    "source": "7797efad64f65e2f19c6f4ff64a94382335bd0a9",
+    "version": "1.9.0",
+    "schema": "b19_registration_0001",
+    "product_pr": 144,
+    "integrated_pull_requests": [
+      141,
+      142,
+      143
+    ],
+    "product_worktree": "C:/rv19-qualified",
+    "branch": "codex/reefvision-1.9-registration-replay",
+    "profile_scope": "generated; source and installed receipts recorded separately",
+    "windows_original": {
+      "run": 44873530801,
+      "job": 136753099467
+    },
+    "hosted_ci": {
+      "general": 44873530725,
+      "general_backend_job": 136753099754,
+      "scientific": 44873530680,
+      "scientific_backend_job": 136753099300
+    },
+    "offline": {
+      "proof_pr": 145,
+      "proof_source": "dc8e118943c538569ec480601709ec96b4af0a6e",
+      "run": 44873856510,
+      "jobs": [
+        136754104991,
+        136754105231
+      ],
+      "prior_source": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8"
+    },
+    "full_windows": {
+      "checkout": "C:/rv19-7797-full",
+      "output": "C:/rvb19-7797",
+      "distinct_ids": 6081,
+      "collection": "40ee0b8c8259641d4141683c8ad5e8812522ac506fb8ede665bc3cd9685df405"
+    },
+    "earlier_964_windows_backend": {
+      "file": "1.9/checkpoints/96476bc46/full-windows-backend/verified-summary.json",
+      "sha256": "aad66d382f61c1729180fc60a28550f9143f02e3c783f65df300faa02f57a768"
+    },
+    "experiment_replay": {
+      "file": "1.9/checkpoints/caa6931c2/source/evidence/experiment-replay-donor/experiment-replay-proof.json",
+      "sha256": "ece5da6390bec94a669b0f82700a80052948314407a420a37fd4d40423771e9e"
+    },
+    "guided_experiment_replay": {
+      "file": "1.9/checkpoints/caa6931c2/source/evidence/experiment-replay-donor/guided-pose-workflow.json",
+      "sha256": "ac56053a98422e047cecbed242abb0d40ba97e6bc1784c3f9257935a6c567ec7"
+    },
+    "zero_draft_training_models": {
+      "file": "1.9/checkpoints/7797efad6/source/zero-draft-training-models.json",
+      "sha256": "173b7ba861aa4f226f3df871a72c0864ac0e7ba4b0f8cbec889e0b792d24d93b"
+    },
+    "tests": {
+      "focused_backend": {
+        "file": "1.9/checkpoints/7797efad6/source/rv19-starting-point-7797-research.xml",
+        "sha256": "6e62ffefd786e7232bab6189fcde3c1aaf6fc3ee591fb9ec85eaebf277f38d8d"
+      },
+      "physical_cuda": {
+        "file": "1.9/checkpoints/7797efad6/source/7797-source-cuda-results.xml",
+        "sha256": "0b364d5298bc21989320ccfe79074b3c21f7266e6d478bf79d5c71ee679d24f1"
+      },
+      "frontend": {
+        "file": "1.9/checkpoints/7797efad6/source/7797-web-test.log",
+        "sha256": "beb08ff5f1e627ad78319e911f3dcf18433790d89c14840b499c728e7b666af6"
+      },
+      "production_frontend": {
+        "file": "1.9/checkpoints/7797efad6/source/7797-web-build.log",
+        "sha256": "77f668c099de7458db096da9ba0e81b41b63bcfcf7bea0efd8530e142ab1988a"
+      },
+      "frontend_format": {
+        "file": "1.9/checkpoints/7797efad6/source/7797-web-format.log",
+        "sha256": "4666969f85835307e8d360234a1877ad8ae96cd6cecd0f578932384d65aa6967"
+      },
+      "types": {
+        "file": "1.9/checkpoints/7797efad6/source/7797-typing.log",
+        "sha256": "615b502f7347809330754d6bf605998bc6289a8865aba36c6dec5ab4ab92c53f"
+      },
+      "rust": {
+        "file": "1.9/checkpoints/7797efad6/source/7797-rust-with-ci-resources.log",
+        "sha256": "2707e23aaf9e30f81653b3c93e01ebe0282719f8eb4b57ef8d59bb2517de1483"
+      },
+      "browser": {
+        "file": "1.9/checkpoints/7797efad6/source/7797-standard-browser.log",
+        "sha256": "cb305d830e624446c523222f6055ef3b0c69ed7e68a251c3179bac5cdbe55f06"
+      },
+      "alembic": {
+        "file": "1.9/checkpoints/7797efad6/source/roundtrip.log",
+        "sha256": "6d66d951c6232a6c33dcd2d0bca8c45bb7939e5d5dde76c02cab8d30b83799a3"
+      },
+      "neutral_exchange_and_retirement": {
+        "file": "1.9/checkpoints/7797efad6/source/rv19-starting-point-7797-neutral.xml",
+        "sha256": "27379acd8f1ffadb420c3a650b5d7dd7773f49c197ee4eb68a649dda319e2f32"
+      }
+    },
+    "concurrent_head_scan": {
+      "file": "1.9/evidence/concurrent-prs-20261121-061153-utc.json",
+      "sha256": "5d5e792c1f3e478b3ea7d2e692bd3d7468d5f835c9acc7e7fc1b4da29dbfaf44"
+    },
+    "local_manufacture_and_workflows": {
+      "source": "7797efad64f65e2f19c6f4ff64a94382335bd0a9",
+      "version": "1.9.0",
+      "msi": "3ca191ee163b54f036eed094bb101701a230e632f3ca5218466857e4351d3ad4",
+      "matching_external_cabs": 5,
+      "payload_bytes": 2979017139,
+      "sha256sums": {
+        "file": "1.9/checkpoints/7797efad6/local-production/installer/SHA256SUMS.txt",
+        "sha256": "cb21d508929d626e1d1bd30efbe96cdde924fb48919fa85dee7352ce04b5f956"
+      },
+      "desktop_sha256": "ccf9048bbfc3580f9de06bc5c1750b5cfa1ea6cb4a40aeabe4ae9ee71c189cf5",
+      "backend_sha256": "cd6f2020b02c3302a1387d29cbaae640b8f409d20f8bc7d193888b1baaad9d64",
+      "policy": {
+        "file": "1.9/checkpoints/7797efad6/local-production/physical-signing-policy.json",
+        "sha256": "1949ec83ff63bbd92940878dab12160d0871aa7985d4892a9199c3449678fdc8"
+      },
+      "archive_audit": {
+        "file": "1.9/checkpoints/7797efad6/local-production/payload-audit.json",
+        "sha256": "2a1778ace945155bbb36025e1d9c092cacd94f90e39b33b35a7bf13c668f75f8"
+      },
+      "extraction": {
+        "file": "1.9/checkpoints/7797efad6/local-production/administrative-extraction.json",
+        "sha256": "58844a27be054768e55635a4679a29b678dfa2a78d1aedd3da0c196a5c79d820"
+      },
+      "native_zero_draft_registration": {
+        "file": "1.9/checkpoints/7797efad6/local-production/evidence/native-zero-draft-registration/index.json",
+        "sha256": "fdbd6e024dff19d3e11e6496a8cad27ff710eb6dd16cd275db84a8b29ab700c3"
+      },
+      "saved_pose_registration_inference_review": {
+        "file": "1.9/checkpoints/7797efad6/local-production/evidence/ultralytics-retained-recovery/evidence-index.json",
+        "sha256": "6de6b9dce220b4ededea94432f1555008e8a17eb7546eaefeafc59a09ed35220"
+      },
+      "actual_old_package_rollback": {
+        "file": "1.9/checkpoints/7797efad6/local-production/evidence/pose-rollback/installed-backends-1.8-to-1.9-and-restore.json",
+        "sha256": "838208620b8263e832609e13a50340b060a41a0f544c04fdccc0c60d13f72360"
+      },
+      "remaining_affected_workflows": [
+        "Recovery on this source can credit a different valid restored file to a previously completed native training run. The fixture restored a real earlier checkpoint at the same path. A worker digest correction is under test.",
+        "Ultralytics validation can score the wrong class when independently frozen splits use different local class ordinals. The reproduced study preserved both original ZIPs. A stable class-ID correction is under test."
+      ],
+      "separate_source_holdout_control": {
+        "file": "1.9/checkpoints/7797efad6/source/independently-frozen-class-maps-before.json",
+        "sha256": "36571d00df474b9f38ddade4a2214f3b8c090f783a2eda88b6eb533811b52b94"
+      }
+    }
+  },
+  "saved_checkpoint_and_class_identity": {
+    "source": "9124acdb0696871208c69f2ffc7601722329daac",
+    "version": "1.9.0",
+    "schema": "b19_registration_0001",
+    "product_pr": 148,
+    "branch": "codex/reefvision-1.9-checkpoint-and-class-integrity",
+    "product_worktree": "C:/rv19-integrity",
+    "parent": "7797efad64f65e2f19c6f4ff64a94382335bd0a9",
+    "integrated_pull_requests": [
+      146,
+      147
+    ],
+    "surface": "Generated media and local weights in disposable Windows profiles",
+    "source_workflows": {
+      "native_checkpoint_recovery": {
+        "file": "1.9/checkpoints/9124acdb0/source/evidence/pose-checkpoint-recovery/selected-checkpoint-recovery.json",
+        "sha256": "f33c5d4ab724ed2e64355944f790e967465381611bbb078707db8d2833502467"
+      },
+      "two_split_fit_register_restart": {
+        "file": "1.9/checkpoints/9124acdb0/source-pose-training-integrity/two-split-checkpoint-reopen.json",
+        "sha256": "86dc1718db9c03a269c0bb57e773f6ba1b2cea62615cd08aee2e1b3601a78ba2"
+      },
+      "workflow_builder_class_and_checkpoint_recovery": {
+        "file": "1.9/checkpoints/9124acdb0/source/workflow-builder-recovery.json",
+        "sha256": "e7ef1804e03419bc20becee00dce08b8e744a6acfb23cc1fa5212438d679a451"
+      }
+    },
+    "source_checks": {
+      "focused": {
+        "file": "1.9/checkpoints/9124acdb0/source/rv19-starting-point-9124-focused.xml",
+        "sha256": "8d4966f227a4b8943c8d27592f1f77c6dbaa5fd05fab930a18623183f88feb5b"
+      },
+      "experiment_recovery": {
+        "file": "1.9/checkpoints/9124acdb0/source/rv19-starting-point-9124-recovery.xml",
+        "sha256": "a2225e8b15e098a1366169f4c36b745a1d31fbf653cd29ec6a221bee5c08ea99"
+      },
+      "mypy": {
+        "file": "1.9/checkpoints/9124acdb0/source/mypy.log",
+        "sha256": "615b502f7347809330754d6bf605998bc6289a8865aba36c6dec5ab4ab92c53f"
+      },
+      "database_upgrade_downgrade_upgrade": {
+        "file": "1.9/checkpoints/9124acdb0/source/roundtrip.log",
+        "sha256": "614363a4932e9422cda58b812c85468d877d274d40cc75e8e33ac7d7f85040b9"
+      },
+      "physical_rtx3090": {
+        "file": "1.9/checkpoints/9124acdb0/source/9124-cuda-results.xml",
+        "sha256": "2ee6a0e08e4ca45e0af00074c45d22fd69df4728e5691075cb62ae298ff92ba8"
+      },
+      "frontend_unit_tests": {
+        "file": "1.9/checkpoints/9124acdb0/source/9124-frontend-run-test.log",
+        "sha256": "b8ab6d8bf7ee18969358e25ecd58498ddff77b3fef6e37609fd5d192c76abbd8"
+      },
+      "frontend_production": {
+        "file": "1.9/checkpoints/9124acdb0/source/9124-frontend-run-build.log",
+        "sha256": "9ff8f6f50aa15ffd33083c142c073b9f4cbc8f6d6f376489ef5d761608b5a01f"
+      },
+      "frontend_format": {
+        "file": "1.9/checkpoints/9124acdb0/source/9124-frontend-run-format-check.log",
+        "sha256": "4666969f85835307e8d360234a1877ad8ae96cd6cecd0f578932384d65aa6967"
+      },
+      "frontend_types": {
+        "file": "1.9/checkpoints/9124acdb0/source/9124-frontend-run-typecheck.log",
+        "sha256": "9a53ffb62f6e9f9632ad62a970c0e93c7f82dc97e021622cbf8c53cd61a7ce34"
+      },
+      "frontend_dependency_lock": {
+        "file": "1.9/checkpoints/9124acdb0/source/9124-frontend-run-lockfile-check.log",
+        "sha256": "c705de73d6d0224a5dc8b71369ec3ae3aa1ee6d5a97b559658b97954413d495a"
+      },
+      "default_browser_journeys": {
+        "file": "1.9/checkpoints/9124acdb0/source/9124-standard-browser.log",
+        "sha256": "d0f432c9a85dbd562c4eb9d633b2d23766d9bb7a6f7820d3ec82d2aa02317b1e"
+      },
+      "rust": {
+        "file": "1.9/checkpoints/9124acdb0/source/9124-rust.log",
+        "sha256": "6ab7979cad469ad4a4d76dc7f15961f19348db054f7ac02caa2de793502c3634"
+      }
+    },
+    "previous_unchanged_surface": {
+      "source": "7797efad64f65e2f19c6f4ff64a94382335bd0a9",
+      "verified_trees": [
+        "apps/web",
+        "scripts/build-desktop.ps1",
+        "scripts/build-desktop-backend.ps1",
+        "scripts/finalize-release-artifacts.ps1",
+        ".github/workflows",
+        "requirements",
+        "apps/api/alembic.ini",
+        "apps/api/migrations"
+      ],
+      "tests": "974 frontend tests, 8 Rust tests and 15 default browser journeys. Current source desktop workflow additionally exercised both new conditions."
+    },
+    "full_windows": {
+      "checkout": "C:/rv19-9124-full",
+      "output": "C:/rvb19-9124",
+      "distinct_ids": 6084,
+      "collection_sha256": "6a7e6e143ae7614cb806d7d42e7d1e257915fb27b02941005b7cdb46b69a395c",
+      "shards": 16
+    },
+    "original_windows": {
+      "run": 44875837825,
+      "job": 136760221622,
+      "matrix_roles": 11
+    },
+    "hosted_ci": {
+      "general_run": 44875837777,
+      "backend": 136760221507,
+      "frontend": 136760221723,
+      "scientific_run": 44875837969,
+      "scientific_backend": 136760222165
+    },
+    "local_manufacture": {
+      "checkout": "C:/rv19n-9124acdb",
+      "staging": "C:/rv19e-9124acdb",
+      "owner_location": "1.9/checkpoints/9124acdb0/local-production"
+    },
+    "donor_heads_and_ci": {
+      "file": "1.9/evidence/concurrent-prs-20261121-064238-utc.json",
+      "sha256": "e6bfb3f6e0076fda2f25225cefcc9bdbade2abcbd5eed122c2b734761254cf6e"
+    },
+    "qualified_local_package": {
+      "source": "9124acdb0696871208c69f2ffc7601722329daac",
+      "version": "1.9.0",
+      "surface": "Locally manufactured MSI, administrative extraction on physical Windows 11, ordinary WebView2 and packaged API processes.",
+      "msi_sha256": "cdf87c98d58730b6ecfc434034ca2060fd8f4f21be717ad77fe9939ee5ccf089",
+      "external_cabs": 5,
+      "payload_bytes": 2979870459,
+      "shell_sha256": "5136200ea3459077907c48f496d5273674dbd0339fbb9bc3660fccf2b8cd0cb6",
+      "sidecar_sha256": "dc46e88692c8ece2971ff145414c6e6278000b29e067cc204838f9b117620c80",
+      "checksums": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/installer/SHA256SUMS.txt",
+        "sha256": "4636015a3b592b027f9cdfb7ae19e48ad100ed1f8e819ff2029c0ff62d3de8fe"
+      },
+      "owner_guide_verification": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/owner-media-verification.json",
+        "sha256": "02703d7648e91bfbdef88a04acf843d4014a1b2065c4d8c25e289adf6b9aed0e"
+      },
+      "payload_audit": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/payload-audit.json",
+        "sha256": "7f2e75773316a4738bd40ad4a8266ef4b179c821981b49e87d7654750edc5fd7"
+      },
+      "physical_signing_and_policy": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/physical-signing-policy.json",
+        "sha256": "0688285a64ec84254495f8e27a34fc02bd97be4a932a3545e146d83c44eafcb2"
+      },
+      "extraction": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/administrative-extraction.json",
+        "sha256": "8b24954dd30f98c7e84026bdb2ddc4dcf1003c1af489a95a45da4afd1388f8b6"
+      },
+      "workflow_builder_retry": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/evidence/native-checkpoint-recovery/index.json",
+        "sha256": "9c80fae6b23b2c6cac7782de33d7fe455e5aaca97188a248b30e40b1ca70958f"
+      },
+      "two_frozen_splits": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/evidence/pose-training-holdout-identity/two-split-checkpoint-reopen.json",
+        "sha256": "e8f8851ea7d244ad254b3975f7adcdf1c5e14be3c2df8c65e5d8816f1352f5f3"
+      },
+      "checkpoint_recovery": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/evidence/pose-checkpoint-recovery/selected-checkpoint-recovery.json",
+        "sha256": "fa09fb23a27ee8020250eb79df65887c6bc91a375ddedd881d738cc35a802666"
+      },
+      "predecessor_upgrade_and_rollback": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/evidence/pose-rollback/installed-backends-1.8-to-1.9-and-restore.json",
+        "sha256": "4c8033782597aa8d1298015eaa46692e9a352394a34fb7105258e0326b629fa9"
+      },
+      "physical_guided_rtx_and_two_replays": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/evidence/physical-guided-rtx3090/evidence-index.json",
+        "sha256": "89373db4f71042c0caeb2cbc64ff7c6b7271d56608934896869b8230d74c6a8c"
+      },
+      "two_models_physical_checksum_chain": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/evidence/physical-guided-rtx3090/native-checkpoint-lineage.json",
+        "sha256": "02422367543474df011a2d9c014a349b4d896427dc5f62f5c2f9b4228be0e118"
+      },
+      "cpu_and_gpu_native_diagnostics": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/evidence/native-configuration-diagnostics/index.json",
+        "sha256": "91fe41af42afd28d8653656efd99bc0c40d8db979dbb4c2e51e7fd0696e49bb0"
+      },
+      "physical_performance": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/evidence/native-performance/index.json",
+        "sha256": "d08035dce2d440b0c303fdc680dc20d36de568b812b384ca35e3fb087a14d9f1"
+      },
+      "publisher_and_enforcing_device_inputs": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/publisher-prerequisites.json",
+        "sha256": "98c384da052dfec293af4b6c380c444684b1880e0fd22f4ff82d582c6094fabc"
+      },
+      "known_advanced_graph_split_failure": {
+        "surface": "Joined source, Advanced saved graph, explicit validation input with the optional require-validation flag unset.",
+        "result": "The model credited eight validation images from either a shared recording or a shared animal. The disjoint control also produced metrics. Training with no validation set kept its exploratory warning and produced no validation metrics.",
+        "receipt": {
+          "file": "1.9/checkpoints/9124acdb0/source/optional-connected-holdout-overlap.json",
+          "sha256": "489f97310bbe898535b6d3b9e816d7ee27fe177bfe80ba6a39086c43a52b64da"
+        }
+      }
+    },
+    "affected_backend_runs": {
+      "initial_test_environment": {
+        "passed": 7,
+        "skipped": 1,
+        "setup_errors": 55,
+        "reason": "The private pytest base directory's parent did not yet exist.",
+        "junit": {
+          "file": "1.9/checkpoints/9124acdb0/source/affected-first-setup.xml",
+          "sha256": "7388d4fce6d14a6149ad5efef06b2a21a29ec19c964efb93ae17ab1dc6c74b3d"
+        }
+      },
+      "corrected_disposable_environment": {
+        "passed": 62,
+        "skipped": 1,
+        "setup_errors": 0,
+        "failures": 0,
+        "junit": {
+          "file": "1.9/checkpoints/9124acdb0/source/affected-rerun.xml",
+          "sha256": "93e03ef62be5dc613d18bbd3520c12f30637a5c6c9836baf3d612ded09579e23"
+        },
+        "skip_reason": "The native GPU test is a separate opt-in. It passed on the physical RTX at this same source."
+      }
+    }
+  },
+  "first_1_9_original_offline_wait": {
+    "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+    "producer": 44867493658,
+    "proof": 44867740231,
+    "attempt": 1,
+    "conclusion": "failure",
+    "roles": {
+      "fresh": {
+        "file": "1.9/checkpoints/96476bc46/official/offline/attempt-44867740231/attempt-1-producer-wait/fresh.json",
+        "sha256": "f41cb0be9569757a64dafe4161fb74db211f1f42bee82ea1f142a05c6eb33cc5"
+      },
+      "cached-upgrade": {
+        "file": "1.9/checkpoints/96476bc46/official/offline/attempt-44867740231/attempt-1-producer-wait/cached-upgrade.json",
+        "sha256": "12fdc000f27a04511312db553952c20741c4fd886b46043a36af36f7d766cbda"
+      }
+    },
+    "cause": "Both jobs reached their fixed wait limit before the original installer was uploaded. Installation and offline behavior were not exercised.",
+    "retry_action": "Rerun the two failed offline jobs after job 136734331397 succeeds and the original media are available. Retain attempt 2 independently."
+  },
+  "independent_frozen_pose_validation": {
+    "source": "15be85268fc0cf4f801152fa79b4901adffddc3d",
+    "parent": "9124acdb0696871208c69f2ffc7601722329daac",
+    "version": "1.9.0",
+    "schema": "b19_registration_0001",
+    "product_pr": 149,
+    "branch": "codex/reefvision-1.9-independent-pose-validation",
+    "product_worktree": "C:/rv19-pose-independent",
+    "product_tree_change": "Five files covering the graph planner, saved pose execution, native and Ultralytics workers and regressions. The five modified paths add no migration or packaging change.",
+    "two_optional_overlap_controls_baseline": {
+      "file": "1.9/checkpoints/15be85268/source-independent-pose-validation/overlapping-baseline-red.json",
+      "sha256": "489f97310bbe898535b6d3b9e816d7ee27fe177bfe80ba6a39086c43a52b64da"
+    },
+    "corrected_controls": {
+      "file": "1.9/checkpoints/15be85268/source-independent-pose-validation/overlapping-corrected-green.json",
+      "sha256": "a32415a2588242510ff90d457a62340e43073f4ed768d2668d5dcc8d3c2d2dda"
+    },
+    "workflow_builder": {
+      "file": "1.9/checkpoints/15be85268/source-independent-pose-validation/ordinary-workflow-builder.json",
+      "sha256": "491b604fb77d3ced5efefa9751688c38a4dfced581dc3b99f75ce1f7df524b74"
+    },
+    "seven_focused_tests": {
+      "file": "1.9/checkpoints/15be85268/source-independent-pose-validation/independent-green-tests.log",
+      "sha256": "9024e8cc85c1b1cab89a888b1de77a14ec3c95e5ae1a74c86919123b37c938cd"
+    },
+    "normal_lint_format_typecheck": {
+      "file": "1.9/checkpoints/15be85268/source-independent-pose-validation/api-and-inventory.log",
+      "sha256": "05ce9fc173b578168c17e5753aec9595ec9937bbea8e460f108e135c9d21d74a"
+    },
+    "alembic": {
+      "file": "1.9/checkpoints/15be85268/source-independent-pose-validation/roundtrip.log",
+      "sha256": "614363a4932e9422cda58b812c85468d877d274d40cc75e8e33ac7d7f85040b9"
+    },
+    "full_windows": {
+      "output": "C:/rvb19-15be",
+      "checkout": "C:/rv19-15be-full",
+      "cases": 6088,
+      "node_ids_sha256": "53a6ec579b8adeecc1794d807c5ae19a52ec6252b777f2d6631b5009757cc8f3",
+      "workers": 16,
+      "shares_completed_slots_with": "9124acdb0696871208c69f2ffc7601722329daac"
+    },
+    "affected_windows": {
+      "output": "C:/rvb19-split-15be",
+      "cases": 93,
+      "node_ids_sha256": "dbec1c63de2135ede1b71c63c1d709daa6fdda42e649cd85e199b6215bee0492",
+      "workers": 5
+    },
+    "original_windows": {
+      "run": 44878790843,
+      "job": 136769291129,
+      "roles": 11
+    },
+    "hosted_ci": {
+      "general_run": 44878790851,
+      "backend_job": 136769290837,
+      "scientific_run": 44878790815,
+      "scientific_backend_job": 136769290679
+    },
+    "local_manufacture": {
+      "checkout": "C:/rv19n-15be8526",
+      "staging": "C:/rv19e-15be8526",
+      "owner_location": "1.9/checkpoints/15be85268/local-production"
+    },
+    "known_provider_diagnostic": "For training with no validation set, the pinned optional Ultralytics plot can log an index error. Training and export completed with the explicit exploratory warning and zero independent validation metrics on both source checkpoints.",
+    "ordinary_workflow_builder_audit": {
+      "file": "1.9/checkpoints/15be85268/source/heldout-independence-ui/index.json",
+      "sha256": "71ebe04cd7c0fa41b2a8527973ac25e579c37226fe2b9866bbc1d47f9683c98a"
+    },
+    "affected_suite_verification": {
+      "file": "1.9/checkpoints/15be85268/affected-windows-backend/verified-summary.json",
+      "sha256": "075915a854d60c42fd5ded97b7306f399d6ed9a6e223d744339118cf404e3071"
+    },
+    "five_rtx_regressions": {
+      "results": {
+        "file": "1.9/checkpoints/15be85268/source-independent-pose-validation/physical-rtx-results.xml",
+        "sha256": "b96c8d37333a5c258226211cbe095d932957b79b48efa9e2f7a2f80edc1ea09c"
+      },
+      "log": {
+        "file": "1.9/checkpoints/15be85268/source-independent-pose-validation/physical-rtx-run.log",
+        "sha256": "f3554d2b7200237c14825dd9a9c010cbb507122d79c0ca6c39b85879c9df3125"
+      },
+      "test_names": [
+        "test_native_reefpose_cuda_scientific_evaluation",
+        "test_async_two_model_reefpose_cuda_comparison",
+        "test_native_reefpose_cuda_workflow_registration_and_inference",
+        "test_chunked_inference_matches_one_batch_with_boundary_context[cuda]",
+        "test_training_uses_partial_reviewed_targets_and_resume_matches_uninterrupted[cuda]"
+      ]
+    },
+    "qualified_local_package": {
+      "source": "15be85268fc0cf4f801152fa79b4901adffddc3d",
+      "version": "1.9.0",
+      "schema": "b19_registration_0001",
+      "build_surface": "local-production",
+      "msi_sha256": "2808f684dd6aacf30a1e985fcaf6ab54c6ee7fa8ab88c0036427739eb9530272",
+      "manifest_sha256": "3c8e31d110846e761816da2204b75a75f461ef4362ce8da3c5b5706c7b707851",
+      "external_cabinets": 6,
+      "manifest_members": 8,
+      "payload_bytes": 2979560782,
+      "package": {
+        "file": "1.9/checkpoints/15be85268/local-production/owner-media-verification.json",
+        "sha256": "b3f987f7a5f4c78a18107a0e6a8801e9de7055ccff1d98b512695a74f64a3bee"
+      },
+      "distribution": {
+        "file": "1.9/checkpoints/15be85268/local-production/payload-audit.json",
+        "sha256": "bcb1ebfbb7775dfbd637638d7ba65b9318a72698e7e4a67d0aba153ffb0ce6f5"
+      },
+      "administrator_extraction": {
+        "file": "1.9/checkpoints/15be85268/local-production/administrative-extraction.json",
+        "sha256": "8ac50bbeb5337baa8ea8c486e0f7051f4e2071c17b91ec9ac3eb579f71cb1833"
+      },
+      "actual_signing_and_policy": {
+        "file": "1.9/checkpoints/15be85268/local-production/physical-signing-policy.json",
+        "sha256": "1d9740bdededea85d9247753e870d75722a7fec7be8dba49a2dd8a9d3c573b6e"
+      },
+      "embedded_offline_runtime": {
+        "file": "1.9/checkpoints/15be85268/local-production/embedded-webview2.json",
+        "sha256": "bca4c29eb6f1931371a88309bd9bc1909ede1db585293403688f7d18b3a90f65"
+      },
+      "ordinary_advanced_graph_retry_and_new_run": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/native-heldout-independence/index.json",
+        "sha256": "334996ce74921a0c7942dee191df9684846d4b63a2ccab90b35d6ac07df4cae7"
+      },
+      "both_negative_and_positive_controls": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/pose-validation-independence-worker/four-worker-controls.json",
+        "sha256": "068c1cb291a4515de0713a42706b219e8f6cbc1bf9b7a24ebe98239d48f3409a"
+      },
+      "guided_rtx_replays": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/physical-guided-rtx3090/evidence-index.json",
+        "sha256": "1603526558558be3b33a661f306165422b6fac56f76211e57407bfde2a6b3ca9"
+      },
+      "physical_run_model_chain": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/physical-guided-rtx3090/native-checkpoint-lineage.json",
+        "sha256": "6159921942a46535b8b44dfc20f29346eace17b38ca7a80516e32c49e2408be7"
+      },
+      "actual_local_upgrade_and_previous_original_restore": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/pose-rollback/installed-backends-1.8-to-1.9-and-restore.json",
+        "sha256": "ae58ad13350e00f5bf6fe96e6d50058db9a022bf312a4598ed3af14e93853b68"
+      }
+    },
+    "original_offline_trial": {
+      "product_source": "15be85268fc0cf4f801152fa79b4901adffddc3d",
+      "producer": 44878790843,
+      "producer_job": 136769291129,
+      "harness_source": "4a8eaf33a2902a189a58d6b2148ba9b8c4518ee0",
+      "worktree": "C:/rv19-independence-offline",
+      "submit_after_verified_parts": "C:/rv19-starting-point/submit-15be-offline-after-media.py"
+    },
+    "concurrent_heads": {
+      "file": "1.9/evidence/concurrent-prs-20261121-073206-utc.json",
+      "sha256": "d392155f963a7c7d2fe8d41d300f808a33d978d7d0e1e90dc1a7420b752c098b"
+    },
+    "selection_after_concurrent_update": {
+      "pr_79": "db122455ba68eda08942c904cb63a33bfba3278a",
+      "pr_78": "c7f7de898a24828db5fbf23936f43a475d6208eb",
+      "finding": "The 1.4 saved mesh coverage preview stays on its existing branch. The 1.9 donor moves checks earlier for a noncanonical intermediate ZIP sent to the materializer. Supported frozen project revisions, including exchanged studies, regenerate canonical YAML in pose_training_exports.py on each attempt. Public Retry either reuses a verified completed run or creates a fresh training stage. The donor also enforces raw YAML equality that would reject a supported disjoint validation class subset on the integrated candidate. Both sibling histories are preserved."
+    },
+    "native_research_and_exchanged_study": {
+      "exchange-and-reopen.json": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/exchanged-pose-registration/exchange-and-reopen.json",
+        "sha256": "5aaaa6b78d7e9809f13aa8199a95743f2166bd2a7aefdc83851c947907c01d37"
+      },
+      "registration-before-and-after-transfer-red.json": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/exchanged-pose-registration/registration-before-and-after-transfer-red.json",
+        "sha256": "16d9d2bfd209a61dcf2dfbd39a499e8f9cf74324272690fe21d4bd83f7d8abe8"
+      },
+      "native_registration_refusal": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/native-transferred-pose-registration-red/index.json",
+        "sha256": "b74b2842631281fd8f18eb67ea0072902f06c86dc2c274477f0cdff358ba4d65"
+      },
+      "native_coral_and_temporal": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/native-coral-and-temporal/index.json",
+        "sha256": "7af6831737063f3f0e932a1ca46d21c44c76408585b1ad2177b02d8d732b50d3"
+      },
+      "native_detector_and_paired_comparison": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/native-detector-and-paired-comparison/evidence-index.json",
+        "sha256": "4de7519fa74a1fa1d955e44610ffd14c04751faa3f82d766160bc45565d4230a"
+      },
+      "open_defect": "A valid independently held-out completed training run registered before exchange and failed after import. All six transferred checkpoint files matched their completion digests. The original archived study stayed intact. The #149 interface re-enabled Register best pose model and did not display the returned HTTP 400 reason.",
+      "source_profile": "C:/rv19-starting-point/15be-study-exchange-c8297a2b/destination"
+    }
+  },
+  "original_1_9_msi_research_and_recovery": {
+    "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+    "original_run": 44867493658,
+    "manufacturer": 136734331397,
+    "msi_sha256": "86bc21d9bffbafd514b355e9d57266cfea5d93df7e6ee46fb653e15f599e2f5f",
+    "media": {
+      "file": "1.9/checkpoints/96476bc46/official/independent-package-validation.json",
+      "sha256": "b8a9f9cc9bd9fc86aeefe09328aa290338307acf8f1a9057c489546556341fff"
+    },
+    "registered_guided_replay": {
+      "file": "1.9/checkpoints/96476bc46/official/registered-guided-pose/narrow-driver/registered-guided-index.json",
+      "sha256": "d1075a13ebc0825262edeb6d4174f11f0243371a5e607d771b53436fbee830f5"
+    },
+    "registered_stages": [
+      "data_retention",
+      "external_annotation_imports",
+      "first_launch",
+      "first_use_workflow",
+      "frontend_backend_connectivity",
+      "guided_pose_workflow",
+      "install",
+      "model_policy",
+      "project_exchange",
+      "project_persistence",
+      "provider_manifests",
+      "restart",
+      "schema_migration",
+      "shortcuts",
+      "spatial_workflow",
+      "uninstall",
+      "webview2"
+    ],
+    "hosted_cpu_runs": [
+      "06a7b738-d7bb-40c7-b9b4-7143c1b28ae1",
+      "01a1d3d1-a464-48fc-82ef-324b110634c3"
+    ],
+    "physical_rtx_workflow": {
+      "file": "1.9/checkpoints/96476bc46/official/evidence/physical-guided-rtx3090/evidence-index.json",
+      "sha256": "1acb395d000ba45c906b440469f3eb651e3499a9fbcb449c27e9ce06d8f9fc10"
+    },
+    "device_observation": "Both runs reported CUDA. Three GPU samples fell within training on each run. The first 0.440-second inference ended between samples; one sample fell inside the second inference.",
+    "original_18_19_rollback": {
+      "file": "1.9/checkpoints/96476bc46/official/evidence/pose-rollback/original-pose-upgrade-and-rollback.json",
+      "sha256": "8b6c738a287475bfb3973d88ea8309f37915d9d0b482c432ae90e14ee2b52953"
+    },
+    "timing": {
+      "file": "1.9/checkpoints/96476bc46/official/evidence/native-performance/index.json",
+      "sha256": "131ab5a48a23942d688f129fa21ad07587137f9937dd052203a9c6679e2ad7fd"
+    },
+    "observed_ms": {
+      "cold_launcher_upper_bound_ms": 7832,
+      "first_decoded_gallery_ms": 284,
+      "dense_editor_full_source_ms": 426.29420000000005,
+      "video_import_ack_ms": 1187.3873,
+      "video_playable_ms": 1520.9791,
+      "video_presented_seek_ms": 104.69800000000009,
+      "extracted_review_seek_ms": 360.2060999999994
+    },
+    "offline_runtime_payload": {
+      "file": "1.9/checkpoints/96476bc46/official/embedded-webview2.json",
+      "sha256": "303036a8f93e85775bac507b8dfdd5ec54ab440059a7e1f77db7ad81d0d54836"
+    },
+    "bounded_storage_first_attempt": {
+      "file": "1.9/checkpoints/96476bc46/official/evidence/bounded-volume-recovery/attempt-1/index.json",
+      "sha256": "e6753b92c5a2a26838582a5732bec186c00aca50acb77c9e8a211422a9233f26"
+    },
+    "bounded_storage_next_attempt": {
+      "qa_branch": "codex/reefvision-1.9-original-storage-proof",
+      "qa_commit": "df22d467861efa030f8c7626b1a51080bc62f535",
+      "pr": 137,
+      "run": 44892936947,
+      "job": 136812458336,
+      "original_msi_sha256": "86bc21d9bffbafd514b355e9d57266cfea5d93df7e6ee46fb653e15f599e2f5f",
+      "journal_mode_rehearsal": {
+        "file": "1.9/checkpoints/96476bc46/official/evidence/bounded-volume-recovery/journal-rehearsal/index.json",
+        "sha256": "67fa0fd3a869a8df69745adc4c8d58ada91a7473d99bf2d84ed89e1b0a4d6fdd"
+      }
+    },
+    "offline_after_producer_available": {
+      "run": 44867740231,
+      "attempt": 2,
+      "fresh": 136770405841,
+      "cached_upgrade": 136770405714,
+      "verified": true,
+      "fresh_offline_seconds": 128.7246004,
+      "cached_offline_seconds": 370.2482217,
+      "backup_files_reopened": 7,
+      "receipt": {
+        "file": "1.9/checkpoints/96476bc46/official/offline/attempt-44867740231-try-2/offline-index.json",
+        "sha256": "181c2dd946a7873e072588fc9b311ca841a7304e9bd4b6773f0fe2b74b35adf9"
+      }
+    },
+    "generated_fixture_only": true,
+    "registered_clean": {
+      "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+      "original_msi_sha256": [
+        "86bc21d9bffbafd514b355e9d57266cfea5d93df7e6ee46fb653e15f599e2f5f"
+      ],
+      "role": 136770245418,
+      "standard_user_desktop_journeys": 31,
+      "scheduler_restart_phases": 2,
+      "results": {
+        "file": "1.9/checkpoints/96476bc46/official/first-clean-verified-snapshot.json",
+        "sha256": "6c3e166c8d67c1ee4ae1ce0752cb745bfe7f1beac238c64d5843d16351c085fb"
+      }
+    },
+    "registered_matrix": {
+      "product_pr": 131,
+      "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+      "run": 44867493658,
+      "msi_sha256": "86bc21d9bffbafd514b355e9d57266cfea5d93df7e6ee46fb653e15f599e2f5f",
+      "registered_scenarios": 11,
+      "rehashed_artifact_members": 225,
+      "ordinary_desktop_journeys": 31,
+      "scheduler_restart_phases": 2,
+      "scenarios": [
+        "clean",
+        "published-1.0.3",
+        "validated-1.3",
+        "validated-1.4",
+        "validated-1.5",
+        "validated-1.6",
+        "validated-1.7",
+        "validated-1.8",
+        "draft-1.4-0038",
+        "draft-1.4-0039",
+        "historical-qc"
+      ],
+      "direct_1_8_rollback": {
+        "job": 136770245553,
+        "artifact": {
+          "id": 14702811925,
+          "sha256": "57c4fb01204e9a210af2ac17429213aa972636f2be36fd9bd8ee38be322dd27e",
+          "files_rehashed": 11
+        },
+        "older_backup_files": 10,
+        "historical_schema_rejection": "Historical 1.8.0 rejected schema b19_registration_0001 (backend explicitly rejected migration revision b19_registration_0001); database SHA-256 remained 6532957781bc6193d3eef76d0153e3a4a2d90ae54f0c6fc144661c827dcb0122.",
+        "historical_backup_reopen": "Historical 1.8.0 reopened a separate b18_spectral_0002 recovery of 10 verified files; project, original SHA-256 431ced6916a2a21a156e38701afe55bbd7f88969fbbfc56d7fe099d47f265460 and annotation coordinates matched. Backup manifest SHA-256 a8d430411ef6bf40eeaa21ed94883c4bef898544a5fdd9fd80a371319c765799."
+      },
+      "receipt": {
+        "file": "1.9/checkpoints/96476bc46/official/full-hosted-role-validation.json",
+        "sha256": "ca97cf020bb22f0f468217f41b7ff02f4e7a1f1300e8ba419e3f4a5501b9b006"
+      }
+    },
+    "bounded_storage_attempts": [
+      {
+        "attempt": "attempt-1",
+        "result": "failed-before-application-launch",
+        "job_id": 136738091375,
+        "artifact_id": 14697840077,
+        "receipt": {
+          "file": "1.9/checkpoints/96476bc46/official/evidence/bounded-volume-recovery/attempt-1/index.json",
+          "sha256": "e6753b92c5a2a26838582a5732bec186c00aca50acb77c9e8a211422a9233f26"
+        },
+        "actual_editor_recovery_verified": false,
+        "cleanup": {
+          "success_before_cleanup": false,
+          "listener_closed": false,
+          "sidecar_closed": false,
+          "mounted_volume_detached": true,
+          "uninstalled": true
+        }
+      },
+      {
+        "attempt": "attempt-2",
+        "result": "incomplete",
+        "job_id": 136772839520,
+        "artifact_id": 14702442640,
+        "receipt": {
+          "file": "1.9/checkpoints/96476bc46/official/evidence/bounded-volume-recovery/attempt-2/index.json",
+          "sha256": "db517043f09c27b15d44a37e8ab6e9c803d3905d1751bccaf6c86570103aafe2"
+        },
+        "actual_editor_recovery_verified": false,
+        "cleanup": {
+          "success_before_cleanup": false,
+          "listener_closed": true,
+          "sidecar_closed": true,
+          "mounted_volume_detached": true,
+          "uninstalled": true
+        }
+      },
+      {
+        "attempt": "attempt-3",
+        "result": "passed",
+        "job_id": 136812458336,
+        "artifact_id": 14706121696,
+        "receipt": {
+          "file": "1.9/checkpoints/96476bc46/official/evidence/bounded-volume-recovery/attempt-3/index.json",
+          "sha256": "a03fe00207e49b2311a1e0f8935f25add7fa227346d1b89abc80ebaaf2c4c8d1"
+        },
+        "actual_editor_recovery_verified": true
+      }
+    ],
+    "combined_installation_and_recovery": {
+      "file": "1.9/checkpoints/96476bc46/official/combined-installed-qualification.json",
+      "sha256": "fdf8ea494b767e63d20b1014a2a56e0ef72a1349690357b890b585d551d89c45"
+    }
+  },
+  "active_product_pr": 152,
+  "exchanged_pose_training": {
+    "source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
+    "version": "1.9.0",
+    "database_head": "b19_registration_0001",
+    "product_pr": 150,
+    "parent": "15be85268fc0cf4f801152fa79b4901adffddc3d",
+    "branch": "codex/reefvision-1.9-exchanged-pose-provenance",
+    "worktree": "C:\\rv19-exchange-pins",
+    "generated_fixture_only": true,
+    "source_evidence": {
+      "legacy_export_and_reimport": {
+        "file": "1.9/checkpoints/6334bcbb8/source/evidence/legacy-pose-exchange/exchange-and-atomicity.json",
+        "sha256": "4eb8d420e34f06a7db86db17c5e73c5327e385788b12cac439e6a3ad75fe888c"
+      },
+      "registered_native_seed": {
+        "file": "1.9/checkpoints/6334bcbb8/source/evidence/legacy-pose-exchange/registered-native-seed.json",
+        "sha256": "5676ffcddf9914b453f32d2b355f0f1b7277ff3fe977d769014f844a12a112c0"
+      },
+      "two_fresh_transfers": {
+        "file": "1.9/checkpoints/6334bcbb8/source/evidence/fresh-mixed-two-hop/index.json",
+        "sha256": "ea61c54c640a417cbfdc19d48c1d5f1ebf62f35aad24c39b25f7c73b1b438fd0"
+      },
+      "ordinary_training_ui": {
+        "file": "1.9/checkpoints/6334bcbb8/source/transfer-registration/index.json",
+        "sha256": "2feff41ad27b574c546c5159fafee52062542e55fade39cc28a3d97807ff5bde"
+      }
+    },
+    "source_gates": {
+      "focused_implementation": {
+        "passed": 6,
+        "junit": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/exchange-integrated-checks-stacked.xml",
+          "sha256": "61eb635e096d776a22c302f0c383332dfbe340c63dbf9a46cf7a903202bef750"
+        }
+      },
+      "final_shared_registration_and_export": {
+        "passed": 2,
+        "junit": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/exchange-integrated-checks-shared-registration.xml",
+          "sha256": "6682a6eed07fd82a0ae17aa5c359f089ca9fcfffec8ed7a7336a4e22d038b916"
+        }
+      },
+      "canonical_inventory_tests": {
+        "passed": 22,
+        "junit": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/exchange-integrated-checks-inventory.xml",
+          "sha256": "fa710adbda64dafa1ec80efd5615364bd86a408ac262bad0a9290875db800851"
+        }
+      },
+      "physical_cuda": {
+        "passed": 5,
+        "junit": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/6334-cuda-results.xml",
+          "sha256": "525856981ddfe263b0411d11bf25230d9ee553581a2ee1730779dd823e4a64dc"
+        }
+      },
+      "mypy": {
+        "file": "1.9/checkpoints/6334bcbb8/source/checks/final-types.log",
+        "sha256": "18ec172b5be8236c8d902039fbe3212d1bc6498b22b1f7459ad9d1498238a0ff"
+      },
+      "alembic_upgrade_base_upgrade": {
+        "file": "1.9/checkpoints/6334bcbb8/source/checks/roundtrip.log",
+        "sha256": "09839064b5b5bb688eb340d7b4bde5d5a5bed0e85b1cb987c0af7fc9d030ad58"
+      },
+      "rust_tests": {
+        "file": "1.9/checkpoints/6334bcbb8/source/checks/6334-rust.log",
+        "sha256": "b367ec931b3e99183301a7ace63b4ea42a675f1f5292b7eb485bfbbaeb1772e8"
+      },
+      "frontend": {
+        "ci---no-audit---no-fund.log": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/frontend-ci---no-audit---no-fund.log",
+          "sha256": "d51066973db63eaecdac51bc41b0981e79f66e4940603c1458ad0070afdb2293"
+        },
+        "run-build.log": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/frontend-run-build.log",
+          "sha256": "63f71659041df6a6c4798eb28b0b2164df640ed7d51070bca28dcbe30d4c0b48"
+        },
+        "run-format-check.log": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/frontend-run-format-check.log",
+          "sha256": "4666969f85835307e8d360234a1877ad8ae96cd6cecd0f578932384d65aa6967"
+        },
+        "run-lockfile-check.log": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/frontend-run-lockfile-check.log",
+          "sha256": "c705de73d6d0224a5dc8b71369ec3ae3aa1ee6d5a97b559658b97954413d495a"
+        },
+        "run-test-e2e.log": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/frontend-run-test-e2e.log",
+          "sha256": "7c68c09e806c0dab9a0c83647002dc2a4573d6a52ab45c082ef38183a607b7e9"
+        },
+        "run-typecheck.log": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/frontend-run-typecheck.log",
+          "sha256": "9a53ffb62f6e9f9632ad62a970c0e93c7f82dc97e021622cbf8c53cd61a7ce34"
+        },
+        "test.log": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/frontend-test.log",
+          "sha256": "b4ec5f5ecb6d0502ba4912a7d20f2820e2e665b92b2c832bd9ee2e5e32bbdfff"
+        }
+      }
+    },
+    "migration_changes": [],
+    "suite_collection": {
+      "full": 6094,
+      "affected": 104,
+      "full_identity_sha256": "5c18a0d41a904b9edcfab4395ca243c9764edac7667630310ab22831729b55f4",
+      "affected_identity_sha256": "c7f214c29bac93b59608617011f78a0f42b258715185636ff5194cd8792b8513"
+    },
+    "windows_original": {
+      "run": 44884655409,
+      "producer": 136787200988,
+      "pr": 150
+    },
+    "hosted_ci": {
+      "general": 44884655459,
+      "pose": 44884655423,
+      "frontend": {
+        "job": 136787201041,
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44884655459/job/136787201041",
+        "test_files": 142,
+        "unit_passed": 976,
+        "browser_passed": 15,
+        "receipt": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/hosted-frontend-136787201041.json",
+          "sha256": "c20458613c8b51c779e58eb9f9e4dc536ccc3591d12b5b60bd7ed15191731c56"
+        }
+      }
+    },
+    "local_build_root": "C:/rv19e-6334bcbb",
+    "offline_qa": {
+      "source": "4401080895fa9bf28b823983a664afcd2c1eef29",
+      "folder": "C:/rv19-exchange-offline",
+      "submission": "C:/rv19-starting-point/submit-6334-offline-after-media.py"
+    },
+    "registered_guided_qa": {
+      "source": "94a82a08d37ae946c8216795def2d7fdafff8265",
+      "folder": "C:/rv19-guided-exchange-reg"
+    },
+    "full_windows_folder": "C:/rvb19-6334",
+    "affected_windows_folder": "C:/rvb19-6334-affected",
+    "retained_record": {
+      "file": "1.9/checkpoints/6334bcbb8/source/qualification.json",
+      "sha256": "3231df6efe8fd3da1db0842420f53877a66e75c2d1b3626726cdb8cad01d692b"
+    },
+    "local_media_and_source": {
+      "file": "1.9/checkpoints/6334bcbb8/local-production/media-and-source-checks.json",
+      "sha256": "bb344c937123586aa2c6aad97b8afb4afb191d6abd6012c664add17aa7b81bba"
+    },
+    "windows_affected": {
+      "passed": 103,
+      "skipped": 1,
+      "receipt": {
+        "file": "1.9/checkpoints/6334bcbb8/source/checks/windows-affected-suite.json",
+        "sha256": "e39c4e5efb938036371804050736ca242f6126ba34bff205ef9b60b276a9ddd2"
+      }
+    },
+    "concurrent_heads": {
+      "file": "1.9/evidence/concurrent-prs-20261121-090545-utc.json",
+      "sha256": "343ec947b7600bb5dc859720df982add1356fd1ee5d9bc174caef5d3ab2f4828"
+    },
+    "verified_locally_packaged_workflows": {
+      "product_pr": 150,
+      "source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
+      "msi_sha256": "3c5231737f44232f017fcddd24f01c7ad334cf8addae4667622947e298c0dd04",
+      "schema": "b19_registration_0001",
+      "surface": "Windows 11 local MSI administrative extraction, native WebView2 and packaged API on disposable studies",
+      "generated_fixture_only": true,
+      "media": {
+        "file": "1.9/checkpoints/6334bcbb8/local-production/media-and-source-checks.json",
+        "sha256": "bb344c937123586aa2c6aad97b8afb4afb191d6abd6012c664add17aa7b81bba"
+      },
+      "evidence": {
+        "guided_rtx": {
+          "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/physical-guided-rtx3090/evidence-index.json",
+          "sha256": "36b4d76f9bfc311cbe656a793169e15c836a9260f0730653eeab66cc75327d58"
+        },
+        "mixed_transfer": {
+          "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/fresh-mixed-two-hop/index.json",
+          "sha256": "18ab415774b50f7c366ee75ca160570cc7e5022a43812947981fcbec2ac4391e"
+        },
+        "rich_rollback": {
+          "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/pose-rollback/installed-backends-1.8-to-1.9-and-restore.json",
+          "sha256": "81ef563a02f2b4afd7601085e5ba0416de54024ca9af07c15358220b7b30455d"
+        },
+        "registration": {
+          "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/native-transfer-registration/index.json",
+          "sha256": "16c6cca146fa2c3f69bb09431339bfc0afd11f6b0fc0a0640ce7e8b3c27af8a2"
+        },
+        "segmentation": {
+          "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/native-reviewed-segmentation/index.json",
+          "sha256": "f86d237ba9ee28bdb5d3f740ec7aaee3c73e1f744f205ce1b1ae18442033c148"
+        }
+      },
+      "cuda_runs": [
+        {
+          "id": "2d7a69be-d1e8-41cc-8e9f-04b4e075932e",
+          "model": "65aebeaa-20aa-4d4c-af4f-7e15d2754dde",
+          "weights_sha256": "9bd59f8143c9dcbd4ca839440e3939ca4bca9db6aca9703a376e180d766abd22",
+          "training_gpu_samples": 4,
+          "inference_gpu_samples": 1
+        },
+        {
+          "id": "4db8b22c-b9ba-4fdc-800d-ac4194445b50",
+          "model": "c7e17496-46ca-4b32-b84b-b249c4ea4675",
+          "weights_sha256": "f802b63421d4a1dd6568f0f15e1a3f2f5e5ae2f05dfac5e8b5422db588f46b8f",
+          "training_gpu_samples": 4,
+          "inference_gpu_samples": 1
+        }
+      ],
+      "rollback": {
+        "source_tables": 37,
+        "backup_files": 112,
+        "bytes": 27777736,
+        "original_msi": "78d52066848afc6aeac975765359ba13cd3d0e2e8b79ef1b90307eecd03c35ed"
+      },
+      "hosted_registered_windows": {
+        "run": 44884655409,
+        "producer_job": 136787200988
+      },
+      "retained_record": {
+        "file": "1.9/checkpoints/6334bcbb8/local-production/verified-workflows.json",
+        "sha256": "903c06c81f68b7dfaf7d4e3c5e7a53cf2a8e3dfa248dd473dc717d30034862ca"
+      }
+    },
+    "registered_native_seed_on_packaged_runtime": {
+      "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/registered-native-seed/registered-native-seed.json",
+      "sha256": "0a47e5643a99b755ea90b0b0e61fb8d7adb8db5bc817beac5c0303af2d625998"
+    },
+    "saved_mask_inference_review_and_measurement": {
+      "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/native-saved-mask-review/index.json",
+      "sha256": "66ab8dd82d95b35f40081c6f6659ff50b7ab6c59c29fcbf0bf143e8f8155d053"
+    },
+    "gallery_scroll_and_final_decoded_page": {
+      "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/native-gallery-navigation/index.json",
+      "sha256": "3688d8cd380e0fdd6e0a1420a6167a06bbf4a6da9d35d817a172fc8d1a84a355"
+    },
+    "saved_nonpose_tracking": {
+      "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/native-saved-object-tracking/index.json",
+      "sha256": "69593b70532d0e33e04b96b3eac5c742f453b7a0ffec92e78f3cd859f7158869"
+    },
+    "concurrent_pose_export_review": {
+      "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/pose-export-reconciliation/receipt.json",
+      "sha256": "046cd91e3d2ac13b4f16f901e009876e925db00a1608a3e7c16ead00b71ba52e"
+    },
+    "unavailable_provider_across_two_native_imports": {
+      "scope": "administratively_extracted_windows_msi",
+      "source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
+      "msi_sha256": "3c5231737f44232f017fcddd24f01c7ad334cf8addae4667622947e298c0dd04",
+      "verified": {
+        "each_project_image_model_job_and_proposal_typed_id_is_local_and_distinct": true,
+        "original_opaque_nested_string_uuid_tree_is_unchanged": true,
+        "pending_prediction_remains_pending": true,
+        "accepted_annotations_or_masks": [
+          0,
+          0
+        ],
+        "unknown_provider_catalog_http": 404,
+        "original_pixels_and_inert_historical_attachment_rehashed_in_closed_database_and_archive": true,
+        "foreign_key_violations": 0,
+        "unmodified_donor_bytes": true,
+        "live_product_registration_unchanged": true
+      },
+      "export_sha256": "2a0d5608728b14db8f68d1ac73012666c4e02008cf800c51f165678a4e573592",
+      "receipt": {
+        "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/native-opaque-provider-two-hop/index.json",
+        "sha256": "fb83ed3b7dc379528e29ed6df33a5b675cd696f7490fc3afc84a63c07d538266"
+      }
+    }
+  },
+  "original_offline_7797": {
+    "source": "7797efad64f65e2f19c6f4ff64a94382335bd0a9",
+    "proof_run": 44873856510,
+    "original_build_run": 44873530801,
+    "msi_sha256": "cbb877535bb94b8c34e54a3932e31b4bdb3a53519f5f36ec893dff3f40068480",
+    "fresh_offline_seconds": 187.3441305,
+    "cached_offline_seconds": 234.7882078,
+    "verified_restored_files": 7,
+    "receipt": {
+      "file": "1.9/checkpoints/7797efad6/official/offline/attempt-44873856510/offline-index.json",
+      "sha256": "157fcb6eb80a0c64f0b53020ab4aea98c8aa819fdfa670e44510c3538a7f3485"
+    }
+  },
+  "frozen_frame_qualification_boundary": {
+    "source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
+    "product_draft": 150,
+    "observation": "Two separately reviewed and frozen recordings with distinct video IDs, raw content hashes and declared acquisition groups shared eight lossless frames. Both real pose providers scored and registered the overlapping holdout. Training from the disjoint fixture succeeded. The old worker's interrupted parent and Training's registration action reproduced the same result. This candidate does not qualify independent holdouts with shared decoded frames.",
+    "native_webview_and_both_public_workers": {
+      "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/native-pose-frame-overlap-baseline/index.json",
+      "sha256": "7e35b2ff93457a473e525f7a601813bf3581c1f0afbf2f367af9ba329c0bea44"
+    },
+    "original_6334_physical_guided": {
+      "file": "1.9/checkpoints/6334bcbb8/official/evidence/physical-guided-rtx3090/evidence-index.json",
+      "sha256": "1da34950d5eaef827142a1c4b8b809c475f9791f39eb79fa77a62d7bbcf8153a"
+    },
+    "full_windows": {
+      "collected": 6094,
+      "passed": 6082,
+      "skipped": 12,
+      "failed": 0,
+      "proof": {
+        "file": "1.9/checkpoints/6334bcbb8/full-windows-backend/verified-summary.json",
+        "sha256": "328ec42d87236121bc3d6b5a0d41adac1369c4119192f725695b2e7c3673cde6"
+      }
+    },
+    "historical_parent_and_registration": {
+      "ultralytics": {
+        "file": "1.9/checkpoints/6334bcbb8/source/overlapping-frozen-frames/ultralytics-parent-retry.json",
+        "sha256": "53c911ee55f262fb0917594d8c6701c15a51c351b9ef2140ed213c62432fe175"
+      },
+      "reefpose": {
+        "file": "1.9/checkpoints/6334bcbb8/source/overlapping-frozen-frames/reefpose-parent-retry.json",
+        "sha256": "d47b87c4e4dce515e129767c6893aaa427e9a56d3fc9261eb34d79e44990c02f"
+      }
+    },
+    "successor_worktree": "C:/rv19-frame-holdout",
+    "successor_branch": "codex/reefvision-1.9-frozen-frame-separation",
+    "qualification": "Original #150 media, full backend and stock installation retain their individual observations. The corrected package receives the final registered guided and offline scenarios."
+  },
+  "frozen_frame_separation": {
+    "source": "91027e893172d500897058dbb2c1cc5b9de5d50a",
+    "branch": "codex/reefvision-1.9-frozen-frame-separation",
+    "draft": 151,
+    "base_draft": 150,
+    "previous_source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
+    "frozen_frame_trials": {
+      "reefpose": {
+        "worker_and_reopen": {
+          "file": "1.9/checkpoints/91027e893/source/public/reefpose.json",
+          "sha256": "683ab906a684c893bef7abfff20c8d224540177f1ff245bf3fdd2710645dde7c"
+        },
+        "prior_child_recovery_and_registration": {
+          "file": "1.9/checkpoints/91027e893/source/historical/reefpose.json",
+          "sha256": "f42256773dd5d8b7449b1b2e13a9a857502866a04437a6a6287f06a8c7b25d95"
+        },
+        "generated_disjoint_checkpoint_sha256": "416dedd6fac34138d08439b6552df3f51748f27baa2d024113e510172953309b",
+        "generated_disjoint_model_id": "5ee37775-68a7-4c4f-8685-a8a9736134b6"
+      },
+      "ultralytics": {
+        "worker_and_reopen": {
+          "file": "1.9/checkpoints/91027e893/source/public/ultralytics.json",
+          "sha256": "63bd5646361f440e06f160d2578885160db91af51ad9c98768f27c9baa39fb8a"
+        },
+        "prior_child_recovery_and_registration": {
+          "file": "1.9/checkpoints/91027e893/source/historical/ultralytics.json",
+          "sha256": "814b00936a82cb30f74aba0bda3a2694caa9747179b34712e7f2256a64bd7c9b"
+        },
+        "generated_disjoint_checkpoint_sha256": "46c701fba7fa1a2978df7d497fae7a0c920b96f356c0d39690ee421feb5fa56c",
+        "generated_disjoint_model_id": "d9965c72-2d31-40f8-baae-abdd3207e6cb"
+      }
+    },
+    "tests": {
+      "frame-final-regressions": {
+        "passed": 5,
+        "junit": {
+          "file": "1.9/checkpoints/91027e893/source/checks/frame-final-regressions.xml",
+          "sha256": "eb3647692f10476c04d24d6709aba24873563c9cbc4378311256dba0e57d8895"
+        }
+      },
+      "frame-stored-check": {
+        "passed": 9,
+        "junit": {
+          "file": "1.9/checkpoints/91027e893/source/checks/frame-stored-check.xml",
+          "sha256": "28c0d50c54c08f54d9a59169a44503f0ee1d4c3a0d50b040719e6bc936807bcf"
+        }
+      },
+      "frame-transfer": {
+        "passed": 4,
+        "junit": {
+          "file": "1.9/checkpoints/91027e893/source/checks/frame-transfer.xml",
+          "sha256": "9d36c12df48ea3d2dea7df222ef365f18410d0e08082a27aade9803a252f6b88"
+        }
+      },
+      "frame-pose-phase": {
+        "passed": 33,
+        "junit": {
+          "file": "1.9/checkpoints/91027e893/source/checks/frame-pose-phase.xml",
+          "sha256": "e480cad2289cea2a82c40ad2e3f6584570e6c713b2f6f841cb97cffd3a58a780"
+        }
+      },
+      "91027-gpu": {
+        "passed": 5,
+        "junit": {
+          "file": "1.9/checkpoints/91027e893/source/checks/91027-gpu.xml",
+          "sha256": "04b51bd3039b07ea08106443a50ec38fc91d8d6a872d10f7748bd9b51f4ab121"
+        }
+      }
+    },
+    "full_windows": {
+      "output": "C:/rvb19-91027",
+      "source": "91027e893172d500897058dbb2c1cc5b9de5d50a",
+      "cases": 6099,
+      "workers": 16,
+      "ordered_collection_sha256": "6b31f967415095a9e9d0036098cf0f1a6b20a99a5d78b70401e67a672769f263"
+    },
+    "schema": "b19_registration_0001",
+    "new_migrations": [],
+    "migration_roundtrip": {
+      "file": "1.9/checkpoints/91027e893/source/checks/migration-roundtrip.log",
+      "sha256": "0c3040c05dc906eb69e8fb87f06118e3f33accddb329721e9583c47d2f12df6d"
+    },
+    "transfer_browser": {
+      "fresh": {
+        "worker": {
+          "file": "1.9/checkpoints/91027e893/source/transfers/fresh.json",
+          "sha256": "3a5b6481d5779995bfd1b26e8616d708dd576f286db18433f13d4602e9b4a1fd"
+        },
+        "playwright": {
+          "file": "1.9/checkpoints/91027e893/source/transfers/fresh-playwright.json",
+          "sha256": "db92485ef85746ed374a4c97b04e0df75bc7fd56b9dcf51c627df05b85d21811"
+        }
+      },
+      "historical": {
+        "worker": {
+          "file": "1.9/checkpoints/91027e893/source/transfers/historical.json",
+          "sha256": "ae369fe82346448630660822536fe4673484522eef70d50f218ca90623ac062e"
+        },
+        "playwright": {
+          "file": "1.9/checkpoints/91027e893/source/transfers/historical-playwright.json",
+          "sha256": "98b5dc0bf0454236a0fab8729cd899342699136af0c8f3b6c9759c193eb5f09e"
+        }
+      }
+    },
+    "existing_study_exchange": {
+      "file": "1.9/checkpoints/91027e893/source/transfers/preserved-legacy-history.json",
+      "sha256": "29a4916af4e2c69c69f10f8220b692024b8e0becf57e5623ca69cbaa4df52642"
+    },
+    "quality": {
+      "ruff_checked": true,
+      "ruff_format_checked_files": 1349,
+      "mypy_checked_files": 779
+    },
+    "hosted": {
+      "build_run": 44897196611,
+      "producer": 136825277972,
+      "general": 44897196447,
+      "pose": 44897196416
+    },
+    "scientific_scope": "Generated recordings, reviewed fixture frames and real local model fitting. Independent field data and review remain open.",
+    "retained_record": {
+      "file": "1.9/checkpoints/91027e893/source/qualification.json",
+      "sha256": "21375b03a17c5b300e277f913f1860c244b6998514ad3bca10789ae7b82189a0"
+    },
+    "local_package_and_desktop": {
+      "source": "91027e893172d500897058dbb2c1cc5b9de5d50a",
+      "windows_media": {
+        "version": "1.9.0",
+        "msi_sha256": "4a7b27d4e6187bf29509bfdef76e0138822db9d20f5f1e47b7ee033b1bbb1709",
+        "external_cabinets": 5,
+        "payload_bytes": 2978698362,
+        "checksum_manifest": {
+          "file": "1.9/checkpoints/91027e893/local-production/installer/SHA256SUMS.txt",
+          "sha256": "441df921d1eb915e87e3bdf9a9ac8a723f2ed728ddd9b2022e4fb3a16f03893d"
+        }
+      },
+      "surface": "Normal Windows GUI opened from the administratively extracted locally built MSI under the ordinary account. GitHub-registered trials retain their original job and media identities.",
+      "frozen_frame_desktop": {
+        "file": "1.9/checkpoints/91027e893/local-production/evidence/native-frozen-frame-workflows/index.json",
+        "sha256": "91dfe0f49ba00465d55a593c45f930cc6ba3273a93bd00199993e50794b27b5f"
+      },
+      "complete_verified_package_receipt": {
+        "file": "1.9/checkpoints/91027e893/local-production/verified-workflows.json",
+        "sha256": "88392cd71c050efc12b30478cd28fba8c07ec3fc310cf96771de0b5a7d0fce84"
+      },
+      "two_successive_transfers": {
+        "selected_source": {
+          "file": "1.9/checkpoints/91027e893/source/transfers/checked-pose-two-hops.json",
+          "sha256": "a1dbbdf1274f7895d9668bd3b05db7435e1514cfa0946325c157aba95f9d82dc"
+        },
+        "packaged_sidecar": {
+          "file": "1.9/checkpoints/91027e893/local-production/evidence/frozen-frame-exchange/two-transfers.json",
+          "sha256": "6c4be9bb22d6869409fad74c8ad94df3c7e2ca8d28f88f865aae92351888a9ce"
+        },
+        "observation": "Both imported copies preserved all three original recording hashes and all four registered model weights. The valid splits retained their checkpoints. Re-registration and saved replay withheld the historical overlapping score."
+      },
+      "restored_18_backup": {
+        "source_tables": 37,
+        "backup_files": 112,
+        "backup_bytes": 27777736,
+        "prior_msi_sha256": "78d52066848afc6aeac975765359ba13cd3d0e2e8b79ef1b90307eecd03c35ed"
+      },
+      "physical_cuda_runs": [
+        {
+          "run": "e37728bd-e926-4b1c-b46e-5bfeaaf56d28",
+          "checkpoint_sha256": "f891101480a04bfb91b59ca2d75a4989ac7bc21a86913dc8b25f309a1f28c422"
+        },
+        {
+          "run": "ddd96e6a-9f37-46e8-9c3d-510bb16408d8",
+          "checkpoint_sha256": "52d35356fa5d4c080feee8572831c03198ed9ba95c9dc88f34187dd52085c6b0"
+        }
+      ],
+      "desktop_suites": {
+        "file": "1.9/checkpoints/91027e893/source/checks/windows-desktop-suites.json",
+        "sha256": "8b02013c0af8da69e7737af4be97fec0e856489ebd91d3b3aad7b9ef8e9f89f8"
+      },
+      "frontend_and_rust": {
+        "frontend": {
+          "files": 142,
+          "passed": 976
+        },
+        "chromium": {
+          "passed": 15,
+          "opt_in_skipped": 50,
+          "failed": 0,
+          "flaky": 0
+        },
+        "rust": 8
+      }
+    },
+    "native_recovery_and_cancel_observation": {
+      "source": "91027e893172d500897058dbb2c1cc5b9de5d50a",
+      "draft": 151,
+      "previously_checked_split_still_refuses_overlapping_frames": true,
+      "cancel_during_dataset_preparation": {
+        "ordinary_entry": "Workflow Builder / recent running job / Cancel during reviewed pose export",
+        "reviewed_training_frames": 240,
+        "reviewed_validation_frames": 72,
+        "shared_frozen_frames": 0,
+        "accepted_cancel": {
+          "http_status": 200,
+          "requested_job": "8cfa297e-97fe-43d0-b9fd-6ee039b5a2d0",
+          "response_status": "cancel_requested",
+          "observed_preparing_before_and_after": true,
+          "parent_start_to_terminal_ms": 10057,
+          "trace_sha256": "1847a18b47825bd3bdfc318c69404a8f8f53a27b8b9be7f9e4d3617230554ff1"
+        },
+        "actual": "The child job stopped at epoch zero without a new score, model, checkpoint or experiment. Its parent reported Failed. A new run of the same saved revision succeeded and its single registered checkpoint matched the file.",
+        "native_receipt": {
+          "file": "1.9/checkpoints/91027e893/local-production/evidence/native-dataset-preparation-cancel/index.json",
+          "sha256": "b0aedfd2116d567e00eeb85dfae80b29d40b4cd1b5f64c646c85c7c98b9787b9"
+        },
+        "disjoint_control_milliseconds": 14933
+      },
+      "native_used_study_backup": {
+        "entry": "System status > Backups and restore > Create backup > Verify backup > Restore into new location",
+        "restored_files": 114,
+        "bytes": 27808634,
+        "old_populated_tables": 36,
+        "restored_populated_tables": 40,
+        "result": "Every preceding row and managed project/model file survived. Two GPU runs reopened with their frozen archive and checkpoint identities. The recovered study accepted a separate write and reopened.",
+        "receipt": {
+          "file": "1.9/checkpoints/91027e893/local-production/evidence/managed-checked-study-recovery/index.json",
+          "sha256": "dda7cb175075cb84348402c2f14800aef0cd334bd73da4010a070abe7ed0fac4"
+        }
+      },
+      "native_underwater_rendering": {
+        "actual": "The earlier flaky native assertion sampled a thumbnail while the same asset was promoting to its full display. On #151 the 104 by 96 original response and independently decoded RGBA matched before adjustment and after showing the original. The normal adjustment, inference and both replays passed.",
+        "native": {
+          "file": "1.9/checkpoints/91027e893/local-production/evidence/underwater-render-transition/verified-original-pixel-transition.json",
+          "sha256": "317b55772958984edcbaac82b30a13b3e30da97f31a155355eebe52e527bef78"
+        },
+        "fixed_observation": {
+          "file": "1.9/checkpoints/91027e893/local-production/evidence/underwater-render-transition/qa-assertion-native-delay.json",
+          "sha256": "fee1fbc8cdc637b13ad4a600816a353a0f84d98a0b49e6ff0e39072a828c2abb"
+        },
+        "test_change": "5d0f1b6058cfd7773a691f86d4b904d6150ef985"
+      },
+      "focused_successor": {
+        "branch": "codex/reefvision-1.9-training-cancellation",
+        "worktree": "C:/rv19-cancel-graph",
+        "test_commit": "9812e67e6804f93ffaf6e2ca4ff5d4c5180958e0",
+        "scope": "Honor a cancelled pose child and record the terminal state of unfinished workflow nodes."
+      }
+    },
+    "full_windows_backend": {
+      "source": "91027e893172d500897058dbb2c1cc5b9de5d50a",
+      "distinct_tests": 6099,
+      "passed": 6087,
+      "skipped": 12,
+      "failures": 0,
+      "receipt": {
+        "file": "1.9/checkpoints/91027e893/full-windows-backend/verified-summary.json",
+        "sha256": "3cc9035895e4ef5354f3c9825a6fd1529e0234852f36a88dfe987e7925732257"
+      }
+    }
+  },
+  "workflow_cancellation": {
+    "source": "272ee64e929bdfd2ebbf5e1f912221862ec5f9d2",
+    "draft": 152,
+    "branch": "codex/reefvision-1.9-training-cancellation",
+    "ordinary_paths": [
+      "Workflow Builder > running job > Cancel",
+      "Jobs > training job > Cancel",
+      "Training > Runs > Cancel training"
+    ],
+    "reproduced_on": "787e6bc5cdef75c884cb969ba74e7601a221005b",
+    "before_child_publication": "The parent returned cancel_requested with zero training runs, then incorrectly trained and reported success. The correction closes the running node and creates zero training runs.",
+    "before_parent_success": "An accepted Cancel after the last node now preserves the completed node and its exact typed artifact. The parent and job close as cancelled.",
+    "queued_and_preparing": "Queued cancellation synchronizes the child job and training record. During dataset preparation, a cancelled child propagates to its parent and unfinished nodes. Confirmed model failures still report failure.",
+    "source_checks": {
+      "publication-and-queued.xml": {
+        "file": "1.9/checkpoints/272ee64e9/source/checks/publication-and-queued.xml",
+        "sha256": "8d56fdc532b410a82051d34dcaba5c1fcbf13075dc5d310cde8ae1e59021209c",
+        "tests": 3,
+        "failures": 0
+      },
+      "preparation-second.xml": {
+        "file": "1.9/checkpoints/272ee64e9/source/checks/preparation-second.xml",
+        "sha256": "85730cad094613e66eea9068bade8f72e8e020951bfbde3a5a2c678e83e50756",
+        "tests": 5,
+        "failures": 0
+      },
+      "queued-training-red.xml": {
+        "file": "1.9/checkpoints/272ee64e9/source/checks/queued-training-red.xml",
+        "sha256": "7bbb35c3a10c7e8bc7f11e301144b5fec6a88b037988a4ea01eef76d93b172bd",
+        "tests": 1,
+        "failures": 1
+      },
+      "selected-boundaries.xml": {
+        "file": "1.9/checkpoints/272ee64e9/source/checks/selected-boundaries.xml",
+        "sha256": "2fd5dca45b12a028c8261c9e1831397eb1fdd1becf6360abc824d94f30450930",
+        "tests": 2,
+        "failures": 0
+      },
+      "exact-787e-red.log": {
+        "file": "1.9/checkpoints/272ee64e9/source/checks/exact-787e-red.log",
+        "sha256": "9caf1b3169c03fccb4d40e80b5ed4b1e4a0816921cae3a43fdabfa9bdd8e52dd"
+      },
+      "exact-787e-two-boundaries.log": {
+        "file": "1.9/checkpoints/272ee64e9/source/checks/exact-787e-two-boundaries.log",
+        "sha256": "b37a50f6d3a9bee74be6d41a79f187e1559ceac832733900e012f8a2d1a407ea"
+      }
+    },
+    "intermediate_source_browser": {
+      "file": "1.9/checkpoints/787e6bc5c/source/evidence/dataset-preparation-cancellation/index.json",
+      "sha256": "0526fc4a1ec2e6ab3172ed330b187905d59b5bf53944278b658dcb8747d6c4be"
+    },
+    "earlier_registered_bounded_volume": {
+      "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+      "msi_sha256": "86bc21d9bffbafd514b355e9d57266cfea5d93df7e6ee46fb653e15f599e2f5f",
+      "receipt": {
+        "file": "1.9/checkpoints/96476bc46/official/evidence/bounded-volume-recovery/attempt-3/index.json",
+        "sha256": "a03fe00207e49b2311a1e0f8935f25add7fa227346d1b89abc80ebaaf2c4c8d1"
+      },
+      "job_url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44892936947/job/136812458336",
+      "source_lineage": {
+        "file": "1.9/checkpoints/272ee64e9/source/checks/annotation-storage-lineage.json",
+        "sha256": "626857a5f2fd6452865a2fbad343f85229709ffc2faa2ee1917da4657a636e88"
+      },
+      "retained_draft": 192,
+      "prior_saved": 96,
+      "reopened_after_identical_retry": 192
+    },
+    "migration": "Inherited b19_registration_0001. The cancellation repair uses the existing job, training and workflow rows.",
+    "selected_desktop_source": {
+      "receipt": {
+        "file": "1.9/checkpoints/272ee64e9/source/evidence/dataset-preparation-cancellation/index.json",
+        "sha256": "d1c2f75c8507d479eb3abfc26b9328963cccb02e063d490cc406afe524c7f57c"
+      },
+      "outcome": "Workflow Builder and Training each cancelled during dataset preparation. Each stopped at epoch zero and retained 240 training frames, 72 disjoint validation frames and the original files. Re-running the same saved revision registered one checkpoint in each study."
+    },
+    "selected_windows_qualification": {
+      "file": "1.9/checkpoints/272ee64e9/local-production/verified-workflows.json",
+      "sha256": "e83181ba7cab41e3efec57d202c84097921621206f27553ac7cb8a39825ddfe8"
+    },
+    "source_and_windows_results": {
+      "source": "272ee64e929bdfd2ebbf5e1f912221862ec5f9d2",
+      "source_browser_cases": 2,
+      "native_cases": 2,
+      "physical_cuda_source_cases": 5,
+      "gpu_reviewed_replays": 2,
+      "exports_per_run": 4,
+      "msi": "5d1ee924f3aeb09dd0b6e02d438ede8cc8dcec23f63f71092cb355cc895440ce",
+      "cabinets": 6,
+      "backup_files": 112
+    },
+    "concurrent_drafts_before_2_0": {
+      "file": "1.9/checkpoints/272ee64e9/source/checks/concurrent-drafts-before-2.0.json",
+      "sha256": "6b9b2e73558f8ac29678ebcc3a44c5cd2bccc4bd61f3f39de707b1b9d85db151"
+    },
+    "technical_boundary": {
+      "source": "272ee64e929bdfd2ebbf5e1f912221862ec5f9d2",
+      "version": "1.9",
+      "windows_backend": {
+        "file": "1.9/checkpoints/272ee64e9/full-windows-backend/verified-summary.json",
+        "sha256": "b303224370121e4f3bf031bfce8a851ed96a4e5312ef23897e4a259497a011cc",
+        "outcomes": {
+          "passed": 6093,
+          "skipped": 12
+        },
+        "distinct": 6105
+      },
+      "native_windows": {
+        "file": "1.9/checkpoints/272ee64e9/local-production/verified-workflows.json",
+        "sha256": "e83181ba7cab41e3efec57d202c84097921621206f27553ac7cb8a39825ddfe8"
+      },
+      "status": "Engineering verified on generated studies, prior registered installations and the current native package. Historical-profile, independent field and enforcing signed-device acceptance remain open.",
+      "official_build": 44902072714,
+      "receipt": {
+        "file": "1.9/checkpoints/272ee64e9/engineering-qualification.json",
+        "sha256": "9f1bda0fa9440a9502e1fccfa789598986d0a2864d048ff922d8d4a835cab841"
+      }
+    }
+  },
+  "registered_predecessor_media": {
+    "144": {
+      "source": "7797efad64f65e2f19c6f4ff64a94382335bd0a9",
+      "manufacturer_run": 44873530801,
+      "manufacturer_job": 136753099467,
+      "original_msi_sha256": "cbb877535bb94b8c34e54a3932e31b4bdb3a53519f5f36ec893dff3f40068480",
+      "cabinet_count": 6,
+      "media_validation": {
+        "file": "1.9/checkpoints/7797efad6/official/independent-package-validation.json",
+        "sha256": "e970e54f6c997e2484abc0a5aa2856f5354ab0f1b8d0dd1add7a4f263725c17b"
+      },
+      "registered_checks": {
+        "result": "failure",
+        "outcomes": {
+          "failure": 1,
+          "success": 10
+        },
+        "validation": {
+          "file": "1.9/checkpoints/7797efad6/official/full-hosted-role-validation.json",
+          "sha256": "6678f89453ac9567e8f25397e630d6e76e8942a3fa4ac2c7f80e99242e293f07"
+        },
+        "failed_role": "clean",
+        "observation": "The underwater original-display assertion compared the thumbnail URL. The other ten registered upgrade and recovery scenarios passed."
+      }
+    },
+    "148": {
+      "source": "9124acdb0696871208c69f2ffc7601722329daac",
+      "manufacturer_run": 44875837825,
+      "manufacturer_job": 136760221622,
+      "original_msi_sha256": "11eec4d4780a1613e36c3101f04ebae626a8053c7cd403ab6b872b67507a9146",
+      "cabinet_count": 5,
+      "media_validation": {
+        "file": "1.9/checkpoints/9124acdb0/official/independent-package-validation.json",
+        "sha256": "a99df699a65a9db3413e186af9018c855e372e26096de95fadc1e071efb61c54"
+      },
+      "registered_checks": {
+        "result": "failure",
+        "outcomes": {
+          "failure": 1,
+          "success": 10
+        },
+        "validation": {
+          "file": "1.9/checkpoints/9124acdb0/official/full-hosted-role-validation.json",
+          "sha256": "41982d1b42f4a6bad28acce4763fb857e104f8669584efb0a81d3a4e290ff5ad"
+        },
+        "failed_role": "clean",
+        "observation": "The underwater original-display assertion compared the thumbnail URL. The other ten registered upgrade and recovery scenarios passed."
+      }
+    },
+    "149": {
+      "source": "15be85268fc0cf4f801152fa79b4901adffddc3d",
+      "manufacturer_run": 44878790843,
+      "manufacturer_job": 136769291129,
+      "original_msi_sha256": "0ca3fe2cd489ffd84fb542598a1734e32987367998b587589482b4686fa1f14c",
+      "cabinet_count": 6,
+      "media_validation": {
+        "file": "1.9/checkpoints/15be85268/official/independent-package-validation.json",
+        "sha256": "625f759c3cf29a50dafa1c26d4e3914cb4a5dbb132270aae3473da57a99b7d23"
+      },
+      "registered_checks": {
+        "result": "success",
+        "outcomes": {
+          "success": 11
+        },
+        "validation": {
+          "file": "1.9/checkpoints/15be85268/official/full-hosted-role-validation.json",
+          "sha256": "9c238d7e8841c9344ee1f3d661abe225a75adbc10b185808eb948a907a58613e"
+        }
+      }
+    },
+    "150": {
+      "source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
+      "manufacturer_run": 44884655409,
+      "manufacturer_job": 136787200988,
+      "original_msi_sha256": "8155f626ea99b5052658d81fc6d6b6300ce66eb7d479bda48a161b1c51ea9c35",
+      "cabinet_count": 6,
+      "media_validation": {
+        "file": "1.9/checkpoints/6334bcbb8/official/independent-package-validation.json",
+        "sha256": "7e08e1d6e8ca613540d7ec8adf27983dd2aec047fb02e497b3fc85c625ec2fbc"
+      },
+      "registered_checks": {
+        "result": "success",
+        "outcomes": {
+          "success": 11
+        },
+        "validation": {
+          "file": "1.9/checkpoints/6334bcbb8/official/full-hosted-role-validation.json",
+          "sha256": "9db23dcea23d05f9a939dec5b4f002e8ef1437de631f2291693daeb789a51845"
+        }
+      }
+    },
+    "151": {
+      "source": "91027e893172d500897058dbb2c1cc5b9de5d50a",
+      "manufacturer_run": 44897196611,
+      "manufacturer_job": 136825277972,
+      "original_msi_sha256": "b52c298567e88f48b72dac1cd49771582ad487941989878f1f8d23db25e93b43",
+      "cabinet_count": 6,
+      "media_validation": {
+        "file": "1.9/checkpoints/91027e893/official/independent-package-validation.json",
+        "sha256": "a4392e531f1431f8843ba376deadc2d001b0e5ad219461f15f9f7c35f84f9148"
+      },
+      "original_18_rollback": {
+        "restored_files": 112,
+        "restored_bytes": 27777736,
+        "restored_nonempty_tables": 37,
+        "receipt": {
+          "file": "1.9/checkpoints/91027e893/official/evidence/pose-rollback/installed-backends-1.8-to-1.9-and-restore.json",
+          "sha256": "9f1416a99ace7337a5f639de79b269031b64cd7567d6053946e79a4d7ae34c0c"
+        }
+      }
+    }
   }
 }
