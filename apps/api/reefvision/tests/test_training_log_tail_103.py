@@ -692,6 +692,43 @@ def test_log_tail_quarantines_invisible_unicode_loss_splices(
     assert log.read_bytes() == original
 
 
+@pytest.mark.parametrize(
+    "invisible_control",
+    [
+        b"\x00",  # NUL
+        b"\x07",  # BEL
+        b"\x0b",  # Vertical tab
+        b"\x0c",  # Form feed
+        b"\x1f",  # C0 unit separator
+        b"\x7f",  # DEL
+        b"\x81",  # Raw 8-bit C1 control
+        b"\x9c",  # Orphan C1 string terminator
+    ],
+)
+def test_log_tail_quarantines_invisible_byte_splices_inside_real_losses(
+    tmp_path: Path, invisible_control: bytes
+) -> None:
+    """A stripped terminal byte must not turn two loss fragments into a fake value."""
+    log = tmp_path / "training.log"
+    original = (
+        b"train/box_loss=0.2"
+        + invisible_control
+        + b"5\ntrain/cls_loss=0.30\ntrain/dfl_loss=0.10\n"
+    )
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": (
+            "[terminal-edited training log record omitted]\n"
+            "train/cls_loss=0.30\n"
+            "train/dfl_loss=0.10\n"
+        ),
+    }
+    # The monitor is passive and never edits the live trainer's persisted bytes.
+    assert log.read_bytes() == original
+
+
 def test_log_tail_preserves_leading_clear_before_colored_epoch_and_loss(tmp_path: Path) -> None:
     """A leading CSI clear must not be mistaken for a loss-token splice."""
     log = tmp_path / "training.log"
