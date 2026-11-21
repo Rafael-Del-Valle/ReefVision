@@ -744,6 +744,11 @@ class SemanticModelService(SegmentationModelService):
             raise ValidationError("One or more requested images do not exist")
         if any(image.project_id != project_id for image in images):
             raise ValidationError("Inference images must belong to the same project as the model")
+        if payload.source_pins is not None:
+            from reefvision.services.inference_pins import verify_inference_pins
+
+            verify_inference_pins(self.settings, model, images, payload.source_pins)
+            pinned["source_pins"] = payload.source_pins.model_dump(mode="json")
         adjusted = (
             adjusted_inference_binding(
                 self.session,

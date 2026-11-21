@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_validator
 
 from reefvision.schemas.image_adjustments_v18 import ImageAdjustmentPin
+from reefvision.schemas.model_runtime import Digest
 
 
 def _strip(value: str | None) -> str | None:
@@ -69,8 +71,15 @@ class PoseLandmarkSchemaUpdateRequest(BaseModel):
         return [group.name for group in self.groups for _ in range(group.count)]
 
 
+class InferenceSourcePins(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    checkpoint_sha256: Digest
+    images: dict[UUID, Digest] = Field(min_length=1)
+
+
 class InferenceJobCreateRequest(BaseModel):
     model_id: str = Field(min_length=1, max_length=36)
+    source_pins: InferenceSourcePins | None = None
     runtime_selection_id: str | None = Field(default=None, min_length=36, max_length=36)
     image_ids: list[str] = Field(min_length=1)
     image_adjustment: ImageAdjustmentPin | None = None

@@ -1,6 +1,7 @@
 """Workflow registry, validation, persistence, and execution endpoints."""
 
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
@@ -88,6 +89,13 @@ def save_workflow_graph(
     return WorkflowExecutionService(session, request.app.state.settings).save_graph(
         project_id, payload
     )
+
+
+@router.get("/projects/{project_id}/workflow-graphs/{graph_id}")
+def saved_graph_revision(
+    project_id: UUID, graph_id: UUID, session: DbSession
+) -> WorkflowGraphRecordResponse:
+    return WorkflowExecutionService(session).get_graph(str(project_id), str(graph_id))
 
 
 @router.get(

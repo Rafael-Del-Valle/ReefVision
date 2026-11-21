@@ -7,9 +7,9 @@ from pathlib import Path
 
 
 @contextmanager
-def worker_leadership(directory: Path) -> Iterator[bool]:
+def worker_leadership(directory: Path, *, filename: str = "compute-worker.lock") -> Iterator[bool]:
     directory.mkdir(parents=True, exist_ok=True)
-    with (directory / "compute-worker.lock").open("a+b") as stream:
+    with (directory / filename).open("a+b") as stream:
         stream.seek(0)
         if sys.platform == "win32":
             import msvcrt

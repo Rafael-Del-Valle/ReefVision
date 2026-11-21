@@ -621,6 +621,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
+    if len(sys.argv) >= 4 and sys.argv[1] == "--automation-cli-output" and sys.argv[3] == "--":
+        ensure_standard_streams()
+        from reefvision.automation_cli import main as automation_main
+
+        raise SystemExit(automation_main(sys.argv[4:], output=Path(sys.argv[2])))
     if len(sys.argv) == 3 and sys.argv[1] == "--plugin-worker":
         from reefvision.ml.plugin_worker import run_plugin_worker
 
