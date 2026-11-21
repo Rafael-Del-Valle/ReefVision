@@ -911,6 +911,19 @@ def test_pose_materialization_rejects_unmapped_frozen_class_labels(
             destination=destination,
         )
     assert not (destination / "images" / "val").exists()
+    # Invalid frozen labels must not strand a saved run or prevent its retry.
+    assert not destination.exists()
+    corrected = materialize_pose_training_exports(
+        training_content=reviewed,
+        validation_content=independent_validation,
+        destination=destination,
+    )
+    assert corrected["validation_mode"] == "separate_frozen_pose_dataset"
+    assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed"
+    assert (
+        (destination / "images/val/frame_00000001.png").read_bytes()
+        == b"independent-validation"
+    )
 
 
 @pytest.mark.parametrize("altered_split", ("training", "validation"))
@@ -963,6 +976,19 @@ def test_pose_materialization_rejects_malformed_frozen_pose_rows(
             destination=destination,
         )
     assert not (destination / "images" / "val").exists()
+    # Invalid frozen labels must not strand a saved run or prevent its retry.
+    assert not destination.exists()
+    corrected = materialize_pose_training_exports(
+        training_content=reviewed,
+        validation_content=independent_validation,
+        destination=destination,
+    )
+    assert corrected["validation_mode"] == "separate_frozen_pose_dataset"
+    assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed"
+    assert (
+        (destination / "images/val/frame_00000001.png").read_bytes()
+        == b"independent-validation"
+    )
 
 
 @pytest.mark.parametrize(
