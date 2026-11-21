@@ -1,11 +1,27 @@
 {
   "milestone": "2.0",
   "draft_pr": 155,
-  "integrated_source": "2adee8d3344807a4934a3d8548b39fd1c38f2722",
+  "integrated_source": "eab4814236c0efd81366a5cc9370561ce8e82eaa",
   "predecessor": {
     "source": "272ee64e929bdfd2ebbf5e1f912221862ec5f9d2",
     "qualification": "docs/validation/1.9-frozen-research.json",
-    "draft": 152
+    "draft": 152,
+    "registered_windows": {
+      "roles_passed": 11,
+      "run": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44902072714",
+      "evidence": {
+        "review_file": "1.9/checkpoints/272ee64e9/official/full-hosted-role-validation.json",
+        "sha256": "078b841209f40ef61421d2a955f127053865e44e4129ab39b549fab1bd2ecdce"
+      }
+    },
+    "offline_windows": {
+      "roles_passed": 2,
+      "run": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44909720578",
+      "evidence": {
+        "review_file": "1.9/checkpoints/272ee64e9/official/offline/attempt-44909720578/offline-index.json",
+        "sha256": "4126a3d49ffb43b79e730900fc2ab6f06d92f751b960ea9a67c2c355aece4248"
+      }
+    }
   },
   "plugin_and_guided_builder": {
     "entry": [
@@ -121,5 +137,137 @@
     "open_field_check": "An approved appearance protocol, independently adjudicated held-out recordings across animals and cameras, ambiguity rules, and prespecified false-match and missed-match margins with uncertainty."
   },
   "intermediate_windows_source": "78496d0007027d9a736ad044723c1fd768f93f94",
-  "final_windows_installer": "Open. The final engineering revisions and their exact-source installation and rollback journeys are pending."
+  "final_windows_installer": "Open. The final engineering revisions and their exact-source installation and rollback journeys are pending.",
+  "multimodal": {
+    "source": "3c848d3bfaeb03370eabaf592c5777c248d5b7c2",
+    "entry": "Research → Multimodal analysis",
+    "surface": "source Chromium and service tests",
+    "journey": {
+      "review_file": "2.0/multimodal/source/paired-optical-acoustic.json",
+      "sha256": "95756c1719a35de5d9fedb2a1cb4e0bfc9f2cae15476905d5500be0949d2d4ae"
+    },
+    "tests": [
+      {
+        "review_file": "2.0/multimodal/source/qua-final.xml",
+        "sha256": "0bcd76a9b471ff3e76bdeba4b52d22f0f651e01d00b156af5fae2363ee57415f",
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "review_file": "2.0/multimodal/source/head.xml",
+        "sha256": "7f5ad474230a6bc1501396c09e4e96998e00fbd7b7f25498b1e80e9da7573f57",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ],
+    "fixture": "Two reviewed visits to the same organism, 16 optical pixels per visit and synchronized 8 kHz acoustic observations. ROI means 0.5 and 0.2 gave a descriptive paired difference of 0.3. Excess clock uncertainty withheld the result. Two successive exchanges preserved runnable inputs.",
+    "field_open": "An authorized paired survey with independent common frame, calibrated optical bands, surveyed acoustic footprint, original clocks, observation effort and independent scientific review."
+  },
+  "compute": {
+    "source": "a7ba8b62c48a9410fa82c876580cd7b083cf9872",
+    "tests_source": "10a3d60ab393c12578bcfbb872a81f1c19c7ef4f",
+    "entry": "Models & AI → Jobs and resources",
+    "surface": "source Chromium and CPU training",
+    "journey": {
+      "review_file": "2.0/checkpoints/eab481423/source/compute-resources.json",
+      "sha256": "f593f5450a9a06519d3eaa9157b785db403d49221055ab25727bfb2368cf52bd"
+    },
+    "tests": {
+      "review_file": "2.0/checkpoints/eab481423/source/compute-qual.xml",
+      "sha256": "2561818146874f0f9b7e11e30ade1239ce3358c628da4d2076883060148c480e",
+      "tests": 164,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1
+    },
+    "recovery": "An actual CPU training epoch survived interruption and resumed as the same logical job, after checksumming the last and best checkpoints. Altered bytes were refused. Pausing the CPU queue held a newly imported gallery image job across navigation and reload. Restoring its slot completed the same job."
+  },
+  "layout": {
+    "source": "1c84788c5edc502eb667a37a48886f5acd24f176",
+    "entry": "Workspace → Panels and Reset layout",
+    "surface": "source Chromium, 960 × 640 CSS pixels and simulated 1.5 device scale factor",
+    "journey": {
+      "review_file": "2.0/checkpoints/eab481423/source/contextual-panel-layout-evidence.json",
+      "sha256": "87fbf33948937697cc3d408abc24cf9950b8b1d8676eba6d5bc68ef828f55ee5"
+    },
+    "result": "A keyboard reorder persisted. Disabling a pinned plugin showed its placeholder. Reinstalling the same package recovered the panel. Reset preserved and saved an already open graph draft."
+  },
+  "automation": {
+    "source": "9064024f64731e997aa9f971d42ab2b3894d306a",
+    "help_source": "4c62ee3c8c974dd5d0853ab05c32301321db3a27",
+    "entry": "Help → Automation API and source CLI/SDK",
+    "gated_workflow": {
+      "review_file": "2.0/checkpoints/eab481423/source/cli-review-full.xml",
+      "sha256": "1c91e221f6b6500d1fcc5f312358991b23c400fd3bc91146d9108468720b8a4d",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "help": {
+      "review_file": "2.0/checkpoints/eab481423/source/automation-api-help-evidence.json",
+      "sha256": "009924ff7ad4083af5ffe6956432ea2379cdcd813def5e1aef7bdf217fdc66e8"
+    },
+    "default_windows_pipes": {
+      "review_file": "2.0/checkpoints/eab481423/source/headless-operations-evidence.json",
+      "sha256": "a802e193f1d5b5447fdb317ba7fdf0b67084a7c2f099516a5872ab9e2fc29c02"
+    },
+    "result": "Help copied the selected saved graph and its checksum. A live gated CLI run returned exit 3 and resumed only with a reviewer and note. The Windows default pipe initially failed encoding a scientific symbol in a real report. The corrected CLI ran CPU inference with nine pending proposals, benchmarked three held-out images in two groups, and exported nine images with unchanged source and annotations. Six stale or foreign operations and an existing ZIP were refused."
+  },
+  "merged_schema": {
+    "head": "b20_integrated_0001",
+    "parents": [
+      "b20_compute_0001",
+      "b20_multimodal_0002"
+    ],
+    "tests": {
+      "review_file": "2.0/checkpoints/eab481423/source/integrated-joint.xml",
+      "sha256": "4d8e44280d1b4f137f841ab9167931eed84f8df8dfa4b4e8248ac0f4d626f5f5",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "intermediate_windows": {
+    "source": "78496d0007027d9a736ad044723c1fd768f93f94",
+    "distribution": "local production MSI, administrative extraction, original frozen 2.0 sidecar, browser renderer from the same Git revision",
+    "media": {
+      "review_file": "2.0/checkpoints/78496d000/local-production/installer/build-provenance.json",
+      "sha256": "5572e6743aa98b43c355012706aa9c3d98d3ea0c7d0ecac26c8c3f1ae5e19808"
+    },
+    "sha256sums": {
+      "review_file": "2.0/checkpoints/78496d000/local-production/installer/SHA256SUMS.txt",
+      "sha256": "8479bc8310d0f8aa271de21c591c207e8d6beb8f273eb47332a134acf4205a94"
+    },
+    "extraction": {
+      "review_file": "2.0/checkpoints/78496d000/local-production/administrative-extraction.json",
+      "sha256": "7b524dc0db8f48269261610edf4ab313089ea8291445ebb2405e12a7068a6a6d"
+    },
+    "cabinet_count": 8,
+    "msi_sha256": "56014267ea1ed65ac7ca29459fd7632b56d3c34957237e8d392a8f73683357ab",
+    "plugin_and_appearance": {
+      "plugin": {
+        "review_file": "2.0/checkpoints/78496d000/local-production/evidence/intermediate-packaged-api/plugin.json",
+        "sha256": "08de81521c073f6c1d38fcb0c47b561150b0e7e2c6e7eb696ba2032df35ded0f"
+      },
+      "appearance-cpu": {
+        "review_file": "2.0/checkpoints/78496d000/local-production/evidence/intermediate-packaged-api/appearance-cpu.json",
+        "sha256": "5dd25266270d3a96af8cebe6bc7236bbb6a3f24b15f24013e16f65623596b147"
+      },
+      "appearance-cuda": {
+        "review_file": "2.0/checkpoints/78496d000/local-production/evidence/intermediate-packaged-api/appearance-cuda.json",
+        "sha256": "a8578ec32cf1c2e4b7e4726d0d5b72a195a603838921c6bfa7dd4413bc91f833"
+      }
+    },
+    "generated_upgrade_rollback": {
+      "review_file": "2.0/checkpoints/78496d000/local-production/evidence/intermediate-rollover/original-1.9-2.0-upgrade-and-rollback.json",
+      "sha256": "155f7bb544880bf2f35a2f8f7f9494739a8c8a86f0965acbc25f08b74d296639"
+    },
+    "native_window": "The intermediate shell exited on its ordinary single-instance mutex while the original 1.9 owner window was open. The marked-profile coexistence fix at 2987b3921 passed ten Rust tests on Windows and awaits a new packaged shell."
+  }
 }
