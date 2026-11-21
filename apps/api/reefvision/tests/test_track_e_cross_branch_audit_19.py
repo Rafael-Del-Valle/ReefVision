@@ -56,6 +56,7 @@ def test_cross_branch_audit_flags_distinct_branch_only_revisions(tmp_path: Path)
     assert result.returncode == 2, result.stderr
     report = json.loads(result.stdout)
     assert report["collision_count"] == 0
+    assert report["invalid_branch_graph_count"] == 0
     assert report["branch_only_revision_count"] == 2
     assert report["requires_reviewed_data_preserving_reconciliation"] is True
     assert {
@@ -65,3 +66,25 @@ def test_cross_branch_audit_flags_distinct_branch_only_revisions(tmp_path: Path)
         "0002_science": (["science"], ["review"]),
         "0002_review": (["review"], ["science"]),
     }
+
+    # The same real Git branches must also reject an orphaned revision:
+    # distinct IDs alone do not prove that either applied history is valid.
+    (migrations / "0002_review.py").write_text(
+        'revision = "0002_review"\ndown_revision = "deleted_parent"\n'
+    )
+    git("add", ".")
+    git("commit", "-q", "-m", "orphaned review migration")
+    invalid = subprocess.run(
+        [sys.executable, str(audit), "science", "review"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert invalid.returncode == 2, invalid.stderr
+    invalid_report = json.loads(invalid.stdout)
+    assert invalid_report["invalid_branch_graph_count"] == 1
+    assert invalid_report["invalid_branch_graphs"]["review"] == [
+        "missing parent deleted_parent for 0002_review"
+    ]
+    assert invalid_report["refs"]["review"]["commit"] != report["refs"]["review"]["commit"]
