@@ -621,4 +621,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
+    if len(sys.argv) == 3 and sys.argv[1] == "--plugin-worker":
+        from reefvision.ml.plugin_worker import run_plugin_worker
+
+        run_plugin_worker(Path(sys.argv[2]))
+        raise SystemExit(0)
     raise SystemExit(main())

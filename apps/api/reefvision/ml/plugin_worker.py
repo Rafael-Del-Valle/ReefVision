@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import math
-import multiprocessing
-from multiprocessing.connection import Connection
+import subprocess
+import sys
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import cast
 
 from reefvision.domain.errors import ValidationError
@@ -50,56 +53,62 @@ def _measure(module_bytes: bytes, arguments: Arguments | None) -> float | None:
     return value
 
 
-def _run_child(channel: Connection, module: bytes, arguments: Arguments | None) -> None:
+def run_plugin_worker(directory: Path) -> None:
+    """Read a private request prepared by the desktop process."""
+
+    module = (directory / "module.wasm").read_bytes()
+    arguments: Arguments | None = json.loads((directory / "arguments.json").read_bytes())
+    result: tuple[bool, float | str | None]
     try:
         value = _measure(module, arguments)
     except (ImportError, OSError):
-        channel.send(
-            (
-                False,
-                "The bundled WebAssembly runtime could not start. Check installation diagnostics.",
-            )
+        result = (
+            False,
+            "The bundled WebAssembly runtime could not start. Check installation diagnostics.",
         )
     except ValueError as exc:
-        channel.send((False, str(exc)))
+        result = (False, str(exc))
     except Exception:
         # The caller needs a stable domain outcome, including for native Wasmtime traps.
-        channel.send(
-            (False, "The plugin failed inside its isolated worker. No measurement was saved.")
-        )
+        result = (False, "The plugin failed inside its isolated worker. No measurement was saved.")
     else:
-        channel.send((True, value))
-    finally:
-        channel.close()
+        result = (True, value)
+    (directory / "result.json").write_text(json.dumps(result, allow_nan=False), encoding="utf-8")
 
 
 def run_plugin(module: bytes, arguments: Arguments | None = None) -> float | None:
-    context = multiprocessing.get_context("spawn")
-    receive, send = context.Pipe(duplex=False)
-    process = context.Process(target=_run_child, args=(send, module, arguments))
-    with receive, send:
-        process.start()
-        send.close()
+    # Use an explicit worker entry point so the Windows desktop can start it
+    # without replaying the API launcher or depending on its console handles.
+    entrypoint = (
+        ["--plugin-worker"]
+        if getattr(sys, "frozen", False)
+        else ["-m", "reefvision.ml.plugin_worker"]
+    )
+    with TemporaryDirectory(prefix="reefvision-plugin-") as scratch:
+        directory = Path(scratch)
+        (directory / "module.wasm").write_bytes(module)
+        (directory / "arguments.json").write_text(json.dumps(arguments), encoding="utf-8")
         try:
-            if not receive.poll(WORKER_TIMEOUT_SECONDS):
-                raise ValidationError(
-                    "The plugin exceeded its execution time. No measurement was saved."
-                )
-            try:
-                valid, result = receive.recv()
-            except EOFError as exc:
-                raise ValidationError(
-                    "The plugin worker stopped. No measurement was saved."
-                ) from exc
-            if not valid:
-                raise ValidationError(str(result))
-            return cast(float | None, result)
-        finally:
-            process.join(timeout=0.3)
-            if process.is_alive():
-                process.terminate()
-                process.join(timeout=2)
-            if process.is_alive():
-                process.kill()
-                process.join()
-            process.close()
+            subprocess.run(
+                [sys.executable, *entrypoint, str(directory)],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+                timeout=WORKER_TIMEOUT_SECONDS,
+                check=True,
+            )
+            valid, result = json.loads((directory / "result.json").read_bytes())
+        except subprocess.TimeoutExpired as exc:
+            raise ValidationError(
+                "The plugin exceeded its execution time. No measurement was saved."
+            ) from exc
+        except (OSError, ValueError, subprocess.CalledProcessError) as exc:
+            raise ValidationError("The plugin worker stopped. No measurement was saved.") from exc
+        if not valid:
+            raise ValidationError(str(result))
+        return cast(float | None, result)
+
+
+if __name__ == "__main__" and len(sys.argv) == 2:
+    run_plugin_worker(Path(sys.argv[1]))
