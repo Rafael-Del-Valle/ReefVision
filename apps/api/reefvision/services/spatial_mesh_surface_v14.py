@@ -104,7 +104,11 @@ def _sample_mesh_display_geometry(
     last = len(faces) - 1
     face_indices = [0] if count == 1 else [index * last // (count - 1) for index in range(count)]
     if (preserve_axis_extrema or patch_representative_faces is not None) and count < len(faces):
-        protected = {0, last}
+        # In patch-only mode, prioritize the largest reconstructed patches.
+        # Arbitrary first/last face indices must not displace a larger patch
+        # when the source contains more disconnected patches than display slots.
+        # Combined extrema+patch mode deliberately reserves extrema first.
+        protected = {0, last} if preserve_axis_extrema else set()
         if preserve_axis_extrema:
             # Source-axis extrema and the area-dominant face aid visual
             # interpretation but are not specimen landmarks or tissue coverage.
