@@ -28,9 +28,12 @@ on:
 permissions:
   contents: read
 
+# Windows console tests are an independent 1.0.3 release gate. Preserve
+# in-progress exact-SHA runs when another development commit is pushed;
+# GitHub may still replace a pending run while a previous run executes.
 concurrency:
   group: reefvision-103-console-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   windows-readonly-console:
