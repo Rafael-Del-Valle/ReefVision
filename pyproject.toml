@@ -41,6 +41,7 @@ dev = [
   "pytest-cov>=6,<7",
   "ruff>=0.9,<1",
   "scikit-image>=0.24,<1",
+  "setuptools>=77",
   "types-networkx>=3.2,<4",
   "types-openpyxl>=3.1,<4",
   "types-PyYAML>=6.0,<7",
