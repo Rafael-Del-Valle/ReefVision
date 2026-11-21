@@ -260,7 +260,7 @@ function Invoke-ReefVisionInstalledPlaywrightSuite {
             $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
             [Environment]::SetEnvironmentVariable($name, $variables[$name], 'Process')
         }
-        $trace = if ($Suite -eq 'research-tools') { @('--trace=off') } else { @() }
+        $trace = @(if ($Suite -eq 'research-tools') { '--trace=off' })
         & $NodePath 'node_modules/@playwright/test/cli.js' test @Specs @trace --workers=1 --retries=0 --reporter=list,json --output=$output *> $log
         if ($LASTEXITCODE -ne 0) {
             $tail = Get-Content -LiteralPath $log -Tail 25 | Out-String
