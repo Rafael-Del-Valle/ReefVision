@@ -654,6 +654,45 @@ describe("ClassManagerPanel", () => {
               ],
             },
           ],
+          [
+            "duplicate mutable reference identifiers",
+            {
+              mutable_records: [
+                {
+                  key: "annotations_active",
+                  label: "Current annotations",
+                  count: 2,
+                  record_ids: ["annotation-1", "annotation-1"],
+                },
+              ],
+            },
+          ],
+          [
+            "duplicate protected reference identifiers",
+            {
+              protected_records: [
+                {
+                  key: "dataset_versions",
+                  label: "Frozen dataset versions",
+                  count: 2,
+                  record_ids: ["version-1", "version-1"],
+                },
+              ],
+            },
+          ],
+          [
+            "duplicate blocking reference identifiers",
+            {
+              blocking_records: [
+                {
+                  key: "annotations_deleted",
+                  label: "Historical records",
+                  count: 2,
+                  record_ids: ["annotation-1", "annotation-1"],
+                },
+              ],
+            },
+          ],
           ["null compatibility impact", { compatibility_impacts: [null] }],
           ["nonstring blocker", { blockers: [null] }],
           ["nonstring warning", { warnings: [null] }],
@@ -986,6 +1025,7 @@ describe("ClassManagerPanel", () => {
                     ? ["A protected class reference prevents this operation."]
                     : [],
               },
+              warnings: [],
               failures:
                 evidenceType === "failures"
                   ? ["Preview could not validate scientific references."]

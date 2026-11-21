@@ -66,7 +66,8 @@ function validReviewGroup(value: unknown): boolean {
     Number.isSafeInteger(item.count) &&
     item.count >= 0 &&
     validReviewTextList(item.record_ids) &&
-    item.count === item.record_ids.length
+    item.count === item.record_ids.length &&
+    new Set(item.record_ids).size === item.record_ids.length
   );
 }
 
