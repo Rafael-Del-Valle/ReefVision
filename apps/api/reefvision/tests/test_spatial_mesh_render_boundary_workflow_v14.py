@@ -14,6 +14,17 @@ from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_spatial_mesh_render_sample_v14 import _mesh_parameters
 
 
+def _hidden_dominant_non_extreme_face_parameters() -> dict:
+    """Face 511 dominates area but is not extreme on any source axis."""
+    params = _mesh_parameters(513)
+    # Face 100 defines y_max with negligible area; face 511 has a
+    # much larger area but neither y_max nor global x_min/x_max.
+    params["vertices"][3 * 100 + 1][0] = 300.01
+    params["vertices"][3 * 100 + 2][1] = 10.0
+    params["vertices"][3 * 511 + 2][1] = 9.0
+    return params
+
+
 @pytest.mark.parametrize("face_count", [512, 513])
 def test_render_threshold_preserves_original_face_indices(face_count: int) -> None:
     parameters = _mesh_parameters(face_count)
@@ -145,6 +156,8 @@ def test_zero_area_mesh_has_undefined_render_area_fraction() -> None:
     assert result["surface_area_m2"] == 0.0
     assert result["preview_sampled_surface_area_m2"] == 0.0
     assert result["preview_surface_area_fraction"] is None
+    assert result["preview_largest_triangle_face_index"] is None
+    assert result["preview_largest_triangle_displayed"] is None
     assert "degenerate_triangles_present" in result["qc_warnings"]
 
 
@@ -171,9 +184,33 @@ def test_extrema_pinning_recovers_hidden_coral_tip_without_changing_science() ->
     assert pinned["axis_aligned_dimensions_m"] == uniform["axis_aligned_dimensions_m"]
     assert pinned["provenance"]["geometry_sha256"] == uniform["provenance"]["geometry_sha256"]
     assert pinned["preview_camera_fit_basis"] == "all_referenced_vertices"
-    assert pinned["preview_referenced_bounds_in_source_frame_m"] == (
-        uniform["preview_referenced_bounds_in_source_frame_m"]
-    )
+    pinned_bounds = pinned["preview_referenced_bounds_in_source_frame_m"]
+    assert pinned_bounds == uniform["preview_referenced_bounds_in_source_frame_m"]
+    assert pinned["provenance"]["calibration_verified"] is False
+    assert pinned["measurement_status"] == "caller_supplied_unverified"
+
+
+def test_non_extreme_dominant_triangle_gets_a_preview_qc_warning_and_pin() -> None:
+    """Area-dominant surface can be invisible despite complete axis bounds."""
+    params = _hidden_dominant_non_extreme_face_parameters()
+    uniform = measure_mesh_preview(**params)
+    pinned = measure_mesh_preview(**params, preserve_axis_extrema_in_preview=True)
+
+    assert uniform["preview_largest_triangle_face_index"] == 511
+    assert uniform["preview_largest_triangle_displayed"] is False
+    assert "preview_omits_largest_mesh_triangle" in uniform["qc_warnings"]
+    assert uniform["preview_omitted_axis_extremum_sides"] == []
+    assert 511 not in uniform["preview_face_indices"]
+
+    assert pinned["preview_largest_triangle_face_index"] == 511
+    assert pinned["preview_largest_triangle_displayed"] is True
+    assert "preview_omits_largest_mesh_triangle" not in pinned["qc_warnings"]
+    assert 511 in pinned["preview_face_indices"]
+    assert pinned["preview_surface_area_fraction"] > uniform["preview_surface_area_fraction"]
+    assert pinned["preview_omitted_axis_extremum_sides"] == []
+    assert pinned["surface_area_m2"] == uniform["surface_area_m2"]
+    assert pinned["axis_aligned_dimensions_m"] == uniform["axis_aligned_dimensions_m"]
+    assert pinned["provenance"]["geometry_sha256"] == uniform["provenance"]["geometry_sha256"]
     assert pinned["provenance"]["calibration_verified"] is False
     assert pinned["measurement_status"] == "caller_supplied_unverified"
 
@@ -183,8 +220,7 @@ def test_extrema_pinning_standalone_and_twice_replayed_saved_workflow(
 ) -> None:
     """Display policy is saved, typed, deterministic and never a calibrated claim."""
     project_id = str(create_project(client, "Mesh extrema preview replay")["id"])
-    params = _mesh_parameters(513)
-    params["vertices"][3 * 511 + 2][1] = 100_000.0
+    params = _hidden_dominant_non_extreme_face_parameters()
     params["preserve_axis_extrema_in_preview"] = True
     base = f"/api/v1/projects/{project_id}"
 
@@ -192,6 +228,8 @@ def test_extrema_pinning_standalone_and_twice_replayed_saved_workflow(
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     assert expected["preview_omitted_axis_extremum_sides"] == []
+    assert expected["preview_largest_triangle_face_index"] == 511
+    assert expected["preview_largest_triangle_displayed"] is True
     assert expected["preview_sampling_strategy"] == "uniform_face_index_extrema_preserving"
     assert expected["provenance"]["calibration_verified"] is False
     assert expected["provenance"]["specimen_identity_verified"] is False
@@ -219,9 +257,8 @@ def test_extrema_pinning_standalone_and_twice_replayed_saved_workflow(
     assert plan.json()["executable"] is True
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    assert saved.json()["graph_json"]["nodes"][1]["parameters"][
-        "preserve_axis_extrema_in_preview"
-    ] is True
+    saved_option = saved.json()["graph_json"]["nodes"][1]["parameters"]
+    assert saved_option["preserve_axis_extrema_in_preview"] is True
 
     hashes = []
     for _ in range(2):
