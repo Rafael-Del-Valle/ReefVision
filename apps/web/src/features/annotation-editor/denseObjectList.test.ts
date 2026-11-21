@@ -288,13 +288,7 @@ describe("dense object-browser window", () => {
       "box-4999",
       ...Array.from({ length: 5_000 }, (_, index) => `stale-${index}`),
     ];
-    const rows = boundedDenseObjectRows(
-      annotations,
-      [],
-      200,
-      selectedIds,
-      [],
-    );
+    const rows = boundedDenseObjectRows(annotations, [], 200, selectedIds, []);
     expect(rows).toHaveLength(201);
     expect(rows[200].position).toBe(4_999);
     // Prefix, one candidate scan and one exceptional-path index build.
