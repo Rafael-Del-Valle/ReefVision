@@ -1395,6 +1395,52 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  it("pauses the GPU queue through project Models & AI and reopens the saved limit", async () => {
+    const fetchMock = mockApi({ projects: [project] });
+    const original = fetchMock.getMockImplementation()!;
+    let gpuSlots = 1;
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/compute/resources")) {
+        if (init?.method === "PUT")
+          gpuSlots = JSON.parse(String(init.body)).gpu_slots;
+        return Response.json({
+          cpu_slots: 1,
+          gpu_slots: gpuSlots,
+          cpu_in_use: 0,
+          gpu_in_use: 0,
+        });
+      }
+      if (url.includes("/compute/jobs?"))
+        return Response.json({ items: [], total: 0 });
+      return original(input, init);
+    });
+    renderApp();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /CPT Coral Study/ }),
+    );
+    await userEvent.click(screen.getByRole("tab", { name: "Models & AI" }));
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Jobs and resources" }),
+    );
+    await userEvent.selectOptions(
+      await screen.findByLabelText("GPU slots"),
+      "0",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save resource limits" }),
+    );
+    await screen.findByText("Resource limits saved.");
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Plugins and providers" }),
+    );
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Jobs and resources" }),
+    );
+    expect(await screen.findByLabelText("GPU slots")).toHaveValue("0");
+    expect(screen.getByText("No jobs in this project.")).toBeInTheDocument();
+  });
+
   it("opens the managed image gallery for a project", async () => {
     mockApi({ projects: [project] });
     renderApp();

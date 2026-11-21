@@ -30,6 +30,7 @@ import { EnhancedAnnotationEditor } from "./features/annotation-editor/EnhancedA
 import { ClassManagerPanel } from "./features/classes/ClassManagerPanel";
 import { ClassificationWorkspace } from "./features/classification/ClassificationWorkspace";
 import { ComputedMetricsPanel } from "./features/computed-metrics/ComputedMetricsPanel";
+import { ComputeWorkspace } from "./features/compute/ComputeWorkspace";
 import { DatasetVersionsPanel } from "./features/dataset-versions/DatasetVersionsPanel";
 import { EnvironmentalContextPanel } from "./features/environmental-context/EnvironmentalContextPanel";
 import { FieldCaptureWorkspace } from "./features/field-capture/FieldCaptureWorkspace";
@@ -127,6 +128,7 @@ type ProjectView =
   | "review_queue"
   | "reviewer_lab"
   | "advanced_providers"
+  | "compute"
   | "workflows"
   | "workflow_schedules"
   | "system";
@@ -245,6 +247,12 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Plugins and providers",
         description:
           "Inspect local manifests and use supported prompt, segmentation, depth, OCR, and VLM provider tools.",
+      },
+      {
+        id: "compute",
+        label: "Jobs and resources",
+        description:
+          "Set local CPU and GPU limits and recover interrupted jobs.",
       },
     ],
   },
@@ -1309,6 +1317,12 @@ function ReefVisionMainApp() {
               <ClassificationWorkspace
                 project={selectedProject}
                 initialArchitecture={classificationArchitecture}
+              />
+            )}
+            {activeView === "compute" && (
+              <ComputeWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
               />
             )}
             {activeView === "advanced_providers" && (

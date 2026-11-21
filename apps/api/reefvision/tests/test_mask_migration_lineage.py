@@ -9,7 +9,9 @@ def test_mask_migrations_retain_the_common_lineage() -> None:
     config = Config(str(api_root / "alembic.ini"))
     scripts = ScriptDirectory.from_config(config)
 
-    assert scripts.get_heads() == ["b20_appearance_0001"]
+    assert scripts.get_heads() == ["b20_compute_0001"]
+    compute = scripts.get_revision("b20_compute_0001")
+    assert compute is not None and compute.down_revision == "b20_appearance_0001"
     appearance = scripts.get_revision("b20_appearance_0001")
     assert appearance is not None and appearance.down_revision == "b19_registration_0001"
     registration = scripts.get_revision("b19_registration_0001")
