@@ -124,32 +124,35 @@ export function ImageViewport({
       );
     };
     updateSize();
-    // Some embedded WebView2 shells expose the property before a usable
-    // ResizeObserver constructor exists. Fall back to window resize rather
-    // than crashing the initial image viewport during first launch.
+    // WebView2 can construct a ResizeObserver successfully yet miss desktop
+    // resize notifications. Always retain the window-resize fallback so the
+    // initial camera image is fitted and manual scientific zoom is preserved.
+    // updateSize ignores duplicate measurements from the two listeners.
+    globalThis.addEventListener("resize", updateSize);
+    let observer: ResizeObserver | null = null;
     if (typeof ResizeObserver === "function") {
-      let observer: ResizeObserver | null = null;
-      const disconnect = () => {
-        try {
-          observer?.disconnect();
-        } catch {
-          // A broken WebView2 observer must not prevent first-image fitting
-          // or crash the editor when the viewport unmounts.
-        }
-      };
       try {
         observer = new ResizeObserver(updateSize);
         observer.observe(frame);
-        return disconnect;
       } catch {
-        // An embedded WebView2 may expose a constructor or observer that
-        // throws. Attempt cleanup without letting a second exception prevent
-        // the window-resize fallback from being registered.
-        disconnect();
+        // Broken WebView2 observers must not crash the first image, even
+        // when disconnecting a partially registered observer also throws.
+        try {
+          observer?.disconnect();
+        } catch {
+          // The window-resize fallback remains active.
+        }
+        observer = null;
       }
     }
-    globalThis.addEventListener("resize", updateSize);
-    return () => globalThis.removeEventListener("resize", updateSize);
+    return () => {
+      try {
+        observer?.disconnect();
+      } catch {
+        // Observer cleanup failures must not leak the window listener.
+      }
+      globalThis.removeEventListener("resize", updateSize);
+    };
   }, []);
 
   useEffect(() => {
