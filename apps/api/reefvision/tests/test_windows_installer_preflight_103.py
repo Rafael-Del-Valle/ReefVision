@@ -23,8 +23,7 @@ def test_real_windows_installer_workflow_passes_preflight() -> None:
     assert CHECK_CABS(WORKFLOW) == []
 
 
-
-@pytest.mark.parametrize(
+@pytest.mark.parametrize
     ("job_marker", "disabling_key"),
     [
         ("  build-windows-installer:", "    if: false"),
