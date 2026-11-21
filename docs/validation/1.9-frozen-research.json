@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T06:12:41.905503+00:00",
+  "updated_utc": "2026-11-21T06:21:05.940115+00:00",
   "candidate_pr": 131,
   "scope": "Generated research projects. Registered installer trials identify their own package.",
   "reviewed_predecessors": {
@@ -632,6 +632,51 @@
     "concurrent_head_scan": {
       "file": "1.9/evidence/concurrent-prs-20261121-061153-utc.json",
       "sha256": "5d5e792c1f3e478b3ea7d2e692bd3d7468d5f835c9acc7e7fc1b4da29dbfaf44"
+    },
+    "local_manufacture_and_workflows": {
+      "source": "7797efad64f65e2f19c6f4ff64a94382335bd0a9",
+      "version": "1.9.0",
+      "msi": "3ca191ee163b54f036eed094bb101701a230e632f3ca5218466857e4351d3ad4",
+      "matching_external_cabs": 5,
+      "payload_bytes": 2979017139,
+      "sha256sums": {
+        "file": "1.9/checkpoints/7797efad6/local-production/installer/SHA256SUMS.txt",
+        "sha256": "cb21d508929d626e1d1bd30efbe96cdde924fb48919fa85dee7352ce04b5f956"
+      },
+      "desktop_sha256": "ccf9048bbfc3580f9de06bc5c1750b5cfa1ea6cb4a40aeabe4ae9ee71c189cf5",
+      "backend_sha256": "cd6f2020b02c3302a1387d29cbaae640b8f409d20f8bc7d193888b1baaad9d64",
+      "policy": {
+        "file": "1.9/checkpoints/7797efad6/local-production/physical-signing-policy.json",
+        "sha256": "1949ec83ff63bbd92940878dab12160d0871aa7985d4892a9199c3449678fdc8"
+      },
+      "archive_audit": {
+        "file": "1.9/checkpoints/7797efad6/local-production/payload-audit.json",
+        "sha256": "2a1778ace945155bbb36025e1d9c092cacd94f90e39b33b35a7bf13c668f75f8"
+      },
+      "extraction": {
+        "file": "1.9/checkpoints/7797efad6/local-production/administrative-extraction.json",
+        "sha256": "58844a27be054768e55635a4679a29b678dfa2a78d1aedd3da0c196a5c79d820"
+      },
+      "native_zero_draft_registration": {
+        "file": "1.9/checkpoints/7797efad6/local-production/evidence/native-zero-draft-registration/index.json",
+        "sha256": "fdbd6e024dff19d3e11e6496a8cad27ff710eb6dd16cd275db84a8b29ab700c3"
+      },
+      "saved_pose_registration_inference_review": {
+        "file": "1.9/checkpoints/7797efad6/local-production/evidence/ultralytics-retained-recovery/evidence-index.json",
+        "sha256": "6de6b9dce220b4ededea94432f1555008e8a17eb7546eaefeafc59a09ed35220"
+      },
+      "actual_old_package_rollback": {
+        "file": "1.9/checkpoints/7797efad6/local-production/evidence/pose-rollback/installed-backends-1.8-to-1.9-and-restore.json",
+        "sha256": "838208620b8263e832609e13a50340b060a41a0f544c04fdccc0c60d13f72360"
+      },
+      "remaining_affected_workflows": [
+        "Recovery on this source can credit a different valid restored file to a previously completed native training run. The fixture restored a real earlier checkpoint at the same path. A worker digest correction is under test.",
+        "Ultralytics validation can score the wrong class when independently frozen splits use different local class ordinals. The reproduced study preserved both original ZIPs. A stable class-ID correction is under test."
+      ],
+      "separate_source_holdout_control": {
+        "file": "1.9/checkpoints/7797efad6/source/independently-frozen-class-maps-before.json",
+        "sha256": "36571d00df474b9f38ddade4a2214f3b8c090f783a2eda88b6eb533811b52b94"
+      }
     }
   }
 }

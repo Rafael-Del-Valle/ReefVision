@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T06:09:14Z`
+Updated: `2026-11-21T06:21:06Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1533,7 +1533,7 @@ Evidence:
 - `source`: The original 1.9 source completed 6,065 distinct Windows backend cases. All ten JUnit identity sets and digests matched the collection. There were 6,051 passes, 14 documented skips and zero failures. — `docs/validation/1.9-frozen-research.json` (`rv19-ancestry-integration-windows-6065-96476bc46`)
 - `browser`: none recorded
 - `windows_installed`: Ten registered roles with rehashed reports passed on the original 1.8 package, including the two historical 1.4 fingerprints. A second workflow exercised fresh and cached offline recovery. This identifies the predecessor for the direct 1.8 upgrade. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-ancestry-integration-installed-1-8-lineage`)
-- `physical_hardware`: none recorded
+- `physical_hardware`: The original 1.8 and joined local 1.9 backends preserved 37 populated table fingerprints and three training/model links. The older binary refused the newer copy, then reopened and wrote to the restored study after all 112 backup files and 27,777,736 bytes were rehashed. — `docs/validation/1.9-frozen-research.json` (`rv19-ancestry-integration-local-rollback-7797efad6`)
 - `representative_data`: none recorded
 
 ### rv19-compatibility-matrix: Supported OS, GPU, provider, format, and project compatibility matrix
@@ -1585,6 +1585,7 @@ Evidence:
 - `physical_hardware`: The original 1.8 MSI payload ran the same 14-node graph twice in native WebView2 on the RTX 3090. Each separately trained, registered and inferred on actual CUDA, paused for two ordinary reviews and downloaded the audited pose and training ZIP. The generated held-out video and source-pixel landmarks are pinned in both receipts. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-end-to-end-workflows-cuda-two-saved-e3e8`)
 - `physical_hardware`: The local 1.9 production WebView2 ran one saved 14-node graph twice on the RTX 3090. Each run trained and registered its checkpoint, inferred the held-out recording, stopped for both human decisions and exported the confirmed source points. The retained record includes 132 process-bound GPU samples. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-local-native-rtx-96476bc46`)
 - `physical_hardware`: Ordinary Retry produced a new Ultralytics CPU pose checkpoint on 96 training and 48 validation images. A checkpoint-inclusive Training Results ZIP verified 57 members. Register Trained Model and direct registration both rejected the retained checkpoint. The base inspector read its two landmarks. The active expanded catalog rejected the pose task. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-packaged-caa-ultralytics-recovery-register`)
+- `physical_hardware`: The 1.9 local MSI registered the prior worker’s checkpoint from Training → Models with zero drafts, then reopened the model under the same ordinary account. An independent packaged Retry used the same completed training, applied the frozen pose schema and exported a reviewed frame from held-out inference. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-local-native-registration-7797efad6`)
 - `representative_data`: none recorded
 
 ### rv19-performance-resilience: Large-project/video performance and restart/resume resilience
