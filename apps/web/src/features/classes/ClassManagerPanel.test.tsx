@@ -1128,6 +1128,54 @@ describe("ClassManagerPanel", () => {
       "truncated scientific reference report",
       { plan: { blockers: [], blocking_records: [] } },
     ],
+    [
+      "reassign",
+      "reassign",
+      "Preview reassign",
+      "Run reassign",
+      "unrecognized blocking category",
+      {
+        plan: {
+          mutable_records: [],
+          protected_records: [],
+          blocking_records: [
+            {
+              key: "unrecognized_scientific_category",
+              label: "Unknown scientific reference",
+              count: 1,
+              record_ids: ["unknown-1"],
+            },
+          ],
+          compatibility_impacts: [],
+          warnings: [],
+          blockers: [],
+        },
+      },
+    ],
+    [
+      "reassign-delete",
+      "reassign_delete",
+      "Preview Reassign and Delete",
+      "Run Reassign and Delete",
+      "unrecognized blocking category",
+      {
+        plan: {
+          mutable_records: [],
+          protected_records: [],
+          blocking_records: [
+            {
+              key: "unrecognized_scientific_category",
+              label: "Unknown scientific reference",
+              count: 1,
+              record_ids: ["unknown-1"],
+            },
+          ],
+          compatibility_impacts: [],
+          warnings: [],
+          blockers: [],
+        },
+      },
+    ],
   ] as const)(
     "does not execute %s with %s",
     async (
@@ -1188,7 +1236,10 @@ describe("ClassManagerPanel", () => {
             : "Reassign and Delete preview",
         ),
       ).toBeInTheDocument();
-      if (defect === "truncated scientific reference report") {
+      if (
+        defect === "truncated scientific reference report" ||
+        defect === "unrecognized blocking category"
+      ) {
         expect(
           within(row).getByText(/Operation evidence is incomplete/),
         ).toBeInTheDocument();
@@ -1250,10 +1301,10 @@ describe("ClassManagerPanel", () => {
                   evidenceType === "blocking_records"
                     ? [
                         {
-                          key: "archived_annotation",
-                          label: "Protected historical annotation",
+                          key: "review_queue_items_workflow",
+                          label: "Workflow-linked review queue",
                           count: 1,
-                          record_ids: ["annotation-3"],
+                          record_ids: ["review-queue-3"],
                         },
                       ]
                     : [],
