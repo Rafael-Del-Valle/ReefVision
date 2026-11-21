@@ -3,10 +3,12 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, ClassVar, cast
 
+import cv2
 import numpy as np
 import pytest
 from fastapi import FastAPI
@@ -165,6 +167,9 @@ def _persist_pose_track(
     client: TestClient,
     project: dict[str, object],
     video: dict[str, object],
+    *,
+    status: str = "verified",
+    track_number: int = 1,
 ) -> str:
     label_classes = cast(list[dict[str, object]], project["label_classes"])
     app = cast(FastAPI, client.app)
@@ -172,10 +177,10 @@ def _persist_pose_track(
         track = VideoTrack(
             video_id=str(video["id"]),
             label_class_id=str(label_classes[0]["id"]),
-            track_number=1,
+            track_number=track_number,
             geometry_kind="bbox",
             interpolation="hold",
-            status="verified",
+            status=status,
             keyframes_json=[
                 {
                     "frame": 4,
@@ -229,6 +234,145 @@ def _persist_pose_track(
         session.commit()
         session.refresh(track)
         return track.id
+
+
+def _neutral_clip(tmp_path: Path) -> bytes:
+    clip = tmp_path / "pose.mp4"
+    writer = cv2.VideoWriter(str(clip), cv2.VideoWriter.fourcc(*"mp4v"), 10, (64, 48))
+    assert writer.isOpened()
+    for _ in range(6):
+        writer.write(np.zeros((48, 64, 3), dtype=np.uint8))
+    writer.release()
+    return clip.read_bytes()
+
+
+def _import_neutral_clip(client: TestClient, project_id: object, clip: bytes) -> dict[str, Any]:
+    response = client.post(
+        f"/api/v1/projects/{project_id}/imports/videos",
+        files={"file": ("pose.mp4", clip, "video/mp4")},
+    )
+    assert response.status_code == 201, response.text
+    return cast(dict[str, Any], response.json())
+
+
+def test_coco_export_requires_explicit_unreviewed_scope(client: TestClient, tmp_path: Path) -> None:
+    project = create_project(client, "Reviewed and provisional pose tracks")
+    video = _import_neutral_clip(client, project["id"], _neutral_clip(tmp_path))
+    verified = _persist_pose_track(client, project, video)
+    provisional = _persist_pose_track(
+        client, project, video, status="machine_generated", track_number=2
+    )
+    url = f"/api/v1/videos/{video['id']}/pose-interoperability/export"
+
+    def export_tracks(**params: str) -> dict[str, str]:
+        exported = client.get(url, params={"format": "coco", **params})
+        assert exported.status_code == 200, exported.text
+        with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
+            manifest = json.loads(archive.read("reefvision-pose-manifest.json"))
+            native_name = next(name for name in archive.namelist() if name.endswith(".coco.json"))
+            coco = json.loads(archive.read(native_name))
+        tracks = manifest["reefvision_pose_interoperability"]["tracks"]
+        assert len(coco["annotations"]) == len(tracks)
+        return {item["video_track_id"]: item.get("source_track_status") for item in tracks.values()}
+
+    assert export_tracks() == {verified: "verified"}
+    assert export_tracks(include_unreviewed="true") == {
+        verified: "verified",
+        provisional: "machine_generated",
+    }
+    assert client.delete(f"/api/v1/video-tracks/{verified}").status_code == 204
+    rejected = client.get(url, params={"format": "coco"})
+    assert rejected.status_code == 400
+    assert "No verified pose tracks" in rejected.json()["detail"]
+    assert export_tracks(include_unreviewed="true") == {provisional: "machine_generated"}
+
+
+@pytest.mark.parametrize("timestamps", [(0.1337, 0.4175), (None, None)])
+def test_coco_restores_explicit_canonical_presentation_timestamps(
+    client: TestClient, tmp_path: Path, timestamps: tuple[float | None, float | None]
+) -> None:
+    project = create_project(client, "Source reviewed timing")
+    destination = create_project(client, "Target reviewed timing")
+    clip = _neutral_clip(tmp_path)
+    source = _import_neutral_clip(client, project["id"], clip)
+    target = _import_neutral_clip(client, destination["id"], clip)
+    source_track = _persist_pose_track(client, project, source)
+    with cast(FastAPI, client.app).state.session_factory() as session:
+        row = session.get_one(VideoTrack, source_track)
+        sample = row.keyframes_json[0]
+        row.keyframes_json = [
+            {
+                **deepcopy(sample),
+                "frame": frame,
+                **({"timestamp_seconds": timestamp} if timestamp is not None else {}),
+            }
+            for frame, timestamp in zip((1, 4), timestamps, strict=True)
+        ]
+        session.commit()
+    exported = client.get(
+        f"/api/v1/videos/{source['id']}/pose-interoperability/export", params={"format": "coco"}
+    )
+    assert exported.status_code == 200, exported.text
+    classes = cast(list[dict[str, object]], destination["label_classes"])
+    route = f"/api/v1/videos/{target['id']}/pose-interoperability/import"
+
+    def send(content: bytes) -> Any:
+        return client.post(
+            route,
+            params={"format": "coco", "label_class_id": classes[0]["id"]},
+            files={"file": ("pose.coco.zip", content, "application/zip")},
+        )
+
+    def replace_timestamps(first: float | None, last: float | None, *, legacy: bool) -> bytes:
+        changed = io.BytesIO()
+        with (
+            zipfile.ZipFile(io.BytesIO(exported.content)) as origin,
+            zipfile.ZipFile(changed, "w") as out,
+        ):
+            for name in origin.namelist():
+                payload = origin.read(name)
+                if name.endswith(".coco.json"):
+                    native = json.loads(payload)
+                    evidence = native["reefvision"]["provenance"][
+                        "reefvision_pose_interoperability"
+                    ]
+                    (track,) = evidence["tracks"].values()
+                    if legacy:
+                        track.pop("canonical_pose_sha256", None)
+                        track.pop("source_track_status", None)
+                    points = track["canonical_keyframes"]
+                    for point, timestamp in zip(points, (first, last), strict=True):
+                        if timestamp is None:
+                            point.pop("timestamp_seconds", None)
+                        else:
+                            point["timestamp_seconds"] = timestamp
+                    payload = json.dumps(native).encode()
+                out.writestr(name, payload)
+        return changed.getvalue()
+
+    if timestamps[0] is not None:
+        altered = send(replace_timestamps(0.144, 0.5, legacy=False))
+        assert altered.status_code == 400 and "Canonical pose digest mismatch" in altered.text
+        for invalid in (
+            replace_timestamps(0.9, 0.4, legacy=True),
+            replace_timestamps(None, 0.4, legacy=True),
+            replace_timestamps(float("inf"), 0.4, legacy=True),
+        ):
+            rejected = send(invalid)
+            assert rejected.status_code == 400, rejected.text
+            assert client.get(f"/api/v1/videos/{target['id']}/tracks").json() == []
+    content = (
+        exported.content
+        if timestamps[0] is not None
+        else replace_timestamps(None, None, legacy=True)
+    )
+    imported = send(content)
+    assert imported.status_code == 201, imported.text
+    (new_track,) = client.get(f"/api/v1/videos/{target['id']}/tracks").json()
+    assert new_track["status"] == "imported_review_required"
+    assert [
+        (row["frame"], row.get("timestamp_seconds")) for row in new_track["keyframes_json"]
+    ] == list(zip((1, 4), timestamps, strict=True))
 
 
 def test_repeated_semantic_labels_receive_stable_external_node_names() -> None:
