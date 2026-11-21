@@ -239,7 +239,15 @@ def _safe_extract_zip(
         # Invalid or ambiguous archives must not leave even an empty run
         # directory behind: that would block a corrected frozen export retry.
         # Keep the destination absent until every member passes preflight.
-        destination.mkdir(parents=True, exist_ok=True)
+        # Claim this directory exclusively: another job may have created
+        # reviewed artifacts after the materializer checked for occupancy.
+        try:
+            destination.mkdir(parents=True, exist_ok=False)
+        except FileExistsError as exc:
+            raise ValidationError(
+                "Pose training export destination already exists; "
+                "refusing to overwrite prior scientific data"
+            ) from exc
         root = destination.resolve()
 
         for item in archive.infolist():

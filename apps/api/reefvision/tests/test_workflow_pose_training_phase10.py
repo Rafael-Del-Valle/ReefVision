@@ -40,6 +40,7 @@ from reefvision.jobs.pose_training import (
     _require_empty_pose_gpu_output,
     _require_trusted_pose_checkpoints,
     _resolve_unlinked_pose_run_path,
+    _safe_extract_zip,
     _verified_pose_trainer_save_dir,
     _verify_postlaunch_pose_dataset,
     _verify_prelaunch_pose_dataset,
@@ -659,6 +660,15 @@ def test_pose_materialization_preserves_prior_scientific_data(
     assert previous.read_bytes() == b"preserve-previous-run"
     assert not (destination / "data.yaml").exists()
     assert not (destination / "images").exists()
+
+    if blocked_area == "dataset":
+        # The extractor must also reject a directory filled between the
+        # materializer's occupancy check and the first archive write.
+        with pytest.raises(ValidationError, match="refusing to overwrite prior scientific data"):
+            _safe_extract_zip(_pose_export_zip(b"new-training"), destination)
+        assert previous.read_bytes() == b"preserve-previous-run"
+        assert not (destination / "data.yaml").exists()
+        assert not (destination / "images").exists()
 
 
 def test_pose_materialization_rejects_failed_final_holdout_cleanup(
