@@ -25,6 +25,11 @@ import type { EventSummary } from "../ecology/EventSummaryPanel";
 import type { PoseLink } from "../ecology/poseOrganismLinksApi";
 import { ModelSelectionField } from "../models/ReviewedModelRuntime";
 import { listStudyDesigns } from "../ecology/studyDesignApi";
+import { PluginMeasurementControls } from "../plugins/PluginMeasurementControls";
+import {
+  completePluginMeasurementPins,
+  pluginMeasurementPins,
+} from "../plugins/pluginApi";
 import { listResearchProofs } from "../reproducibility/reproducibilityApi";
 import {
   AcquisitionQualityControls,
@@ -56,6 +61,7 @@ const scientificNodes = new Set([
   "point_cloud_preview",
   "mesh_longitudinal_comparison",
   "provider_manifest_snapshot",
+  "plugin_image_measurement",
   "reviewed_model_runtime",
   "underwater_adjustment",
 ]);
@@ -198,6 +204,11 @@ export function scientificConfigurationIssue(
     !string(parameters.record_id)
   )
     return "Choose an inspect-only local provider manifest.";
+  if (
+    nodeType === "plugin_image_measurement" &&
+    !completePluginMeasurementPins(pluginMeasurementPins(parameters))
+  )
+    return "Choose a plugin version and an original source image with both content digests.";
   if (nodeType === "scientific_comparison") {
     if (
       string(parameters.comparison_id) ||
@@ -1982,6 +1993,14 @@ export function ScientificNodeControls({
       <ProviderManifestSnapshotFields
         parameters={parameters}
         onChange={onChange}
+      />
+    );
+  if (nodeType === "plugin_image_measurement")
+    return (
+      <PluginMeasurementControls
+        projectId={projectId}
+        pins={pluginMeasurementPins(parameters)}
+        onChange={(pins) => onChange({ ...parameters, ...pins })}
       />
     );
   if (nodeType === "research_reproducibility_package")

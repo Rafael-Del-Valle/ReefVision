@@ -242,7 +242,7 @@ const PROJECT_NAV_GROUPS: Array<{
       },
       {
         id: "advanced_providers",
-        label: "Providers",
+        label: "Plugins and providers",
         description:
           "Inspect local manifests and use supported prompt, segmentation, depth, OCR, and VLM provider tools.",
       },
@@ -1312,7 +1312,15 @@ function ReefVisionMainApp() {
               />
             )}
             {activeView === "advanced_providers" && (
-              <AdvancedProviderWorkspace project={selectedProject} />
+              <AdvancedProviderWorkspace
+                project={selectedProject}
+                onOpenPluginWorkflow={(graph) => {
+                  if (graph.project_id !== selectedProject.id) return;
+                  setResearchGraph(graph);
+                  setScheduledRunId(null);
+                  setActiveView("workflows");
+                }}
+              />
             )}
             {activeView === "workflow_schedules" && (
               <WorkflowSchedulesWorkspace

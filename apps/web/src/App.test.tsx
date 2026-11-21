@@ -1378,12 +1378,13 @@ describe("App", () => {
       await screen.findByRole("button", { name: /CPT Coral Study/ }),
     );
     await userEvent.click(screen.getByRole("tab", { name: "Models & AI" }));
-    await userEvent.click(screen.getByRole("tab", { name: "Providers" }));
-
-    expect(screen.getByRole("tab", { name: "Providers" })).toHaveAttribute(
-      "aria-selected",
-      "true",
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Plugins and providers" }),
     );
+
+    expect(
+      screen.getByRole("tab", { name: "Plugins and providers" }),
+    ).toHaveAttribute("aria-selected", "true");
     expect(
       await screen.findAllByRole("heading", { name: "Providers" }),
     ).not.toHaveLength(0);
