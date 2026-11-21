@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T10:13:55.968706+00:00",
+  "updated_utc": "2026-11-21T10:33:24.184249+00:00",
   "candidate_pr": 150,
   "integrated_source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
   "selected_qualification": "exchanged_pose_training",
@@ -1187,7 +1187,15 @@
       "run": 44867740231,
       "attempt": 2,
       "fresh": 136770405841,
-      "cached_upgrade": 136770405714
+      "cached_upgrade": 136770405714,
+      "verified": true,
+      "fresh_offline_seconds": 128.7246004,
+      "cached_offline_seconds": 370.2482217,
+      "backup_files_reopened": 7,
+      "receipt": {
+        "file": "1.9/checkpoints/96476bc46/official/offline/attempt-44867740231-try-2/offline-index.json",
+        "sha256": "181c2dd946a7873e072588fc9b311ca841a7304e9bd4b6773f0fe2b74b35adf9"
+      }
     },
     "generated_fixture_only": true,
     "registered_clean": {
@@ -1278,7 +1286,11 @@
           "uninstalled": true
         }
       }
-    ]
+    ],
+    "combined_installation_and_recovery": {
+      "file": "1.9/checkpoints/96476bc46/official/combined-installed-qualification.json",
+      "sha256": "fdf8ea494b767e63d20b1014a2a56e0ef72a1349690357b890b585d551d89c45"
+    }
   },
   "active_product_pr": 150,
   "exchanged_pose_training": {
@@ -1394,7 +1406,18 @@
     },
     "hosted_ci": {
       "general": 44884655459,
-      "pose": 44884655423
+      "pose": 44884655423,
+      "frontend": {
+        "job": 136787201041,
+        "url": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44884655459/job/136787201041",
+        "test_files": 142,
+        "unit_passed": 976,
+        "browser_passed": 15,
+        "receipt": {
+          "file": "1.9/checkpoints/6334bcbb8/source/checks/hosted-frontend-136787201041.json",
+          "sha256": "c20458613c8b51c779e58eb9f9e4dc536ccc3591d12b5b60bd7ed15191731c56"
+        }
+      }
     },
     "local_build_root": "C:/rv19e-6334bcbb",
     "offline_qa": {
@@ -1511,6 +1534,30 @@
     "concurrent_pose_export_review": {
       "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/pose-export-reconciliation/receipt.json",
       "sha256": "046cd91e3d2ac13b4f16f901e009876e925db00a1608a3e7c16ead00b71ba52e"
+    },
+    "unavailable_provider_across_two_native_imports": {
+      "scope": "administratively_extracted_windows_msi",
+      "source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
+      "msi_sha256": "3c5231737f44232f017fcddd24f01c7ad334cf8addae4667622947e298c0dd04",
+      "verified": {
+        "each_project_image_model_job_and_proposal_typed_id_is_local_and_distinct": true,
+        "original_opaque_nested_string_uuid_tree_is_unchanged": true,
+        "pending_prediction_remains_pending": true,
+        "accepted_annotations_or_masks": [
+          0,
+          0
+        ],
+        "unknown_provider_catalog_http": 404,
+        "original_pixels_and_inert_historical_attachment_rehashed_in_closed_database_and_archive": true,
+        "foreign_key_violations": 0,
+        "unmodified_donor_bytes": true,
+        "live_product_registration_unchanged": true
+      },
+      "export_sha256": "2a0d5608728b14db8f68d1ac73012666c4e02008cf800c51f165678a4e573592",
+      "receipt": {
+        "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/native-opaque-provider-two-hop/index.json",
+        "sha256": "fb83ed3b7dc379528e29ed6df33a5b675cd696f7490fc3afc84a63c07d538266"
+      }
     }
   },
   "original_offline_7797": {
