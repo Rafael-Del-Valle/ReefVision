@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T11:09:19.557814+00:00",
+  "updated_utc": "2026-11-21T11:29:18.991764+00:00",
   "candidate_pr": 151,
   "integrated_source": "91027e893172d500897058dbb2c1cc5b9de5d50a",
   "selected_qualification": "frozen_frame_separation",
@@ -1732,6 +1732,72 @@
     "retained_record": {
       "file": "1.9/checkpoints/91027e893/source/qualification.json",
       "sha256": "21375b03a17c5b300e277f913f1860c244b6998514ad3bca10789ae7b82189a0"
+    },
+    "local_package_and_desktop": {
+      "source": "91027e893172d500897058dbb2c1cc5b9de5d50a",
+      "windows_media": {
+        "version": "1.9.0",
+        "msi_sha256": "4a7b27d4e6187bf29509bfdef76e0138822db9d20f5f1e47b7ee033b1bbb1709",
+        "external_cabinets": 5,
+        "payload_bytes": 2978698362,
+        "checksum_manifest": {
+          "file": "1.9/checkpoints/91027e893/local-production/installer/SHA256SUMS.txt",
+          "sha256": "441df921d1eb915e87e3bdf9a9ac8a723f2ed728ddd9b2022e4fb3a16f03893d"
+        }
+      },
+      "surface": "Normal Windows GUI opened from the administratively extracted locally built MSI under the ordinary account. GitHub-registered trials retain their original job and media identities.",
+      "frozen_frame_desktop": {
+        "file": "1.9/checkpoints/91027e893/local-production/evidence/native-frozen-frame-workflows/index.json",
+        "sha256": "91dfe0f49ba00465d55a593c45f930cc6ba3273a93bd00199993e50794b27b5f"
+      },
+      "complete_verified_package_receipt": {
+        "file": "1.9/checkpoints/91027e893/local-production/verified-workflows.json",
+        "sha256": "88392cd71c050efc12b30478cd28fba8c07ec3fc310cf96771de0b5a7d0fce84"
+      },
+      "two_successive_transfers": {
+        "selected_source": {
+          "file": "1.9/checkpoints/91027e893/source/transfers/checked-pose-two-hops.json",
+          "sha256": "a1dbbdf1274f7895d9668bd3b05db7435e1514cfa0946325c157aba95f9d82dc"
+        },
+        "packaged_sidecar": {
+          "file": "1.9/checkpoints/91027e893/local-production/evidence/frozen-frame-exchange/two-transfers.json",
+          "sha256": "6c4be9bb22d6869409fad74c8ad94df3c7e2ca8d28f88f865aae92351888a9ce"
+        },
+        "observation": "Both imported copies preserved all three original recording hashes and all four registered model weights. The valid splits retained their checkpoints. Re-registration and saved replay withheld the historical overlapping score."
+      },
+      "restored_18_backup": {
+        "source_tables": 37,
+        "backup_files": 112,
+        "backup_bytes": 27777736,
+        "prior_msi_sha256": "78d52066848afc6aeac975765359ba13cd3d0e2e8b79ef1b90307eecd03c35ed"
+      },
+      "physical_cuda_runs": [
+        {
+          "run": "e37728bd-e926-4b1c-b46e-5bfeaaf56d28",
+          "checkpoint_sha256": "f891101480a04bfb91b59ca2d75a4989ac7bc21a86913dc8b25f309a1f28c422"
+        },
+        {
+          "run": "ddd96e6a-9f37-46e8-9c3d-510bb16408d8",
+          "checkpoint_sha256": "52d35356fa5d4c080feee8572831c03198ed9ba95c9dc88f34187dd52085c6b0"
+        }
+      ],
+      "desktop_suites": {
+        "file": "1.9/checkpoints/91027e893/source/checks/windows-desktop-suites.json",
+        "sha256": "8b02013c0af8da69e7737af4be97fec0e856489ebd91d3b3aad7b9ef8e9f89f8"
+      },
+      "frontend_and_rust": {
+        "frontend": {
+          "files": 142,
+          "passed": 976
+        },
+        "chromium": {
+          "passed": 15,
+          "opt_in_skipped": 50,
+          "failed": 0,
+          "flaky": 0
+        },
+        "rust": 8
+      }
     }
   }
 }
