@@ -91,6 +91,29 @@ describe("dense object-browser window", () => {
     expect(masks).toEqual([{ id: "m" }]);
   });
 
+  it("skips retained-selection traversal when a filtered modality has no off-page rows", () => {
+    const retainedSelection = new Proxy(["deleted-scientific-object"], {
+      get(target, key, receiver) {
+        if (key === "0") {
+          throw new Error("Unexpected scan of fully visible or empty modality");
+        }
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    expect(
+      boundedDenseObjectRows([], [], 200, retainedSelection, retainedSelection),
+    ).toEqual([]);
+    expect(
+      boundedDenseObjectRows(
+        [{ id: "annotation-a" }],
+        [{ id: "mask-a" }],
+        2,
+        retainedSelection,
+        retainedSelection,
+      ).map((row) => row.item.id),
+    ).toEqual(["annotation-a", "mask-a"]);
+  });
+
   it("reads only mounted rows for an in-window selection", () => {
     const source = Array.from({ length: 20_000 }, (_, index) => ({
       id: `box-${index}`,
