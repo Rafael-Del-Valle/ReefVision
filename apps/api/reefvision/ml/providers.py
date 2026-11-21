@@ -283,7 +283,9 @@ class UltralyticsDetectionProvider:
         except Exception as exc:  # pragma: no cover - exercised only when dependency missing
             raise ValidationError(f"Ultralytics is unavailable: {exc}") from exc
 
-        model = YOLO(str(model_path))
+        return self._inspect_loaded_model(YOLO(str(model_path)))
+
+    def _inspect_loaded_model(self, model: Any) -> DetectionModelMetadata:
         task = str(getattr(model, "task", "detect") or "detect")
         if task not in {"detect", "segment", "pose"}:
             raise ValidationError(

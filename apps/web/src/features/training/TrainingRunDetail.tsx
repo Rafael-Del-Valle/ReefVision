@@ -25,6 +25,21 @@ function metricLabel(key: string): string {
   return key.replaceAll("/", " ").replaceAll("_", " ");
 }
 
+export function trainingRegistrationLabel(task: TrainingRun["task"]): string {
+  switch (task) {
+    case "detect":
+      return "Register best detector";
+    case "pose":
+      return "Register best pose model";
+    case "segment":
+      return "Register best segmenter";
+    case "semantic_segment":
+      return "Register best semantic segmenter";
+    default:
+      return "Register best model";
+  }
+}
+
 function preferredMetric(run: TrainingRun): [string, number[]] | null {
   const entries = Object.entries(history(run));
   const preferences =
@@ -401,7 +416,7 @@ export function TrainingRunDetail({
             >
               {registering
                 ? "Registering…"
-                : `Register best ${run.task === "segment" ? "segmenter" : run.task === "pose" ? "pose model" : "detector"}`}
+                : trainingRegistrationLabel(run.task)}
             </button>
           ))}
       </div>
