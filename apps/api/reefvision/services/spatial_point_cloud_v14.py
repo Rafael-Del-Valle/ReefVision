@@ -224,6 +224,7 @@ def measure_point_cloud_preview(
     point_index_pairs: list[list[int]] | None = None,
     preserve_axis_extrema_in_preview: bool = False,
     preserve_measured_chord_endpoints_in_preview: bool = False,
+    preserve_largest_axis_gap_boundaries_in_preview: bool = False,
 ) -> dict[str, Any]:
     """Report point extents, not surface area, organism size, or branch length."""
     if not 1 <= len(points) <= MAX_VERTICES:
@@ -232,6 +233,8 @@ def measure_point_cloud_preview(
         raise ValueError("preserve_axis_extrema_in_preview must be a boolean")
     if not isinstance(preserve_measured_chord_endpoints_in_preview, bool):
         raise ValueError("preserve_measured_chord_endpoints_in_preview must be a boolean")
+    if not isinstance(preserve_largest_axis_gap_boundaries_in_preview, bool):
+        raise ValueError("preserve_largest_axis_gap_boundaries_in_preview must be a boolean")
     if type(meters_per_unit) not in (int, float) or not 0 < meters_per_unit <= 1_000_000:
         raise ValueError("meters_per_unit must be a finite numeric value within bounds")
     scale = float(meters_per_unit)
@@ -645,12 +648,40 @@ def measure_point_cloud_preview(
         }
     )
     pin_chords = preserve_measured_chord_endpoints_in_preview and bool(selected_endpoint_indices)
-    if (preserve_axis_extrema_in_preview or pin_chords) and len(vertices) > preview_count:
+    # The full-source gap analysis above is independent of display sampling.
+    # A user may explicitly retain one acquisition row at each distinct
+    # boundary coordinate level of every equally largest projected gap.
+    # This does not retain every 3D locus or raw acquisition row there.
+    gap_boundary_indices: set[int] = set()
+    if preserve_largest_axis_gap_boundaries_in_preview:
+        for axis, label in enumerate(("x", "y", "z")):
+            maximum_gap = axis_sampling_gaps[label]["largest_adjacent_source_gap_units"]
+            if maximum_gap is None:
+                continue
+            levels = sorted({vertex[axis] for vertex in vertices})
+            boundary_levels = {
+                level
+                for lower, upper in pairwise(levels)
+                if upper - lower == maximum_gap
+                for level in (lower, upper)
+            }
+            first_index_per_level: dict[float, int] = {}
+            for index, vertex in enumerate(vertices):
+                coordinate = vertex[axis]
+                if coordinate in boundary_levels and coordinate not in first_index_per_level:
+                    first_index_per_level[coordinate] = index
+            gap_boundary_indices.update(first_index_per_level.values())
+    if (
+        preserve_axis_extrema_in_preview
+        or pin_chords
+        or preserve_largest_axis_gap_boundaries_in_preview
+    ) and len(vertices) > preview_count:
         protected = {0, len(vertices) - 1}
         if preserve_axis_extrema_in_preview:
             protected.update(extrema_indices)
         if pin_chords:
             protected.update(selected_endpoint_indices)
+        protected.update(gap_boundary_indices)
         # Fill remaining slots evenly across the entire source index range.
         # Taking the first N candidates biases the sample toward early rows.
         candidates = [index for index in range(len(vertices)) if index not in protected]
@@ -809,13 +840,23 @@ def measure_point_cloud_preview(
         ),
         "preview_extrema_source_indices": extrema_indices,
         "preview_sampling_strategy": (
-            "uniform_index_extrema_and_chord_endpoints_preserving"
-            if preserve_axis_extrema_in_preview and pin_chords
-            else "uniform_index_extrema_preserving"
-            if preserve_axis_extrema_in_preview
-            else "uniform_index_chord_endpoints_preserving"
-            if pin_chords
-            else "uniform_index"
+            (
+                "uniform_index_extrema_and_chord_endpoints_preserving"
+                if preserve_axis_extrema_in_preview and pin_chords
+                else "uniform_index_extrema_preserving"
+                if preserve_axis_extrema_in_preview
+                else "uniform_index_chord_endpoints_preserving"
+                if pin_chords
+                else "uniform_index"
+            )
+            + (
+                "_largest_gap_boundaries_preserving"
+                if preserve_largest_axis_gap_boundaries_in_preview
+                else ""
+            )
+        ),
+        "preview_largest_axis_gap_boundaries_preservation_requested": (
+            preserve_largest_axis_gap_boundaries_in_preview
         ),
         "preview_omitted_selected_chord_endpoint_indices": omitted_chord_endpoints,
         "preview_selected_chord_endpoints_covered": not omitted_chord_endpoints,
@@ -1033,6 +1074,9 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         preserve_axis_extrema_in_preview=payload.preserve_axis_extrema_in_preview,
         preserve_measured_chord_endpoints_in_preview=(
             payload.preserve_measured_chord_endpoints_in_preview
+        ),
+        preserve_largest_axis_gap_boundaries_in_preview=(
+            payload.preserve_largest_axis_gap_boundaries_in_preview
         ),
     )
     result["preview_point_colors_rgb_uint8"] = (
