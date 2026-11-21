@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from hashlib import sha256
 from io import BytesIO
 from typing import Any, cast
+from unittest.mock import patch
 from zipfile import ZipFile
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from httpx import Response
 
 from reefvision.config import Settings
+from reefvision.db.models import TrainingRun
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
+from reefvision.services import project_exchange_pose
 from reefvision.services.pose_training_exports import PoseTrainingExportService
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import hash_model_file
@@ -23,6 +28,11 @@ from reefvision.tests.test_scientific_project_exchange import import_archive, re
 from reefvision.tests.test_workflow_pose_training_phase10 import (
     _native_pose_workflow_graph,
     _synthetic_exact_frames,
+)
+
+import_project_archive = cast(Callable[[TestClient, bytes], Response], import_archive)
+rewrite_project_archive = cast(
+    Callable[[bytes, Callable[[dict[str, Any], dict[str, Any]], None]], bytes], rewrite
 )
 
 
@@ -109,11 +119,11 @@ def _archive(
     )
     downloaded = client.get(f"/api/v1/exchange-packages/{exported['package']['id']}/download")
     assert downloaded.status_code == 200, downloaded.text
-    return downloaded.content
+    return cast(bytes, downloaded.content)
 
 
 def _restore(client: TestClient, archive: bytes) -> tuple[str, dict[str, str]]:
-    restored = import_archive(client, archive)
+    restored = import_project_archive(client, archive)
     assert restored.status_code == 201, restored.text
     receipt = restored.json()
     return receipt["project_id"], receipt["package"]["options_json"]["id_map"]
@@ -132,6 +142,51 @@ def _assert_registration_unavailable(client: TestClient, project_id: str, traini
     assert models.status_code == 200, models.text
     assert models.json() == []
     return cast(str, registration.json()["detail"]).lower()
+
+
+def _assert_pose_registration(
+    client: TestClient,
+    test_settings: Settings,
+    project: str,
+    run_id: str,
+    dataset_id: str,
+    original_hash: str,
+    source_schema_digest: str,
+) -> str:
+    read = client.get(f"/api/v1/training-runs/{run_id}")
+    assert read.status_code == 200, read.text
+    run = read.json()
+    assert run["status"] == "completed"
+    assert run["registered_model_id"] is None
+    restored_checkpoint = resolve_managed_project_path(test_settings, run["result_checkpoint_path"])
+    assert hash_model_file(restored_checkpoint)[0] == original_hash
+
+    registration = client.post(
+        f"/api/v1/projects/{project}/models/register-from-run",
+        json={"training_run_id": run_id},
+    )
+    assert registration.status_code == 200, registration.text
+    model = registration.json()
+    assert model["sha256"] == original_hash
+    assert (
+        hash_model_file(resolve_managed_project_path(test_settings, model["managed_path"]))[0]
+        == original_hash
+    )
+
+    dataset_response = client.get(f"/api/v1/pose-training-datasets/{dataset_id}")
+    assert dataset_response.status_code == 200, dataset_response.text
+    dataset = dataset_response.json()
+    metadata = model["metadata_json"]
+    assert metadata["source_training_run_id"] == run_id
+    assert metadata["source_pose_training_dataset_id"] == dataset_id
+    assert metadata["source_pose_training_dataset_manifest_sha256"] == dataset["manifest_sha256"]
+    assert metadata["pose_landmark_schema"]["schema_id"] == dataset["pose_schema_id"]
+    assert metadata["pose_landmark_schema"]["schema_revision"] == dataset["pose_schema_revision"]
+    assert metadata["pose_landmark_schema"]["content_hash"] == source_schema_digest
+    assert (
+        client.get(f"/api/v1/training-runs/{run_id}").json()["registered_model_id"] == model["id"]
+    )
+    return cast(str, model["id"])
 
 
 def test_real_native_checkpoint_registers_after_two_fresh_project_transfers(
@@ -158,51 +213,67 @@ def test_real_native_checkpoint_registers_after_two_fresh_project_transfers(
         (first, first_run, first_dataset),
         (second, second_run, second_dataset),
     ):
-        read = client.get(f"/api/v1/training-runs/{run_id}")
-        assert read.status_code == 200, read.text
-        run = read.json()
-        assert run["status"] == "completed"
-        assert run["registered_model_id"] is None
-        restored_checkpoint = resolve_managed_project_path(
-            test_settings, run["result_checkpoint_path"]
-        )
-        assert hash_model_file(restored_checkpoint)[0] == original_hash
-
-        registration = client.post(
-            f"/api/v1/projects/{project}/models/register-from-run",
-            json={"training_run_id": run_id},
-        )
-        assert registration.status_code == 200, registration.text
-        model = registration.json()
-        registrations.append(model["id"])
-        assert model["sha256"] == original_hash
-        assert (
-            hash_model_file(resolve_managed_project_path(test_settings, model["managed_path"]))[0]
-            == original_hash
-        )
-
-        dataset_response = client.get(f"/api/v1/pose-training-datasets/{dataset_id}")
-        assert dataset_response.status_code == 200, dataset_response.text
-        dataset = dataset_response.json()
-        metadata = model["metadata_json"]
-        assert metadata["source_training_run_id"] == run_id
-        assert metadata["source_pose_training_dataset_id"] == dataset_id
-        assert (
-            metadata["source_pose_training_dataset_manifest_sha256"] == dataset["manifest_sha256"]
-        )
-        assert metadata["pose_landmark_schema"]["schema_id"] == dataset["pose_schema_id"]
-        assert (
-            metadata["pose_landmark_schema"]["schema_revision"] == dataset["pose_schema_revision"]
-        )
-        assert (
-            metadata["pose_landmark_schema"]["content_hash"] == frozen["pose_schema_content_hash"]
-        )
-        assert (
-            client.get(f"/api/v1/training-runs/{run_id}").json()["registered_model_id"]
-            == model["id"]
+        registrations.append(
+            _assert_pose_registration(
+                client,
+                test_settings,
+                project,
+                run_id,
+                dataset_id,
+                original_hash,
+                frozen["pose_schema_content_hash"],
+            )
         )
     assert len(set(registrations)) == 3
     assert hash_model_file(checkpoint)[0] == original_hash
+
+
+def test_legacy_pose_exchange_reexports_before_first_registration(
+    client: TestClient,
+    test_settings: Settings,
+    completed_pose_study: tuple[str, dict[str, Any], dict[str, Any], str],
+) -> None:
+    source, frozen, training, _ = completed_pose_study
+    source_archive = _archive(client, test_settings, source)
+    # Simulate the previous importer while preserving every other import step.
+    with patch.object(
+        project_exchange_pose, "rebind_pose_training_run", return_value=None, create=True
+    ):
+        legacy, legacy_map = _restore(client, source_archive)
+    legacy_run_id = legacy_map[training["training_run_id"]]
+    legacy_dataset_id = legacy_map[frozen["id"]]
+    original_hash = training["result_checkpoint_sha256"]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, legacy_run_id)
+        assert run is not None and run.project_id == legacy
+        assert run.registered_model_id is None and run.result_checkpoint_path
+        split = run.artifact_manifest_json["pose_split_manifest"]
+        assert canonical_json_sha256(split) != run.split_manifest_sha256
+        path = resolve_managed_project_path(test_settings, run.result_checkpoint_path)
+        assert hash_model_file(path)[0] == original_hash
+
+    reexported = _archive(client, test_settings, legacy)
+    reexported_project, rebound_map = _restore(client, reexported)
+    registered_legacy = _assert_pose_registration(
+        client,
+        test_settings,
+        legacy,
+        legacy_run_id,
+        legacy_dataset_id,
+        original_hash,
+        frozen["pose_schema_content_hash"],
+    )
+    registered_reexport = _assert_pose_registration(
+        client,
+        test_settings,
+        reexported_project,
+        rebound_map[legacy_run_id],
+        rebound_map[legacy_dataset_id],
+        original_hash,
+        frozen["pose_schema_content_hash"],
+    )
+    assert registered_legacy != registered_reexport
 
 
 def test_pose_training_exchange_without_checkpoint_retains_readable_run(
@@ -249,8 +320,10 @@ def test_pose_training_exchange_does_not_reseal_an_inconsistent_source(
         artifact["pose_split_manifest_sha256"] = split_hash
 
     before = {item["id"] for item in client.get("/api/v1/projects").json()}
-    damaged = rewrite(_archive(client, test_settings, source), choose_inconsistent_split)
-    imported = import_archive(client, damaged)
+    damaged = rewrite_project_archive(
+        _archive(client, test_settings, source), choose_inconsistent_split
+    )
+    imported = import_project_archive(client, damaged)
     if imported.status_code == 400:
         assert {item["id"] for item in client.get("/api/v1/projects").json()} == before
         return
