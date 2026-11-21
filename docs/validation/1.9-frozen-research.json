@@ -871,6 +871,48 @@
           "sha256": "489f97310bbe898535b6d3b9e816d7ee27fe177bfe80ba6a39086c43a52b64da"
         }
       }
+    },
+    "affected_backend_runs": {
+      "initial_test_environment": {
+        "passed": 7,
+        "skipped": 1,
+        "setup_errors": 55,
+        "reason": "The private pytest base directory's parent did not yet exist.",
+        "junit": {
+          "file": "1.9/checkpoints/9124acdb0/source/affected-first-setup.xml",
+          "sha256": "7388d4fce6d14a6149ad5efef06b2a21a29ec19c964efb93ae17ab1dc6c74b3d"
+        }
+      },
+      "corrected_disposable_environment": {
+        "passed": 62,
+        "skipped": 1,
+        "setup_errors": 0,
+        "failures": 0,
+        "junit": {
+          "file": "1.9/checkpoints/9124acdb0/source/affected-rerun.xml",
+          "sha256": "93e03ef62be5dc613d18bbd3520c12f30637a5c6c9836baf3d612ded09579e23"
+        },
+        "skip_reason": "The native GPU test is a separate opt-in. It passed on the physical RTX at this same source."
+      }
     }
+  },
+  "first_1_9_original_offline_wait": {
+    "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+    "producer": 44867493658,
+    "proof": 44867740231,
+    "attempt": 1,
+    "conclusion": "failure",
+    "roles": {
+      "fresh": {
+        "file": "1.9/checkpoints/96476bc46/official/offline/attempt-44867740231/attempt-1-producer-wait/fresh.json",
+        "sha256": "f41cb0be9569757a64dafe4161fb74db211f1f42bee82ea1f142a05c6eb33cc5"
+      },
+      "cached-upgrade": {
+        "file": "1.9/checkpoints/96476bc46/official/offline/attempt-44867740231/attempt-1-producer-wait/cached-upgrade.json",
+        "sha256": "12fdc000f27a04511312db553952c20741c4fd886b46043a36af36f7d766cbda"
+      }
+    },
+    "cause": "Both jobs reached their fixed wait limit before the original installer was uploaded. Installation and offline behavior were not exercised.",
+    "retry_action": "Rerun the two failed offline jobs after job 136734331397 succeeds and the original media are available. Retain attempt 2 independently."
   }
 }
