@@ -76,6 +76,74 @@ describe("ImageViewport", () => {
     expect(transform.style.transform).not.toContain("scale(1)");
   });
 
+  it("refits on desktop resize when a registered WebView2 observer stops notifying", () => {
+    let observations = 0;
+    let disconnects = 0;
+    class SilentResizeObserver {
+      constructor(_callback: ResizeObserverCallback) {}
+      observe() {
+        observations += 1;
+      }
+      disconnect() {
+        disconnects += 1;
+      }
+    }
+    vi.stubGlobal("ResizeObserver", SilentResizeObserver);
+    try {
+      const dimensions = { width: 960, height: 640 };
+      const { unmount } = render(
+        <ImageViewport width={1600} height={1200} label="Silent observer camera">
+          <svg data-testid="silent-observer-overlay" viewBox="0 0 1600 1200">
+            <polygon points="10,20 40,20 40,60" />
+          </svg>
+        </ImageViewport>,
+      );
+      const frame = screen.getByRole("region", {
+        name: "Silent observer camera",
+      });
+      Object.defineProperty(frame, "clientWidth", {
+        configurable: true,
+        get: () => dimensions.width,
+      });
+      Object.defineProperty(frame, "clientHeight", {
+        configurable: true,
+        get: () => dimensions.height,
+      });
+      const transform = screen.getByTestId("image-viewport-transform");
+      const polygon = screen
+        .getByTestId("silent-observer-overlay")
+        .querySelector("polygon");
+      const originalPoints = polygon?.getAttribute("points");
+      expect(observations).toBe(1);
+
+      // ResizeObserver.observe succeeded but never delivered a callback.
+      // Window resizing alone must measure and fit the initial camera image.
+      fireEvent.resize(window);
+      expect(transform.style.transform).toContain(
+        `scale(${fitTransform({ width: 1600, height: 1200 }, dimensions).scale})`,
+      );
+
+      // A scientist's manual zoom must survive a second desktop resize.
+      fireEvent.wheel(frame, { deltaY: -120, clientX: 480, clientY: 320 });
+      const manuallyZoomedScale = transform.style.transform.match(
+        /scale\(([^)]+)\)/,
+      )?.[1];
+      expect(manuallyZoomedScale).toBeDefined();
+      dimensions.width = 1100;
+      dimensions.height = 720;
+      fireEvent.resize(window);
+      expect(transform.style.transform).toContain(
+        `scale(${manuallyZoomedScale})`,
+      );
+      expect(polygon).toHaveAttribute("points", originalPoints);
+
+      unmount();
+      expect(disconnects).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("falls back to window resizing when WebView2 exposes no usable ResizeObserver", () => {
     // A property-existence check is insufficient: some desktop webviews
     // expose ResizeObserver as undefined while starting the first image.
