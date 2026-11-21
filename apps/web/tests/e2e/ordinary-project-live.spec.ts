@@ -1,7 +1,54 @@
-import { expect } from "@playwright/test";
+import { expect, type Locator } from "@playwright/test";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { test } from "./spatialDesktop";
+
+async function observeBoxGesture(canvas: Locator) {
+  return canvas.evaluateHandle((svg) => {
+    const controller = new AbortController();
+    const frame = () => {
+      const matrix = svg.querySelector("g")?.getScreenCTM();
+      return {
+        canvas: svg.getBoundingClientRect().toJSON(),
+        sourceToScreen: matrix
+          ? [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f]
+          : null,
+        viewport: [innerWidth, innerHeight],
+        scroll: [scrollX, scrollY],
+        devicePixelRatio,
+        fullImageLoading: !!document.querySelector(".rv-media-load-status"),
+      };
+    };
+    const initial = frame();
+    const events: {
+      type: string;
+      client: number[];
+      buttons: number;
+      ms: number;
+      frame: ReturnType<typeof frame>;
+    }[] = [];
+    const observe = (event: PointerEvent) => {
+      if (event.type === "pointermove" && !event.buttons) return;
+      events.push({
+        type: event.type,
+        client: [event.clientX, event.clientY],
+        buttons: event.buttons,
+        ms: event.timeStamp,
+        frame: frame(),
+      });
+    };
+    for (const type of ["pointerdown", "pointermove", "pointerup"] as const)
+      window.addEventListener(type, observe, {
+        capture: true,
+        passive: true,
+        signal: controller.signal,
+      });
+    return () => {
+      controller.abort();
+      return { initial, events };
+    };
+  });
+}
 
 test("imports an image and video, persists a reviewed edit, and exports YOLO", async ({
   desktop,
@@ -151,6 +198,7 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
   await editor.getByRole("button", { name: "Box tool", exact: true }).click();
   await expect(canvas).toHaveClass(/tool-box/);
   await canvas.scrollIntoViewIfNeeded();
+  const observer = firstUse ? await observeBoxGesture(canvas) : null;
   const { start, end } = await canvas.evaluate((svg) => {
     const matrix = svg.querySelector("g")?.getScreenCTM();
     if (!matrix) throw new Error("No source pixel transform");
@@ -162,6 +210,17 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
   await page.mouse.down();
   await page.mouse.move(end.x, end.y, { steps: 8 });
   await page.mouse.up();
+  const gesture = observer
+    ? {
+        surface: desktop.surface,
+        intendedSource: [20, 15, 55, 40],
+        requestedScreen: { start, end },
+        observed: await observer.evaluate((finish) => finish()),
+      }
+    : null;
+  await observer?.dispose();
+  const gesturePath = info.outputPath("first-use-box-evidence.json");
+  if (gesture) await writeFile(gesturePath, JSON.stringify(gesture, null, 2));
   await expect(boxes).toHaveCount(1);
   if (firstUse) {
     const undoButton = editor.getByRole("button", {
@@ -209,6 +268,26 @@ test("imports an image and video, persists a reviewed edit, and exports YOLO", a
   await editor.getByRole("button", { name: "Save now" }).click();
   await expect(editor.getByTestId("annotation-save-state")).toHaveText("Saved");
   const saved = await json(`${api}/images/${imageId}/annotations`);
+  if (gesture) {
+    await writeFile(
+      gesturePath,
+      JSON.stringify(
+        {
+          ...gesture,
+          savedSource: saved.annotations.map(
+            (box: {
+              x_min: number;
+              y_min: number;
+              x_max: number;
+              y_max: number;
+            }) => [box.x_min, box.y_min, box.x_max, box.y_max],
+          ),
+        },
+        null,
+        2,
+      ),
+    );
+  }
   expect(saved.image.annotation_status).toBe("reviewed");
   expect(saved.image.sha256).toBe(hash(image));
   expect(saved.annotations).toHaveLength(1);
