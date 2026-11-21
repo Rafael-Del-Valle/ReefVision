@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T11:29:18.991764+00:00",
+  "updated_utc": "2026-11-21T11:49:10.896338+00:00",
   "candidate_pr": 151,
   "integrated_source": "91027e893172d500897058dbb2c1cc5b9de5d50a",
   "selected_qualification": "frozen_frame_separation",
@@ -1797,6 +1797,61 @@
           "flaky": 0
         },
         "rust": 8
+      }
+    },
+    "native_recovery_and_cancel_observation": {
+      "source": "91027e893172d500897058dbb2c1cc5b9de5d50a",
+      "draft": 151,
+      "previously_checked_split_still_refuses_overlapping_frames": true,
+      "cancel_during_dataset_preparation": {
+        "ordinary_entry": "Workflow Builder / recent running job / Cancel during reviewed pose export",
+        "reviewed_training_frames": 240,
+        "reviewed_validation_frames": 72,
+        "shared_frozen_frames": 0,
+        "accepted_cancel": {
+          "http_status": 200,
+          "requested_job": "8cfa297e-97fe-43d0-b9fd-6ee039b5a2d0",
+          "response_status": "cancel_requested",
+          "observed_preparing_before_and_after": true,
+          "parent_start_to_terminal_ms": 10057,
+          "trace_sha256": "1847a18b47825bd3bdfc318c69404a8f8f53a27b8b9be7f9e4d3617230554ff1"
+        },
+        "actual": "The child job stopped at epoch zero without a new score, model, checkpoint or experiment. Its parent reported Failed. A new run of the same saved revision succeeded and its single registered checkpoint matched the file.",
+        "native_receipt": {
+          "file": "1.9/checkpoints/91027e893/local-production/evidence/native-dataset-preparation-cancel/index.json",
+          "sha256": "b0aedfd2116d567e00eeb85dfae80b29d40b4cd1b5f64c646c85c7c98b9787b9"
+        },
+        "disjoint_control_milliseconds": 14933
+      },
+      "native_used_study_backup": {
+        "entry": "System status > Backups and restore > Create backup > Verify backup > Restore into new location",
+        "restored_files": 114,
+        "bytes": 27808634,
+        "old_populated_tables": 36,
+        "restored_populated_tables": 40,
+        "result": "Every preceding row and managed project/model file survived. Two GPU runs reopened with their frozen archive and checkpoint identities. The recovered study accepted a separate write and reopened.",
+        "receipt": {
+          "file": "1.9/checkpoints/91027e893/local-production/evidence/managed-checked-study-recovery/index.json",
+          "sha256": "dda7cb175075cb84348402c2f14800aef0cd334bd73da4010a070abe7ed0fac4"
+        }
+      },
+      "native_underwater_rendering": {
+        "actual": "The earlier flaky native assertion sampled a thumbnail while the same asset was promoting to its full display. On #151 the 104 by 96 original response and independently decoded RGBA matched before adjustment and after showing the original. The normal adjustment, inference and both replays passed.",
+        "native": {
+          "file": "1.9/checkpoints/91027e893/local-production/evidence/underwater-render-transition/verified-original-pixel-transition.json",
+          "sha256": "317b55772958984edcbaac82b30a13b3e30da97f31a155355eebe52e527bef78"
+        },
+        "fixed_observation": {
+          "file": "1.9/checkpoints/91027e893/local-production/evidence/underwater-render-transition/qa-assertion-native-delay.json",
+          "sha256": "fee1fbc8cdc637b13ad4a600816a353a0f84d98a0b49e6ff0e39072a828c2abb"
+        },
+        "test_change": "5d0f1b6058cfd7773a691f86d4b904d6150ef985"
+      },
+      "focused_successor": {
+        "branch": "codex/reefvision-1.9-training-cancellation",
+        "worktree": "C:/rv19-cancel-graph",
+        "test_commit": "9812e67e6804f93ffaf6e2ca4ff5d4c5180958e0",
+        "scope": "Honor a cancelled pose child and record the terminal state of unfinished workflow nodes."
       }
     }
   }
