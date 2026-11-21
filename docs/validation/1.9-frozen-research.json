@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T04:39:30.308927+00:00",
+  "updated_utc": "2026-11-21T05:07:35.598109+00:00",
   "candidate_pr": 131,
   "scope": "Generated research projects. Registered installer trials identify their own package.",
   "reviewed_predecessors": {
@@ -194,6 +194,22 @@
         "file": "1.9/checkpoints/701f3b931/source/evidence/pose-rollback/original-pose-upgrade-and-rollback.json",
         "sha256": "3e310f2483c83e2bdff92138d2055942f1a93e77c57aac8be9716647440c22e6"
       }
+    },
+    "calibrated_coral_and_temporal": {
+      "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+      "result": "Generated coral acquired two days apart measured 9.75 to 10.75 mm. Held-out event testing covered 120 frames from five recordings. Frame-only matched 0, missed 7 and added 15 events. Temporal matched 3, missed 4 and added 16. The reviewed video workflow reopened the downloaded archive and retained its original files.",
+      "raw": {
+        "file": "1.9/checkpoints/96476bc46/preserved-coral-and-temporal/evidence-index.json",
+        "sha256": "6e9dc7cff1322a945a8e65ce57e14f9269990691068090ce5e0218234f063ff8"
+      }
+    },
+    "source_compatibility_and_long_video": {
+      "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+      "result": "Keyboard navigation exposed the source host and CPU-only fallback. A generated 362 MB, 18,000-frame H.264 recording imported in 2.42 seconds. Seeking to 1709.3 seconds presented a matching source frame in 48.7 ms. The reviewed frame-17,100 box reopened after sparse analysis.",
+      "raw": {
+        "file": "1.9/checkpoints/96476bc46/source-compatibility-and-long-video/evidence-index.json",
+        "sha256": "4401fb97c2b3f8de2e51adf19f5a313781d3bc0f767597d8ac38cac7475e1bc9"
+      }
     }
   },
   "performance_budgets_before_candidate_trial": {
@@ -234,8 +250,40 @@
       "lineage_inventory": {
         "file": "1.9/checkpoints/96476bc46/source/lineage-inventory.log",
         "sha256": "6752a4b327bf7da34034bed85a48ab4c0d9ec2d0409d16962bbfd21e610b957b"
+      },
+      "cuda_physical_source": {
+        "file": "1.9/checkpoints/96476bc46/source/physical-source-rtx-junit.xml",
+        "sha256": "4e52c866b75da7ab8fba627c38835dc9189012b368dc11dd8dc1f72c5afb3b73"
+      },
+      "migration": {
+        "file": "1.9/checkpoints/96476bc46/source/upgrade-downgrade-upgrade.log",
+        "sha256": "09839064b5b5bb688eb340d7b4bde5d5a5bed0e85b1cb987c0af7fc9d030ad58"
+      },
+      "mypy": {
+        "file": "1.9/checkpoints/96476bc46/source/mypy.log",
+        "sha256": "615b502f7347809330754d6bf605998bc6289a8865aba36c6dec5ab4ab92c53f"
+      },
+      "prettier": {
+        "file": "1.9/checkpoints/96476bc46/source/frontend-prettier.log",
+        "sha256": "f20510a9da4717c51c4cffee6d0dd88d6c9a723d0a83711d01216f5b48961283"
       }
-    }
+    },
+    "full_mypy_source_files": 781,
+    "native_cuda_source_tests": [
+      "test_native_reefpose_cuda_scientific_evaluation",
+      "test_async_two_model_reefpose_cuda_comparison",
+      "test_native_reefpose_cuda_workflow_registration_and_inference"
+    ],
+    "fresh_db_upgrade_downgrade_upgrade": [
+      "upgrade head",
+      "current",
+      "b19_registration_0001 (head)",
+      "downgrade base",
+      "current",
+      "upgrade head",
+      "current",
+      "b19_registration_0001 (head)"
+    ]
   },
   "production_run": {
     "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
@@ -243,6 +291,13 @@
     "original_build_job": 136734331397,
     "general_ci": 44867493592,
     "scientific_workflow": 44867493582,
-    "offline_draft": 135
+    "offline_draft": 135,
+    "offline_run": 44867740231,
+    "guided_registered_run": 44869092046,
+    "guided_registered_draft": 136,
+    "superseded_guided_proof": 44868405915,
+    "registered_storage_run": 44868688751,
+    "registered_storage_draft": 137,
+    "registered_storage_job": 136738091375
   }
 }

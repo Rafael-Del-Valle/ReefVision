@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T04:51:14Z`
+Updated: `2026-11-21T04:56:53Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1570,6 +1570,7 @@ Evidence:
 - `browser`: A researcher used the existing advanced graph editor with declared input IDs, then ran one 14-node revision twice. Both scratch CPU checkpoints, reviewed held-out poses and downloaded ZIPs have distinct receipts. The result uses run-derived registration names and provides the source baseline for the 1.9 guided and installed workflow. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-end-to-end-workflows-inherited-57f16152b`)
 - `browser`: Opening Training in a project created by saved workflows shows completed runs and experiments before creating a training draft. Three real source-browser profiles exercised the historical and corrected cases. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-historical-training-0b5e0f1d7`)
 - `browser`: Two ordinary CPU runs of the same saved 14-node revision trained and registered distinct models, ran held-out inference and completed all four human review gates. Both downloaded native ZIPs contained frame 14 with the human-reviewed source-pixel landmarks and three skipped items. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-guided-96476bc46`)
+- `browser`: Generated coral acquired two days apart measured 9.75 to 10.75 mm. Held-out event testing covered 120 frames from five recordings. Frame-only matched 0, missed 7 and added 15 events. Temporal matched 3, missed 4 and added 16. The reviewed video workflow reopened the downloaded archive and retained its original files. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-source-coral-temporal-96476bc46`)
 - `windows_installed`: none recorded
 - `physical_hardware`: The original 1.8 MSI payload ran the same 14-node graph twice in native WebView2 on the RTX 3090. Each separately trained, registered and inferred on actual CUDA, paused for two ordinary reviews and downloaded the audited pose and training ZIP. The generated held-out video and source-pixel landmarks are pinned in both receipts. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-end-to-end-workflows-cuda-two-saved-e3e8`)
 - `representative_data`: none recorded
@@ -1592,6 +1593,7 @@ Evidence:
 - `browser`: In the inherited ReefPose identity workspace, reopening two real queued runs and changing selection during a network interruption cancelled the originally requested job and retained the other run. The same workflow on 542254b8a cancelled the wrong persisted run. Both used generated video and a real local queue. — `docs/validation/reviewed-operations-dd3c7207e.json` (`rv19-performance-resilience-identity-job-reconnect-dd3c7207e`)
 - `browser`: The ordinary failed-workflow Retry action reused the job, run and three prior artifacts after the validation video was restored. Cancellation at human review kept nine artifacts. — `docs/validation/1.9-frozen-research.json` (`rv19-performance-resilience-retry-cancel-61804f487`)
 - `browser`: A real SQLite full response held 96 draft boxes while 48 remained stored. The editor waited for explicit Retry. The identical request committed revision two once storage became available. — `docs/validation/1.9-frozen-research.json` (`rv19-performance-resilience-editor-manual-storage-retry-b82305b13`)
+- `browser`: Keyboard navigation exposed the source host and CPU-only fallback. A generated 362 MB, 18,000-frame H.264 recording imported in 2.42 seconds. Seeking to 1709.3 seconds presented a matching source frame in 48.7 ms. The reviewed frame-17,100 box reopened after sparse analysis. — `docs/validation/1.9-frozen-research.json` (`rv19-performance-resilience-long-recording-96476bc46`)
 - `windows_installed`: none recorded
 - `physical_hardware`: On original 1.8 the generated 5,000-image gallery decoded a first thumbnail in 232 ms. The 1,500-box editor drew in 271 ms and preserved all original boxes. A 30-minute 720p fixture opened for playback in 1.39 s and decoded a near-end seek in 240 ms. A source-pixel annotation saved at frame 17,100 reopened after restart. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-performance-resilience-5000-gallery-long-video-1-8`)
 - `representative_data`: none recorded
