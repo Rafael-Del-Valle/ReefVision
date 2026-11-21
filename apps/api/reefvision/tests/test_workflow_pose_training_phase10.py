@@ -739,6 +739,54 @@ def test_pose_materialization_rejects_failed_final_holdout_cleanup(
     assert staged_frame.read_bytes() == b"reviewed-holdout"
 
 
+def test_pose_materialization_preserves_replaced_holdout_stage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Another worker can rename our claimed stage and replace it after the
+    # holdout has been copied. Never delete that unrelated scientist's files.
+    import reefvision.jobs.pose_training as pose_job
+
+    destination = tmp_path / "pose-dataset"
+    staging = tmp_path / ".pose-dataset-validation"
+    displaced = tmp_path / "original-reviewed-validation"
+    original_copy = pose_job._copy_split
+
+    def replace_stage_after_copy(
+        source_root: Path,
+        destination_root: Path,
+        *,
+        split_name: str,
+        class_count: int,
+        keypoint_count: int,
+    ) -> None:
+        original_copy(
+            source_root,
+            destination_root,
+            split_name=split_name,
+            class_count=class_count,
+            keypoint_count=keypoint_count,
+        )
+        staging.rename(displaced)
+        staging.mkdir()
+        (staging / "unrelated-scientific-data.txt").write_bytes(b"retain-other-run")
+
+    monkeypatch.setattr(pose_job, "_copy_split", replace_stage_after_copy)
+    with pytest.raises(ValidationError, match="staging directory changed"):
+        materialize_pose_training_exports(
+            training_content=_pose_export_zip(b"reviewed-train"),
+            validation_content=_pose_export_zip(b"independent-reviewed-holdout"),
+            destination=destination,
+        )
+
+    assert (staging / "unrelated-scientific-data.txt").read_bytes() == b"retain-other-run"
+    assert (displaced / "images/train/frame_00000001.png").read_bytes() == (
+        b"independent-reviewed-holdout"
+    )
+    assert (destination / "images/val/frame_00000001.png").read_bytes() == (
+        b"independent-reviewed-holdout"
+    )
+
+
 def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
     tmp_path: Path,
 ) -> None:
