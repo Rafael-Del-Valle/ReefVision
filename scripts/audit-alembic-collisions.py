@@ -48,6 +48,8 @@ def _declaration(source: bytes, path: str) -> tuple[str, list[str], list[str]]:
             continue
         for name in names:
             if name in {"revision", "down_revision", "depends_on"} and value is not None:
+                if name in values:
+                    raise ValueError(f"Duplicate Alembic {name} declaration: {path}")
                 values[name] = ast.literal_eval(value)
 
     def links(name: str) -> list[str]:
