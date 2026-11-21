@@ -48,7 +48,7 @@ describe("MeshArtifactViewer", () => {
     expect(JSON.stringify(validArtifact)).toBe(before);
   });
 
-  it("shows persisted mesh display-coverage QC without promoting it to biological evidence", () => {
+  it("shows preview coverage QC without claiming biological evidence", () => {
     const artifact = {
       ...validArtifact,
       qc_warnings: [
@@ -63,8 +63,12 @@ describe("MeshArtifactViewer", () => {
     const before = JSON.stringify(artifact);
     render(<MeshArtifactViewer artifact={artifact} />);
     const coverage = screen.getByText(/Preview coverage QC \(rendering only\)/);
-    expect(coverage).toHaveTextContent("disconnected reconstructed surface patch");
-    expect(coverage).toHaveTextContent("excludes reconstructed mesh surface area");
+    expect(coverage).toHaveTextContent(
+      "disconnected reconstructed surface patch",
+    );
+    expect(coverage).toHaveTextContent(
+      "excludes reconstructed mesh surface area",
+    );
     expect(coverage).toHaveTextContent("omit source-axis extrema");
     expect(coverage).toHaveTextContent("largest reconstructed source triangle");
     expect(coverage).toHaveTextContent("cannot be represented");
@@ -73,7 +77,7 @@ describe("MeshArtifactViewer", () => {
     expect(JSON.stringify(artifact)).toBe(before);
   });
 
-  it("ignores invalid and unknown coverage flags in legacy saved render artifacts", () => {
+  it("ignores malformed and unknown legacy coverage flags", () => {
     const { rerender } = render(
       <MeshArtifactViewer
         artifact={{ ...validArtifact, qc_warnings: "not a verified list" }}
