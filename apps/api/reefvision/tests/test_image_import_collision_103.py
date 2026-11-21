@@ -718,7 +718,7 @@ def test_locked_camera_rendition_cleanup_preserves_original_publish_failure(
 
 
 @pytest.mark.parametrize("rendition", ["display", "thumbnail"])
-@pytest.mark.parametrize("lock_kind", ["win32", "win33", "busy"])
+@pytest.mark.parametrize("lock_kind", ["win32", "win33", "win170", "busy"])
 def test_transient_camera_rendition_lock_retry_without_mutating_source(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -745,7 +745,7 @@ def test_transient_camera_rendition_lock_retry_without_mutating_source(
             if lock_kind == "busy":
                 raise OSError(errno.EBUSY, "simulated removable-volume contention")
             failure = OSError(errno.EIO, "simulated Windows file lock")
-            failure.winerror = 32 if lock_kind == "win32" else 33
+            failure.winerror = {"win32": 32, "win33": 33, "win170": 170}[lock_kind]
             raise failure
         real_replace(temporary, target)
 
@@ -764,6 +764,52 @@ def test_transient_camera_rendition_lock_retry_without_mutating_source(
     with Image.open(destination) as preview:
         preview.load()
         assert preview.format == ("PNG" if rendition == "display" else "JPEG")
+    assert list(tmp_path.glob(f".{destination.name}.*.part")) == []
+
+
+@pytest.mark.parametrize("rendition", ["display", "thumbnail"])
+@pytest.mark.parametrize("lock_kind", ["win170", "busy"])
+def test_camera_rendition_retry_exhaustion_retains_original_and_last_preview(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    rendition: str,
+    lock_kind: str,
+) -> None:
+    """A persistently busy camera rendition fails within a bounded budget."""
+    source = tmp_path / "camera_original.JPG"
+    original = image_bytes("JPEG", size=(48, 32))
+    source.write_bytes(original)
+    destination = tmp_path / ("display.png" if rendition == "display" else "thumbnail.jpg")
+    previous = b"last verified preview must survive repeated Windows locks"
+    destination.write_bytes(previous)
+    attempts = 0
+    delays: list[float] = []
+
+    def always_busy(temporary: Path, target: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        assert temporary.exists()
+        assert target == destination
+        assert destination.read_bytes() == previous
+        if lock_kind == "busy":
+            raise OSError(errno.EBUSY, "simulated EBUSY on preview publish")
+        failure = OSError(errno.EIO, "simulated ERROR_BUSY on preview publish")
+        failure.winerror = 170
+        raise failure
+
+    monkeypatch.setattr(image_storage.os, "replace", always_busy)
+    monkeypatch.setattr(image_storage.time, "sleep", delays.append)
+
+    with pytest.raises(OSError, match="preview publish"):
+        if rendition == "display":
+            image_storage.create_browser_display(source, destination)
+        else:
+            image_storage.create_thumbnail(source, destination, max_width=24, max_height=24)
+
+    assert attempts == 5
+    assert delays == [0.01, 0.02, 0.04, 0.08]
+    assert source.read_bytes() == original
+    assert destination.read_bytes() == previous
     assert list(tmp_path.glob(f".{destination.name}.*.part")) == []
 
 
