@@ -2434,10 +2434,9 @@ export function AnnotationEditor({
           );
         } else {
           setEditorGestureStatus(null);
-          commitDocument(
-            replaceAnnotations(currentState.document, [resized]),
-            [currentInteraction.annotationId],
-          );
+          commitDocument(replaceAnnotations(currentState.document, [resized]), [
+            currentInteraction.annotationId,
+          ]);
         }
       }
 
