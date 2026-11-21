@@ -279,6 +279,40 @@ def register_workflow_trained_model(
         raise ValidationError("Workflow training run does not belong to this project")
     if run.status != "completed" or not run.result_checkpoint_path:
         raise ValidationError("Only completed workflow training runs can be registered")
+    # Pose registration is the last point where an intact checkpoint can be
+    # detached from its scientist-verified Workflow Builder lineage. A missing
+    # digest was previously accepted as an optional legacy hint, permitting
+    # registration even when the saved training artifact omitted its checksum.
+    # Keep that historical behavior for other training tasks only.
+    if run.task == "pose":
+        manifest = run.artifact_manifest_json
+        if not isinstance(manifest, dict):
+            raise ValidationError("Pose registration requires frozen training provenance")
+        manifest_digest = manifest.get("result_checkpoint_sha256")
+        expected_lineage = {
+            "task": run.task,
+            "training_run_id": run.id,
+            "training_job_id": run.job_id,
+            "result_checkpoint_path": run.result_checkpoint_path,
+            "result_checkpoint_sha256": manifest_digest,
+            "dataset_manifest_sha256": run.dataset_manifest_sha256,
+            "split_manifest_sha256": run.split_manifest_sha256,
+            "pose_training_dataset_id": manifest.get("pose_training_dataset_id"),
+            "pose_validation_dataset_id": manifest.get("pose_validation_dataset_id"),
+            "pose_schema_id": manifest.get("pose_schema_id"),
+            "pose_schema_revision": manifest.get("pose_schema_revision"),
+            "pose_schema_content_hash": manifest.get("pose_schema_content_hash"),
+        }
+        if (
+            not isinstance(manifest_digest, str)
+            or len(manifest_digest) != 64
+            or any(char not in "0123456789abcdef" for char in manifest_digest)
+            or not isinstance(manifest.get("pose_training_dataset_id"), str)
+            or not manifest["pose_training_dataset_id"]
+            or type(training_payload.get("pose_schema_revision")) is not int
+            or any(training_payload.get(key) != value for key, value in expected_lineage.items())
+        ):
+            raise ValidationError("Pose registration frozen training lineage does not match")
     expected_sha = str(training_payload.get("result_checkpoint_sha256") or "")
     checkpoint = resolve_managed_project_path(settings, run.result_checkpoint_path)
     if not checkpoint.is_file():
