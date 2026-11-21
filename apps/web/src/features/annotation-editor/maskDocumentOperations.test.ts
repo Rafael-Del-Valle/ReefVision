@@ -213,5 +213,4 @@ describe("mask document operations", () => {
     ).toBe(original);
     expect(deleteSelectedAnnotations(original, [], [])).toBe(original);
   });
-
 });

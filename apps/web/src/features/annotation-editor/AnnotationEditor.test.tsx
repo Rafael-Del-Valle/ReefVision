@@ -920,7 +920,6 @@ describe("AnnotationEditor", () => {
     expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
   });
 
-
   it("does not autosave an already-assigned class when selecting a coral again", async () => {
     const writes: string[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
