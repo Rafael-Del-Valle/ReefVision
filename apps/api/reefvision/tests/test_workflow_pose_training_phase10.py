@@ -1256,6 +1256,54 @@ def test_pose_materialization_rejects_ambiguous_frozen_landmark_names(
     assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed-frame"
 
 
+@pytest.mark.parametrize(
+    ("class_names", "expected_error"),
+    (
+        ((b"animal", b"animal"), "noncanonical class/keypoint metadata"),
+        ((b" ", b"other"), "noncanonical class/keypoint metadata"),
+    ),
+)
+def test_pose_materialization_rejects_ambiguous_frozen_class_names(
+    tmp_path: Path,
+    class_names: tuple[bytes, bytes],
+    expected_error: str,
+) -> None:
+    # Two distinct class IDs must not silently share an empty or duplicate
+    # scientific label in a frozen export from the saved workflow.
+    reviewed = _pose_export_zip(b"reviewed-science-frame")
+    altered = io.BytesIO()
+    with (
+        zipfile.ZipFile(io.BytesIO(reviewed)) as original,
+        zipfile.ZipFile(altered, "w", compression=zipfile.ZIP_DEFLATED) as rewritten,
+    ):
+        for member in original.namelist():
+            content = original.read(member)
+            if member == "data.yaml":
+                content = content.replace(
+                    b'  0: "animal"\n',
+                    b'  0: "' + class_names[0] + b'"\n  1: "' + class_names[1] + b'"\n',
+                )
+            rewritten.writestr(member, content)
+
+    destination = tmp_path / "frozen-pose-classes"
+    with pytest.raises(ValidationError, match=expected_error):
+        materialize_pose_training_exports(
+            training_content=altered.getvalue(),
+            validation_content=None,
+            destination=destination,
+        )
+    assert not destination.exists()
+
+    # A genuine corrected frozen export can occupy the original run path.
+    result = materialize_pose_training_exports(
+        training_content=reviewed,
+        validation_content=None,
+        destination=destination,
+    )
+    assert result["training_image_count"] == 1
+    assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed-science-frame"
+
+
 def test_pose_materialization_missing_header_allows_corrected_frozen_export(
     tmp_path: Path,
 ) -> None:
