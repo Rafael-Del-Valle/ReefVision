@@ -842,6 +842,34 @@
       "predecessor_upgrade_and_rollback": {
         "file": "1.9/checkpoints/9124acdb0/local-production/evidence/pose-rollback/installed-backends-1.8-to-1.9-and-restore.json",
         "sha256": "4c8033782597aa8d1298015eaa46692e9a352394a34fb7105258e0326b629fa9"
+      },
+      "physical_guided_rtx_and_two_replays": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/evidence/physical-guided-rtx3090/evidence-index.json",
+        "sha256": "89373db4f71042c0caeb2cbc64ff7c6b7271d56608934896869b8230d74c6a8c"
+      },
+      "two_models_physical_checksum_chain": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/evidence/physical-guided-rtx3090/native-checkpoint-lineage.json",
+        "sha256": "02422367543474df011a2d9c014a349b4d896427dc5f62f5c2f9b4228be0e118"
+      },
+      "cpu_and_gpu_native_diagnostics": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/evidence/native-configuration-diagnostics/index.json",
+        "sha256": "91fe41af42afd28d8653656efd99bc0c40d8db979dbb4c2e51e7fd0696e49bb0"
+      },
+      "physical_performance": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/evidence/native-performance/index.json",
+        "sha256": "d08035dce2d440b0c303fdc680dc20d36de568b812b384ca35e3fb087a14d9f1"
+      },
+      "publisher_and_enforcing_device_inputs": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/publisher-prerequisites.json",
+        "sha256": "98c384da052dfec293af4b6c380c444684b1880e0fd22f4ff82d582c6094fabc"
+      },
+      "known_advanced_graph_split_failure": {
+        "surface": "Joined source, Advanced saved graph, explicit validation input with the optional require-validation flag unset.",
+        "result": "The model credited eight validation images from either a shared recording or a shared animal. The disjoint control also produced metrics. Training with no validation set kept its exploratory warning and produced no validation metrics.",
+        "receipt": {
+          "file": "1.9/checkpoints/9124acdb0/source/optional-connected-holdout-overlap.json",
+          "sha256": "489f97310bbe898535b6d3b9e816d7ee27fe177bfe80ba6a39086c43a52b64da"
+        }
       }
     }
   }

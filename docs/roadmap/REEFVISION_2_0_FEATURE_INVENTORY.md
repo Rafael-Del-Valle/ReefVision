@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T06:48:41Z`
+Updated: `2026-11-21T06:58:04Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1561,6 +1561,7 @@ Evidence:
 - `physical_hardware`: Help and System status showed Windows 11 build 26300, source runtime and local formats. Separate keyboard-driven browser launches detected this physical RTX 3090 and a CPU-only masked runtime. The prior package is identified individually. — `docs/validation/1.9-frozen-research.json` (`rv19-compatibility-matrix-live-host-621e20b34`)
 - `physical_hardware`: The local MSI and five cabinets verified against the media table and manifest. The native WebView2, packaged backend, physical RTX 3090 and H.264 decode were exercised. Windows 11 reported Smart App Control off and the three inspected binaries were unsigned. — `docs/validation/1.9-frozen-research.json` (`rv19-compatibility-matrix-local-package-platform-96476bc46`)
 - `physical_hardware`: The local Windows build retained 96 frames and 192 landmarks through neutral COCO export and import, including an occlusion and subframe timing. Its DLC export had the same canonical payload. NWB reported its optional codec unavailable. The transferred model history reopened with retired-provider execution disabled. — `docs/validation/1.9-frozen-research.json` (`rv19-compatibility-matrix-neutral-pose-local-96476bc46`)
+- `physical_hardware`: In separate ordinary Windows WebView2 processes, Help displayed both the actual RTX 3090 CUDA capability and the actionable CPU choice under explicit CUDA masking. Both showed the neutral file alternatives and the retired pose provider. The keyboard journeys also passed at 150 percent scale. — `docs/validation/1.9-frozen-research.json` (`rv19-compatibility-matrix-native-cpu-and-cuda-configurations-9124acdb0`)
 - `representative_data`: none recorded
 
 ### rv19-end-to-end-workflows: End-to-end detection, segmentation, pose, tracking, and scientific workflows
@@ -1594,6 +1595,7 @@ Evidence:
 - `physical_hardware`: The local 1.9 production WebView2 ran one saved 14-node graph twice on the RTX 3090. Each run trained and registered its checkpoint, inferred the held-out recording, stopped for both human decisions and exported the confirmed source points. The retained record includes 132 process-bound GPU samples. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-local-native-rtx-96476bc46`)
 - `physical_hardware`: Ordinary Retry produced a new Ultralytics CPU pose checkpoint on 96 training and 48 validation images. A checkpoint-inclusive Training Results ZIP verified 57 members. Register Trained Model and direct registration both rejected the retained checkpoint. The base inspector read its two landmarks. The active expanded catalog rejected the pose task. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-packaged-caa-ultralytics-recovery-register`)
 - `physical_hardware`: The 1.9 local MSI registered the prior worker’s checkpoint from Training → Models with zero drafts, then reopened the model under the same ordinary account. An independent packaged Retry used the same completed training, applied the frozen pose schema and exported a reviewed frame from held-out inference. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-local-native-registration-7797efad6`)
+- `physical_hardware`: A normal installed Workflow Builder ran the same saved native ReefPose graph twice. On the RTX 3090 the researcher approved both review gates for each run and opened four exports per run. All 56 device samples belonged to the owned backend. Each distinct checkpoint matched its experiment, training result and freshly rehashed registered bytes. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-two-guided-rtx-runs-9124acdb0`)
 - `representative_data`: none recorded
 
 ### rv19-performance-resilience: Large-project/video performance and restart/resume resilience
@@ -1621,6 +1623,7 @@ Evidence:
 - `windows_installed`: Three packaged native training children produced genuine checkpoints. A different valid file at the expected path stopped retry and standalone registration. Restoring the exact bytes recovered one job and exactly one model. The three sidecar sessions shut down normally. — `docs/validation/1.9-frozen-research.json` (`rv19-performance-resilience-registered-checkpoint-recovery-9124acdb0`)
 - `physical_hardware`: On original 1.8 the generated 5,000-image gallery decoded a first thumbnail in 232 ms. The 1,500-box editor drew in 271 ms and preserved all original boxes. A 30-minute 720p fixture opened for playback in 1.39 s and decoded a near-end seek in 240 ms. A source-pixel annotation saved at frame 17,100 reopened after restart. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-performance-resilience-5000-gallery-long-video-1-8`)
 - `physical_hardware`: On physical Windows 11, the local package reached keyboard interaction in 7.101 seconds, showed the decoded 5,000-image gallery in 0.261 seconds and loaded a 1,500-box image editor in 0.282 seconds. The half-hour clip became playable in 1.693 seconds and presented its seek frame in 0.134 seconds. — `docs/validation/1.9-frozen-research.json` (`rv19-performance-resilience-local-package-timing-96476bc46`)
+- `physical_hardware`: Cold interactive launch took 7.747 seconds, a 5,000-image gallery first decoded in 288.6 ms, a 1,500-box editor was ready in 332.3 ms and a 30-minute H.264 recording was playable in 1.251 seconds. Distant seek presented in 89.2 ms. All predeclared limits passed on the measured Windows workstation. — `docs/validation/1.9-frozen-research.json` (`rv19-performance-resilience-physical-desktop-budgets-9124acdb0`)
 - `representative_data`: none recorded
 
 ### rv20-cli-sdk-headless: CLI, Python SDK, and headless infer/benchmark/export
