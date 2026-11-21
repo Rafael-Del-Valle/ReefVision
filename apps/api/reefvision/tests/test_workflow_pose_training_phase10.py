@@ -824,9 +824,8 @@ def test_pose_materialization_rejects_identical_frames_in_independent_validation
     assert corrected["validation_mode"] == "separate_frozen_pose_dataset"
     assert (destination / "images/train/frame_00000001.png").read_bytes() == b"same-reviewed-frame"
     assert (
-        (destination / "images/val/frame_00000001.png").read_bytes()
-        == b"separately-reviewed-holdout-frame"
-    )
+        destination / "images/val/frame_00000001.png"
+    ).read_bytes() == b"separately-reviewed-holdout-frame"
 
 
 @pytest.mark.parametrize(
@@ -883,9 +882,8 @@ def test_pose_materialization_rejects_unpaired_reviewed_frames(
     assert corrected["validation_mode"] == "separate_frozen_pose_dataset"
     assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed"
     assert (
-        (destination / "images/val/frame_00000001.png").read_bytes()
-        == b"independent-reviewed-validation"
-    )
+        destination / "images/val/frame_00000001.png"
+    ).read_bytes() == b"independent-reviewed-validation"
 
 
 @pytest.mark.parametrize("altered_split", ("training", "validation"))
@@ -935,10 +933,7 @@ def test_pose_materialization_rejects_unmapped_frozen_class_labels(
     )
     assert corrected["validation_mode"] == "separate_frozen_pose_dataset"
     assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed"
-    assert (
-        (destination / "images/val/frame_00000001.png").read_bytes()
-        == b"independent-validation"
-    )
+    assert (destination / "images/val/frame_00000001.png").read_bytes() == b"independent-validation"
 
 
 @pytest.mark.parametrize("altered_split", ("training", "validation"))
@@ -1000,10 +995,7 @@ def test_pose_materialization_rejects_malformed_frozen_pose_rows(
     )
     assert corrected["validation_mode"] == "separate_frozen_pose_dataset"
     assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed"
-    assert (
-        (destination / "images/val/frame_00000001.png").read_bytes()
-        == b"independent-validation"
-    )
+    assert (destination / "images/val/frame_00000001.png").read_bytes() == b"independent-validation"
 
 
 @pytest.mark.parametrize(
@@ -1232,9 +1224,7 @@ def test_pose_materialization_rejects_ambiguous_frozen_landmark_names(
                         b'  - "keypoint"\n  - "' + second_name + b'"\n',
                     )
                 elif member.startswith("labels/train/"):
-                    content = content.replace(
-                        b"0.5 0.5 2\n", b"0.5 0.5 2 0.25 0.75 2\n"
-                    )
+                    content = content.replace(b"0.5 0.5 2\n", b"0.5 0.5 2 0.25 0.75 2\n")
                 rewritten.writestr(member, content)
         return stream.getvalue()
 
@@ -1404,10 +1394,7 @@ def test_pose_materialization_rejects_unsafe_holdout_member_before_training_outp
     )
     assert corrected["validation_mode"] == "separate_frozen_pose_dataset"
     assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed-training"
-    assert (
-        (destination / "images/val/frame_00000001.png").read_bytes()
-        == b"reviewed-validation"
-    )
+    assert (destination / "images/val/frame_00000001.png").read_bytes() == b"reviewed-validation"
 
 
 def test_pose_materialization_rejects_corrupt_unread_holdout_member(
@@ -1445,10 +1432,7 @@ def test_pose_materialization_rejects_corrupt_unread_holdout_member(
     )
     assert corrected["validation_mode"] == "separate_frozen_pose_dataset"
     assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed-training"
-    assert (
-        (destination / "images/val/frame_00000001.png").read_bytes()
-        == b"reviewed-validation"
-    )
+    assert (destination / "images/val/frame_00000001.png").read_bytes() == b"reviewed-validation"
 
 
 @pytest.mark.parametrize("alias", ("images", "labels/train"))
