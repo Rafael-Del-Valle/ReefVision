@@ -1125,6 +1125,39 @@ function SpatialMeasurementFields({
           </label>
         ),
       )}
+      {kind === "mesh" && (
+        <>
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={parameters.preserve_axis_extrema_in_preview === true}
+              onChange={(event) =>
+                update({ preserve_axis_extrema_in_preview: event.target.checked })
+              }
+            />
+            Preserve source-axis extrema faces in preview
+          </label>
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={
+                parameters.preserve_edge_connected_patches_in_preview === true
+              }
+              onChange={(event) =>
+                update({
+                  preserve_edge_connected_patches_in_preview:
+                    event.target.checked,
+                })
+              }
+            />
+            Preserve disconnected mesh patches in preview
+          </label>
+          <p className="annotation-helper">
+            Display sampling only. These controls do not change full-mesh
+            measurements or verify calibration or specimen identity.
+          </p>
+        </>
+      )}
       {kind === "point_cloud" && (
         <label className="toggle-row">
           <input
