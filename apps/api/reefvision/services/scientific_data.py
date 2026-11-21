@@ -196,41 +196,36 @@ class ScientificDataService:
                     EnvironmentalCacheEntry.cache_key == cache_key,
                 )
             )
-            if cache is None or not isinstance(cache.payload_json, dict):
-                raise ConflictError("Environmental snapshot cache is missing or malformed")
-            # Scientific record lists, saved analyses and exports also use this
-            # response. Rehashed but malformed provider evidence must never
-            # produce a server error or falsely claim current scientific data.
-            payload = cache.payload_json
-            try:
-                verified_checksum = content_hash(payload) == cache.content_sha256
+            # Record history is an immutable audit surface. A corrupt or
+            # missing provider cache invalidates scientific currentness, not
+            # the independently checksummed original observation. Dataset
+            # reuse and inference endpoints enforce strict cache validation.
+            snapshot_current = False
+            if cache is not None and isinstance(cache.payload_json, dict):
+                payload = cache.payload_json
                 identity = payload.get("cache_identity")
-                verified_identity = (
-                    isinstance(identity, dict) and content_hash(identity) == cache.cache_key
-                )
-            except ValidationError as exc:
-                raise ConflictError("Environmental snapshot cache has invalid JSON") from exc
-            if not verified_checksum:
-                raise ConflictError("Environmental snapshot cache checksum mismatch")
-            # Narrow the provider identity before reading optional source fields.
-            # A missing or non-object identity is a controlled scientific conflict.
-            if not isinstance(identity, dict) or not verified_identity:
-                raise ConflictError("Environmental snapshot cache identity mismatch")
-            if "source_url" in identity and identity["source_url"] != cache.source_url:
-                raise ConflictError("Environmental snapshot cache identity mismatch")
-            missing = payload.get("skipped_missing")
-            if type(missing) is not int or missing < 0:
-                raise ConflictError("Environmental snapshot cache has invalid missingness")
-            if not isinstance(payload.get("provider_response"), dict):
-                raise ConflictError("Environmental snapshot cache has malformed provider evidence")
-            record_ids = payload.get("record_ids")
-            if not isinstance(record_ids, list) or any(
-                not isinstance(record_id, str) for record_id in record_ids
-            ):
-                raise ConflictError("Environmental snapshot cache has invalid record lineage")
-            if len(set(record_ids)) != len(record_ids):
-                raise ConflictError("Environmental snapshot cache has duplicate record lineage")
-            snapshot_current = row.id in record_ids
+                record_ids = payload.get("record_ids")
+                missing = payload.get("skipped_missing")
+                try:
+                    verified = (
+                        content_hash(payload) == cache.content_sha256
+                        and isinstance(identity, dict)
+                        and content_hash(identity) == cache.cache_key
+                        and (
+                            "source_url" not in identity
+                            or identity["source_url"] == cache.source_url
+                        )
+                        and type(missing) is int
+                        and missing >= 0
+                        and isinstance(payload.get("provider_response"), dict)
+                        and isinstance(record_ids, list)
+                        and all(isinstance(record_id, str) for record_id in record_ids)
+                        and len(record_ids) == len(set(record_ids))
+                    )
+                except ValidationError:
+                    verified = False
+                if verified:
+                    snapshot_current = row.id in record_ids
         if row.payload_json.get("calibration_sha256"):
             image = self.session.get(ImageAsset, row.image_id) if row.image_id else None
             calibration = (
