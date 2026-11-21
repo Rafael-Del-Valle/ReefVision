@@ -26,6 +26,11 @@ function recentMatchingSelectionRows<T extends { id: string }>(
   offset: number,
 ): Array<{ item: T; position: number }> {
   const rows: Array<{ item: T; position: number }> = [];
+  // No off-page observations exist when the filtered type is empty or fully
+  // mounted. Do not traverse a large retained selection in either case.
+  if (items.length === 0 || (windowStart === 0 && windowEnd === items.length)) {
+    return rows;
+  }
   const pinnedIds = new Set<string>();
   let nextIndex = selectedIds.length - 1;
   while (nextIndex >= 0 && pinnedIds.size < 200) {
