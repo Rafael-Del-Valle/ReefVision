@@ -48,6 +48,52 @@ describe("MeshArtifactViewer", () => {
     expect(JSON.stringify(validArtifact)).toBe(before);
   });
 
+  it("shows persisted mesh display-coverage QC without promoting it to biological evidence", () => {
+    const artifact = {
+      ...validArtifact,
+      qc_warnings: [
+        "preview_omits_edge_connected_mesh_patches",
+        "preview_omits_reconstructed_mesh_surface_area",
+        "preview_omits_source_axis_extrema",
+        "preview_omits_largest_mesh_triangle",
+        "preview_partially_sampled_missing_area_numeric_unrepresentable",
+        "open_mesh_surface_not_enclosed",
+      ],
+    };
+    const before = JSON.stringify(artifact);
+    render(<MeshArtifactViewer artifact={artifact} />);
+    const coverage = screen.getByText(/Preview coverage QC \(rendering only\)/);
+    expect(coverage).toHaveTextContent("disconnected reconstructed surface patch");
+    expect(coverage).toHaveTextContent("excludes reconstructed mesh surface area");
+    expect(coverage).toHaveTextContent("omit source-axis extrema");
+    expect(coverage).toHaveTextContent("largest reconstructed source triangle");
+    expect(coverage).toHaveTextContent("cannot be represented");
+    expect(coverage).toHaveTextContent("do not establish coral condition");
+    expect(coverage).not.toHaveTextContent("open_mesh_surface_not_enclosed");
+    expect(JSON.stringify(artifact)).toBe(before);
+  });
+
+  it("ignores invalid and unknown coverage flags in legacy saved render artifacts", () => {
+    const { rerender } = render(
+      <MeshArtifactViewer
+        artifact={{ ...validArtifact, qc_warnings: "not a verified list" }}
+      />,
+    );
+    expect(screen.queryByText(/Preview coverage QC/)).not.toBeInTheDocument();
+    rerender(
+      <MeshArtifactViewer
+        artifact={{
+          ...validArtifact,
+          qc_warnings: ["arbitrary_claim_of_verified_coral", 123],
+        }}
+      />,
+    );
+    expect(screen.queryByText(/Preview coverage QC/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Surface-area coverage:/)).toHaveTextContent(
+      "Decimated preview",
+    );
+  });
+
   it("renders complete provisional edge routes despite triangle decimation", () => {
     const artifact = {
       ...validArtifact,
