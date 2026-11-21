@@ -81,6 +81,7 @@ from reefvision.db.models.pose_active_learning import (
     PoseActiveLearningCandidate,
     PoseActiveLearningRound,
 )
+from reefvision.db.models.pose_appearance import PoseAppearanceDecision, PoseAppearanceStudy
 from reefvision.db.models.pose_biological_measurement import (
     PoseBiologicalEventRevision,
     PoseEventDetectionRun,
@@ -240,6 +241,8 @@ __all__ = [
     "PoseActiveLearningCandidate",
     "PoseActiveLearningRound",
     "PoseAnimalIdentity",
+    "PoseAppearanceDecision",
+    "PoseAppearanceStudy",
     "PoseBiologicalEventRevision",
     "PoseEvaluationRun",
     "PoseEventDetectionRun",
