@@ -1,7 +1,24 @@
+import { request } from "../../api/client";
 import { getApiBaseUrl } from "../../runtime";
 
 export type PoseInteroperabilityFormat =
   "nwb" | "coco" | "dlc_csv" | "ultralytics_pose";
+
+interface PoseInteroperabilityRuntime {
+  available: boolean;
+  required_version: string;
+  installed_version: string | null;
+  reason: string | null;
+}
+
+export function getPoseInteroperabilityRuntime(signal?: AbortSignal) {
+  return request<PoseInteroperabilityRuntime>(
+    "/pose-interoperability/runtime",
+    {
+      signal,
+    },
+  );
+}
 
 export function poseInteroperabilityExportUrl(
   videoId: string,

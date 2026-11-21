@@ -87,7 +87,20 @@ type AnnotationEditorAction =
       type: "saveFailed";
       message: string;
       conflict: boolean;
+      storageFull?: boolean;
     };
+
+function saveStateAfterEdit(
+  state: AnnotationEditorState,
+): Pick<AnnotationEditorState, "saveState" | "saveMessage"> {
+  if (state.saveState === "storage_full") {
+    return { saveState: state.saveState, saveMessage: state.saveMessage };
+  }
+  return {
+    saveState: state.saveState === "saving" ? "saving" : "dirty",
+    saveMessage: null,
+  };
+}
 
 function annotationsEqual(
   left: EditorAnnotation[],
@@ -397,8 +410,7 @@ export function annotationEditorReducer(
         selectedIds: nextSelection,
         selectedMaskIds: nextMaskSelection,
         documentVersion: state.documentVersion + 1,
-        saveState: state.saveState === "saving" ? "saving" : "dirty",
-        saveMessage: null,
+        ...saveStateAfterEdit(state),
       };
     }
     case "undo": {
@@ -414,8 +426,7 @@ export function annotationEditorReducer(
         selectedIds: validSelection(previous, state.selectedIds),
         selectedMaskIds: validMaskSelection(previous, state.selectedMaskIds),
         documentVersion: state.documentVersion + 1,
-        saveState: state.saveState === "saving" ? "saving" : "dirty",
-        saveMessage: null,
+        ...saveStateAfterEdit(state),
       };
     }
     case "redo": {
@@ -431,8 +442,7 @@ export function annotationEditorReducer(
         selectedIds: validSelection(next, state.selectedIds),
         selectedMaskIds: validMaskSelection(next, state.selectedMaskIds),
         documentVersion: state.documentVersion + 1,
-        saveState: state.saveState === "saving" ? "saving" : "dirty",
-        saveMessage: null,
+        ...saveStateAfterEdit(state),
       };
     }
     case "saveStarted":
@@ -465,7 +475,11 @@ export function annotationEditorReducer(
     case "saveFailed":
       return {
         ...state,
-        saveState: action.conflict ? "conflict" : "error",
+        saveState: action.storageFull
+          ? "storage_full"
+          : action.conflict
+            ? "conflict"
+            : "error",
         saveMessage: action.message,
       };
     default:

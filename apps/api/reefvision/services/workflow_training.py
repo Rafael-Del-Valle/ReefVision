@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
@@ -16,7 +17,7 @@ from reefvision.db.models import (
     ModelRegistration,
     TrainingRun,
 )
-from reefvision.domain.errors import ValidationError
+from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.jobs.training_dispatch import process_task_aware_training_job
 from reefvision.ml.semantic_segmentation import (
     NNUNET_CONFIGURATION,
@@ -288,15 +289,34 @@ def register_workflow_trained_model(
         raise ValidationError("Training checkpoint checksum changed before model registration")
 
     service = model_service_factory(session, settings)
-    registered = service.register_model_from_run(
-        project_id,
-        RegisterModelFromRunRequest(
-            training_run_id=run.id,
-            display_name=str(parameters.get("display_name") or "").strip() or None,
-            notes=str(parameters.get("notes") or "").strip() or None,
-        ),
+    request = RegisterModelFromRunRequest(
+        training_run_id=run.id,
+        display_name=str(parameters.get("display_name") or "").strip() or None,
+        notes=str(parameters.get("notes") or "").strip() or None,
     )
+    try:
+        registered = service.register_model_from_run(project_id, request)
+    except (ConflictError, IntegrityError):
+        # A saved graph reuses its human-readable model name on every run.
+        # Preserve the first registration and distinguish subsequent checkpoint bytes.
+        session.rollback()
+        if not request.display_name:
+            raise
+        named = service.models.find_by_display_name(project_id, request.display_name)
+        if named is None:
+            if service.models.find_by_checksum(project_id, actual_sha) is None:
+                raise
+        elif named.sha256 != actual_sha:
+            suffix = f" ({run.id})"
+            request.display_name = request.display_name[: 200 - len(suffix)] + suffix
+        registered = service.register_model_from_run(project_id, request)
     metadata = dict(registered.metadata_json or {})
+    experiment_id = session.scalar(
+        select(ExperimentRecord.id).where(ExperimentRecord.training_run_id == run.id)
+    )
+    manifest = run.artifact_manifest_json or {}
+    split = manifest.get("pose_split_manifest")
+    pose_split = split if run.task == "pose" and isinstance(split, dict) else {}
     pose_schema = metadata.get("pose_landmark_schema")
     pose_schema = (
         dict(pose_schema)
@@ -318,18 +338,22 @@ def register_workflow_trained_model(
         "provider_version": registered.provider_version,
         "framework": registered.framework,
         "source_training_run_id": run.id,
-        "source_experiment_id": metadata.get("source_experiment_id"),
-        "source_dataset_version_id": metadata.get("source_dataset_version_id"),
-        "source_dataset_manifest_sha256": metadata.get("source_dataset_manifest_sha256"),
-        "source_split_manifest_sha256": metadata.get("source_split_manifest_sha256"),
-        "source_pose_training_dataset_id": metadata.get("source_pose_training_dataset_id"),
-        "source_pose_training_dataset_manifest_sha256": metadata.get(
-            "source_pose_training_dataset_manifest_sha256"
-        ),
-        "source_pose_validation_dataset_id": metadata.get("source_pose_validation_dataset_id"),
-        "source_pose_validation_dataset_manifest_sha256": metadata.get(
-            "source_pose_validation_dataset_manifest_sha256"
-        ),
+        "model_source_training_run_id": metadata.get("source_training_run_id"),
+        "source_experiment_id": experiment_id,
+        "source_dataset_version_id": run.dataset_version_id,
+        "source_dataset_manifest_sha256": run.dataset_manifest_sha256,
+        "source_split_manifest_sha256": run.split_manifest_sha256,
+        "source_pose_training_dataset_id": manifest.get("pose_training_dataset_id")
+        or pose_split.get("training_dataset_id"),
+        "source_pose_training_dataset_manifest_sha256": run.dataset_manifest_sha256
+        if run.task == "pose"
+        else None,
+        "source_pose_validation_dataset_id": manifest.get("pose_validation_dataset_id")
+        or pose_split.get("validation_dataset_id"),
+        "source_pose_validation_dataset_manifest_sha256": manifest.get(
+            "pose_validation_dataset_manifest_sha256"
+        )
+        or pose_split.get("validation_dataset_manifest_sha256"),
         "pose_schema_id": pose_schema.get("schema_id"),
         "pose_schema_revision": pose_schema.get("schema_revision"),
         "pose_schema_content_hash": pose_schema.get("content_hash"),

@@ -1513,6 +1513,65 @@ describe("AnnotationEditor", () => {
     expect(nativeConfirm).not.toHaveBeenCalled();
   });
 
+  it("keeps a storage-full draft open until the researcher retries the same save", async () => {
+    const writes: unknown[] = [];
+    let capacityAvailable = false;
+    const storageMessage =
+      "ReefVision storage is full. Free space and retry this operation.";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith(`/images/${session.image.id}/annotations`)) {
+        if (init?.method !== "PUT") return jsonResponse(session);
+        const body = JSON.parse(String(init.body));
+        writes.push(body);
+        if (!capacityAvailable) {
+          return jsonResponse(
+            { code: "storage_full", detail: storageMessage },
+            507,
+          );
+        }
+        return jsonResponse({
+          ...session,
+          image: {
+            ...session.image,
+            annotation_revision: 3,
+            annotation_status: body.annotation_status,
+          },
+          annotations: body.annotations,
+        });
+      }
+      const shared = handleDefaultEditorRequests(url, init);
+      if (shared) return shared;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    const status = await screen.findByLabelText("Annotation status");
+    await userEvent.selectOptions(status, "reviewed");
+    await userEvent.click(screen.getByRole("button", { name: "Save now" }));
+    const retry = await screen.findByRole("button", { name: "Retry save" });
+    expect(screen.getByTestId("annotation-save-state")).toHaveTextContent(
+      storageMessage,
+    );
+    await userEvent.selectOptions(status, "in_progress");
+    await userEvent.selectOptions(status, "reviewed");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1600));
+    });
+    expect(writes).toHaveLength(1);
+    expect(status).toHaveValue("reviewed");
+    expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
+    capacityAvailable = true;
+    await userEvent.click(retry);
+    await waitFor(() => {
+      expect(screen.getByTestId("annotation-save-state")).toHaveTextContent(
+        "Saved",
+      );
+    });
+    expect(writes).toHaveLength(2);
+    expect(writes[1]).toEqual(writes[0]);
+  });
+
   it("only replaces a conflicted draft after an approved successful same-image reload", async () => {
     let getCount = 0;
     let serverAvailable = false;

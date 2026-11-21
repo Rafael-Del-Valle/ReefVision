@@ -23,6 +23,7 @@ interface PoseActiveLearningPanelProps {
   projectId: string;
   videoId: string;
   activeCandidateId?: string | null;
+  initialRoundId?: string;
   selectedTrack?: { id: string; track_number: number };
   onOpenCandidate: (candidate: PoseActiveLearningCandidate) => void;
 }
@@ -35,6 +36,7 @@ export function PoseActiveLearningPanel({
   projectId,
   videoId,
   activeCandidateId = null,
+  initialRoundId,
   selectedTrack,
   onOpenCandidate,
 }: PoseActiveLearningPanelProps) {
@@ -54,7 +56,7 @@ export function PoseActiveLearningPanel({
   }>();
   const grouping =
     declared?.trackId === selectedTrack?.id ? declared?.grouping : undefined;
-  const [selectedRoundId, setSelectedRoundId] = useState("");
+  const [selectedRoundId, setSelectedRoundId] = useState(initialRoundId ?? "");
   const [frozenDataset, setFrozenDataset] =
     useState<PoseTrainingDataset | null>(null);
   const [trainingExportFormat, setTrainingExportFormat] =
@@ -65,6 +67,8 @@ export function PoseActiveLearningPanel({
     queryFn: ({ signal }) =>
       getPoseActiveLearningRounds(projectId, videoId, signal),
     enabled: Boolean(projectId && videoId),
+    // A workflow can create the linked round after the prior review cached this list.
+    refetchOnMount: initialRoundId ? "always" : undefined,
   });
 
   useEffect(() => {
@@ -77,7 +81,9 @@ export function PoseActiveLearningPanel({
     queryKey: ["pose-active-learning-candidates", selectedRoundId],
     queryFn: ({ signal }) =>
       getPoseActiveLearningCandidates(selectedRoundId, signal),
-    enabled: Boolean(selectedRoundId),
+    enabled: (roundsQuery.data ?? []).some(
+      (round) => round.id === selectedRoundId,
+    ),
   });
 
   const createMutation = useMutation({

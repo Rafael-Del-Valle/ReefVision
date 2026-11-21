@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from math import isfinite
 from typing import Any
 
 from sqlalchemy import select
@@ -32,6 +33,10 @@ from reefvision.ml.ultralytics_registry import (
 from reefvision.services import (
     workflow_runtime_adapters as runtime_adapters,
 )
+from reefvision.services.workflow_pose_sources import (
+    resolve_frozen_pose_dataset,
+    verify_pose_dataset_separation,
+)
 from reefvision.storage.datasets import (
     canonical_json_sha256,
 )
@@ -39,6 +44,7 @@ from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import (
     resolve_managed_project_path,
 )
+from reefvision.storage.training import free_training_space_gib
 
 PoseTrainingProcessor = Callable[
     [
@@ -167,42 +173,6 @@ def _optional_payload(
         raise ValidationError(f"Pose Model Training accepts at most one '{port_id}' artifact")
 
     return dict(artifacts[0].payload_json or {})
-
-
-def _pose_dataset(
-    session: Session,
-    *,
-    project_id: str,
-    payload: dict[str, Any],
-    role: str,
-) -> PoseTrainingDataset:
-    payload_project = payload.get("project_id")
-
-    if payload_project is not None and str(payload_project) != project_id:
-        raise ValidationError(f"Pose {role} dataset belongs to another project")
-
-    dataset_id = str(payload.get("dataset_id") or "")
-
-    if not dataset_id:
-        raise ValidationError(f"Pose {role} dataset artifact is missing dataset_id")
-
-    dataset = session.get(
-        PoseTrainingDataset,
-        dataset_id,
-    )
-
-    if dataset is None or dataset.project_id != project_id:
-        raise ValidationError(f"Pose {role} dataset does not belong to this project")
-
-    if dataset.status != "complete":
-        raise ValidationError(f"Pose {role} dataset must be complete")
-
-    advertised_manifest = str(payload.get("manifest_sha256") or "")
-
-    if advertised_manifest and advertised_manifest != dataset.manifest_sha256:
-        raise ValidationError(f"Pose {role} dataset manifest no longer matches persisted truth")
-
-    return dataset
 
 
 def _seed_pose_model(
@@ -457,7 +427,7 @@ def create_pose_workflow_training_result(
     if project is None:
         raise ValidationError("Pose training project was not found")
 
-    dataset = _pose_dataset(
+    dataset = resolve_frozen_pose_dataset(
         session,
         project_id=project_id,
         payload=dataset_payload,
@@ -465,7 +435,7 @@ def create_pose_workflow_training_result(
     )
 
     validation_dataset = (
-        _pose_dataset(
+        resolve_frozen_pose_dataset(
             session,
             project_id=project_id,
             payload=(validation_dataset_payload or {}),
@@ -497,6 +467,8 @@ def create_pose_workflow_training_result(
         raise ValidationError(
             "This pose retraining configuration requires a separate frozen validation dataset"
         )
+    if require_validation and validation_dataset is not None:
+        verify_pose_dataset_separation(session, dataset, validation_dataset)
 
     provider_id = str(parameters.get("provider_id") or "ultralytics").strip().casefold()
     if provider_id not in SUPPORTED_POSE_TRAINING_PROVIDERS:
@@ -673,6 +645,32 @@ def create_pose_workflow_training_result(
             workflow_node_run_id=(workflow_node_run_id),
         )
 
+    resource_limits = parameters.get("resource_limits")
+    if resource_limits is None:
+        resource_limits = {}
+    if not isinstance(resource_limits, dict):
+        raise ValidationError("Pose training resource_limits must be an object")
+    disk_budget = resource_limits.get("max_disk_usage_gb", 0)
+    try:
+        required_gib = float(disk_budget)
+    except (OverflowError, TypeError, ValueError) as error:
+        raise ValidationError(
+            "Pose training disk budget must be a finite nonnegative number"
+        ) from error
+    if isinstance(disk_budget, bool) or not isfinite(required_gib) or required_gib < 0:
+        raise ValidationError("Pose training disk budget must be a finite nonnegative number")
+    try:
+        free_gib = free_training_space_gib(settings.resolved_data_dir)
+    except OSError as error:
+        raise ValidationError(
+            "Could not verify the available disk space for pose training"
+        ) from error
+    if free_gib <= 0 or free_gib < required_gib:
+        raise ValidationError(
+            "Requested pose training disk budget exceeds the available disk space "
+            "in the ReefVision data directory"
+        )
+
     run = TrainingRun(
         project_id=project_id,
         draft_id=None,
@@ -707,7 +705,7 @@ def create_pose_workflow_training_result(
         training_config_json=(training_config),
         tuning_config_json={"mode": "disabled"},
         evaluation_config_json={"validation_mode": (split_manifest["validation_mode"])},
-        resource_limits_json=dict(parameters.get("resource_limits") or {}),
+        resource_limits_json=resource_limits,
         preflight_report_json={
             "status": "ready_with_warnings" if warning_list else "ready",
             "warnings": warning_list,
@@ -940,7 +938,9 @@ def execute_pose_training_dataset_adapter(
     parameters: dict[str, Any],
     inputs: dict[str, list[WorkflowArtifact]],
 ) -> list[dict[str, Any]]:
-    dataset = _pose_dataset(session, project_id=project_id, payload=parameters, role="training")
+    dataset = resolve_frozen_pose_dataset(
+        session, project_id=project_id, payload=parameters, role="training"
+    )
     return [
         {
             "port_id": "dataset",

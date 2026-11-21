@@ -1,9 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
-import { getModelHubBootstrap, type Project } from "../../api/client";
+import {
+  getModelHubBootstrap,
+  resultsPackageDownloadUrl,
+  retryJob,
+  type Project,
+} from "../../api/client";
 import { getApiBaseUrl } from "../../runtime";
-import { getPoseTrainingDatasets } from "../video/poseActiveLearningApi";
+import {
+  getPoseTrainingDatasets,
+  poseTrainingDatasetNativePackageUrl,
+} from "../video/poseActiveLearningApi";
+import { getVideos } from "../video/videoApi";
+import type { WorkflowPoseReviewTarget } from "../video/videoWorkspaceBridge";
 import {
   cancelWorkflowRunJob,
   getWorkflowNodeRegistry,
@@ -16,6 +26,7 @@ import {
   saveWorkflowGraph,
   validateWorkflowGraph,
   type WorkflowArtifact,
+  type WorkflowNodeRun,
 } from "./workflowGraphApi";
 import {
   createPoseArchitectureWorkflow,
@@ -29,6 +40,11 @@ import { downloadFieldReconciliation } from "../field-capture/fieldCaptureApi";
 import { MeshArtifactViewer } from "./MeshArtifactViewer";
 import { PointCloudArtifactViewer } from "./PointCloudArtifactViewer";
 import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
+import {
+  WorkflowPoseSourceFields,
+  type WorkflowSourceEdge,
+  type WorkflowSourceNode,
+} from "./WorkflowPoseSourceFields";
 import { scientificConfigurationIssue } from "./ScientificNodeControls";
 
 interface WorkflowGraphWorkspaceProps {
@@ -40,6 +56,70 @@ interface WorkflowGraphWorkspaceProps {
     view: "ecology" | "models" | "quality_control" | "video",
   ) => void;
   onOpenReviewQueue?: (queueId: string, datasetVersionId?: string) => void;
+  onOpenPoseReview?: (target: WorkflowPoseReviewTarget) => void;
+}
+
+function PoseReviewActions({
+  node,
+  runId,
+  projectId,
+  artifacts,
+  onOpen,
+}: {
+  node: WorkflowNodeRun;
+  runId: string;
+  projectId: string;
+  artifacts: WorkflowArtifact[];
+  onOpen?: (target: WorkflowPoseReviewTarget) => void;
+}) {
+  const temporal = node.node_type === "pose_review_gate";
+  const acquisition = node.node_type === "pose_active_learning_review_gate";
+  if (!onOpen || (!temporal && !acquisition)) return null;
+  const review = node.result_json.review as
+    { source_artifact_id?: unknown } | undefined;
+  const source = artifacts.find(
+    (artifact) =>
+      artifact.id === review?.source_artifact_id &&
+      artifact.data_type ===
+        (temporal ? "pose_temporal_tracks" : "pose_active_learning_round"),
+  );
+  const data = source?.payload_json;
+  if (data?.project_id !== projectId || typeof data.video_id !== "string")
+    return null;
+  const videoId = data.video_id;
+  const roundId =
+    acquisition && typeof data.round_id === "string"
+      ? data.round_id
+      : undefined;
+  if (acquisition && !roundId) return null;
+  const tracks = temporal ? data.track_ids : data.source_track_ids;
+  if (!Array.isArray(tracks)) return null;
+  const candidates = tracks.filter(
+    (track): track is string => typeof track === "string",
+  );
+  if (acquisition) {
+    const trackId = candidates[0];
+    return trackId ? (
+      <button
+        type="button"
+        className="secondary"
+        onClick={() => onOpen({ runId, videoId, trackId, roundId })}
+      >
+        Open pose acquisition review
+      </button>
+    ) : null;
+  }
+  return candidates.map((trackId, index) => (
+    <button
+      key={trackId}
+      type="button"
+      className="secondary"
+      onClick={() => onOpen({ runId, videoId, trackId, roundId })}
+    >
+      Review temporal associations
+      {candidates.length > 1 && ` · track ${index + 1}`}
+    </button>
+  ));
 }
 
 function ScienceArtifact({
@@ -55,6 +135,31 @@ function ScienceArtifact({
 }) {
   const data = artifact.payload_json;
   const api = `${getApiBaseUrl()}/projects/${projectId}`;
+  if (
+    artifact.data_type === "results_package" &&
+    data.project_id === projectId &&
+    typeof data.download_url === "string" &&
+    data.download_url.startsWith("/training-runs/") &&
+    data.verification_valid === true
+  ) {
+    return (
+      <a href={resultsPackageDownloadUrl(data.download_url)}>
+        Download verified training results
+      </a>
+    );
+  }
+  if (
+    artifact.data_type === "pose_training_package" &&
+    data.project_id === projectId &&
+    typeof data.dataset_id === "string" &&
+    data.export_format === "native"
+  ) {
+    return (
+      <a href={poseTrainingDatasetNativePackageUrl(data.dataset_id)}>
+        Download reviewed native poses
+      </a>
+    );
+  }
   if (
     artifact.data_type === "review_queue_reference" &&
     data.project_id === projectId &&
@@ -275,6 +380,7 @@ export function WorkflowGraphWorkspace({
   initialRunId,
   initialGraph,
   onOpenScience,
+  onOpenPoseReview,
   onOpenReviewQueue,
 }: WorkflowGraphWorkspaceProps) {
   const queryClient = useQueryClient();
@@ -297,11 +403,10 @@ export function WorkflowGraphWorkspace({
 
   const visualGraph = safeParseGraph(graphJson);
   const graphNodes = Array.isArray(visualGraph?.nodes)
-    ? (visualGraph.nodes as Array<{
-        node_id: string;
-        node_type: string;
-        parameters?: Record<string, unknown>;
-      }>)
+    ? (visualGraph.nodes as WorkflowSourceNode[])
+    : [];
+  const graphEdges = Array.isArray(visualGraph?.edges)
+    ? (visualGraph.edges as WorkflowSourceEdge[])
     : [];
   const poseDatasetSources = graphNodes.filter(
     (node) => node.node_type === "pose_training_dataset",
@@ -311,6 +416,40 @@ export function WorkflowGraphWorkspace({
     queryFn: ({ signal }) => getPoseTrainingDatasets(project.id, signal),
     enabled: poseDatasetSources.length > 0,
   });
+  const hasRecordingSource = graphNodes.some(
+    (node) => node.node_type === "project_video_source",
+  );
+  const recordings = useQuery({
+    queryKey: ["project-videos", project.id],
+    queryFn: ({ signal }) => getVideos(project.id, signal),
+    enabled: hasRecordingSource,
+  });
+
+  function pickSource(nodeId: string, id: string, digest: string) {
+    setGraphJson((text) => {
+      const graph = safeParseGraph(text);
+      if (!graph || !Array.isArray(graph.nodes)) return text;
+      return JSON.stringify(
+        {
+          ...graph,
+          nodes: (graph.nodes as WorkflowSourceNode[]).map((node) => {
+            if (node.node_id !== nodeId) return node;
+            const parameters = { ...node.parameters };
+            const [idField, digestField] =
+              node.node_type === "project_video_source"
+                ? ["video_id", "video_sha256"]
+                : ["dataset_id", "manifest_sha256"];
+            parameters[idField] = id;
+            if (id && digest) parameters[digestField] = digest;
+            else delete parameters[digestField];
+            return { ...node, parameters };
+          }),
+        },
+        null,
+        2,
+      );
+    });
+  }
   const modelHubQuery = useQuery({
     queryKey: ["model_hub_bootstrap", project.id],
     queryFn: ({ signal }) => getModelHubBootstrap(project.id, signal),
@@ -410,6 +549,24 @@ export function WorkflowGraphWorkspace({
       void runDetailQuery.refetch();
     },
   });
+  const retryMutation = useMutation({
+    mutationFn: (request: {
+      projectId: string;
+      runId: string;
+      jobId: string;
+    }) => retryJob(request.jobId),
+    onSettled: async (_job, _error, { projectId, runId }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["workflow-runs", projectId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["workflow-run", projectId, runId],
+          refetchType: "all",
+        }),
+      ]);
+    },
+  });
 
   const mutationError =
     validationMutation.error ??
@@ -420,6 +577,11 @@ export function WorkflowGraphWorkspace({
     resumeReviewMutation.error ??
     cancelMutation.error;
   const selectedRun = runDetailQuery.data?.run;
+  const retryJobId =
+    selectedRun?.status === "failed" ? selectedRun.job_id : null;
+  const retryIsForSelectedRun =
+    retryMutation.variables?.projectId === project.id &&
+    retryMutation.variables.runId === selectedRun?.id;
   useEffect(() => {
     if (selectedRun?.status === "succeeded") {
       void queryClient.invalidateQueries({
@@ -543,78 +705,46 @@ export function WorkflowGraphWorkspace({
       <LocalMeshPreview projectId={project.id} />
       <LocalPointCloudPreview projectId={project.id} />
 
-      {poseDatasetSources.length > 0 && (
+      {(poseDatasetSources.length > 0 || hasRecordingSource) && (
         <section className="panel-card">
-          <h4>Verified pose training data</h4>
-          <p>
-            Choose an immutable dataset frozen after scientist review. The
-            dataset supplies its landmark schema and revision to training.
-          </p>
-          {poseDatasetSources.map((source) => (
-            <label key={source.node_id}>
-              Frozen pose dataset
-              <select
-                value={String(source.parameters?.dataset_id ?? "")}
-                onChange={(event) =>
-                  setGraphJson(
-                    JSON.stringify(
-                      {
-                        ...visualGraph,
-                        nodes: graphNodes.map((node) =>
-                          node.node_id === source.node_id
-                            ? {
-                                ...node,
-                                parameters: {
-                                  ...node.parameters,
-                                  dataset_id: event.target.value,
-                                },
-                              }
-                            : node,
-                        ),
-                      },
-                      null,
-                      2,
-                    ),
-                  )
-                }
-              >
-                <option value="">Choose a verified pose dataset</option>
-                {(poseDatasets.data ?? []).map((dataset) => (
-                  <option key={dataset.id} value={dataset.id}>
-                    {dataset.name} — {dataset.item_count} observations — schema
-                    revision {dataset.pose_schema_revision}
-                  </option>
-                ))}
-              </select>
-              {(() => {
-                const dataset = poseDatasets.data?.find(
-                  (item) =>
-                    item.id === String(source.parameters?.dataset_id ?? ""),
-                );
-                return dataset ? (
-                  <small>
-                    Immutable manifest {shortHash(dataset.manifest_sha256)} ·
-                    schema {shortHash(dataset.pose_schema_id)} revision{" "}
-                    {dataset.pose_schema_revision} · integrity{" "}
-                    {shortHash(dataset.pose_schema_content_hash)}
-                  </small>
-                ) : null;
-              })()}
-            </label>
-          ))}
-          {poseDatasets.isPending && <p>Loading frozen pose datasets...</p>}
+          <h4>
+            {poseDatasetSources.length
+              ? "Verified pose workflow sources"
+              : "Recording sources"}
+          </h4>
+          {poseDatasetSources.length > 0 && (
+            <p>
+              Choose pose evidence frozen after scientist review. The workflow
+              keeps the selected original checksums.
+            </p>
+          )}
+          <WorkflowPoseSourceFields
+            nodes={graphNodes}
+            edges={graphEdges}
+            datasets={poseDatasets.data ?? []}
+            recordings={recordings.data ?? []}
+            onPick={pickSource}
+          />
+          {poseDatasetSources.length > 0 && poseDatasets.isPending && (
+            <p>Loading frozen pose datasets…</p>
+          )}
           {poseDatasets.error && (
             <p className="form-error">{poseDatasets.error.message}</p>
           )}
           {poseDatasets.data?.length === 0 && (
             <p>
-              Review pose annotations and freeze a verified dataset in Pose
-              Tracking before training.
+              Review pose annotations and freeze a verified dataset in Video
+              &amp; tracking before training.
             </p>
+          )}
+          {hasRecordingSource && recordings.isPending && (
+            <p>Loading project recordings…</p>
+          )}
+          {recordings.error && (
+            <p className="form-error">{recordings.error.message}</p>
           )}
         </section>
       )}
-
       <div className="panel-card" style={{ marginTop: 12 }}>
         <h4>Visual workflow editor</h4>
         {visualGraph ? (
@@ -874,6 +1004,35 @@ export function WorkflowGraphWorkspace({
               {selectedRun.error_message && (
                 <p className="form-error">{selectedRun.error_message}</p>
               )}
+              {retryJobId && (
+                <div>
+                  <p className="muted-copy">
+                    Resolve the reported issue before retrying. Completed steps
+                    and their artifacts are reused.
+                  </p>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={retryMutation.isPending}
+                    onClick={() =>
+                      retryMutation.mutate({
+                        projectId: project.id,
+                        runId: selectedRun.id,
+                        jobId: retryJobId,
+                      })
+                    }
+                  >
+                    {retryIsForSelectedRun && retryMutation.isPending
+                      ? "Retrying workflow…"
+                      : "Retry failed workflow"}
+                  </button>
+                </div>
+              )}
+              {retryIsForSelectedRun && retryMutation.error && (
+                <p className="form-error" role="alert">
+                  {retryMutation.error.message}
+                </p>
+              )}
               {(selectedProvenanceSha || selectedProvenanceManifest) && (
                 <div className="workflow-provenance-summary">
                   <h5>Workflow provenance</h5>
@@ -907,6 +1066,13 @@ export function WorkflowGraphWorkspace({
                     {node.error_message ? ` — ${node.error_message}` : ""}
                     {node.status === "waiting_for_review" && (
                       <div className="button-row">
+                        <PoseReviewActions
+                          node={node}
+                          runId={selectedRun.id}
+                          projectId={project.id}
+                          artifacts={runDetailQuery.data?.artifacts ?? []}
+                          onOpen={onOpenPoseReview}
+                        />
                         <button
                           type="button"
                           disabled={resumeReviewMutation.isPending}

@@ -1,0 +1,137 @@
+{
+  "milestone": "1.9",
+  "updated_utc": "2026-11-21T04:39:30.308927+00:00",
+  "candidate_pr": 131,
+  "scope": "Generated research projects. Registered installer trials identify their own package.",
+  "reviewed_predecessors": {
+    "product_pr": 119,
+    "package_source": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8",
+    "msi_sha256": "78d52066848afc6aeac975765359ba13cd3d0e2e8b79ef1b90307eecd03c35ed",
+    "external_cabinets": 6,
+    "registered_scenarios": 10,
+    "offline_run": 44857726714,
+    "reviewed_source_prs": [
+      120,
+      122,
+      123,
+      124,
+      125,
+      126,
+      127,
+      128,
+      129,
+      130
+    ],
+    "linux_full": {
+      "source": "54a89896c484fc0525d9c8e73323d5f5706d3522",
+      "run": 44855074063,
+      "passed": 6026,
+      "skipped": 11,
+      "raw": {
+        "owner_file": "1.9/evidence/1.8-hosted-linux-54a89896c.log",
+        "sha256": "4f368a242f4d06bcf392450826362ab84595c06fc07ea4bff632befe7cc3358b"
+      }
+    },
+    "windows_full": {
+      "source": "4ac9fd69be43a9d0045e6dd8816041c4c796b098",
+      "passed": 6028,
+      "skipped": 12,
+      "workers": 10,
+      "raw": {
+        "owner_file": "1.9/evidence/1.8-local-windows-reviewed-4ac9.json",
+        "sha256": "a459fd69f601c757831b1a4896f79f02e1773ec244c72c1e1bda69fb5106a43c"
+      }
+    }
+  },
+  "checks": {
+    "frozen_exchange": {
+      "source": "38ec7718dfbf3205501f808380787b4caa4e41d8",
+      "donor_files": 112,
+      "generations": 2,
+      "stale_source_pins": 4,
+      "corrected_source_pins": 4,
+      "prior_runs_retained_each": 2,
+      "registered_model_files_verified_each": 4,
+      "raw": {
+        "owner_file": "1.9/evidence/two-generation-transfer-after.json",
+        "sha256": "f3c61f327ab53b87aba1e3e122ac33cd01ddca709fb3997f73f21612e628ef6b"
+      }
+    },
+    "shared_checkpoint": {
+      "source": "701f3b931a77ccded2fa69b5bddd4fc188891c23",
+      "input": "A controlled completed run with the same real native checkpoint, alongside two actual scratch-trained frozen native workflow runs. Fixture-only evidence.",
+      "model_sha256": "3d7d0131cea6bc8be80ea3c35bd9a378253153ecfcd1d1b5603ab4b7c93ad753",
+      "same_resource_at_all_generations": true,
+      "explicit_registration_required_for_second_run": true,
+      "donor_files": 113,
+      "raw": {
+        "owner_file": "1.9/evidence/registered-output-two-transfers.json",
+        "sha256": "cc043420d8e72921a6529a2a1aac6fc36e8a6132a7392f804d4690e337653db8"
+      }
+    },
+    "sqlite_quota": {
+      "source": "701f3b931a77ccded2fa69b5bddd4fc188891c23",
+      "page_size": 4096,
+      "limit_pages": 654,
+      "original_revision": 1,
+      "failed_status": 507,
+      "after_failure_count": 1,
+      "after_identical_retry_count": 1001,
+      "after_identical_retry_revision": 2,
+      "original_image_unchanged": true,
+      "raw": {
+        "owner_file": "1.9/evidence/annotation-storage-capacity.json",
+        "sha256": "1afba15f4688dc66654805a45a81938afb6c0eeed2919ef9888eb21a41b9511c"
+      }
+    },
+    "retry_cancel": {
+      "source": "61804f4875ebf43186b861a1a3eaccb578ae1342",
+      "entry": "Workflow Builder, run inspection, retry then cancel at human review.",
+      "cause": "Missing managed validation recording restored with its original SHA-256.",
+      "same_run": "80e970be-139c-4490-8b13-4971bb4328f8",
+      "same_job": "45aa8842-0987-478b-853e-b63837bc2e69",
+      "retained_prior_artifacts": 3,
+      "artifacts_at_cancellation": 9,
+      "raw": {
+        "owner_file": "1.9/evidence/ordinary-retry-and-cancel.json",
+        "sha256": "654b4457a98f5dd4a9cd9d6ddf01942839b83bb6787ed18eebe46efda63ab18c"
+      }
+    },
+    "compatibility": {
+      "source": "621e20b34293cbba016c4fc7e023b09014fa0d9c",
+      "entry": "Help, System status, compatibility",
+      "os": "Windows 11 Home 10.0.26300 AMD64",
+      "runtime": "PyTorch 2.5.1+cu121, physical NVIDIA RTX 3090 and separate CPU-masked process",
+      "optional_interchange": "sleap-io 0.9.2 neutral NWB",
+      "raw": {
+        "owner_file": "1.9/evidence/source-retry-and-compatibility.json",
+        "sha256": "aee95035f0667604d9993fce2274de154f5eca9fa238296951bec72b7d7c4269"
+      }
+    },
+    "training_replay": {
+      "source": "4abd5b680",
+      "migration": "b19_registration_0001",
+      "result": "Two CPU training executions use the same saved graph revision and explicit display name. Their individually registered checkpoints remain available. A controlled byte-identical registration preserves the first origin and both run links. The physical native CUDA registration and inference test passed separately."
+    },
+    "windows_long_export": {
+      "source": "c61d87ddc",
+      "result": "Ordinary segmentation training previously failed to copy the image and then to write the polygon label in a deeply nested Windows project. The full export now succeeds in that same path, preserving original bytes and portable manifest paths.",
+      "raw": {
+        "owner_file": "1.9/evidence/long-export-source-tests.log",
+        "sha256": "450ec7d3263a5e7c4a3ac41586f98cc24db5478c97faa175d391adf54bbfb974"
+      }
+    }
+  },
+  "performance_budgets_before_candidate_trial": {
+    "loaded_cold_desktop_seconds": 20,
+    "decoded_gallery_seconds": 2,
+    "dense_editor_ready_seconds": 1,
+    "import_half_hour_video_seconds": 60,
+    "seek_half_hour_video_seconds": 2
+  },
+  "open": [
+    "Qualify the integrated 1.9 original MSI/CABs on all registered roles and physical native workflows.",
+    "Complete guided source and installed replays with both independent human actions on the frozen fixture.",
+    "Independent reference field material, a signed installer on an enforcing Smart App Control machine and authorized historical user data are tracked in the owner evidence matrix."
+  ]
+}

@@ -73,17 +73,17 @@ HISTORICAL_ARTIFACT_TYPES = frozenset(
 )
 
 
-def is_spatial_workflow_graph(graph: dict[str, Any]) -> bool:
-    spatial_nodes = MESH_NODE_TYPES | {"spatial_condition_report"}
+def has_portable_workflow_inputs(graph: dict[str, Any]) -> bool:
+    bound_nodes = MESH_NODE_TYPES | {"spatial_condition_report", "pose_training_dataset"}
     nodes = graph.get("nodes")
     return isinstance(nodes, list) and any(
-        isinstance(node, dict) and node.get("node_type") in spatial_nodes for node in nodes
+        isinstance(node, dict) and node.get("node_type") in bound_nodes for node in nodes
     )
 
 
-def has_spatial_workflow_history(sections: dict[str, list[dict[str, Any]]]) -> bool:
+def has_portable_workflow_history(sections: dict[str, list[dict[str, Any]]]) -> bool:
     return any(
-        isinstance(row.get("graph_json"), dict) and is_spatial_workflow_graph(row["graph_json"])
+        isinstance(row.get("graph_json"), dict) and has_portable_workflow_inputs(row["graph_json"])
         for row in sections.get("workflow_graphs", [])
     )
 
@@ -185,6 +185,10 @@ def restore_workflow_provenance(
 ) -> None:
     artifacts = {id_map[row["id"]]: row for row in sections.get("workflow_artifacts", [])}
     source_nodes = {id_map[row["id"]]: row for row in sections.get("workflow_node_runs", [])}
+    pose_pins = {
+        (id_map[row["id"]], row["manifest_sha256"]): digest_map[row["manifest_sha256"]]
+        for row in sections.get("pose_training_datasets", [])
+    }
     for original in sections.get("workflow_graphs", []):
         graph = session.get(WorkflowGraphRecord, id_map[original["id"]])
         if graph is None:
@@ -215,7 +219,7 @@ def restore_workflow_provenance(
                     )
                 else:
                     node["parameters"] = _restore_parameters(
-                        node_type, node["parameters"], digest_map
+                        node_type, node["parameters"], digest_map, pose_pins
                     )
         graph.graph_json = graph_payload
         graph.graph_sha256 = canonical_json_sha256(graph_payload)
@@ -260,7 +264,7 @@ def restore_workflow_provenance(
                 )
             else:
                 node.parameters_json = _restore_parameters(
-                    node.node_type, node.parameters_json, digest_map
+                    node.node_type, node.parameters_json, digest_map, pose_pins
                 )
             for identifier in node.output_artifact_ids_json or []:
                 artifact = session.get(WorkflowArtifact, identifier)
@@ -335,8 +339,16 @@ def restore_workflow_provenance(
 
 
 def _restore_parameters(
-    node_type: str, parameters: dict[str, Any], digests: dict[str, str]
+    node_type: str,
+    parameters: dict[str, Any],
+    digests: dict[str, str],
+    pose_pins: dict[tuple[str, str], str],
 ) -> dict[str, Any]:
+    if node_type == "pose_training_dataset":
+        dataset_id, pin = parameters.get("dataset_id"), parameters.get("manifest_sha256")
+        if isinstance(dataset_id, str) and isinstance(pin, str):
+            return {**parameters, "manifest_sha256": pose_pins.get((dataset_id, pin), pin)}
+        return parameters
     portable_pins = {
         "acquisition_source_capture": ("source_sha256",),
         "acquisition_capture_replay": ("content_sha256",),

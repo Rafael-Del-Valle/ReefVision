@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import zipfile
 from hashlib import sha256
 from pathlib import Path
@@ -17,9 +16,10 @@ from reefvision.storage.datasets import (
     EXPORT_SPLIT_DIRECTORIES,
     canonical_json_bytes,
     canonical_json_sha256,
+    copy_export_image,
     safe_export_filename,
 )
-from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.projects import filesystem_io_path, resolve_managed_project_path
 from reefvision.storage.raster_edits import polygon_from_binary_region
 
 if TYPE_CHECKING:
@@ -104,7 +104,7 @@ def write_yolo_segmentation_export(
 ) -> dict[str, Any]:
     """Write Ultralytics polygon labels without changing detection export."""
 
-    output_root = resolve_managed_project_path(settings, output_path)
+    output_root = filesystem_io_path(resolve_managed_project_path(settings, output_path))
     output_root.mkdir(parents=True, exist_ok=False)
     images_root = output_root / "images"
     labels_root = output_root / "labels"
@@ -133,7 +133,7 @@ def write_yolo_segmentation_export(
             item.original_filename,
         )
         target_image = images_root / split_directory / target_filename
-        shutil.copy2(image_paths[item.image_id], target_image)
+        copy_export_image(image_paths[item.image_id], target_image)
         label_path = (labels_root / split_directory / Path(target_filename).stem).with_suffix(
             ".txt"
         )
@@ -227,10 +227,10 @@ def write_yolo_segmentation_export(
         "class_map": version.class_map_json,
         "items": manifest_items,
     }
-    resolve_managed_project_path(settings, manifest_path).write_bytes(
+    filesystem_io_path(resolve_managed_project_path(settings, manifest_path)).write_bytes(
         canonical_json_bytes(export_manifest)
     )
-    archive_file = resolve_managed_project_path(settings, archive_path)
+    archive_file = filesystem_io_path(resolve_managed_project_path(settings, archive_path))
     _archive_export(output_root, archive_file)
     return {
         "manifest_sha256": canonical_json_sha256(export_manifest),
@@ -305,7 +305,7 @@ def write_semantic_mask_export(
 ) -> dict[str, Any]:
     """Write indexed PNG masks; background is 0 and classes are index + 1."""
 
-    output_root = resolve_managed_project_path(settings, output_path)
+    output_root = filesystem_io_path(resolve_managed_project_path(settings, output_path))
     output_root.mkdir(parents=True, exist_ok=False)
     images_root = output_root / "images"
     masks_root = output_root / "masks"
@@ -332,7 +332,7 @@ def write_semantic_mask_export(
             item.original_filename,
         )
         target_image = images_root / split_directory / target_filename
-        shutil.copy2(image_paths[item.image_id], target_image)
+        copy_export_image(image_paths[item.image_id], target_image)
         semantic = Image.new("P", (item.width_px, item.height_px), 0)
         semantic.putpalette(palette)
         draw = ImageDraw.Draw(semantic)
@@ -410,10 +410,10 @@ def write_semantic_mask_export(
         "class_map": version.class_map_json,
         "items": manifest_items,
     }
-    resolve_managed_project_path(settings, manifest_path).write_bytes(
+    filesystem_io_path(resolve_managed_project_path(settings, manifest_path)).write_bytes(
         canonical_json_bytes(export_manifest)
     )
-    archive_file = resolve_managed_project_path(settings, archive_path)
+    archive_file = filesystem_io_path(resolve_managed_project_path(settings, archive_path))
     _archive_export(output_root, archive_file)
     return {
         "manifest_sha256": canonical_json_sha256(export_manifest),

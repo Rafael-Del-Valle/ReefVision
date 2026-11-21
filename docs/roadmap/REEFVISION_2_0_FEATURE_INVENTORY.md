@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T03:50:08Z`
+Updated: `2026-11-21T04:39:30Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1524,6 +1524,8 @@ Evidence:
 
 - `source`: Two actual export/import generations on the inherited 1.8 source preserved typed links and original bytes but changed an unavailable provider's external UUID literals. The source project and opaque-field regression fixture are retained for repair. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv19-ancestry-integration-inherited-transfer-baseline-9cde9e6e7`)
 - `source`: Two real export, inspect, import and reopen generations preserved unknown provider data and checkpoint bytes exactly while the local rows and ordinary class links rebound. This is inherited source evidence. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-ancestry-integration-literal-history-3736712ff`)
+- `source`: A second completed training record with identical checkpoint bytes preserves the registered model's original training provenance. The two workflows retain their producing experiment and share the immutable model ID. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-ancestry-integration-shared-checkpoint-a4efc2765`)
+- `source`: Two ordinary project transfers rebound all four saved frozen dataset pins, retained both completed runs and rehashed all four model files on each import. The donor retained all 112 original files. — `docs/validation/1.9-frozen-research.json` (`rv19-ancestry-integration-two-frozen-transfers-38ec7718d`)
 - `browser`: none recorded
 - `windows_installed`: Ten registered roles with rehashed reports passed on the original 1.8 package, including the two historical 1.4 fingerprints. A second workflow exercised fresh and cached offline recovery. This identifies the predecessor for the direct 1.8 upgrade. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-ancestry-integration-installed-1-8-lineage`)
 - `physical_hardware`: none recorded
@@ -1546,7 +1548,7 @@ Evidence:
 - `source`: none recorded
 - `browser`: An ordinary imported historical model reports Unavailable in Model Hub with its retained bytes and hash. The native frame and temporal models report Ready, and removing then restoring a copied native checkpoint shows Model required then Ready. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-compatibility-matrix-historic-model-127`)
 - `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `physical_hardware`: Help and System status showed Windows 11 build 26300, source runtime and local formats. Separate keyboard-driven browser launches detected this physical RTX 3090 and a CPU-only masked runtime. The prior package is identified individually. — `docs/validation/1.9-frozen-research.json` (`rv19-compatibility-matrix-live-host-621e20b34`)
 - `representative_data`: none recorded
 
 ### rv19-end-to-end-workflows: End-to-end detection, segmentation, pose, tracking, and scientific workflows
@@ -1563,10 +1565,11 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
+- `source`: Two completed records explicitly sharing a real native checkpoint reopened with their own result links across two Project Exchanges. The trained model retained its original experiment. The unregistered historical duplicate required an explicit registration. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-per-run-links-701f3b931`)
 - `browser`: A researcher used the existing advanced graph editor with declared input IDs, then ran one 14-node revision twice. Both scratch CPU checkpoints, reviewed held-out poses and downloaded ZIPs have distinct receipts. The result uses run-derived registration names and provides the source baseline for the 1.9 guided and installed workflow. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-end-to-end-workflows-inherited-57f16152b`)
+- `browser`: Opening Training in a project created by saved workflows shows completed runs and experiments before creating a training draft. Three real source-browser profiles exercised the historical and corrected cases. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-historical-training-0b5e0f1d7`)
 - `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `physical_hardware`: The original 1.8 MSI payload ran the same 14-node graph twice in native WebView2 on the RTX 3090. Each separately trained, registered and inferred on actual CUDA, paused for two ordinary reviews and downloaded the audited pose and training ZIP. The generated held-out video and source-pixel landmarks are pinned in both receipts. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-end-to-end-workflows-cuda-two-saved-e3e8`)
 - `representative_data`: none recorded
 
 ### rv19-performance-resilience: Large-project/video performance and restart/resume resilience
@@ -1583,8 +1586,9 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
+- `source`: An actual SQLite page limit interrupted a 1001-box save. HTTP 507 identified the full storage. The original image, one-box revision and request IDs survived the failed transaction; the identical retry committed revision two. — `docs/validation/1.9-frozen-research.json` (`rv19-performance-resilience-atomic-save-701f3b931`)
 - `browser`: In the inherited ReefPose identity workspace, reopening two real queued runs and changing selection during a network interruption cancelled the originally requested job and retained the other run. The same workflow on 542254b8a cancelled the wrong persisted run. Both used generated video and a real local queue. — `docs/validation/reviewed-operations-dd3c7207e.json` (`rv19-performance-resilience-identity-job-reconnect-dd3c7207e`)
+- `browser`: The ordinary failed-workflow Retry action reused the job, run and three prior artifacts after the validation video was restored. Cancellation at human review kept nine artifacts. — `docs/validation/1.9-frozen-research.json` (`rv19-performance-resilience-retry-cancel-61804f487`)
 - `windows_installed`: none recorded
 - `physical_hardware`: On original 1.8 the generated 5,000-image gallery decoded a first thumbnail in 232 ms. The 1,500-box editor drew in 271 ms and preserved all original boxes. A 30-minute 720p fixture opened for playback in 1.39 s and decoded a near-end seek in 240 ms. A source-pixel annotation saved at frame 17,100 reopened after restart. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-performance-resilience-5000-gallery-long-video-1-8`)
 - `representative_data`: none recorded

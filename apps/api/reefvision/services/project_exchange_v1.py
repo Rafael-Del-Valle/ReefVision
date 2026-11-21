@@ -119,7 +119,7 @@ from reefvision.services.project_exchange_schedules import SECTIONS as SCHEDULE_
 from reefvision.services.project_exchange_schedules import has_schedules
 from reefvision.services.project_exchange_v15 import FORMAT_VERSION as RESEARCH_FORMAT_VERSION
 from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, has_v15_records
-from reefvision.services.project_exchange_workflows import is_spatial_workflow_graph
+from reefvision.services.project_exchange_workflows import has_portable_workflow_inputs
 from reefvision.services.reproducibility_lineage_v15 import project_proofs
 from reefvision.services.spatial_source_assets_v14 import SpatialSourceAssetService
 from reefvision.storage.datasets import canonical_json_sha256
@@ -962,7 +962,7 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             "source_ids_are_preserved_in_import_provenance": True,
         }
         if package.format_version in INTEGRATED_FORMATS or any(
-            is_spatial_workflow_graph(graph.graph_json)
+            has_portable_workflow_inputs(graph.graph_json)
             for graph in cast(Sequence[WorkflowGraphRecord], records["workflow_graphs"])
         ):
             parent = self.session.scalar(

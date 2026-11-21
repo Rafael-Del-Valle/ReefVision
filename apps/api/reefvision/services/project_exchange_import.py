@@ -172,7 +172,7 @@ from reefvision.services.project_exchange_v15 import (
     validate_v15_exchange,
 )
 from reefvision.services.project_exchange_workflows import (
-    has_spatial_workflow_history,
+    has_portable_workflow_history,
     restore_workflow_provenance,
 )
 from reefvision.services.projects import ProjectService
@@ -541,7 +541,7 @@ def import_project_exchange(
             )
             validate_field_origin(section_rows, manifest.get(FIELD_ORIGIN), manifest.get("origin"))
         _validate_heatmap_artifacts(old_project_id, section_rows)
-        restores_workflow_provenance = bool(integrated) or has_spatial_workflow_history(
+        restores_workflow_provenance = bool(integrated) or has_portable_workflow_history(
             section_rows
         )
 

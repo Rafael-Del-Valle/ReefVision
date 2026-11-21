@@ -301,6 +301,58 @@ def test_trained_pose_registration_reuses_exact_frozen_schema_revision(
         assert binding.schema_id == frozen.pose_schema_id
 
 
+def test_identical_checkpoint_preserves_first_model_history_and_both_run_receipts(
+    client: TestClient, test_settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project, dataset, first = _training_result(client, test_settings, monkeypatch)
+    app = cast(FastAPI, client.app)
+    project_id = str(project["id"])
+    with app.state.session_factory() as session:
+        second = create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload={
+                "project_id": project_id,
+                "dataset_id": dataset["id"],
+                "manifest_sha256": dataset["manifest_sha256"],
+            },
+            initial_model_payload={"model_id": first["initial_checkpoint_model_id"]},
+            parameters={"device": "cpu", "run_name": "Second held-out pose run"},
+            workflow_run_id="another-fixture-workflow",
+            workflow_node_run_id="another-fixture-training-node",
+            processor=_fake_pose_processor,
+        )
+        assert first["result_checkpoint_sha256"] == second["result_checkpoint_sha256"]
+        assert first["experiment_id"] != second["experiment_id"]
+        receipts = []
+        originals = []
+        for training in (first, second, second):
+            receipt = register_workflow_trained_model(
+                session,
+                test_settings,
+                project_id=project_id,
+                training_payload=training,
+                parameters={"display_name": "Shared pose checkpoint"},
+                model_service_factory=_fake_pose_model_factory,
+            )
+            receipts.append(receipt)
+            model = session.get(ModelRegistration, receipt["model_id"])
+            assert model is not None
+            originals.append(dict(model.metadata_json))
+        assert len({item["model_id"] for item in receipts}) == 1
+        assert originals[0]["source_training_run_id"] == first["training_run_id"]
+        assert originals[0] == originals[1] == originals[2]
+        assert receipts[1] == receipts[2]
+        for receipt, training in zip(receipts[:2], (first, second), strict=True):
+            assert receipt["source_training_run_id"] == training["training_run_id"]
+            assert receipt["source_experiment_id"] == training["experiment_id"]
+            assert receipt["model_source_training_run_id"] == first["training_run_id"]
+            reopened = client.get(f"/api/v1/training-runs/{training['training_run_id']}")
+            assert reopened.status_code == 200, reopened.text
+            assert reopened.json()["registered_model_id"] == receipt["model_id"]
+
+
 def test_pose_registration_fails_closed_if_training_schema_provenance_changes(
     client: TestClient,
     test_settings: Settings,

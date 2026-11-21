@@ -17,6 +17,10 @@ class ValidationError(ReefVisionError):
     """Requested operation violates a domain rule."""
 
 
+class StorageCapacityError(ReefVisionError):
+    """The database or managed storage ran out of space during a request."""
+
+
 class WorkflowExecutionCancelled(ReefVisionError):
     """A workflow child operation was cancelled by the user."""
 

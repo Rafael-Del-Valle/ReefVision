@@ -718,6 +718,7 @@ export interface TrainingRun {
   id: string;
   project_id: string;
   draft_id: string | null;
+  registered_model_id?: string | null;
   dataset_version_id: string | null;
   dataset_manifest_sha256: string;
   split_manifest_sha256: string;
@@ -1668,11 +1669,17 @@ export interface ImageFilters {
 
 export class ApiRequestError extends Error {
   details: Record<string, unknown> | null;
+  code: string | null;
 
-  constructor(message: string, details: Record<string, unknown> | null = null) {
+  constructor(
+    message: string,
+    details: Record<string, unknown> | null = null,
+    code: string | null = null,
+  ) {
     super(message);
     this.name = "ApiRequestError";
     this.details = details;
+    this.code = code;
   }
 }
 
@@ -1718,10 +1725,13 @@ export async function request<T>(
   if (!response.ok) {
     let message = `Request failed with HTTP ${response.status}`;
     let details: Record<string, unknown> | null = null;
+    let code: string | null = null;
     try {
       const payload = (await response.json()) as {
+        code?: unknown;
         detail?: string | Record<string, unknown>;
       };
+      if (typeof payload.code === "string") code = payload.code;
       if (typeof payload.detail === "string") message = payload.detail;
       if (payload.detail && typeof payload.detail === "object") {
         details = payload.detail;
@@ -1732,7 +1742,7 @@ export async function request<T>(
     } catch {
       // Keep the HTTP fallback when the response is not JSON.
     }
-    throw new ApiRequestError(message, details);
+    throw new ApiRequestError(message, details, code);
   }
   if (response.status === 204) {
     return undefined as T;

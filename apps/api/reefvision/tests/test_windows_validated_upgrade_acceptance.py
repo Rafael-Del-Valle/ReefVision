@@ -19,7 +19,34 @@ JOB = "windows-validated-14-upgrade-acceptance"
 VALIDATED_15_JOB = "windows-validated-15-upgrade-acceptance"
 VALIDATED_16_JOB = "windows-validated-16-upgrade-acceptance"
 DIRECT_PREDECESSOR_JOB = "windows-validated-17-upgrade-acceptance"
-VERSION = "1.8.0"
+VALIDATED_18_JOB = "windows-validated-18-upgrade-acceptance"
+VERSION = "1.9.0"
+
+
+@pytest.mark.parametrize(
+    "required",
+    [
+        'REEFVISION_1_8_RUN: "44853957856"',
+        'REEFVISION_1_8_BUILD_JOB: "136691608332"',
+        "e3e8ffb6395c9f2675ffc10397c2401388e63ee8",
+        "5f9bf934e2fe442ec7c9da5817ddd7fe7bb03ad30035708429d8d1f70b1361f6",
+        "78d52066848afc6aeac975765359ba13cd3d0e2e8b79ef1b90307eecd03c35ed",
+        "14687728605",
+        "fc577bc4f464e33f2b46725ec6501831f968af5daa060f1149a2513f61cb3310",
+        "$partMatches[0].digest -cne $pin.digest",
+        ".Count -ne 6",
+        "-ExpectedInitialSchemaRevision 'b18_spectral_0002'",
+        "-ExpectedSchemaRevision 'b19_registration_0001'",
+        "-VerifyPreviousInstallerRejectsUpgradedProfile",
+    ],
+)
+def test_19_direct_upgrade_requires_original_18_msi_and_rollback(required: str) -> None:
+    job = PREFLIGHT._job(WORKFLOW, VALIDATED_18_JOB)
+    assert job, "Windows must exercise a direct original 1.8 to 1.9 upgrade"
+    assert required in job
+    assert PREFLIGHT.check_workflow(WORKFLOW, "1.9.0") == []
+    changed = WORKFLOW.replace(job, job.replace(required, "altered-1.8-upgrade-contract"))
+    assert any(VALIDATED_18_JOB in error for error in PREFLIGHT.check_workflow(changed, "1.9.0"))
 
 
 @pytest.mark.parametrize(
@@ -54,7 +81,7 @@ def test_direct_validated_16_upgrade_is_pinned_and_exercises_rollback() -> None:
     assert "d4e53ebfebdf8201526fa7f58acd31392eceba6cdee12b5145e55313452ffb3c" in job
     assert "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be" in job
     assert "-ExpectedInitialSchemaRevision 'b16_integrated_0001'" in job
-    assert "-ExpectedSchemaRevision 'b18_spectral_0002'" in job
+    assert "-ExpectedSchemaRevision 'b19_registration_0001'" in job
     assert "-VerifyPreviousInstallerRejectsUpgradedProfile" in job
     assert PREFLIGHT.check_workflow(WORKFLOW, VERSION) == []
     assert PREFLIGHT.check_cab_artifact_partition(WORKFLOW, VERSION) == []
@@ -83,7 +110,7 @@ def test_direct_validated_14_upgrade_is_separate_from_existing_roles() -> None:
             "draft-1.4-0039",
         )
     )
-    assert "name: Installed 1.8 lineage" in lineage
+    assert "name: Installed 1.9 lineage" in lineage
     assert PREFLIGHT._job(WORKFLOW, "windows-qc-history-acceptance")
     assert "*.reefvision.zip" not in upgrade and "*.pt" not in upgrade
 
@@ -99,7 +126,7 @@ def test_direct_validated_14_upgrade_is_separate_from_existing_roles() -> None:
             "-ExpectedInitialSchemaRevision '0039'",
         ),
         (
-            "-ExpectedSchemaRevision 'b18_spectral_0002'",
+            "-ExpectedSchemaRevision 'b19_registration_0001'",
             "-ExpectedSchemaRevision 'b16_integrated_0001'",
         ),
         ("foreach ($part in 1..2)", "foreach ($part in 1..1)"),
@@ -164,7 +191,7 @@ def test_validated_upgrade_requires_independent_rollback(job_name: str) -> None:
             "-ExpectedInitialSchemaRevision '0039'",
         ),
         (
-            "-ExpectedSchemaRevision 'b18_spectral_0002'",
+            "-ExpectedSchemaRevision 'b19_registration_0001'",
             "-ExpectedSchemaRevision 'b16_integrated_0001'",
         ),
     ],

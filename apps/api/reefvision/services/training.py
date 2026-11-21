@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import shutil
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
@@ -56,6 +55,7 @@ from reefvision.services.model_catalog import ModelCatalogService
 from reefvision.snapshot_cache import get_cached_snapshot
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.training import free_training_space_gib
 
 TRAINABLE_PROVIDER_ID = "ultralytics"
 TRAINING_TASKS = ("detect",)
@@ -712,6 +712,7 @@ class TrainingService:
             id=run.id,
             project_id=run.project_id,
             draft_id=run.draft_id,
+            registered_model_id=run.registered_model_id,
             dataset_version_id=run.dataset_version_id,
             dataset_manifest_sha256=run.dataset_manifest_sha256,
             split_manifest_sha256=run.split_manifest_sha256,
@@ -886,9 +887,7 @@ class TrainingService:
     def _resource_snapshot(self, requested_device: str) -> dict[str, Any]:
         snapshot: dict[str, Any] = {
             "requested_device": requested_device,
-            "disk_free_gb": round(
-                shutil.disk_usage(self.settings.resolved_data_dir).free / (1024**3), 2
-            ),
+            "disk_free_gb": round(free_training_space_gib(self.settings.resolved_data_dir), 2),
         }
         try:
             import psutil

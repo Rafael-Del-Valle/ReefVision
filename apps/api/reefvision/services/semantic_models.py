@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from reefvision.db.models import (
     ExperimentRecord,
@@ -412,10 +412,10 @@ class SemanticModelService(SegmentationModelService):
             )
 
         model_metadata = dict(model.metadata_json or {})
-
-        model_metadata.update(metadata_overrides)
-
-        model.metadata_json = model_metadata
+        # The registry deduplicates identical checkpoint bytes across runs. Its
+        # original training record remains the source of the model in Model Hub.
+        if model_metadata.get("source_training_run_id") is None:
+            model.metadata_json = {**model_metadata, **metadata_overrides}
 
         self.session.commit()
         self.session.refresh(model)
@@ -430,14 +430,46 @@ class SemanticModelService(SegmentationModelService):
         run = self.session.get(TrainingRun, payload.training_run_id)
         if run is None:
             raise NotFoundError("Training run not found")
+        if run.project_id != project_id:
+            raise ValidationError("Training runs must belong to the selected project")
+        if run.registered_model_id and run.result_checkpoint_path:
+            original = self._model(run.registered_model_id)
+            checkpoint = resolve_managed_project_path(self.settings, run.result_checkpoint_path)
+            if not checkpoint.is_file() or hash_model_file(checkpoint)[0] != original.sha256:
+                raise ConflictError(
+                    "The completed checkpoint no longer matches this run's registered model"
+                )
         if run.task == "pose":
-            return self._register_pose_model_from_run(
-                project_id,
-                payload,
-                run,
+            model = self._register_pose_model_from_run(project_id, payload, run)
+        elif run.task == SEMANTIC_SEGMENTATION_TASK:
+            model = self._register_semantic_model_from_run(project_id, payload, run)
+        else:
+            model = super().register_model_from_run(project_id, payload)
+        if model.task != run.task or model.provider_name != run.provider_id:
+            raise ConflictError(
+                "The registered checkpoint does not match this training task and provider"
             )
-        if run.task != SEMANTIC_SEGMENTATION_TASK:
-            return super().register_model_from_run(project_id, payload)
+        if run.registered_model_id != model.id:
+            linked = self.session.scalar(
+                update(TrainingRun)
+                .where(
+                    TrainingRun.id == run.id,
+                    TrainingRun.registered_model_id.is_(None)
+                    | (TrainingRun.registered_model_id == model.id),
+                )
+                .values(registered_model_id=model.id)
+                .returning(TrainingRun.id)
+            )
+            if linked is None:
+                raise ConflictError(
+                    "This training run is already associated with a different checkpoint"
+                )
+            self.session.commit()
+        return model
+
+    def _register_semantic_model_from_run(
+        self, project_id: str, payload: RegisterModelFromRunRequest, run: TrainingRun
+    ) -> ModelRegistrationResponse:
         if run.project_id != project_id:
             raise ValidationError("Training runs must belong to the selected project")
         if run.status != "completed" or not run.result_checkpoint_path:

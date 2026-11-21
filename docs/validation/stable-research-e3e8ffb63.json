@@ -1241,6 +1241,126 @@
         "failed": 2
       },
       "cause": "Both suites failed the two image-adjustment assertions that called Pillow's deprecated pixel accessor. The separate 54a89896c test correction compares identical RGB bytes on both supported Pillow versions."
+    },
+    "physical_native_trained_pose": {
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/official/evidence/physical-rtx3090-native-pose-workflow/evidence-index.json",
+        "sha256": "3a007df555413497ac2477e1802195f0b482eb43cf61b5c57bdf1e527d063374"
+      },
+      "graph": {
+        "id": "86635ade-00be-4351-85eb-c5fcbea0cd4e",
+        "key": "generated-native-pose-e2e-cuda",
+        "name": "Generated native ReefPose end to end (cuda)",
+        "sha256": "40a1e2142cfd55b8b3a97c76d2b48bc4f00dc444e021c38f8a17ed2510b5877e",
+        "revision": 1
+      },
+      "runs": [
+        {
+          "run_id": "bc4925da-431b-49a1-a270-613e9a45ed03",
+          "run_provenance_sha256": "ef2e5c552ef6dc0816a5db2c1fb0d231d079aea4f1ca3220c3baa6abd201b85b",
+          "training": {
+            "training_id": "f4781fca-d839-4c93-8e12-2f0f060f20c3",
+            "job_id": "e071605b-256e-4f06-bb8f-5d6b1bfeb552",
+            "training_dataset_id": "89466a4e-b334-4f2e-8b1a-3de745913b26",
+            "validation_dataset_id": "aa1592b7-b775-4dc0-8f16-d89564605ea7",
+            "split_manifest_sha256": "7bc623f430de1f88f9d6f8bbc64192a7eb3889aaca41e00fa0d3a146f1fb7ba3",
+            "device": "cuda",
+            "initialization": "random",
+            "checkpoint_sha256": "08affa501268ce1722c19b10c7f517ee7ff6ff29391bb3c8da94533599e2fab6",
+            "registered_model_id": "10e5c883-07e4-4dbd-9071-a941bc03a0e4",
+            "verified_package_sha256": "8b25c831a8342482e6b1120b2a26c3b4422385e888d79e1a3a0bb452b268bf3b",
+            "package_bytes": 433725
+          },
+          "inference": {
+            "job_id": "ea20ee63-e428-472b-9672-a89cf2b2c15a",
+            "artifact_id": "9e8ad3cf-85ed-4dbc-b68c-d9da5d899b69",
+            "artifact_sha256": "e00e6a3348a4280e177f4d405db12a1c6ee1e7e6c97c096afc265a8d853caf97",
+            "held_out_video": "fa9237f1-d949-4abf-b275-aa5235657277",
+            "held_out_sha256": "9f8ec488580412ca17e85a797d910920d44840cf6eb1bd8ea7ee17051bb7095e",
+            "track_ids": [
+              "f287c514-e73b-4adf-b23f-4c574c17246b"
+            ],
+            "tracks": 1
+          },
+          "reviewed_zip": {
+            "dataset_id": "47d5f2b3-b051-48d7-815e-558a57ae2eb6",
+            "size_bytes": 4694,
+            "sha256": "d49d01d12fe6c58b201790ae857b650879f8b11fb4c7c16a9e9ec51593b93967",
+            "artifact_id": "9d7b964d-bc81-426a-b6c9-07f62093c0b3",
+            "lossy": false
+          },
+          "gpu_samples": {
+            "training": {
+              "job_id": "e071605b-256e-4f06-bb8f-5d6b1bfeb552",
+              "duration_seconds": 3.812907,
+              "first_sample_utc": "2026-11-21T04:00:45.015000+00:00",
+              "last_sample_utc": "2026-11-21T04:00:47.574000+00:00",
+              "samples_in_window": 9
+            },
+            "inference": {
+              "job_id": "ea20ee63-e428-472b-9672-a89cf2b2c15a",
+              "duration_seconds": 0.25329,
+              "first_sample_utc": "2026-11-21T04:00:48.707000+00:00",
+              "last_sample_utc": "2026-11-21T04:00:48.707000+00:00",
+              "samples_in_window": 1
+            }
+          }
+        },
+        {
+          "run_id": "69091409-a837-48ab-a08f-179ff962ea98",
+          "run_provenance_sha256": "97833515c764b780e7a8be20cd59dc2d12fcbf5a94497f3bdc5a0dc0756d4fd8",
+          "training": {
+            "training_id": "e936ce55-2915-466b-a1a4-f818ae038d8a",
+            "job_id": "9a4defbd-4277-4329-9e8d-c280369044b6",
+            "training_dataset_id": "89466a4e-b334-4f2e-8b1a-3de745913b26",
+            "validation_dataset_id": "aa1592b7-b775-4dc0-8f16-d89564605ea7",
+            "split_manifest_sha256": "7bc623f430de1f88f9d6f8bbc64192a7eb3889aaca41e00fa0d3a146f1fb7ba3",
+            "device": "cuda",
+            "initialization": "random",
+            "checkpoint_sha256": "2bc18239074c5da53ed0620e456b94fcff69b406fa7ee12b5717d11876b3a821",
+            "registered_model_id": "710c39fc-4ff9-40ec-a9c8-dc4118ba5f9f",
+            "verified_package_sha256": "6e20970d47cd9e3231a2058a9e6126f475ebf1bc51a3b0217196665dcf1c66d5",
+            "package_bytes": 431747
+          },
+          "inference": {
+            "job_id": "7dd955ec-2fef-45eb-a329-2825919fc2ee",
+            "artifact_id": "e5806ce4-5084-46fa-8b4f-7e45055d76ee",
+            "artifact_sha256": "fddfcfb41a665d8650d6b8b201406b11c28a775214d93ac671df13a57ed982ab",
+            "held_out_video": "fa9237f1-d949-4abf-b275-aa5235657277",
+            "held_out_sha256": "9f8ec488580412ca17e85a797d910920d44840cf6eb1bd8ea7ee17051bb7095e",
+            "track_ids": [
+              "d5fa9a54-ce15-420d-8e4e-6a80bcc5ddba"
+            ],
+            "tracks": 1
+          },
+          "reviewed_zip": {
+            "dataset_id": "379d85a3-55c2-4a09-b519-f141f7f220aa",
+            "size_bytes": 4689,
+            "sha256": "64e9532cd5bf34df805e03893cf31046b8fab9a74fa1c2bf0686bf688076238e",
+            "artifact_id": "f6c3a1ef-48bc-4abd-b6ba-d0ed1cd957e9",
+            "lossy": false
+          },
+          "gpu_samples": {
+            "training": {
+              "job_id": "9a4defbd-4277-4329-9e8d-c280369044b6",
+              "duration_seconds": 2.06798,
+              "first_sample_utc": "2026-11-21T04:01:07.315000+00:00",
+              "last_sample_utc": "2026-11-21T04:01:08.928000+00:00",
+              "samples_in_window": 8
+            },
+            "inference": {
+              "job_id": "7dd955ec-2fef-45eb-a329-2825919fc2ee",
+              "duration_seconds": 0.241631,
+              "first_sample_utc": "2026-11-21T04:01:09.622000+00:00",
+              "last_sample_utc": "2026-11-21T04:01:09.622000+00:00",
+              "samples_in_window": 1
+            }
+          }
+        }
+      ],
+      "device": "NVIDIA GeForce RTX 3090",
+      "runtime": "2.5.1+cu121",
+      "observed": "The same original native desktop revision ran twice on generated independent groups. Each trained from random initialization, registered a distinct checkpoint, inferred on a held-out recording and stopped at both scientist gates. The original editor required explicit selection of the bound anatomy and preselection before dragging. Each downloaded dataset contained one verified frame-14 pose at (21,26) and (35,26)."
     }
   },
   "reviewed_retirement_predecessor": {
@@ -1352,5 +1472,14 @@
         }
       }
     ]
+  },
+  "reviewed_shared_checkpoint": {
+    "source": "a4efc2765a2760ba679af853d459969fe45d00e6",
+    "draft": 129,
+    "receipt": {
+      "file": "1.8/checkpoints/a4efc2765/shared-checkpoint/evidence-index.json",
+      "sha256": "f293e2d9b0d508867439693c76c0f974fb48815bffd38ec0a67ec73ce0091aae"
+    },
+    "result": "Registering an identical pose checkpoint from two independent fixture training records now preserves the original bytes and metadata. Each workflow receipt retains the correct producing experiment even when the model ID is shared."
   }
 }

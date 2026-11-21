@@ -8,7 +8,7 @@ import re
 import tomllib
 from pathlib import Path
 
-EXPECTED_VERSION = "1.8.0"
+EXPECTED_VERSION = "1.9.0"
 
 
 def check_versions(root: Path) -> dict[str, str]:

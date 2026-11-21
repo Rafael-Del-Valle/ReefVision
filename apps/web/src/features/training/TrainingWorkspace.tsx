@@ -330,8 +330,8 @@ export function TrainingWorkspace({
     enabled: selectedDraftId.length > 0,
   });
   const models = useQuery({
-    queryKey: ["models", project.id, "detector"],
-    queryFn: ({ signal }) => getModels(project.id, "detector", signal),
+    queryKey: ["models", project.id],
+    queryFn: ({ signal }) => getModels(project.id, undefined, signal),
     enabled: activeSection === "models" || activeSection === "runs",
   });
   const runs = useQuery({
@@ -710,7 +710,10 @@ export function TrainingWorkspace({
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: ["models", project.id, "detector"],
+        queryKey: ["models", project.id],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["training_runs", project.id],
       });
       await queryClient.invalidateQueries({
         queryKey: ["training_workspace_bootstrap", project.id],
@@ -907,19 +910,30 @@ export function TrainingWorkspace({
     visibleRuns.find((run) => run.id === selectedRunId) ??
     visibleRuns[0] ??
     null;
+  const isHistorySection =
+    activeSection === "runs" || activeSection === "experiments";
 
   const registeredRunModels = useMemo(() => {
-    const mapped = new Map<string, ModelRegistration>();
+    const legacy = new Map<string, ModelRegistration>();
+    const byId = new Map(models.data?.map((model) => [model.id, model]));
     models.data?.forEach((model) => {
       const runId = stringValue(
         asRecord(model.metadata_json).source_training_run_id,
       );
       if (runId) {
-        mapped.set(runId, model);
+        legacy.set(runId, model);
       }
     });
+    const mapped = new Map<string, ModelRegistration>();
+    for (const run of runs.data ?? []) {
+      const registered =
+        run.registered_model_id === undefined
+          ? legacy.get(run.id)
+          : byId.get(run.registered_model_id ?? "");
+      if (registered) mapped.set(run.id, registered);
+    }
     return mapped;
-  }, [models.data]);
+  }, [models.data, runs.data]);
 
   useEffect(
     () => () => {
@@ -1012,7 +1026,8 @@ export function TrainingWorkspace({
         </aside>
 
         <div className="training-content">
-          {selectedDraftId &&
+          {!isHistorySection &&
+            selectedDraftId &&
             !selectedDraft &&
             selectedDraftQuery.isPending && (
               <div className="empty-state">
@@ -1023,13 +1038,13 @@ export function TrainingWorkspace({
                 </p>
               </div>
             )}
-          {selectedDraftId && selectedDraftQuery.error && (
+          {!isHistorySection && selectedDraftId && selectedDraftQuery.error && (
             <div className="empty-state">
               <h4>Training draft unavailable</h4>
               <p>{selectedDraftQuery.error.message}</p>
             </div>
           )}
-          {!selectedDraft && !selectedDraftId && (
+          {!isHistorySection && !selectedDraft && !selectedDraftId && (
             <div className="empty-state">
               <h4>No training draft selected</h4>
               <p>
@@ -2027,203 +2042,204 @@ export function TrainingWorkspace({
                   </article>
                 </div>
               )}
+            </>
+          )}
 
-              {activeSection === "runs" && (
-                <div className="training-card-grid">
-                  <article className="system-card">
-                    <div className="section-heading">
-                      <div>
-                        <p className="eyebrow">History</p>
-                        <h4>Active and completed runs</h4>
-                      </div>
-                      <span>{visibleRuns.length} shown</span>
-                    </div>
-                    <div className="training-run-filters">
-                      <label>
-                        Status
-                        <select
-                          value={runStatusFilter}
-                          onChange={(event) =>
-                            setRunStatusFilter(event.target.value)
-                          }
-                        >
-                          <option value="">All states</option>
-                          <option value="queued">Queued</option>
-                          <option value="training">Training</option>
-                          <option value="tuning">Tuning</option>
-                          <option value="completed">Completed</option>
-                          <option value="failed">Failed</option>
-                          <option value="cancelled">Cancelled</option>
-                        </select>
-                      </label>
-                      <label>
-                        Order
-                        <select
-                          value={runSort}
-                          onChange={(event) => setRunSort(event.target.value)}
-                        >
-                          <option value="newest">Newest first</option>
-                          <option value="oldest">Oldest first</option>
-                        </select>
-                      </label>
-                    </div>
-                    {!runs.data?.length && (
-                      <p className="system-subtle">
-                        No training runs have been launched yet.
-                      </p>
-                    )}
-                    <div className="training-run-list">
-                      {visibleRuns.map((run) => (
-                        <button
-                          key={run.id}
-                          type="button"
-                          className={`system-record-card training-run-card ${selectedRun?.id === run.id ? "selected" : ""}`}
-                          onClick={() => setSelectedRunId(run.id)}
-                        >
-                          <div className="section-heading">
-                            <div>
-                              <strong>{run.run_name}</strong>
-                              <p className="system-subtle">
-                                {run.provider_id} | {run.architecture}
-                              </p>
-                            </div>
-                            <span className="status-chip">
-                              {run.status} / {run.stage}
-                            </span>
-                          </div>
-                          <small>
-                            Progress {run.progress_epoch}/
-                            {run.progress_total_epochs}
-                          </small>
-                          <progress
-                            value={run.progress_epoch}
-                            max={Math.max(run.progress_total_epochs, 1)}
-                            aria-label={`${run.run_name} progress`}
-                          />
-                          {run.error_message && (
-                            <p className="form-error">{run.error_message}</p>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </article>
-                  {selectedRun ? (
-                    <TrainingRunDetail
-                      run={selectedRun}
-                      registeredName={
-                        registeredRunModels.get(selectedRun.id)?.display_name
-                      }
-                      registering={
-                        registerRunModelMutation.isPending &&
-                        registerRunModelMutation.variables?.runId ===
-                          selectedRun.id
-                      }
-                      onCancel={async () => {
-                        if (
-                          await confirm({
-                            title: "Cancel training run?",
-                            message: `Stop “${selectedRun.run_name}”? Safely written artifacts will be retained.`,
-                            confirmLabel: "Cancel training run",
-                            destructive: true,
-                          })
-                        ) {
-                          cancelRunMutation.mutate(selectedRun.id);
-                        }
-                      }}
-                      onRegister={() =>
-                        registerRunModelMutation.mutate({
-                          runId: selectedRun.id,
-                          displayName: `${selectedRun.run_name} best`,
-                          notes: selectedRun.notes ?? undefined,
-                        })
-                      }
-                      resuming={
-                        resumeRunMutation.isPending &&
-                        resumeRunMutation.variables === selectedRun.job_id
-                      }
-                      onResume={
-                        selectedRun.job_id
-                          ? () =>
-                              resumeRunMutation.mutate(
-                                selectedRun.job_id as string,
-                              )
-                          : undefined
-                      }
-                      onApplyBest={(trial) =>
-                        applyTuningMutation.mutate({ run: selectedRun, trial })
-                      }
-                    />
-                  ) : (
-                    <article className="system-card">
-                      <h4>Run detail</h4>
-                      <p className="system-subtle">
-                        Select a run to inspect progress, metrics, checkpoints,
-                        artifacts, and provenance.
-                      </p>
-                    </article>
-                  )}
+          {activeSection === "runs" && (
+            <div className="training-card-grid">
+              <article className="system-card">
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">History</p>
+                    <h4>Active and completed runs</h4>
+                  </div>
+                  <span>{visibleRuns.length} shown</span>
                 </div>
-              )}
-
-              {activeSection === "experiments" && (
-                <div className="training-card-grid">
-                  <article className="system-card">
-                    <h4>Experiments</h4>
-                    {!experiments.data?.length && (
-                      <p className="system-subtle">
-                        Completed runs create experiments for comparison.
-                      </p>
-                    )}
-                    <div className="training-run-list">
-                      {experiments.data?.map((experiment) => (
-                        <label
-                          key={experiment.id}
-                          className="system-record-card training-compare-card"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={compareSelection.includes(experiment.id)}
-                            onChange={(event) => {
-                              setCompareSelection((current) =>
-                                event.target.checked
-                                  ? [...current, experiment.id].slice(-4)
-                                  : current.filter(
-                                      (item) => item !== experiment.id,
-                                    ),
-                              );
-                            }}
-                          />
-                          <strong>{experiment.architecture}</strong>
-                          <small>{experiment.provider_id}</small>
-                          {Object.entries(experiment.summary_metrics_json)
-                            .slice(0, 4)
-                            .map(([key, value]) => (
-                              <span key={key}>
-                                {metricLabel(key)}: {String(value)}
-                              </span>
-                            ))}
-                        </label>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => compareExperimentsMutation.mutate()}
-                      disabled={compareSelection.length < 2}
+                <div className="training-run-filters">
+                  <label>
+                    Status
+                    <select
+                      value={runStatusFilter}
+                      onChange={(event) =>
+                        setRunStatusFilter(event.target.value)
+                      }
                     >
-                      Compare selected experiments
-                    </button>
-                    {compareWarnings.length > 0 && (
-                      <ul className="system-details">
-                        {compareWarnings.map((warning) => (
-                          <li key={warning}>{warning}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </article>
+                      <option value="">All states</option>
+                      <option value="queued">Queued</option>
+                      <option value="training">Training</option>
+                      <option value="tuning">Tuning</option>
+                      <option value="completed">Completed</option>
+                      <option value="failed">Failed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </label>
+                  <label>
+                    Order
+                    <select
+                      value={runSort}
+                      onChange={(event) => setRunSort(event.target.value)}
+                    >
+                      <option value="newest">Newest first</option>
+                      <option value="oldest">Oldest first</option>
+                    </select>
+                  </label>
                 </div>
+                {!runs.data?.length && (
+                  <p className="system-subtle">
+                    No training runs have been launched yet.
+                  </p>
+                )}
+                <div className="training-run-list">
+                  {visibleRuns.map((run) => (
+                    <button
+                      key={run.id}
+                      type="button"
+                      className={`system-record-card training-run-card ${selectedRun?.id === run.id ? "selected" : ""}`}
+                      onClick={() => setSelectedRunId(run.id)}
+                    >
+                      <div className="section-heading">
+                        <div>
+                          <strong>{run.run_name}</strong>
+                          <p className="system-subtle">
+                            {run.provider_id} | {run.architecture}
+                          </p>
+                        </div>
+                        <span className="status-chip">
+                          {run.status} / {run.stage}
+                        </span>
+                      </div>
+                      <small>
+                        Progress {run.progress_epoch}/
+                        {run.progress_total_epochs}
+                      </small>
+                      <progress
+                        value={run.progress_epoch}
+                        max={Math.max(run.progress_total_epochs, 1)}
+                        aria-label={`${run.run_name} progress`}
+                      />
+                      {run.error_message && (
+                        <p className="form-error">{run.error_message}</p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </article>
+              {selectedRun ? (
+                <TrainingRunDetail
+                  run={selectedRun}
+                  registeredName={
+                    registeredRunModels.get(selectedRun.id)?.display_name
+                  }
+                  registering={
+                    registerRunModelMutation.isPending &&
+                    registerRunModelMutation.variables?.runId === selectedRun.id
+                  }
+                  onCancel={async () => {
+                    if (
+                      await confirm({
+                        title: "Cancel training run?",
+                        message: `Stop “${selectedRun.run_name}”? Safely written artifacts will be retained.`,
+                        confirmLabel: "Cancel training run",
+                        destructive: true,
+                      })
+                    ) {
+                      cancelRunMutation.mutate(selectedRun.id);
+                    }
+                  }}
+                  onRegister={() =>
+                    registerRunModelMutation.mutate({
+                      runId: selectedRun.id,
+                      displayName: `${selectedRun.run_name} best`,
+                      notes: selectedRun.notes ?? undefined,
+                    })
+                  }
+                  resuming={
+                    resumeRunMutation.isPending &&
+                    resumeRunMutation.variables === selectedRun.job_id
+                  }
+                  onResume={
+                    selectedRun.job_id
+                      ? () =>
+                          resumeRunMutation.mutate(selectedRun.job_id as string)
+                      : undefined
+                  }
+                  onApplyBest={(trial) =>
+                    applyTuningMutation.mutate({ run: selectedRun, trial })
+                  }
+                />
+              ) : (
+                <article className="system-card">
+                  <h4>Run detail</h4>
+                  <p className="system-subtle">
+                    Select a run to inspect progress, metrics, checkpoints,
+                    artifacts, and provenance.
+                  </p>
+                </article>
               )}
+            </div>
+          )}
 
+          {activeSection === "experiments" && (
+            <div className="training-card-grid">
+              <article className="system-card">
+                <h4>Experiments</h4>
+                {!experiments.data?.length && (
+                  <p className="system-subtle">
+                    Completed runs create experiments for comparison.
+                  </p>
+                )}
+                <div className="training-run-list">
+                  {experiments.data?.map((experiment) => (
+                    <label
+                      key={experiment.id}
+                      className="system-record-card training-compare-card"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={compareSelection.includes(experiment.id)}
+                        onChange={(event) => {
+                          setCompareSelection((current) =>
+                            event.target.checked
+                              ? [...current, experiment.id].slice(-4)
+                              : current.filter(
+                                  (item) => item !== experiment.id,
+                                ),
+                          );
+                        }}
+                      />
+                      <strong>{experiment.architecture}</strong>
+                      <small>{experiment.provider_id}</small>
+                      {Object.entries(experiment.summary_metrics_json)
+                        .slice(0, 4)
+                        .map(([key, value]) => (
+                          <span key={key}>
+                            {metricLabel(key)}: {String(value)}
+                          </span>
+                        ))}
+                    </label>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => compareExperimentsMutation.mutate()}
+                  disabled={compareSelection.length < 2}
+                >
+                  Compare selected experiments
+                </button>
+                {compareWarnings.length > 0 && (
+                  <ul className="system-details">
+                    {compareWarnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                )}
+              </article>
+            </div>
+          )}
+
+          {selectedDraft && (
+            <>
               {activeSection === "models" && (
                 <div className="training-card-grid">
                   <SegmentationEvaluationPanel project={project} />
@@ -2281,7 +2297,7 @@ export function TrainingWorkspace({
                   </article>
 
                   <article className="system-card">
-                    <h4>Registered detector models</h4>
+                    <h4>Registered project models</h4>
                     <div className="training-run-list">
                       {models.data?.map((model) => (
                         <div key={model.id} className="system-record-card">

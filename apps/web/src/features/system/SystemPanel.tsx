@@ -21,6 +21,7 @@ import {
   type SystemCommandShortcutRepairResponse,
   type SystemDiagnosticsStatusResponse,
 } from "../../api/client";
+import { ConfigurationDiagnostics } from "./ConfigurationDiagnostics";
 
 const ACTIVE_JOB_STATUSES = new Set(["queued", "running", "cancel_requested"]);
 
@@ -396,6 +397,8 @@ export function SystemPanel({
           )}
         </section>
       </div>
+
+      <ConfigurationDiagnostics />
 
       <section className="system-card">
         <div className="section-heading">

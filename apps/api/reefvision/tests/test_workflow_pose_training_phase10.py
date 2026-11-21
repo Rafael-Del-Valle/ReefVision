@@ -63,7 +63,6 @@ from reefvision.storage.projects import (
 from reefvision.tests.test_pose_training_datasets_phase9 import (
     _verified_round,
 )
-from reefvision.tests.test_workflow_pose_review_resume_phase10 import _save_and_queue
 
 
 def _frozen_dataset(
@@ -1241,7 +1240,11 @@ def test_saved_native_reefpose_workflow_executes_and_replays(
                     },
                 },
             },
-            {"node_id": "register", "node_type": "register_trained_model"},
+            {
+                "node_id": "register",
+                "node_type": "register_trained_model",
+                "parameters": {"display_name": "Repeated native study"},
+            },
         ],
         "edges": [
             {
@@ -1261,8 +1264,14 @@ def test_saved_native_reefpose_workflow_executes_and_replays(
         ],
     }
 
+    url = f"/api/v1/projects/{project['id']}"
+    saved = client.post(url + "/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    models = {}
     for _ in range(2):
-        run_id, job_id = _save_and_queue(client, str(project["id"]), graph)
+        queued = client.post(url + "/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert queued.status_code == 202, queued.text
+        run_id, job_id = queued.json()["id"], queued.json()["job_id"]
         processed = process_workflow_run_job(app.state.settings, app.state.session_factory, job_id)
         if not processed:
             state = client.get(f"/api/v1/workflow-runs/{run_id}")
@@ -1278,10 +1287,15 @@ def test_saved_native_reefpose_workflow_executes_and_replays(
             )
             assert model_artifact is not None
             assert model_artifact.payload_json["provider_name"] == "reefpose"
+            assert run.workflow_graph_record_id == saved.json()["id"]
+            model = session.get(ModelRegistration, model_artifact.payload_json["model_id"])
+            assert model is not None and model.display_name.startswith("Repeated native study")
+            models[model.sha256] = (model.id, model.display_name)
             assert (
                 model_artifact.payload_json["pose_schema_content_hash"]
                 == dataset["pose_schema_content_hash"]
             )
+    assert len(models) == len(set(models.values())) == 2
 
 
 @pytest.mark.integration
