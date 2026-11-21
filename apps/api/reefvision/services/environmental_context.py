@@ -294,8 +294,28 @@ class EnvironmentalContextService:
         ).all()
         if len(rows) > 10000:
             raise ValidationError("Too many environmental candidates; narrow the time interval")
+        # A record checksum alone cannot establish that its provider snapshot
+        # remains trustworthy. Validate each referenced cache once before
+        # allowing its observations into spatial/temporal or event analyses.
+        # Archived record listing remains independent of cache availability.
+        verified_caches: dict[str, EnvironmentalCacheEntry] = {}
         matches = []
         for row in rows:
+            cache_key = row.payload_json.get("environmental_cache_key")
+            if cache_key is not None:
+                if not isinstance(cache_key, str) or not cache_key:
+                    raise ConflictError("Environmental observation has an invalid cache key")
+                if cache_key not in verified_caches:
+                    cache_entry = self.session.scalar(
+                        select(EnvironmentalCacheEntry).where(
+                            EnvironmentalCacheEntry.project_id == project_id,
+                            EnvironmentalCacheEntry.cache_key == cache_key,
+                        )
+                    )
+                    if cache_entry is None:
+                        raise ConflictError("Environmental observation cache is missing")
+                    self._verified_cache_record_ids(cache_entry)
+                    verified_caches[cache_key] = cache_entry
             record = self.science.response(row)
             if (
                 record.location is None
@@ -319,16 +339,7 @@ class EnvironmentalContextService:
                 depth_delta = record.depth_m - request.depth_m
                 if abs(depth_delta) > request.max_depth_delta_m:
                     continue
-            cache = (
-                self.session.scalar(
-                    select(EnvironmentalCacheEntry).where(
-                        EnvironmentalCacheEntry.project_id == project_id,
-                        EnvironmentalCacheEntry.cache_key == record.environmental_cache_key,
-                    )
-                )
-                if record.environmental_cache_key
-                else None
-            )
+            cache = verified_caches.get(cache_key) if cache_key is not None else None
             matches.append(
                 EnvironmentalMatch(
                     cache_fetched_at=_utc(cache.fetched_at) if cache else None,
