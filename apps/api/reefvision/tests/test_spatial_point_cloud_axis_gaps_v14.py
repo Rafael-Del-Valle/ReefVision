@@ -20,6 +20,16 @@ POINTS = [
     [9.0, 1.0, 1.0],
     [1.0, 0.0, 1.0],
 ]
+# Three equal maximal x-axis gaps. The x=2 boundary is supported by
+# three rows but just two distinct XYZ acquisition locations.
+TIED_POINTS = [
+    [0.0, 0.0, 0.0],
+    [2.0, 0.0, 1.0],
+    [4.0, 1.0, 0.0],
+    [6.0, 1.0, 1.0],
+    [2.0, 1.0, 1.0],
+    [2.0, 1.0, 1.0],
+]
 PARAMS = {
     "meters_per_unit": 0.25,
     "calibration_method": "ruler",
@@ -46,6 +56,7 @@ def test_axis_gap_is_projection_only_duplicate_invariant_and_scale_bounded() -> 
     gaps = original["axis_largest_adjacent_coordinate_gaps"]
     assert gaps == reversed_rows["axis_largest_adjacent_coordinate_gaps"]
     assert gaps["x"]["distinct_source_coordinate_levels"] == 4
+    assert gaps["x"]["equally_largest_adjacent_gap_count"] == 1
     assert gaps["x"]["source_endpoint_values"] == [2.0, 9.0]
     assert gaps["x"]["gap_endpoint_support"] == {
         "lower": {"source_rows": 1, "distinct_xyz_loci": 1},
@@ -58,6 +69,7 @@ def test_axis_gap_is_projection_only_duplicate_invariant_and_scale_bounded() -> 
     for axis in ("y", "z"):
         assert gaps[axis]["distinct_source_coordinate_levels"] == 2
         assert gaps[axis]["largest_adjacent_source_gap_units"] == 1.0
+        assert gaps[axis]["equally_largest_adjacent_gap_count"] == 1
         assert gaps[axis]["calibrated_gap_m"] == pytest.approx(0.25)
     assert original["provenance"]["geometry_sha256"] == reversed_rows["provenance"][
         "geometry_sha256"
@@ -76,6 +88,7 @@ def test_collapsed_axis_has_no_invented_sampling_gap() -> None:
         "distinct_source_coordinate_levels": 1,
         "source_endpoint_values": None,
         "gap_endpoint_support": None,
+        "equally_largest_adjacent_gap_count": 0,
         "largest_adjacent_source_gap_units": None,
         "fraction_of_source_axis_span": None,
         "calibrated_gap_m": None,
@@ -98,6 +111,7 @@ def test_gap_boundary_support_distinguishes_rows_and_distinct_xyz_loci() -> None
     reordered = _direct(list(reversed(points)))
     x_gap = original["axis_largest_adjacent_coordinate_gaps"]["x"]
     assert x_gap["source_endpoint_values"] == [2.0, 9.0]
+    assert x_gap["equally_largest_adjacent_gap_count"] == 1
     assert x_gap["gap_endpoint_support"] == {
         "lower": {"source_rows": 3, "distinct_xyz_loci": 2},
         "upper": {"source_rows": 1, "distinct_xyz_loci": 1},
@@ -115,6 +129,28 @@ def test_gap_boundary_support_distinguishes_rows_and_distinct_xyz_loci() -> None
         "axis_largest_adjacent_coordinate_gaps"
     ]
     assert original["provenance"]["geometry_sha256"] == reordered["provenance"][
+        "geometry_sha256"
+    ]
+    assert original["provenance"]["calibration_verified"] is False
+    assert original["surface_area_m2"] is None
+    assert original["branch_length_m"] is None
+
+
+def test_exact_tied_largest_gaps_preserve_row_support_and_disclose_ambiguity() -> None:
+    original = _direct(TIED_POINTS)
+    reversed_rows = _direct(list(reversed(TIED_POINTS)))
+    x_gap = original["axis_largest_adjacent_coordinate_gaps"]["x"]
+    assert x_gap == reversed_rows["axis_largest_adjacent_coordinate_gaps"]["x"]
+    assert x_gap["source_endpoint_values"] == [0.0, 2.0]
+    assert x_gap["equally_largest_adjacent_gap_count"] == 3
+    assert x_gap["largest_adjacent_source_gap_units"] == 2.0
+    assert x_gap["gap_endpoint_support"] == {
+        "lower": {"source_rows": 1, "distinct_xyz_loci": 1},
+        "upper": {"source_rows": 3, "distinct_xyz_loci": 2},
+    }
+    assert "axis_sampling_multiple_equally_largest_gaps" in original["qc_warnings"]
+    assert original["qc_warnings"] == reversed_rows["qc_warnings"]
+    assert original["provenance"]["geometry_sha256"] == reversed_rows["provenance"][
         "geometry_sha256"
     ]
     assert original["provenance"]["calibration_verified"] is False
@@ -144,38 +180,47 @@ def test_positive_axis_gap_below_calibration_resolution_is_not_zero() -> None:
 
 
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
+@pytest.mark.parametrize("tied_gap", [False, True], ids=["unique-largest", "three-way-tie"])
 def test_imported_and_xyz_gap_science_replays_from_saved_typed_graph(
-    client: TestClient, source_format: str
+    client: TestClient, source_format: str, tied_gap: bool
 ) -> None:
     project_id = str(create_project(client, "Synthetic point-cloud sampling QC")["id"])
     base = f"/api/v1/projects/{project_id}"
     params = dict(PARAMS)
+    points = TIED_POINTS if tied_gap else POINTS
     if source_format == "ply":
         header = (
-            "ply\nformat ascii 1.0\nelement vertex 5\n"
+            f"ply\\nformat ascii 1.0\\nelement vertex {len(points)}\\n"
             "property double x\nproperty double y\nproperty double z\nend_header\n"
         )
         params["ply_text"] = header + "".join(
-            f"{x:g} {y:g} {z:g}\n" for x, y, z in POINTS
+            f"{x:g} {y:g} {z:g}\\n" for x, y, z in points
         )
     else:
-        params["points"] = POINTS
+        params["points"] = points
     response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert response.status_code == 200, response.text
     expected = response.json()
     assert expected["axis_largest_adjacent_coordinate_gaps"]["x"][
         "source_endpoint_values"
-    ] == [2.0, 9.0]
+    ] == ([0.0, 2.0] if tied_gap else [2.0, 9.0])
+    assert expected["axis_largest_adjacent_coordinate_gaps"]["x"][
+        "equally_largest_adjacent_gap_count"
+    ] == (3 if tied_gap else 1)
     assert expected["axis_largest_adjacent_coordinate_gaps"]["x"][
         "gap_endpoint_support"
     ] == {
         "lower": {"source_rows": 1, "distinct_xyz_loci": 1},
-        "upper": {"source_rows": 1, "distinct_xyz_loci": 1},
+        "upper": {
+            "source_rows": 3 if tied_gap else 1,
+            "distinct_xyz_loci": 2 if tied_gap else 1,
+        },
     }
+    assert ("axis_sampling_multiple_equally_largest_gaps" in expected["qc_warnings"]) is tied_gap
     assert expected["measurement_status"] == "caller_supplied_unverified"
 
     graph = {
-        "graph_id": f"point-cloud-axis-gaps-{source_format}-v14",
+        "graph_id": f"point-cloud-axis-gaps-{source_format}-{tied_gap}-v14",
         "name": "Review projected coordinate gaps, not coral tissue gaps",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
