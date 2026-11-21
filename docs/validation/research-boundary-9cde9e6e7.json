@@ -1,0 +1,221 @@
+{
+  "source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+  "version": "1.8.0",
+  "schema": "b18_spectral_0002",
+  "fixtures": "Generated; ordinary CPU training and local registration supplied the actual models.",
+  "browser": {
+    "two_cpu_prerequisites": {
+      "startTime": "2026-11-21T01:02:36.639Z",
+      "duration": 63463.96,
+      "expected": 2,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "five_research_journeys": {
+      "startTime": "2026-11-21T01:03:40.482Z",
+      "duration": 36570.225,
+      "expected": 5,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "help_qc_classes_on_production_frontend": {
+      "startTime": "2026-11-21T01:02:40.948Z",
+      "duration": 24143.693,
+      "expected": 3,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "standard_suite": {
+      "startTime": "2026-11-21T01:03:28.653Z",
+      "duration": 9547.497000000001,
+      "expected": 15,
+      "skipped": 49,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "stopped_via_owner_stdin": true,
+    "feature_receipts": {
+      "taxonomy": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/research/taxonomy-detectability-proof.json",
+        "sha256": "6cf9862ee3fad77e896edd56f7024cca3ffcd50ac89910bfc2f4aec15a06e8bb"
+      },
+      "audio": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/research/bioacoustics-evidence.json",
+        "sha256": "fae727f62d7cf76bb339ae0f83aa7b026387608e75ec04cbf528a713e646a148"
+      },
+      "multispectral": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/research/multispectral-evidence.json",
+        "sha256": "f9761af32577fe77bda771aa4c30adc0095d7c701c92d2d73020783ad5d4280b"
+      },
+      "underwater": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/research/underwater-adjustment-evidence.json",
+        "sha256": "ae6f74e3549fe563f7314970ac84ef6a9f46654d64dd9152b9b626d8c6f87b2c"
+      },
+      "domain": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/research/domain-shift-evidence.json",
+        "sha256": "9212accd1083e529ab42041baedc30b117aa3590849417fff9acc87582b7d2bb"
+      }
+    }
+  },
+  "source_checks": {
+    "ruff_format_files": 1420,
+    "mypy_source_files": 778,
+    "focused_desktop_inventory_and_research": 41,
+    "native_argument_cases": 3,
+    "rust_tests": 8,
+    "frontend_unit_tests": 930,
+    "migration_table_counts": [
+      133,
+      1,
+      133
+    ],
+    "source_logs": {
+      "checks.json": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/checks.json",
+        "sha256": "f72121077051690757b89ff48a68ce14d22e05df4c99bae0e7914b72bd42795e"
+      },
+      "lockfile.log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/lockfile.log",
+        "sha256": "a4f05eb0e0f8c59dc774dbcc0f960075269991f0bb58fa76735a0f21b6e87b56"
+      },
+      "format.log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/format.log",
+        "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+      },
+      "typecheck.log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/typecheck.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "unit.log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/unit.log",
+        "sha256": "fd9147af477318a8f96ec58489f9697029f2d9125092fbd7d135d17a070a611d"
+      },
+      "ui-build.log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/ui-build.log",
+        "sha256": "8401f4b07f30c1ee5dee1a914d10019515e6c4fc15333e19f0b6b784e9768458"
+      },
+      "browser.log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/browser.log",
+        "sha256": "4ca50451ad3cbe2dfca2dd83a1eb005b36f6d90b6bcb92b057a17990963c3846"
+      },
+      "migration.json": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/migration.json",
+        "sha256": "f8f1f8123b2c3e9d59c8bd0ba2b99272ebd3a16ab0384abe7722f88c81eedd60"
+      },
+      "desktop-and-research.xml": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/desktop-and-research.xml",
+        "sha256": "62498586c4a69c846d20d0d65964e7ea9e85124e9037061df5a2d381bbe4b4c0"
+      },
+      "final-9cde-mypy.log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/final-9cde-mypy.log",
+        "sha256": "4601cdc37daba45d0f60d4161f3621adf48b6c1ad78e79177171ba9845d60900"
+      },
+      "final-9cde-rust.log": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/gates/final-9cde-rust.log",
+        "sha256": "ec2630f5becf6481e9f864231d0a44099e323e11b07c5018891a8fc927ac599a"
+      }
+    },
+    "physical_cuda": {
+      "tests_passed": 3,
+      "runtime": "PyTorch 2.5.1+cu121",
+      "device": "NVIDIA GeForce RTX 3090",
+      "evidence": {
+        "file": "1.8/checkpoints/9cde9e6e7/source/physical-cuda/result.json",
+        "sha256": "b1837a96876e0c53a83750a9c906af75e498346ad8263bebdaf0d51c9a0124be"
+      }
+    }
+  },
+  "original_installer": {
+    "source": "542254b8aa0d896fb630282d70f263a74a65b99f",
+    "draft": 113,
+    "workflow": 44844039968,
+    "job": 136659258014,
+    "msi_sha256": "4bf9d763c43d7df809b8e97e9bc9c67500342ea27e2d241ab664e6194b310fc4",
+    "external_cabinets": 5,
+    "checksums": {
+      "file": "1.8/checkpoints/542254b8a/official/installer/SHA256SUMS.txt",
+      "sha256": "9863b07288c9ad8aad21ce6ac128e6a3b5bbe0f32fdb0f44d3eda2f218e5d641"
+    },
+    "transport": {
+      "file": "1.8/checkpoints/542254b8a/official/verified-transport.json",
+      "sha256": "6a88e18c5d92d1f3adb6b3beace4440a8365bb52b5566b553894558f01e8c8ff"
+    },
+    "upgrade_1_7_to_1_8": {
+      "projects": 5,
+      "populated_table_fingerprints": 54,
+      "verified_restore_files": 26,
+      "verified_restore_bytes": 20378834,
+      "old_reader_reopened_for_writing": true,
+      "evidence": {
+        "file": "1.8/checkpoints/542254b8a/official/evidence/official-rich-five-projects.json",
+        "sha256": "a56bab4f058ee7432ae56214463ea038ae4a39852315577e12fe7f27de981890"
+      }
+    },
+    "extracted_native_webview2": {
+      "research_journeys": 5,
+      "fixture_training_journeys": 2,
+      "cuda_inference_jobs": 3,
+      "evidence": {
+        "file": "1.8/checkpoints/542254b8a/official/evidence/physical-original/native-original-index.json",
+        "sha256": "687ca069e5d4406d4d901339745cf7ef14b2967706def59c937db1726c327b13"
+      },
+      "independent_retained_output_check": {
+        "file": "1.8/checkpoints/542254b8a/official/evidence/physical-original/independent-validation.json",
+        "sha256": "ef755930d5a9440c3f2eba36b57bbae70afbf9eb48b043786a55897a34cde083"
+      }
+    },
+    "registered_offline": {
+      "fresh": {
+        "ordinary": 511,
+        "system": 511
+      },
+      "cached_upgrade": {
+        "ordinary": 648,
+        "system": 651
+      },
+      "restored_files": 7,
+      "predecessor": "1.7.0",
+      "workflow": 44845170720,
+      "evidence": {
+        "file": "1.8/checkpoints/542254b8a/official/offline/attempt-44845170720/offline-index.json",
+        "sha256": "cddbaa86c267eaa144deaee2f673617ac5c103f33c1396a89d0bcd8e07148099"
+      }
+    }
+  },
+  "separately_built_msis": {
+    "local_542_sha256": "4c43233cc01e0a6757187ee1c29576d989230e8fd67a4aaeec866074ebe5d8ad",
+    "local_cabs": 6,
+    "native_local_profile": {
+      "device": "GeForce RTX 3090",
+      "standard_account_cpu_research_journeys": 5,
+      "cpu_fixture_training": 2,
+      "physical_reviewed_cuda_jobs": 3,
+      "evidence": {
+        "file": "1.8/checkpoints/542254b8a/local-production/evidence/physical-local/native-local-index.json",
+        "sha256": "61e93ec729ff2f0f8a460e2ed964680060af0845f8f0a4cd11e132729ea0a408"
+      }
+    }
+  },
+  "corrected_windows": {
+    "draft": 115,
+    "workflow": 44847408180,
+    "build_job": 136670423050,
+    "qualification": "Pending matched installer and registered Windows results."
+  },
+  "field_acceptance": "Open for field color, acoustic, spectral, ecological and acquisition-group reference evidence.",
+  "original_full_windows_backend": {
+    "source": "542254b8aa0d896fb630282d70f263a74a65b99f",
+    "collected": 6034,
+    "passed": 6022,
+    "skipped": 12,
+    "failed": 0,
+    "errors": 0,
+    "evidence": {
+      "file": "1.8/checkpoints/542254b8a/source/backend/independent-verification.json",
+      "sha256": "75d59b6ca6e8693c093a75cad5f58ec1becf49a6149582a6eb8b01b80ad6eb17"
+    }
+  }
+}
