@@ -93,7 +93,8 @@ def extend_mesh_registry(
                 "Optional source SHA-256 binding rejects changed OBJ/PLY/GLB bytes on replay.",
                 "Optional edge routes are not biologically verified branch lengths.",
                 "Caller-selected edge traces are not verified anatomical centerlines.",
-                "Optional extrema and patch pinning change display sampling only, never measured area.",
+                "Optional extrema and patch pinning change display sampling only, "
+                "never measured area.",
             ],
         )
         nodes[POINT_NODE_TYPE] = WorkflowNodeDefinitionResponse(
