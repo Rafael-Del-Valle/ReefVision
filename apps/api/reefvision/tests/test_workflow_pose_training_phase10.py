@@ -1494,6 +1494,58 @@ def test_cancelling_before_pose_worker_claim_closes_the_training_and_graph(
     assert detail["artifacts"][0]["payload_json"]["manifest_sha256"] == dataset["manifest_sha256"]
 
 
+def test_cancelling_running_pose_node_before_child_publication(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        PoseTrainingExportService,
+        "_extract_exact_frames",
+        staticmethod(_synthetic_exact_frames),
+    )
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    url = f"/api/v1/projects/{project['id']}"
+    graph = _native_pose_workflow_graph(str(dataset["id"]))
+    graph["nodes"] = cast(list[dict[str, Any]], graph["nodes"])[:-1]
+    graph["edges"] = cast(list[dict[str, Any]], graph["edges"])[:-1]
+    saved = client.post(url + "/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    queued = client.post(url + "/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert queued.status_code == 202, queued.text
+    parent_id = queued.json()["job_id"]
+    run_url = f"/api/v1/workflow-runs/{queued.json()['id']}"
+
+    def cancel_at_disk_preflight(_data_dir: Path) -> float:
+        detail = client.get(run_url).json()
+        assert detail["run"]["status"] == "running"
+        assert {node["node_id"]: node["status"] for node in detail["nodes"]} == {
+            "dataset": "succeeded",
+            "train": "running",
+        }
+        assert client.get(url + "/training-runs").json() == []
+        cancelled = client.post(f"/api/v1/jobs/{parent_id}/cancel")
+        assert cancelled.status_code == 200, cancelled.text
+        assert cancelled.json()["status"] == "cancel_requested"
+        return 1.0
+
+    monkeypatch.setattr(
+        "reefvision.services.workflow_pose_training.free_training_space_gib",
+        cancel_at_disk_preflight,
+    )
+    completed = process_workflow_run_job(app.state.settings, app.state.session_factory, parent_id)
+    detail = client.get(run_url).json()
+    assert detail["run"]["status"] == "cancelled", detail["run"]
+    assert not completed
+    assert client.get(f"/api/v1/jobs/{parent_id}").json()["status"] == "cancelled"
+    assert client.get(url + "/training-runs").json() == []
+    assert {node["node_id"]: node["status"] for node in detail["nodes"]} == {
+        "dataset": "succeeded",
+        "train": "cancelled",
+    }
+    assert len(detail["artifacts"]) == 1
+
+
 def test_saved_native_reefpose_workflow_executes_and_replays(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
