@@ -222,8 +222,10 @@ def materialize_pose_training_exports(
     # retain the interoperability export's val: images/train entry.
     # The production runner explicitly forces val=False in that case.
     # Therefore those frames are never silently treated as validation.
+    # Ultralytics resolves an explicit `path: .` against its working directory.
+    # Omitting this portable export header roots the splits at the managed YAML.
     yaml_path.write_text(
-        yaml_text,
+        yaml_text.removeprefix("path: .\n"),
         encoding="utf-8",
     )
 

@@ -402,6 +402,8 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
 
     yaml_text = (destination / "data.yaml").read_text(encoding="utf-8")
 
+    # Ultralytics must resolve relative split names from the managed YAML's directory.
+    assert not any(line.startswith("path:") for line in yaml_text.splitlines())
     assert "train: images/train" in yaml_text
     assert "val: images/val" in yaml_text
 
