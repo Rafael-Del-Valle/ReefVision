@@ -1,0 +1,140 @@
+name: Windows Registered Guided Pose Proof
+
+on:
+  pull_request:
+    branches: [codex/reefvision-1.9-research-integration]
+    paths:
+      - ".github/workflows/windows-registered-guided-pose-proof.yml"
+      - ".github/guided-pose-proof/**"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: registered-guided-pose-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  guided-pose-original-install:
+    if: github.repository == 'Rafael-Del-Valle/ReefVision' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'codex/reefvision-1.9-guided-registered-evidence'
+    runs-on: windows-2022
+    timeout-minutes: 120
+    env:
+      PROOF_ROOT: C:/rv-guided-${{ github.run_id }}-${{ github.run_attempt }}
+      SOURCE_COMMIT: 96476bc462aeed0137a55b02ded6d66b1d4a2c72
+      ORIGINAL_BUILD_RUN: "44867493658"
+      ORIGINAL_BUILD_JOB: "136734331397"
+      CLEAN_DRIVER_BLOB: b16de076216ba50d553cc551cfa81ba7340a7a06
+      RV_VERSION: "1.9.0"
+      RV_SCHEMA: b19_registration_0001
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: proof
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: source/apps/web/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Stage the original MSI and verify the acceptance-only driver
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tool = './proof/.github/guided-pose-proof'
+          & "$tool/stage-original.ps1" -RepositoryRoot ./source -RunId $env:ORIGINAL_BUILD_RUN `
+            -SourceCommit $env:SOURCE_COMMIT -Version $env:RV_VERSION -Root $env:PROOF_ROOT
+          $transport = Get-Content -LiteralPath "$env:PROOF_ROOT/evidence/verified-transport.json" -Raw | ConvertFrom-Json
+          if ($transport.build_job_id -ne [long]$env:ORIGINAL_BUILD_JOB -or $transport.original_msi_sha256 -cnotmatch '^[a-f0-9]{64}$') {
+            throw 'The verified package must bind to the exact original manufacturing job and MSI digest.'
+          }
+          $driver = & "$tool/attach-clean-driver.ps1" -RepositoryRoot ./source -SourceCommit $env:SOURCE_COMMIT `
+            -ExpectedDriverBlob $env:CLEAN_DRIVER_BLOB
+          $driver | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$env:PROOF_ROOT/evidence/guided-clean-driver.json"
+          python -m pip install numpy==2.2.6 opencv-contrib-python==4.12.0.88 httpx==0.28.1
+          if ($LASTEXITCODE) { throw 'Could not install the pinned fixture-only Python dependencies.' }
+          npm --prefix source/apps/web ci --no-audit --no-fund
+          if ($LASTEXITCODE) { throw 'Could not install the locked Playwright acceptance dependencies.' }
+      - name: Exercise two guided pose runs in the registered standard-user desktop
+        shell: pwsh
+        working-directory: source
+        run: |
+          . ./scripts/lib/node-tools.ps1
+          $node = Find-ReefVisionExecutable -Names 'node.exe'
+          $env:RV_GUIDED_PROOF_DRIVER = (Resolve-Path -LiteralPath '../proof/.github/guided-pose-proof/run-guided-pose.ps1').Path
+          $env:RV_GUIDED_PROOF_PYTHON = (Get-Command python.exe).Source
+          $env:PATH = @((Join-Path $env:SystemRoot 'System32'), $env:SystemRoot,
+            (Join-Path $env:SystemRoot 'System32/Wbem'), (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0'),
+            (Split-Path -Parent (Get-Command pwsh.exe).Source)) -join ';'
+          & ./scripts/acceptance-windows-clean-install.ps1 `
+            -InstallerPath "$env:PROOF_ROOT/payload/ReefVision_${env:RV_VERSION}_x64_en-US.msi" `
+            -ExpectedVersion $env:RV_VERSION -ExpectedSchemaRevision $env:RV_SCHEMA `
+            -AcceptanceRoot "$env:PROOF_ROOT/acceptance" -SpatialWorkflowNodePath $node `
+            -HostedStandardUserWebView2 -FirstUseAcceptance -DisposableTest -SkipUpgrade -KeepArtifacts
+      - name: Verify the registered lifecycle and attach only compact receipts
+        if: always()
+        shell: pwsh
+        run: |
+          $destination = New-Item -ItemType Directory -Path './source/.artifacts/registered-guided-proof' -Force
+          foreach ($name in 'verified-payload.json','verified-transport.json','guided-clean-driver.json') {
+            $path = "$env:PROOF_ROOT/evidence/$name"
+            if (Test-Path -LiteralPath $path -PathType Leaf) { Copy-Item -LiteralPath $path -Destination $destination.FullName }
+          }
+          $proof = @(Get-ChildItem -LiteralPath './source/.artifacts' -Directory -Filter 'windows-clean-acceptance-*')
+          if ($proof.Count -ne 1) { throw 'Expected one registered install result.' }
+          $path = $proof[0].FullName
+          $report = Get-Content -LiteralPath (Join-Path $path 'report.json') -Raw | ConvertFrom-Json
+          $guided = Get-Content -LiteralPath (Join-Path $path 'guided-pose-evidence.json') -Raw | ConvertFrom-Json
+          $identity = Get-Content -LiteralPath (Join-Path $path 'spatial-standard-user-identity.log') -Raw | ConvertFrom-Json
+          $cleanup = Get-Content -LiteralPath (Join-Path $path 'spatial-standard-user-cleanup.log') -Raw | ConvertFrom-Json
+          $compact = Join-Path $path 'guided-pose-workflow.json'
+          $transport = Get-Content -LiteralPath "$env:PROOF_ROOT/evidence/verified-transport.json" -Raw | ConvertFrom-Json
+          foreach ($stage in 'install','first_launch','frontend_backend_connectivity','webview2','guided_pose_workflow','project_persistence','restart','uninstall','data_retention') {
+            if ($report.$stage.status -cne 'PASS') { throw "Registered lifecycle stage failed: $stage." }
+          }
+          $guidedDatabase = Join-Path (Split-Path -Parent $report.isolated_data_root) 'spatial-data/reefvision.db'
+          if ($report.installer_sha256 -ine $transport.original_msi_sha256 -or
+              $guided.original_msi_sha256 -cne $transport.original_msi_sha256 -or
+              $guided.source_commit -cne $env:SOURCE_COMMIT -or $guided.status -cne 'PASS' -or
+              $guided.backend.integrity -ne 8192 -or -not $guided.backend.exact_profile_verified -or
+              $identity.desktop_integrity -ne 8192 -or $identity.driver_integrity -le $identity.desktop_integrity -or
+              $identity.desktop_pid -ne $guided.desktop_pid -or $identity.desktop_owner_sid -cne $guided.browser_sid -or
+              -not ($cleanup.desktop_closed -and $cleanup.launch_process_closed -and $cleanup.profile_removed -and $cleanup.account_removed) -or
+              $guided.completed_workflow_runs -ne 2 -or $guided.completed_human_gates -ne 4 -or
+              (Get-FileHash -LiteralPath $compact -Algorithm SHA256).Hash -ine $guided.workflow_receipt_sha256 -or
+              -not (Test-Path -LiteralPath $guidedDatabase -PathType Leaf)) {
+            throw 'Installed guided pose workflow, profile retention or original MSI digest failed verification.'
+          }
+          [ordered]@{source_commit=$env:SOURCE_COMMIT; original_msi_sha256=$transport.original_msi_sha256;
+            original_build_run_id=[long]$env:ORIGINAL_BUILD_RUN; original_build_job_id=[long]$env:ORIGINAL_BUILD_JOB;
+            guided_profile_retained_after_uninstall=$true; original_registered_report_sha256=(Get-FileHash -LiteralPath (Join-Path $path 'report.json')).Hash.ToLowerInvariant();
+            guided_evidence_sha256=(Get-FileHash -LiteralPath (Join-Path $path 'guided-pose-evidence.json')).Hash.ToLowerInvariant()} |
+            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $destination.FullName 'registered-guided-provenance.json')
+      - name: Retain registered original provenance without generated media, archives or weights
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-1.9-Original-Registered-Guided-Pose
+          path: |
+            source/.artifacts/registered-guided-proof/*.json
+            source/.artifacts/windows-clean-acceptance-*/report.json
+            source/.artifacts/windows-clean-acceptance-*/guided-pose-*.json
+            source/.artifacts/windows-clean-acceptance-*/guided-pose-*.log
+            source/.artifacts/windows-clean-acceptance-*/spatial-standard-user-*.log
+            source/.artifacts/windows-clean-acceptance-*/spatial.api.log.tail.log
+            source/.artifacts/windows-clean-acceptance-*/spatial.backend.log.tail.log
+            source/.artifacts/windows-clean-acceptance-*/first-use-playwright.json
+            source/.artifacts/windows-clean-acceptance-*/spatial-playwright.json
+          include-hidden-files: true
+          if-no-files-found: warn
