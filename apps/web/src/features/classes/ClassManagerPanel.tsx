@@ -135,7 +135,10 @@ function deletionBlockersMatchProtectedInventory(
 ): boolean {
   if (operation.operation_type !== "reassign_delete") return true;
   const blocked = new Map(
-    operation.plan.blocking_records.map((group) => [group.key, group.record_ids]),
+    operation.plan.blocking_records.map((group) => [
+      group.key,
+      group.record_ids,
+    ]),
   );
   return operation.plan.protected_records.every((group) => {
     if (!DELETION_BLOCKER_KEYS.has(group.key)) return true;
@@ -175,7 +178,10 @@ function compatibilityImpactsMatchProtectedInventory(
   }
   const impactsByKey = new Map<string, string[]>();
   for (const impact of plan.compatibility_impacts) {
-    if (!compatibilityKeys.includes(impact.key) || impactsByKey.has(impact.key)) {
+    if (
+      !compatibilityKeys.includes(impact.key) ||
+      impactsByKey.has(impact.key)
+    ) {
       return false;
     }
     impactsByKey.set(impact.key, impact.record_ids);

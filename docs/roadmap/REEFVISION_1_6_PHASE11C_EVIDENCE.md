@@ -64,3 +64,9 @@ corrected the exact backend Ruff E501 test line reported by CI
 reconciliation, representative biological persisted-workflow acceptance,
 genuine Windows MSI/CAB clean install/upgrade/rollback and installed-GUI
 checks, plus explicit researcher approval. No unrelated version changes.
+
+## Exact-head CI formatting unblock (2026-11-21)
+
+A fresh read of exact-head [Actions #44909736559](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44909736559) identified two independently blocking format gates: backend Ruff format in the Phase 11C token-binding contract test, and frontend Prettier in the class-reassignment panel and its regression tests. The native Windows research-preservation check passed. Applied only the formatter's exact reported source changes in these three files; **no** scientific operation, reference/category inventory, human approval, Workflow Builder execution, MSI behavior or database migration semantics changed. These isolated formatting corrections are needed before the existing backend pytest and frontend TypeScript/unit/E2E/build gates can execute. Source-level substitutions and branch readback are not a replacement for those tests; require a new exact-commit CI pass before making a release claim.
+
+Status: **RELEASE HOLD** pending CI, 1.1/1.6 Alembic-0038 reconciliation, native Windows MSI/CAB installed GUI/upgrade/rollback, representative biological saved-workflow validation and researcher sign-off.

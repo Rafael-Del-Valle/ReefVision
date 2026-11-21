@@ -990,7 +990,9 @@ describe("ClassManagerPanel", () => {
       renderPanel();
       const row = sourceClassRow();
       await userEvent.click(
-        within(row).getByRole("button", { name: "Preview Reassign and Delete" }),
+        within(row).getByRole("button", {
+          name: "Preview Reassign and Delete",
+        }),
       );
       expect(
         await within(row).findByText(/Operation evidence is incomplete/),

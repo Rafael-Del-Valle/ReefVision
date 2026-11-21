@@ -48,15 +48,14 @@ def test_phase11c_track16_report_is_bound_to_the_child_invocation() -> None:
     helper = _script("lib/phase11c-track16.ps1")
 
     assert "Assert-ReefVisionPhase11CEvidenceToken" in helper
-    assert '^[0-9a-f]{12}$' in helper
+    assert "^[0-9a-f]{12}$" in helper
     assert "$Arguments += @('-EvidenceToken', $EvidenceToken)" in wrapper
     assert "$ExpectedReportDirectory" in wrapper
     assert "[string]$Report.evidence_run_token -cne $EvidenceToken" in wrapper
     assert "--expected-evidence-token $EvidenceToken" in wrapper
     assert "Assert-ReefVisionPhase11CReportDataRoot" in helper
     assert (
-        "Assert-ReefVisionPhase11CReportDataRoot -ExpectedAcceptanceRoot $AcceptanceRoot"
-        in wrapper
+        "Assert-ReefVisionPhase11CReportDataRoot -ExpectedAcceptanceRoot $AcceptanceRoot" in wrapper
     )
     assert "-ReportedAcceptanceRoot ([string]$Report.acceptance_root)" in wrapper
     assert "-ReportedDataRoot ([string]$Report.isolated_data_root)" in wrapper
