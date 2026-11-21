@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useRef, useState } from "react";
 
+import samplePackageUrl from "../../../../../examples/plugins/green-fraction.rvplugin.json?url&inline";
 import {
   saveWorkflowGraph,
   type WorkflowGraphRecord,
@@ -95,6 +96,7 @@ export function PluginWorkspace({ projectId, onOpenWorkflow }: Props) {
   const [catalogOffset, setCatalogOffset] = useState(0);
   const [historyOffset, setHistoryOffset] = useState(0);
   const [pins, setPins] = useState<Partial<PluginMeasurementInput>>({});
+  const [pauseForReview, setPauseForReview] = useState(true);
 
   const catalog = useQuery({
     queryKey: [...pluginCatalogKey, catalogOffset],
@@ -132,7 +134,13 @@ export function PluginWorkspace({ projectId, onOpenWorkflow }: Props) {
     },
   });
   const saveGraph = useMutation({
-    mutationFn: (input: PluginMeasurementInput) =>
+    mutationFn: ({
+      input,
+      pauseForReview,
+    }: {
+      input: PluginMeasurementInput;
+      pauseForReview: boolean;
+    }) =>
       saveWorkflowGraph(projectId, {
         schema_version: "workflow-graph-0001",
         graph_id: "plugin-image-measurement",
@@ -144,6 +152,14 @@ export function PluginWorkspace({ projectId, onOpenWorkflow }: Props) {
             node_type: "plugin_image_measurement",
             parameters: input,
           },
+          ...(pauseForReview
+            ? [
+                {
+                  node_id: "review-measurement",
+                  node_type: "measurement_review_gate",
+                },
+              ]
+            : []),
         ],
         edges: [
           {
@@ -153,6 +169,17 @@ export function PluginWorkspace({ projectId, onOpenWorkflow }: Props) {
             target_node_id: "measure-image",
             target_port_id: "project",
           },
+          ...(pauseForReview
+            ? [
+                {
+                  edge_id: "measurement-to-review",
+                  source_node_id: "measure-image",
+                  source_port_id: "measurement",
+                  target_node_id: "review-measurement",
+                  target_port_id: "measurement",
+                },
+              ]
+            : []),
         ],
       }),
     onSuccess: (graph) => onOpenWorkflow?.(graph),
@@ -164,6 +191,11 @@ export function PluginWorkspace({ projectId, onOpenWorkflow }: Props) {
       <div className="feature-grid">
         <div className="panel-card">
           <h5>Installed packages</h5>
+          <p>
+            <a href={samplePackageUrl} download="green-fraction.rvplugin.json">
+              Download sample plugin
+            </a>
+          </p>
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -244,25 +276,41 @@ export function PluginWorkspace({ projectId, onOpenWorkflow }: Props) {
             pins={pins}
             onChange={setPins}
             actions={(input) => (
-              <div className="button-row">
-                <button
-                  type="button"
-                  disabled={!input || measure.isPending}
-                  onClick={() => input && measure.mutate(input)}
-                >
-                  {measure.isPending ? "Measuring…" : "Run measurement"}
-                </button>
+              <>
                 {onOpenWorkflow && (
+                  <label className="inline-check">
+                    <input
+                      type="checkbox"
+                      checked={pauseForReview}
+                      onChange={(event) =>
+                        setPauseForReview(event.target.checked)
+                      }
+                    />
+                    Pause for measurement review
+                  </label>
+                )}
+                <div className="button-row">
                   <button
                     type="button"
-                    className="secondary"
-                    disabled={!input || saveGraph.isPending}
-                    onClick={() => input && saveGraph.mutate(input)}
+                    disabled={!input || measure.isPending}
+                    onClick={() => input && measure.mutate(input)}
                   >
-                    Open in Workflow Builder
+                    {measure.isPending ? "Measuring…" : "Run measurement"}
                   </button>
-                )}
-              </div>
+                  {onOpenWorkflow && (
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={!input || saveGraph.isPending}
+                      onClick={() =>
+                        input && saveGraph.mutate({ input, pauseForReview })
+                      }
+                    >
+                      Open in Workflow Builder
+                    </button>
+                  )}
+                </div>
+              </>
             )}
           />
           {measure.isSuccess && <p role="status">Measurement saved.</p>}

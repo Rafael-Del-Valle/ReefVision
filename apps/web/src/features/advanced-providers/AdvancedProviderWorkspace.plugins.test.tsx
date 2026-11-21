@@ -175,6 +175,10 @@ describe("Local plugins in Providers", () => {
     const open = renderWorkspace();
     expect(screen.getByRole("heading", { name: "Providers" })).toBeVisible();
     const panel = screen.getByRole("region", { name: "Local plugins" });
+    expect(
+      within(panel).getByRole("link", { name: "Download sample plugin" }),
+    ).toHaveAttribute("download", "green-fraction.rvplugin.json");
+    expect(writes).toEqual([]);
     const chooser = within(panel).getByLabelText("Plugin package (JSON)");
     fireEvent.change(chooser, {
       target: {
@@ -241,6 +245,33 @@ describe("Local plugins in Providers", () => {
               node_type: "plugin_image_measurement",
               parameters: pins,
             }),
+            expect.objectContaining({ node_type: "measurement_review_gate" }),
+          ]),
+          edges: expect.arrayContaining([
+            expect.objectContaining({
+              source_node_id: "measure-image",
+              source_port_id: "measurement",
+              target_node_id: "review-measurement",
+              target_port_id: "measurement",
+            }),
+          ]),
+        },
+      },
+    });
+    const pause = within(panel).getByRole("checkbox", {
+      name: "Pause for measurement review",
+    });
+    expect(pause).toBeChecked();
+    fireEvent.click(pause);
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Open in Workflow Builder" }),
+    );
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    expect(writes[4]).toMatchObject({
+      body: {
+        graph: {
+          nodes: expect.not.arrayContaining([
+            expect.objectContaining({ node_type: "measurement_review_gate" }),
           ]),
         },
       },
@@ -251,7 +282,7 @@ describe("Local plugins in Providers", () => {
     });
     expect(run).toBeDisabled();
     fireEvent.click(run);
-    expect(writes).toHaveLength(4);
+    expect(writes).toHaveLength(5);
   });
 
   it("keeps unavailable versions and saved observations visible and explains a rejected install", async () => {
