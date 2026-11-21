@@ -685,15 +685,15 @@ def _replace_rendition(temporary: Path, destination: Path) -> None:
             os.replace(temporary, destination)
             return
         except OSError as exc:
-            # Windows sharing (32) and lock (33) violations can surface as
-            # plain OSError instead of PermissionError. A removable volume
-            # may also report EBUSY while WebView2 or antivirus holds a
-            # rendition. Retry only these transient cases; never retry a
-            # disconnected drive or conceal the original I/O failure.
+            # Windows sharing (32), lock (33), and resource-busy (170)
+            # errors can surface as plain OSError instead of PermissionError.
+            # A removable volume may also report EBUSY while WebView2 or
+            # antivirus holds a rendition. Retry only these transient cases;
+            # never retry a disconnected drive or conceal the original failure.
             transient_lock = (
                 isinstance(exc, PermissionError)
                 or exc.errno == errno.EBUSY
-                or getattr(exc, "winerror", None) in {32, 33}
+                or getattr(exc, "winerror", None) in {32, 33, 170}
             )
             if not transient_lock or attempt == 4:
                 raise
