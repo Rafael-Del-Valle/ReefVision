@@ -566,5 +566,68 @@
       "sha256": "61d918c5a738cf6ebd58aa551161476f72e82da0ab4324de0eb5f400ac32fdc3"
     },
     "next": "Keep the canvas anchored across thumbnail, original and error status changes. Repeat the forced mid-drag case, ordinary image and video journey, registered installation and offline proof on the repaired build."
+  },
+  "corrected_full_windows_backend": {
+    "source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "selection": [
+      "apps/api/reefvision/tests",
+      "--pose-interop-integration"
+    ],
+    "collected": 6037,
+    "passed": 6025,
+    "skipped_with_recorded_reason": 12,
+    "failed": 0,
+    "errors": 0,
+    "ordered_nodeids_sha256": "30a82142f5c7823338078549cf5010aaa193d8daf474ed9b1d04e861b3851fff",
+    "full_run": {
+      "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/summary.json",
+      "sha256": "601e31bce81eb3a59f6d910d5c2f4f7f2cf34f3e68d2196b8759d97351511c19"
+    },
+    "independent_verification": {
+      "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/independent-verification.json",
+      "sha256": "662265d75050cd16e54dd22234d585b059ce7c27e8e1a62c0cf16d95a305d22c"
+    },
+    "junit": [
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w00.xml",
+        "sha256": "b4a232bcbc6baf54e599b989e3c62c6e8a08b4ac3703da3b6682c6e3eaef8eee"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w01.xml",
+        "sha256": "6ca4fa48efc2294df4961cb1a5cdc58a3f3c1bd8af1b8ab284b57dd6e1459ef1"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w02.xml",
+        "sha256": "ddae4db0dd41aaf4c88d79d371e78e24ebbeb0953d99ad39a243de96d8b46797"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w03.xml",
+        "sha256": "691fd37a03d2748494d425348d55e99c6cc732d34b9cd0a70f02441218411b6c"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w04.xml",
+        "sha256": "8418d4a1eda8488ac9720f5860f842dd22cf2221a95b075f088766b862b9d3ec"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w05.xml",
+        "sha256": "13b495716f347d5941f21a7a9abd8cc4b22fe9a53856acb0cb4f9bb224243e4a"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w06.xml",
+        "sha256": "03f6a94e032503c6c01d193dfc7835c47cb1afcf88c087d9e6eac6abd0028468"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w07.xml",
+        "sha256": "ae658c91dfcbf4f38f26f71f255baf55c030f53c0f730e859d4fd1459769d985"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w08.xml",
+        "sha256": "ee48ef45b4a58a129660849b0fdd0d814ef27b7e1d73f52d7a022cc8e2e6cf4c"
+      },
+      {
+        "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/w09.xml",
+        "sha256": "5fa268a7ca423e3fc29a9a07cfed41bea983cffe9196eec155cf7c1bb896834f"
+      }
+    ]
   }
 }
