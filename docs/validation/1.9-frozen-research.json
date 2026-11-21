@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T05:54:56.959035+00:00",
+  "updated_utc": "2026-11-21T06:12:41.905503+00:00",
   "candidate_pr": 131,
   "scope": "Generated research projects. Registered installer trials identify their own package.",
   "reviewed_predecessors": {
@@ -530,6 +530,108 @@
         "sha256": "615b502f7347809330754d6bf605998bc6289a8865aba36c6dec5ab4ab92c53f"
       },
       "result": "Recovered the failed saved parent at its Register action, reused the original trained checkpoint, and ran held-out CPU inference. A human-reviewed two-landmark frame reopened in the native pose ZIP. Separate public upload registrations preserved detector boxes, segmentation masks and two-landmark pose geometry. A different 17-landmark checkpoint failed without mutating the project."
+    }
+  },
+  "registration_and_experiment_integration": {
+    "source": "7797efad64f65e2f19c6f4ff64a94382335bd0a9",
+    "version": "1.9.0",
+    "schema": "b19_registration_0001",
+    "product_pr": 144,
+    "integrated_pull_requests": [
+      141,
+      142,
+      143
+    ],
+    "product_worktree": "C:/rv19-qualified",
+    "branch": "codex/reefvision-1.9-registration-replay",
+    "profile_scope": "generated; source and installed receipts recorded separately",
+    "windows_original": {
+      "run": 44873530801,
+      "job": 136753099467
+    },
+    "hosted_ci": {
+      "general": 44873530725,
+      "general_backend_job": 136753099754,
+      "scientific": 44873530680,
+      "scientific_backend_job": 136753099300
+    },
+    "offline": {
+      "proof_pr": 145,
+      "proof_source": "dc8e118943c538569ec480601709ec96b4af0a6e",
+      "run": 44873856510,
+      "jobs": [
+        136754104991,
+        136754105231
+      ],
+      "prior_source": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8"
+    },
+    "full_windows": {
+      "checkout": "C:/rv19-7797-full",
+      "output": "C:/rvb19-7797",
+      "distinct_ids": 6081,
+      "collection": "40ee0b8c8259641d4141683c8ad5e8812522ac506fb8ede665bc3cd9685df405"
+    },
+    "earlier_964_windows_backend": {
+      "file": "1.9/checkpoints/96476bc46/full-windows-backend/verified-summary.json",
+      "sha256": "aad66d382f61c1729180fc60a28550f9143f02e3c783f65df300faa02f57a768"
+    },
+    "experiment_replay": {
+      "file": "1.9/checkpoints/caa6931c2/source/evidence/experiment-replay-donor/experiment-replay-proof.json",
+      "sha256": "ece5da6390bec94a669b0f82700a80052948314407a420a37fd4d40423771e9e"
+    },
+    "guided_experiment_replay": {
+      "file": "1.9/checkpoints/caa6931c2/source/evidence/experiment-replay-donor/guided-pose-workflow.json",
+      "sha256": "ac56053a98422e047cecbed242abb0d40ba97e6bc1784c3f9257935a6c567ec7"
+    },
+    "zero_draft_training_models": {
+      "file": "1.9/checkpoints/7797efad6/source/zero-draft-training-models.json",
+      "sha256": "173b7ba861aa4f226f3df871a72c0864ac0e7ba4b0f8cbec889e0b792d24d93b"
+    },
+    "tests": {
+      "focused_backend": {
+        "file": "1.9/checkpoints/7797efad6/source/rv19-starting-point-7797-research.xml",
+        "sha256": "6e62ffefd786e7232bab6189fcde3c1aaf6fc3ee591fb9ec85eaebf277f38d8d"
+      },
+      "physical_cuda": {
+        "file": "1.9/checkpoints/7797efad6/source/7797-source-cuda-results.xml",
+        "sha256": "0b364d5298bc21989320ccfe79074b3c21f7266e6d478bf79d5c71ee679d24f1"
+      },
+      "frontend": {
+        "file": "1.9/checkpoints/7797efad6/source/7797-web-test.log",
+        "sha256": "beb08ff5f1e627ad78319e911f3dcf18433790d89c14840b499c728e7b666af6"
+      },
+      "production_frontend": {
+        "file": "1.9/checkpoints/7797efad6/source/7797-web-build.log",
+        "sha256": "77f668c099de7458db096da9ba0e81b41b63bcfcf7bea0efd8530e142ab1988a"
+      },
+      "frontend_format": {
+        "file": "1.9/checkpoints/7797efad6/source/7797-web-format.log",
+        "sha256": "4666969f85835307e8d360234a1877ad8ae96cd6cecd0f578932384d65aa6967"
+      },
+      "types": {
+        "file": "1.9/checkpoints/7797efad6/source/7797-typing.log",
+        "sha256": "615b502f7347809330754d6bf605998bc6289a8865aba36c6dec5ab4ab92c53f"
+      },
+      "rust": {
+        "file": "1.9/checkpoints/7797efad6/source/7797-rust-with-ci-resources.log",
+        "sha256": "2707e23aaf9e30f81653b3c93e01ebe0282719f8eb4b57ef8d59bb2517de1483"
+      },
+      "browser": {
+        "file": "1.9/checkpoints/7797efad6/source/7797-standard-browser.log",
+        "sha256": "cb305d830e624446c523222f6055ef3b0c69ed7e68a251c3179bac5cdbe55f06"
+      },
+      "alembic": {
+        "file": "1.9/checkpoints/7797efad6/source/roundtrip.log",
+        "sha256": "6d66d951c6232a6c33dcd2d0bca8c45bb7939e5d5dde76c02cab8d30b83799a3"
+      },
+      "neutral_exchange_and_retirement": {
+        "file": "1.9/checkpoints/7797efad6/source/rv19-starting-point-7797-neutral.xml",
+        "sha256": "27379acd8f1ffadb420c3a650b5d7dd7773f49c197ee4eb68a649dda319e2f32"
+      }
+    },
+    "concurrent_head_scan": {
+      "file": "1.9/evidence/concurrent-prs-20261121-061153-utc.json",
+      "sha256": "5d5e792c1f3e478b3ea7d2e692bd3d7468d5f835c9acc7e7fc1b4da29dbfaf44"
     }
   }
 }
