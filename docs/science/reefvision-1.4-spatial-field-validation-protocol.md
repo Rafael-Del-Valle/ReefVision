@@ -121,3 +121,27 @@ standalone versus twice-replayed saved-workflow artifacts/SHA-256 for both
 inline XYZ and imported ASCII PLY. Include a rare locus on an ordinarily
 omitted index and a source containing more than 512 unique XYZ locations.
 Keep unreviewed calibration, specimen identity, and registration provisional.
+
+### Exact-capacity distinct XYZ retention and source-row endpoint disclosure
+
+Reproduce a source with **513 acquisition rows but exactly 512 distinct XYZ
+locations**: rows 0–511 each represent a different location, and the final row
+duplicates row 0. A 512-point preview can legitimately display every observed
+XYZ location, so the opt-in `preserve_distinct_xyz_loci_in_preview` policy must
+**not** reject it simply to retain the duplicate last acquisition row. Preserve
+all 512 first-occurrence indices and report
+`preview_source_acquisition_endpoint_support` as first-row true and last-row
+false, with `preview_omits_acquisition_endpoint_row` QC. Distinguish this raw
+acquisition-order endpoint from axis extrema, scan-completeness evidence, and
+biological landmarks. Other explicitly protected chord, extrema, or gap-boundary
+indices are still hard requirements: reject genuinely oversubscribed unions.
+
+Confirm the same artifact through the standalone XYZ/ASCII PLY API and twice
+executing a saved executable typed Workflow Builder graph, including source
+indices, provisional calibration and biological identity, full-source geometry
+fingerprint, complete QC warnings, and stable artifact SHA-256. Independently
+verify that 600 *different* XYZ locations still fail a 512-slot preservation
+request with HTTP **400** for a domain budget violation; invalid boolean
+request types remain HTTP **422** schema validation errors. These are synthetic
+acceptance references, not representative coral, human-review, installed
+Windows, or physical GPU validation.
