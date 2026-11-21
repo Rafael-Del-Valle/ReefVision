@@ -471,11 +471,13 @@ def export_pose_interoperability(
         PoseInteroperabilityFormat,
         Query(alias="format"),
     ] = "nwb",
+    include_unreviewed: bool = False,
 ) -> Response:
     settings: Settings = request.app.state.settings
     payload = PoseInteroperabilityService(session, settings).export(
         video_id,
         exchange_format,
+        include_unreviewed=include_unreviewed,
     )
     encoded_filename = quote(payload.filename, safe="")
     return Response(

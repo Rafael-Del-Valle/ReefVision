@@ -19,6 +19,7 @@ from reefvision.db.models import (
 from reefvision.domain.errors import ValidationError
 from reefvision.services.pose_evaluation import pose_evaluation_result_sha256
 from reefvision.services.pose_schemas import definition_for_revision
+from reefvision.services.project_exchange_models import has_local_model_lineage
 from reefvision.services.project_exchange_validation_report import validate_reefpose_report
 from reefvision.services.reefpose_validation import frozen_recording, heldout_locks
 from reefvision.storage.datasets import canonical_json_sha256
@@ -505,6 +506,8 @@ def restore_pose_model_lineage(
         {digest: datasets[mapping[identifier]] for identifier, digest in source_datasets.items()}
     )
     for row in sections.get("models", []):
+        if not has_local_model_lineage(row):
+            continue
         source = row.get("metadata_json") or {}
         model = session.get(ModelRegistration, mapping[row["id"]])
         if model is None:

@@ -562,9 +562,12 @@ describe("VideoTrackingWorkspace", () => {
     expect(screen.getByTestId("mock-active-map-frame")).toHaveTextContent("60");
   });
 
-  it("smoke-tests pose prediction review with repeated landmarks and absent keypoints", async () => {
-    const poseSchema = {
-      schema_version: "pose-landmarks-0001" as const,
+  it("reviews native pose tracks with repeated landmarks without selecting a template", async () => {
+    const poseSchema: api.PoseLandmarkSchema = {
+      schema_version: "pose-anatomy-0002",
+      schema_id: "905cc36e-6110-4862-b65d-67eec6a177f1",
+      schema_revision: 3,
+      content_hash: "b".repeat(64),
       groups: [
         { name: "bell_center", count: 1 },
         { name: "tentacle", count: 2 },
@@ -572,6 +575,22 @@ describe("VideoTrackingWorkspace", () => {
       expanded_labels: ["bell_center", "tentacle", "tentacle"],
       keypoint_count: 3,
       allows_repeated_labels: true,
+      landmarks: [
+        { id: "bell", name: "bell_center" },
+        {
+          id: "tentacle-left",
+          name: "tentacle",
+          repeat_group: "tentacle",
+          repeat_index: 0,
+        },
+        {
+          id: "tentacle-right",
+          name: "tentacle",
+          repeat_group: "tentacle",
+          repeat_index: 1,
+        },
+      ],
+      edges: [{ from_id: "bell", to_id: "tentacle-left" }],
     };
     const machineTrack: api.VideoTrackRecord = {
       id: "pose-track-1",
@@ -639,6 +658,17 @@ describe("VideoTrackingWorkspace", () => {
     expect(
       screen.queryByRole("link", { name: "SLEAP SLP" }),
     ).not.toBeInTheDocument();
+    const archiveScope = screen.getByRole("checkbox", {
+      name: "Include unreviewed tracks in archival export",
+    });
+    expect(archiveScope).not.toBeChecked();
+    expect(
+      screen.queryByRole("link", { name: "COCO pose" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/No verified pose tracks are available/),
+    ).toBeVisible();
+    fireEvent.click(archiveScope);
     const nwbExport = screen.getByRole("link", { name: "NWB" });
     const cocoExport = screen.getByRole("link", { name: "COCO pose" });
     const dlcExport = screen.getByRole("link", { name: "DeepLabCut CSV" });
@@ -661,6 +691,13 @@ describe("VideoTrackingWorkspace", () => {
       "href",
       expect.stringContaining("format=ultralytics_pose"),
     );
+    expect(cocoExport.getAttribute("href")).toContain(
+      "include_unreviewed=true",
+    );
+    fireEvent.click(archiveScope);
+    expect(
+      screen.queryByRole("link", { name: "COCO pose" }),
+    ).not.toBeInTheDocument();
 
     expect(screen.getByText("tentacle 1 / 2")).toBeInTheDocument();
     expect(screen.queryByLabelText("tentacle 2")).not.toBeInTheDocument();
@@ -708,6 +745,7 @@ describe("VideoTrackingWorkspace", () => {
     const [, payload] = vi.mocked(api.updateVideoTrack).mock.calls[0];
 
     expect(payload.base_revision).toBe(3);
+    expect(payload.pose_schema_binding).toBeUndefined();
     expect(payload.keyframes).toHaveLength(1);
     const persisted = payload.keyframes[0];
 
@@ -730,6 +768,7 @@ describe("VideoTrackingWorkspace", () => {
           occurrence_index: 0,
           confidence: 0.84,
           source: "corrected",
+          landmark_id: "tentacle-left",
         }),
       ]),
     );

@@ -1,0 +1,1356 @@
+{
+  "product": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8",
+  "version": "1.8.0",
+  "schema": "b18_spectral_0002",
+  "draft": 119,
+  "source_workflows": {
+    "ordinary_first_use_and_controlled_mid_drag": {
+      "stats": {
+        "startTime": "2026-11-21T02:05:59.314Z",
+        "duration": 7216.737,
+        "expected": 2,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "ordinary_viewport": [
+        960,
+        640,
+        1.5
+      ],
+      "controlled_viewport": {
+        "width": 880,
+        "height": 680,
+        "devicePixelRatio": 1
+      },
+      "requested_source_box": [
+        20,
+        15,
+        55,
+        40
+      ],
+      "stored_source_box": [
+        20.028717690325795,
+        14.97134983793218,
+        54.985445063164896,
+        39.94044527094415
+      ],
+      "source_to_screen_anchor_points_identical": true,
+      "source_image_sha256": "11da437ad33072b11627e77994f869a1f92c4c0b94e0b64f920567853ff0674b",
+      "keyboard_retry_after_503": true,
+      "second_image_target_and_adjustment_preview_checked": true,
+      "files": [
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/ordinary/identity.json",
+          "sha256": "74d5f960a334e52865251e83ef788652745abdd9733a63956bcc96cd539d7f47"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/ordinary/closure.json",
+          "sha256": "d4fcd846e397a60822c3591616ac4ca00c091fb758fcc861199632163f62ebcf"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/ordinary/playwright.json",
+          "sha256": "9f9162886e04e974ef22b03d55439a98d85dc436eb88c474dc83ec1622645951"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/ordinary/first-use-box-evidence.json",
+          "sha256": "9f0dc100e5a27036f93e2c6c1a922400a9141309022cf8b711ab3fbf6f9df37f"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/ordinary/source-image-gesture-evidence.json",
+          "sha256": "26f9171cbf53022047a6ce596ef7ec4b8a55247ec1afc907ffb5259e635bf996"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/ordinary/first-use-evidence.json",
+          "sha256": "ced4ed8f108c9e4c84af808cf3a5cee6e59f9c935668218e4ef514ab2aa5efc3"
+        }
+      ]
+    },
+    "preserved_coral_help_qc_classes": {
+      "stats": {
+        "startTime": "2026-11-21T02:06:43.239Z",
+        "duration": 25126.135000000002,
+        "expected": 4,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "files": [
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/preserved/identity.json",
+          "sha256": "f3194dd97a9e0f008edec5071651f5ca59005067e1c159a003a5f353d1a617a4"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/preserved/closure.json",
+          "sha256": "36463f3d759e11137169906abe795948d7979010cc605827c4ee026de19f3ca3"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/preserved/playwright.json",
+          "sha256": "43c3ce21cc6dfb9482f389f0c019e0307cf92131b7e6b5daf77e281d30c788aa"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/preserved/help-handoff-evidence.json",
+          "sha256": "8561495831193d42431aa3686a8c5c72f565f9a2dded4c86c2ea9d802be8911d"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/preserved/qc-review-workflow.json",
+          "sha256": "11c72766350e50fe6922f379c439dd7fb37e75efd9a358fa6242ab12752acfb3"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/preserved/class-lifecycle-evidence.json",
+          "sha256": "cf2b29986177e8989dbfb0d021925dfb353d785ab53f7624c197d441d9d2fe6e"
+        }
+      ],
+      "exported_coral_control": {
+        "method": "paired_projected_coral_length_v1",
+        "source_dates_utc": [
+          "2026-01-01T10:00:00+00:00",
+          "2026-01-03T10:00:00+00:00"
+        ],
+        "reviewed_projected_lengths_mm": [
+          9.75,
+          10.75
+        ],
+        "change_mm_per_day": 0.5,
+        "result_sha256": "d05ecc001c08e77037290d2cbc041a8a71a269aea96582e3a686d53d175b5bcb",
+        "csv": {
+          "file": "1.8/checkpoints/e3e8ffb63/source/preserved/calibrated-coral-growth.csv",
+          "sha256": "dc6420fbb1b34ca7755143edf21024bfd221773a1c1231cd5cb6b78061b26fe2"
+        }
+      }
+    },
+    "research": {
+      "surface": "source Chromium with real local API and queue",
+      "scratch_training_and_registration": {
+        "startTime": "2026-11-21T02:05:55.242Z",
+        "duration": 50619.42,
+        "expected": 2,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "five_workflows": {
+        "startTime": "2026-11-21T02:06:46.387Z",
+        "duration": 29793.686999999998,
+        "expected": 5,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "files": [
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/source-research-tools-rehearsal.json",
+          "sha256": "ef147b25f105714c41b6722f14faac3032495785ecea57f8245792e0a1ea33f1"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/seed.json",
+          "sha256": "ecf22b89cef2de839afafaca9c7ced688ba9d022ecfd7a3b7a1bbc8d6e57ba71"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/playwright.json",
+          "sha256": "43649356d7c14d0150f18c77db7a466b99e591c15cdd379e0802f14094f16c62"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/closure.json",
+          "sha256": "ac3573955f243f215f0c3a5548ccc84766a4c30171c15227c8d3aa7ba4f9b4ad"
+        }
+      ],
+      "feature_receipts": {
+        "taxonomy": {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/taxonomy-detectability-proof.json",
+          "sha256": "0f2f4767896a0e452b28962d4d04460ea0e318deb90782ac7230f7e73a43143d"
+        },
+        "audio": {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/bioacoustics-evidence.json",
+          "sha256": "ee70abf291a2be16d464b794527e001f1f91589d38711c0e910d6591294d44b2"
+        },
+        "multispectral": {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/multispectral-evidence.json",
+          "sha256": "ae8ac4fb70c811abdf96653745b0da8780e9f974af45995487f19fd6ea939ab5"
+        },
+        "underwater": {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/underwater-adjustment-evidence.json",
+          "sha256": "3e5feeab51a4faa5f596105fdbda9ea6651db40b2658ce2a40bc1e3189030a5e"
+        },
+        "domain": {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/domain-shift-evidence.json",
+          "sha256": "e3276f52b7216e154c6bf942738f95d014d05eae4a3227b1ccf0789c9a1ba15d"
+        }
+      }
+    },
+    "selected_image_segmentation": {
+      "source": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8",
+      "mode": "Actual local CPU instance model trained from scratch. Generated held-out mask stills.",
+      "normal_click": {
+        "distinct_pending_polygons": 2,
+        "selected_image": "c39ab381-30ef-412a-92a6-00b66a37c488",
+        "job": "cd1d7d6b-ae94-4421-9294-a3da9ddf2f65",
+        "receipt": {
+          "file": "1.8/checkpoints/e3e8ffb63/source/segmenter/mask-binding-proof.json",
+          "sha256": "9984e2429f2b7cbb52b8a25dbed2f40609df974fce796e5a1eb4af487d1822a2"
+        }
+      },
+      "adjusted_display": {
+        "distinct_pending_polygons": 2,
+        "job": "73fd0751-0e2c-43cf-8ec7-c4f1b090b3c3",
+        "displayed_rendition": "86d98a50b7f02cade4efe23df0035e84457170a8329c4fda27528b7b09e35ae9",
+        "executed_original": "56f40d103ddd6aa4a09e7133e1529381c47855b760c9a71f9dc5fdacb1d18e0b",
+        "observed": "The topbar Run segmentation action used the original managed image while the saved adjusted preview was visible. The separate Deploy trained model adjustment opt-in was unchecked. Both outputs stayed pending.",
+        "receipt": {
+          "file": "1.8/checkpoints/e3e8ffb63/source/segmenter/mask-while-adjusted-proof.json",
+          "sha256": "5dfaf7e3e12964e6bf06444faf00cb171dfcebb209b98633813b882c4f268311"
+        }
+      },
+      "frozen_reference_sha256": "eec567feb75c011c37e42a62ba6d45d637f48aa544142be537c764e265e37bed",
+      "checkpoint_sha256": "6d1e75012502f3bae40f0d921a2b92c91f3e9c0cc671bc14573afccc2977e101",
+      "source_and_reviewed_masks_preserved": true
+    },
+    "known_recording_pose_control": {
+      "ordinary_gui": "The saved native frame model graph produced tracks and stopped at human review. No pose artifact was accepted.",
+      "separate_temporal_control": "A regular CPU refinement request using an existing learned temporal model completed all 24 held-out frames.",
+      "recordings_rehashed": 10,
+      "source_and_model_files_checked": 21,
+      "run": "ede5707c-4a11-4ecd-9883-c90f27669f13",
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/source/pose/reefpose-1.8-e3e8-predecessor-receipt.json",
+        "sha256": "5a41d1a40d1275b1d14d1c98b683c185dea89b10efe0152d80b1b3d54c5eef6e"
+      }
+    },
+    "temporal_review_gui": {
+      "surface": "exact Windows source Chromium with API and real queue",
+      "preparation": "Repository seed generated three tiny videos and hand-authored synthetic supervision, registered the local deterministic frame checkpoint with its schema and ran its three frame tracking jobs. The user-path witness did not train the frame seed.",
+      "frozen_dataset": {
+        "id": "5e0b52a5-ec95-4a4f-9b96-8a15632dd409",
+        "sha256": "002f692256fa9836c6a108debcf7300f261154c3ed8d794b73540b70b87943ee"
+      },
+      "trained_checkpoint": {
+        "id": "3bbb9768-13f2-46eb-822a-8942e89e7f82",
+        "sha256": "735efd8749c4208295bfc44f74155d09a93c487933e3b618d22ccb13a5dd4337",
+        "provider": "reefpose_temporal",
+        "task": "pose_temporal"
+      },
+      "refinement": {
+        "id": "e3ac41b9-8bcb-4853-9cb0-84403ea1175a",
+        "job": "44d89346-6c46-431d-81f0-cfb176bc7da6",
+        "frames": 12,
+        "future_frames": 0
+      },
+      "review": {
+        "id": "7c6d475b-4e3a-45ad-bae8-8de9d8d7c642",
+        "revision": 1,
+        "identity_run_id": "61fdb3c9-22c2-4149-bc4e-06fb662f687e",
+        "identity_id": "c2abcb11-5d36-4bb2-82eb-7837a4beff2c",
+        "accepted_frame_count": 6,
+        "source_stale": false
+      },
+      "evaluation": {
+        "id": "e67e345d-458a-45bf-b947-a9046c697bb3",
+        "job": "cf55de65-59ea-4e32-bcac-0a140ed6167e",
+        "status": "exploratory",
+        "frame": "unverified",
+        "temporal": "recording_disjoint_group_unverified"
+      },
+      "export": {
+        "sha256": "7f34c91df4f26bf32d29d96aa88cfe1cfe60995581e85bb6a9fef80bad82db91",
+        "members_and_rows": {
+          "events.csv": 0,
+          "individual_summaries.csv": 1,
+          "measurements.csv": 6,
+          "review_history.csv": 1
+        },
+        "event_run_id": "533e5f9d-147e-43d5-811c-6df1469eedd6",
+        "event_reviewed_only_count": 0
+      },
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/source/temporal-review/e3e8-ordinary-temporal-panel-compact.json",
+        "sha256": "a22d769a6cb3cb15002d4273d29965d3d06f2d0a4df1f61ea1e92ee7ad774f68"
+      }
+    }
+  },
+  "frontend": {
+    "unit_tests": 930,
+    "unit_files": 140,
+    "production_build": "passed",
+    "default_browser_suite": {
+      "startTime": "2026-11-21T02:06:39.990Z",
+      "duration": 11337.406,
+      "expected": 15,
+      "skipped": 50,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "receipt": {
+      "file": "1.8/checkpoints/e3e8ffb63/source/frontend/checks.json",
+      "sha256": "a320cff8ac81008291930131b220d35bf4e2990061793a7f2ea9765024a8bf5c"
+    },
+    "logs": [
+      {
+        "file": "1.8/checkpoints/e3e8ffb63/source/frontend/node.log",
+        "sha256": "6aff48828de66fbac1ebde4c0c96dd197aa1013dc9964508988344265818e783"
+      },
+      {
+        "file": "1.8/checkpoints/e3e8ffb63/source/frontend/lockfile.log",
+        "sha256": "a4f05eb0e0f8c59dc774dbcc0f960075269991f0bb58fa76735a0f21b6e87b56"
+      },
+      {
+        "file": "1.8/checkpoints/e3e8ffb63/source/frontend/format.log",
+        "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+      },
+      {
+        "file": "1.8/checkpoints/e3e8ffb63/source/frontend/typecheck.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "file": "1.8/checkpoints/e3e8ffb63/source/frontend/unit.log",
+        "sha256": "e041a1f538f8752282418975e45f23d245dd9fa16a484986d02982c00584ede0"
+      },
+      {
+        "file": "1.8/checkpoints/e3e8ffb63/source/frontend/production.log",
+        "sha256": "93575d0ca9e9d104e64fdd0c1829eaadbb20486f8cf8b3c9c998741f00bb4179"
+      },
+      {
+        "file": "1.8/checkpoints/e3e8ffb63/source/frontend/browser.log",
+        "sha256": "4ad3e882b916f8ba2067feb10fed692c970afa8afec10a0850bf621336c5d5de"
+      }
+    ]
+  },
+  "backend_scope": {
+    "verified_prior_source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "matched_prior_test_ids": 6037,
+    "passed": 6025,
+    "skipped": 12,
+    "identical_git_objects": {
+      "apps/api": "ed10ba990943927b92ee175cfb1eb455998d1690",
+      "requirements": "ff8dc6002c29bbc500497667ec49e51203c5208e",
+      "pyproject.toml": "2c3adff6cde8474970fd3f2dc38b328ea53f92b5",
+      "apps/web/src-tauri": "86f851d7c72ebef069bdc7648e255220f0656fd4"
+    },
+    "prior_verification": {
+      "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/independent-verification.json",
+      "sha256": "662265d75050cd16e54dd22234d585b059ce7c27e8e1a62c0cf16d95a305d22c"
+    },
+    "notes": "The original complete Windows backend run belongs to the prior SHA. The repair changes the editor, native test drivers and evidence. Release contracts reading those files were run again."
+  },
+  "source_qualification": {
+    "integrated_release_contract_tests": 138,
+    "junit": {
+      "file": "1.8/checkpoints/e3e8ffb63/source/gates/stable-wired-release-contract.xml",
+      "sha256": "25e6d0c1f9aca748c88af6e1e069d814038d5a2c1a73ebd653901b15365b4682"
+    },
+    "installer_harness_assertions": 205
+  },
+  "original_windows_run": 44853957856,
+  "original_windows_build_job": 136691608332,
+  "general_ci": 44853958059,
+  "separate_scientific_ci": 44853957924,
+  "open_acceptance": "Registered installation, direct historical upgrades, enforced offline rollback, repaired native RTX checks and independent field acceptance are tracked by product and binary identity.",
+  "release_test_compatibility": {
+    "failed_prior_run": 44847408327,
+    "failed_prior_job": 136670423624,
+    "hosted_platform": "Ubuntu, Python 3.11, Pillow 12.3.0",
+    "prior_hosted_counts": {
+      "passed": 6024,
+      "skipped": 11,
+      "failed": 2
+    },
+    "diagnosis": "Both underwater test failures came from the deprecated pixel reader in fixture assertions, including the fake detector. The strict warning policy and byte-exact six-pixel known answer are preserved.",
+    "correction": "54a89896c484fc0525d9c8e73323d5f5706d3522",
+    "change": "Compare all decoded RGB bytes in row-major order. The case also checks the worker receives RGB mode.",
+    "focused_windows": {
+      "Pillow 12.3.0 before": "2 failed of 2 selected",
+      "Pillow 12.3.0 after": "5 passed",
+      "Pillow 12.0.0 after": "5 passed"
+    },
+    "test_module_in_e3e8_local_frozen_application": false,
+    "proof": {
+      "red": {
+        "file": "1.8/checkpoints/e3e8ffb63/source/pillow/red.xml",
+        "sha256": "4fa8794a5f9831a7fdfc3cdb0fd539a711765f70ddbbdfe0aea9ae746189337f"
+      },
+      "green": {
+        "file": "1.8/checkpoints/e3e8ffb63/source/pillow/green.xml",
+        "sha256": "36ca429d9176b520bbfdd03abe775c3ae273097922fa926efa895130efee9d1a"
+      },
+      "packaged-green": {
+        "file": "1.8/checkpoints/e3e8ffb63/source/pillow/packaged-green.xml",
+        "sha256": "6b6c6c3ff4311b6f5620bb2e58f5acbabc8e43c48d896a699171e0793a8fb033"
+      }
+    },
+    "exact_corrected_linux_run": 44855074063
+  },
+  "prior_registered_transport_observation": {
+    "source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "job": 136681446504,
+    "original_coral_fixture_request": "Loopback reset on POST /projects before an HTTP response. Nine other spatial tests passed.",
+    "independent_research_failure": "The registered driver also failed its research sidecar path check.",
+    "receipt": {
+      "file": "1.8/checkpoints/e3e8ffb63/source/predecessors/9cde-original-registered-clean-read.json",
+      "sha256": "13c6bda0110caef0f5a0458086046c8f5da383d715f290a04c4249477da772ab"
+    }
+  },
+  "local_production": {
+    "source": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8",
+    "origin": "Independent local production build, admin extraction and an ordinary-account native WebView2 session.",
+    "msi_sha256": "faad33eefeef9e263253d6052b6c59568ace9dbf57ea70f2acaf0730e817f9df",
+    "external_cabs": 5,
+    "msi_cab_bytes": 2980018209,
+    "checksum_manifest": {
+      "file": "1.8/checkpoints/e3e8ffb63/local-production/installer/SHA256SUMS.txt",
+      "sha256": "6c866182fa8eece998bc34286189c9dc048f7d7a0545a1e24472aae8bf24d302"
+    },
+    "verified_matching_members": {
+      "file": "1.8/checkpoints/e3e8ffb63/local-production/independent-local-verification.json",
+      "sha256": "3716853a97ac8ed3d9b513cbe77512ec97e8e0fc8a60faac8b767ab84280a003"
+    },
+    "payload_audit": {
+      "distribution_metadata": 59,
+      "entry_point_files": 14,
+      "model_manifest_assets": 0,
+      "model_manifest_provider_assets": 0,
+      "msi_cab_files": 19205,
+      "pyinstaller_outer_entries": 14,
+      "pyinstaller_pyz_archives": 1,
+      "pyinstaller_pyz_entries": 12424,
+      "zip_containers": 1,
+      "zip_members": 155
+    },
+    "unsigned_and_policy": {
+      "state": 0,
+      "edition": "Core",
+      "build": "26300",
+      "requirement": "An enforcing disposable Windows 11 device is still needed.",
+      "signature_observation": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/smart-app-control.json",
+        "sha256": "ab1663806477c21c0264043b8aeed4005ab7f59d17a6dfe854f74c3a88a8cf46"
+      }
+    },
+    "native_workspaces": 7,
+    "cpu_training_controls": 2,
+    "native_research_journeys": 5,
+    "compact_source_box": {
+      "x_min": 20.00333835767664,
+      "y_min": 15.001663871433424,
+      "x_max": 55.004633364470116,
+      "y_max": 40.00259001358695
+    },
+    "fixed_canvas_top_css_px": [
+      335.015625,
+      335.015625
+    ],
+    "real_source_switch_and_mask_proposals": 2,
+    "evidence": {
+      "first-use-geometry": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/first-use-geometry/evidence-index.json",
+        "sha256": "f789cb0ea1c428d4a15b74f3f133b4c43a796b9a9fe87d3c2859945f24e68b57"
+      },
+      "native-workspaces": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/native-workspaces/evidence-index.json",
+        "sha256": "0e5dfb98f29ab565178dd2a26e73a89eaf6c65be2d4d3a522b90c87de0fce732"
+      },
+      "native-segmentation": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/native-segmentation/evidence-index.json",
+        "sha256": "0f44bf0d6dd02c5fa9a1083955b89b58d91686ad70f9081c4c36e43e0a4174cb"
+      },
+      "native-research-tools": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/native-research-tools/evidence-index.json",
+        "sha256": "d201c925c4139dea3038bcf5beceb21e0241fef87452483532c3d468f9bd6bd9"
+      },
+      "physical-rtx3090": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/physical-rtx3090/evidence-index.json",
+        "sha256": "90861854f8ecb528b19f7668e6f1958f1e524e954123120a1b568cb743b23e7c"
+      },
+      "physical-rtx3090-segmentation": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/physical-rtx3090-segmentation/evidence-index.json",
+        "sha256": "a91cf1bb6ae66d65dfb8d335617f5e048e19105992799631085f1baf8357ae77"
+      },
+      "native-temporal-review": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/native-temporal-review/native-temporal-receipt.json",
+        "sha256": "e8a1208dc209bf26dc724e141e1a7ecd6fefc4b1fe2cd3c0a8bb7c662e51daa0"
+      }
+    },
+    "previous_1_8_reopened": {
+      "projects": 6,
+      "original_stills": 37,
+      "nonempty_tables": 40,
+      "stable_saved_results": 10,
+      "prior_backup_members": 229,
+      "prior_backup_bytes": 60624990,
+      "write_reopened": true,
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/same-version-profile/same-version-profile-reopen.json",
+        "sha256": "931f210255e11169005ed5d041e8b8fbd0b24836c53c7e0d3f1f0f0e8f42549b"
+      }
+    },
+    "physical_fixture_results": {
+      "device": "NVIDIA GeForce RTX 3090",
+      "reviewed_detector": {
+        "jobs": [
+          {
+            "id": "3ab10b84-0d5c-4e7a-95ec-3f440d7db1db",
+            "device": "cuda",
+            "processed_images": 1,
+            "proposals": 9,
+            "selection_sha256": "d75ee901165015628a7b1dbf3d93106fa69bf53c05c4641a43fa9e879524ea65",
+            "status": "succeeded"
+          },
+          {
+            "id": "e001f814-7ddb-4639-9fbb-3a71ccc55cfb",
+            "device": "cuda",
+            "processed_images": 6,
+            "proposals": 54,
+            "selection_sha256": "d75ee901165015628a7b1dbf3d93106fa69bf53c05c4641a43fa9e879524ea65",
+            "status": "succeeded"
+          },
+          {
+            "id": "32e28b3f-4197-4e3c-b45c-90c324989312",
+            "device": "cuda",
+            "processed_images": 6,
+            "proposals": 54,
+            "selection_sha256": "d75ee901165015628a7b1dbf3d93106fa69bf53c05c4641a43fa9e879524ea65",
+            "status": "succeeded"
+          }
+        ],
+        "runs": [
+          {
+            "id": "8f6dca7c-f220-4dd3-b3ca-776fa3e6755a",
+            "digest": "d8320fea81fc272bd4ce960c774c3e2bbaad9785e1029e80e50948c4721b6473",
+            "child_job_id": "e001f814-7ddb-4639-9fbb-3a71ccc55cfb",
+            "matched_proposals": 9
+          },
+          {
+            "id": "ce86d8b6-fa04-4bc1-919d-4d4de64aa753",
+            "digest": "d8320fea81fc272bd4ce960c774c3e2bbaad9785e1029e80e50948c4721b6473",
+            "child_job_id": "32e28b3f-4197-4e3c-b45c-90c324989312",
+            "matched_proposals": 9
+          }
+        ]
+      },
+      "paired_segmentation": {
+        "fixture_images": 6,
+        "fixture_masks": 12,
+        "distinct_cuda_jobs": 6,
+        "models": [
+          {
+            "checkpoint_sha256": "6d1e75012502f3bae40f0d921a2b92c91f3e9c0cc671bc14573afccc2977e101",
+            "metrics": {
+              "absolute_instance_count_error": 0.0,
+              "false_instances": 2.0,
+              "mask_dice": 0.07870076935175147,
+              "mask_iou": 0.041087962962962965,
+              "matched_instance_mask_iou": null,
+              "missed_instances": 2.0
+            },
+            "model_id": "5088500b-6c67-4b71-8938-bc5b81ec3f71",
+            "per_group": {
+              "mask-test-0": 6,
+              "mask-test-1": 6
+            },
+            "predicted_polygons": 12,
+            "training_run": "0edd2218-79b5-4049-b67f-648edfff06a9",
+            "training_seed": 13
+          },
+          {
+            "checkpoint_sha256": "1ef714a61f5941bb8f43cef00616f64511b3b69f20275ab349d9a499a78ffd7b",
+            "metrics": {
+              "absolute_instance_count_error": 5.0,
+              "false_instances": 7.0,
+              "mask_dice": 0.07871713163122783,
+              "mask_iou": 0.041096881557050866,
+              "matched_instance_mask_iou": null,
+              "missed_instances": 2.0
+            },
+            "model_id": "435a480f-9d9f-4910-8a91-beed263f3e63",
+            "per_group": {
+              "mask-test-0": 21,
+              "mask-test-1": 21
+            },
+            "predicted_polygons": 42,
+            "training_run": "fcc125fc-ddb6-4161-bb2a-221822c36ee5",
+            "training_seed": 29
+          }
+        ],
+        "saved_runs": [
+          {
+            "artifact_sha256": "70515eac3a67cd4f439659dfad6d9c8257013a4f845dc5e0a5bbffc4b6380a63",
+            "report_sha256": "c82408fd858b497f3655fed02c91d04a692073a9532aab73e0a9a27c68142d19",
+            "run": "88cb102e-b04c-4816-8b50-9e67f2f5301f",
+            "workflow_job": "797e5c3c-b447-417f-be0f-d2bdc9e8f2e1"
+          },
+          {
+            "artifact_sha256": "70515eac3a67cd4f439659dfad6d9c8257013a4f845dc5e0a5bbffc4b6380a63",
+            "report_sha256": "c82408fd858b497f3655fed02c91d04a692073a9532aab73e0a9a27c68142d19",
+            "run": "a23a3b22-c725-4e9f-80e1-8ec9aa1b47af",
+            "workflow_job": "ef6c09fe-b704-49d7-8301-470967ccdf39"
+          }
+        ],
+        "exact_sidecar_gpu_samples": 26
+      }
+    },
+    "temporal_review": {
+      "surface": "physical Windows Tauri/WebView2, administratively extracted MSI, existing medium-integrity account",
+      "frozen_dataset": {
+        "id": "c4ec8138-d068-48ce-abf7-1beb186ea13b",
+        "sha256": "72ab43a6972d0c70f7d7099724c4d8d67f3ae7661badf84a3aa27f44288ce648",
+        "splits": {
+          "train": 1,
+          "validation": 1,
+          "test": 1
+        }
+      },
+      "checkpoint": {
+        "id": "fb15b78e-e297-4eb2-a9b2-12e9bbff3efc",
+        "sha256": "d14d1c5be5774b62e7b9059142f40b30712c45453c94fea7c772903af7b9d7a9",
+        "provider": "reefpose_temporal",
+        "task": "pose_temporal"
+      },
+      "refinement": {
+        "frames": 12,
+        "maximum_future_frames": 0
+      },
+      "review": {
+        "receipt": {
+          "id": "821b3ebe-3d49-4dbf-a1cd-857cc5a1c2ca",
+          "revision": 1,
+          "identity_run_id": "288be9fb-6add-4bfe-8e16-c59ff77ef228",
+          "identity_id": "49b86f83-d522-4db2-ab2b-c6074ffc3fc7",
+          "accepted_frame_count": 6,
+          "source_stale": false
+        },
+        "decisions": [
+          {
+            "frame_index": 0,
+            "source": "refined",
+            "corrections": []
+          },
+          {
+            "frame_index": 1,
+            "source": "frame",
+            "corrections": []
+          },
+          {
+            "frame_index": 2,
+            "source": "refined",
+            "corrections": []
+          },
+          {
+            "frame_index": 3,
+            "source": "frame",
+            "corrections": []
+          },
+          {
+            "frame_index": 4,
+            "source": "refined",
+            "corrections": []
+          },
+          {
+            "frame_index": 5,
+            "source": "frame",
+            "corrections": []
+          }
+        ]
+      },
+      "evaluation": {
+        "evaluation_status": "exploratory",
+        "frame_lineage_state": "unverified",
+        "temporal_lineage_state": "recording_disjoint_group_unverified"
+      },
+      "reviewed_download": {
+        "suggested_name": "reefpose-biological-movement-6f8d71c0-6ac0-40ef-8b8c-2d8e0eaab7be.zip",
+        "bytes": 6219,
+        "sha256": "48dc7d2a9391c609fc8fab505c7dfd0a4f730ee58459bb3deb6ee3f1fe77ecb3",
+        "csv_rows": {
+          "events.csv": 0,
+          "individual_summaries.csv": 1,
+          "measurements.csv": 6,
+          "review_history.csv": 1
+        },
+        "member_digests_verified": true,
+        "bound_refinement_id": "befa091a-0f86-4c86-8236-904acf976668",
+        "bound_review_revision": 1
+      },
+      "job_outcomes": [
+        [
+          "pose_biological_event_detection",
+          "completed",
+          1
+        ],
+        [
+          "pose_biological_measurement",
+          "completed",
+          1
+        ],
+        [
+          "temporal_reefpose",
+          "succeeded",
+          3
+        ],
+        [
+          "video_tracking",
+          "succeeded",
+          3
+        ]
+      ]
+    }
+  },
+  "earlier_qualified_registered_suite": {
+    "source": "542254b8aa0d896fb630282d70f263a74a65b99f",
+    "description": "All nine historical upgrade and lineage roles on the original MSI passed. Two corrected driver checks then completed the clean role's 30 ordinary journeys and both scheduler phases on the original executable.",
+    "receipt": {
+      "file": "1.8/checkpoints/542254b8a/official/combined-installed-qualification.json",
+      "sha256": "faa9b84dc0c00792ae615c1e8e54c6b4eab1497b76a2a42f9a1f34db17fe6b27"
+    }
+  },
+  "earlier_clean_9cde_diagnostic": {
+    "source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "msi_sha256": "7d8a5d4d4b0eebd2274a17de6676204eac724ebe06ffc3c87d7cbef353532511",
+    "workflow": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44852831817",
+    "artifact": {
+      "id": 14686984376,
+      "sha256": "c1e03b1edb0ad3342904b290e89d6b15a591c1b00ca6c7d76c6d9a445ed33987",
+      "retained_files": 78
+    },
+    "registered_stages": 21,
+    "ordinary_journeys": 30,
+    "scheduler_phases": 2,
+    "already_loaded_at_pointer_down": true,
+    "geometry": [
+      20.015298594599187,
+      14.98771335767663,
+      55.00042459239131,
+      39.97707201086957
+    ],
+    "capture": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/registered-retest/attempt-44852831817/registered-clean-14686984376/windows-clean-acceptance-8353a7469a96/first-use-playwright/ordinary-project-live-impo-12fa6-iewed-edit-and-exports-YOLO-chromium/first-use-box-evidence.json",
+      "sha256": "a1592905a9ab94bf4502600a014cc5c16e57c4c2d105799d6e7f91b1606a61b3"
+    },
+    "receipt": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/registered-retest/attempt-44852831817/registered-retest-index.json",
+      "sha256": "70ba57a7b209e4aa5ca8d9259113c3892a8493fded33cab278c6e7094b608749"
+    }
+  },
+  "concurrent_mesh_review": {
+    "candidate": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8",
+    "reviewed_track": "f5f003acff08369ad631812819ea3130f4771036",
+    "scope_base": "3654a781adf1774b8b16ab03993404ea2c70c143",
+    "tests": {
+      "candidate_tracked_backend_pass": 9,
+      "candidate_ui_pass": 47,
+      "donor_tracked_backend_pass": 79,
+      "paired_synthetic_obj_api_and_saved_pass_per_head": 2,
+      "candidate_exact_planar_green": 2,
+      "donor_exact_planar_red": 2
+    },
+    "receipt": {
+      "file": "1.8/checkpoints/e3e8ffb63/source/predecessors/spatial-79/triage-receipt.json",
+      "sha256": "d8ae194902a786e09a835201da489e3cdf6cb94aef3e4768604c5ee929b4ac0f"
+    },
+    "decision": "Retain the qualified mesh solver. Default geometry and measurements matched for two ordinary files. The donor adds an optional display-only sampling parameter and changes the serialized default payload. On an exactly coplanar mesh its full solver reported 388.04959816377374 m³ in both windings. The integrated solver correctly withheld that volume in two standalone calls and four saved runs."
+  },
+  "reviewed_class_transport_predecessor": {
+    "source": "c572964dc50a520bcf85caf9c31e30458300e257",
+    "predecessor": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8",
+    "donor": "3a77c6d6ee1b77b585983fec5240bb394065c1bc",
+    "draft": "https://github.com/Rafael-Del-Valle/ReefVision/pull/120",
+    "surface": "Source browser showing production UI with real loopback API and a disposable project.",
+    "initial_transport_observations": {
+      "enabled_on_malformed_operation_id_or_checksum": 6,
+      "truncated_report_prevented_render": 2
+    },
+    "class_tests": 22,
+    "ordinary": {
+      "startTime": "2026-11-21T02:39:53.056Z",
+      "duration": 6866.227,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "backend_class_tests": 9,
+    "frontend_tests": 942,
+    "frontend_files": 140,
+    "receipt": {
+      "file": "1.8/checkpoints/c572964dc/source/class-review/class-review-qualification.json",
+      "sha256": "511528e732672892b5484ba4b0743359fd127fee8c2c49090ab60e77e182ae79"
+    },
+    "followup": {
+      "source": "89a6fffee3b6189d97b2faa41372db583af7cedb",
+      "draft": 120,
+      "normal_browser_checks": 4,
+      "component_tests": 28,
+      "full_frontend_tests": 948,
+      "full_frontend_files": 140,
+      "prior_three_cases": {
+        "file": "1.8/checkpoints/89a6fffee/source/class-review/prior-class-review-c572964dc.json",
+        "sha256": "5ba2b45d09baad4266bfef4d24e488dccf78ce29fcdb371ec87a9a8b02ec5c4b"
+      },
+      "ordinary_recovery": {
+        "file": "1.8/checkpoints/89a6fffee/source/class-review/independent-corrected-review.json",
+        "sha256": "627c236b43867db31031a5ffa9d70cbe0154227420c52fb1ddc6693dc868f803"
+      },
+      "full_frontend": {
+        "file": "1.8/checkpoints/89a6fffee/source/class-review/pr77-full-ui-89a6fffee.json",
+        "sha256": "7f29644f34f27278743549af1de9532056b8217e3a0205eb1ad1f417ce28cce1"
+      },
+      "result": "On three incomplete preview cases the page stayed mounted, Run stayed disabled and the reviewed annotation stayed at revision 2. A fresh complete preview displayed the actual record ID. Only confirmation sent the single accepted request, advancing the annotation to revision 3. The frozen export and protected records reopened intact."
+    },
+    "visible_warnings": {
+      "upstream_reviewed": "7f8a99d86a982ce9cb50f099161320fac066b307",
+      "source": "549750d9570756b78436aaa8b76c7a2782cb20bc",
+      "reviewed_integration": "17955d2392ed82076cefbf20d3c9cef3bb7721ad",
+      "normal_journey": "Data & annotation > Classes > Preview reassign > confirm > Latest operation > reopen frozen export",
+      "observed": "Existing source omitted a real frozen-class warning in a generated project. The corrected UI displayed it once both before confirmation and after execution. Truncated warning lists disabled Run. The prior published class dataset and reviewed annotation relations remained intact.",
+      "frontend_unit_tests": 952,
+      "frontend_files": 140,
+      "browser_runs": 1,
+      "files": [
+        {
+          "file": "1.8/checkpoints/549750d95/source/class-warnings/previous-missing-warning.json",
+          "sha256": "900e1b8eb1e7fc154afc2e219f5ec0fc30756e02d62b38362df395291fbae690"
+        },
+        {
+          "file": "1.8/checkpoints/549750d95/source/class-warnings/integrated-normal-class-browser.json",
+          "sha256": "67b18fc2e2b19e15e144a47e1598993a689aeb43dda5b5d597d2b5f912722d51"
+        },
+        {
+          "file": "1.8/checkpoints/549750d95/source/class-warnings/full-frontend.log",
+          "sha256": "95f47078d09a033edbeeadf893ae2330131c6456dcfbd463b18f270e1f5c2d8c"
+        },
+        {
+          "file": "1.8/checkpoints/549750d95/source/class-warnings/integrated-source.json",
+          "sha256": "ce7a244af5c0486a023c43f751d4c95141ee1b9b2356b15434bbfb0b7e48ad47"
+        },
+        {
+          "file": "1.8/checkpoints/549750d95/source/class-warnings/closed-processes.json",
+          "sha256": "91fd454a716a4ace284d1b8b3de3f1824cbc850ad3a1a337b0696f31f082b26e"
+        }
+      ]
+    }
+  },
+  "original_hosted_package": {
+    "product": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8",
+    "workflow": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44853957856",
+    "build_job": 136691608332,
+    "msi_sha256": "78d52066848afc6aeac975765359ba13cd3d0e2e8b79ef1b90307eecd03c35ed",
+    "external_cabs": 6,
+    "files": {
+      "ReefVision_1.8.0_x64_en-US.msi": "78d52066848afc6aeac975765359ba13cd3d0e2e8b79ef1b90307eecd03c35ed",
+      "build-provenance.json": "5f9bf934e2fe442ec7c9da5817ddd7fe7bb03ad30035708429d8d1f70b1361f6",
+      "rv1.cab": "39f00a5c2f38acbde8cbd4f4a3bfe11ea59475b5bdbf49c29367ebd76c2aaec1",
+      "rv2.cab": "dd2a0ca112eaf7835dd83aeb416c148a0b7dc3386e796298a264d668dfa56c45",
+      "rv3.cab": "6c7925a6e1ccb5c7ebc225a7f503c01c9ec4034a26d56499d9d2959956bf45a5",
+      "rv4.cab": "21497ce7d33712dea95fdd0c722f5ca6883e65416399434abdc46798d2f4cad0",
+      "rv5.cab": "32bcf3e249e99e88401087e8e86da87b5c32b1c2aaf695546ff2e6bac752a65f",
+      "rv6.cab": "8a0afba11b3b0d02c27d2076218042685c2492c5575e3ff034cda79de216256e"
+    },
+    "msi_cab_bytes": 2973028189,
+    "checksum_manifest": {
+      "file": "1.8/checkpoints/e3e8ffb63/official/installer/SHA256SUMS.txt",
+      "sha256": "162a1dfa8c5606f179df03b42987eac1297ba215e16fd059f79bf9439636989b"
+    },
+    "desktop_sha256": "0b0bac68d35827aa1d2956ddf3f119cd3f525fbe05862ca18b546d07eb94cf30",
+    "backend_sha256": "a0321796d4291bad26d4c33a0e7e04d2b3208c4e47835de122c2903165585375",
+    "certificate": {
+      "file": "1.8/checkpoints/e3e8ffb63/official/independent-package-validation.json",
+      "sha256": "f513a990e84b23c2d40a11c89233dca1b25fcef05404b11ea886afe676ae22a3"
+    },
+    "archive_audit": {
+      "file": "1.8/checkpoints/e3e8ffb63/official/payload-audit.json",
+      "sha256": "1d80414c0dcb8bee60052bab5e190ccc994192940f96e931ec47a775a9e3eec1"
+    },
+    "signature_and_policy": {
+      "file": "1.8/checkpoints/e3e8ffb63/official/smart-app-control.json",
+      "sha256": "255fea0c1421b1fc6fdc07db18aa631e605362444e9a06030ea65d372072e80e"
+    },
+    "forced_original_image_geometry": {
+      "file": "1.8/checkpoints/e3e8ffb63/official/evidence/first-use-geometry/evidence-index.json",
+      "sha256": "b3367e1003173b34ee829a18c4fee41f2c82ee40f3ac18e70ac958d7033e7c9e"
+    },
+    "saved_source_box": {
+      "x_min": 20.00333835767664,
+      "y_min": 15.001663871433424,
+      "x_max": 55.004633364470116,
+      "y_max": 40.00259001358695
+    },
+    "prior_1_7_projects": 5,
+    "preserved_project_files": 21,
+    "prior_1_7_rollback": {
+      "backup_id": "817c0122-f10d-480f-9048-23472e85b833",
+      "manifest_sha256": "4eb8a7ea93e98f4c1b151ed45f7897d6b38ebbcaa9e9172f57f8006326e3cadc",
+      "restore_job_id": "faac80b4-480d-483e-bfe6-bc05496efb15",
+      "verified_members": 26,
+      "verified_bytes": 20378834,
+      "restored_database_sha256": "6bc931d9f708d35bf0e6f7ca1e6eef21a6cb01def0d74f387d08343df9a35ea4",
+      "original_predecessor_read_and_write": true
+    },
+    "prior_1_7_receipt": {
+      "file": "1.8/checkpoints/e3e8ffb63/official/evidence/rich-direct-rollback/rich-upgrade-and-rollback.json",
+      "sha256": "c5ab70b87512a6d81ef21545a9292b88d0981f7b970bb2f564786909d976a0b4"
+    },
+    "registered_clean_job": 136703618659,
+    "offline_run": 44857726714,
+    "offline_draft": 121,
+    "physical-rtx3090": {
+      "file": "1.8/checkpoints/e3e8ffb63/official/evidence/physical-rtx3090/evidence-index.json",
+      "sha256": "848a6e535241e12807934f80f96ec5431937b3260adb98b99f30667b0e2630d0"
+    },
+    "reviewed_detector_runs": [
+      {
+        "id": "9993120e-e720-435c-86b0-68fe16c3cb5a",
+        "digest": "d3733d459e2462f7bfaa0756a99f80465092bbe31f9f07af9870d08913245069",
+        "child_job_id": "1184099a-dc69-4b5f-ad07-1bc5d77a0e3f",
+        "matched_proposals": 9
+      },
+      {
+        "id": "873ddd74-c386-456c-afbe-e3c701274cff",
+        "digest": "d3733d459e2462f7bfaa0756a99f80465092bbe31f9f07af9870d08913245069",
+        "child_job_id": "f3851063-a782-447e-8a55-afcc54064616",
+        "matched_proposals": 9
+      }
+    ],
+    "physical-rtx3090-segmentation": {
+      "file": "1.8/checkpoints/e3e8ffb63/official/evidence/physical-rtx3090-segmentation/evidence-index.json",
+      "sha256": "24bab26bf3a00949198aaa6999f115d2c6e76afdb57f2f8e1fec7d7da6b6e26d"
+    },
+    "mask_comparison": {
+      "frozen_images": 6,
+      "reference_masks": 12,
+      "group_balanced_metrics": [
+        {
+          "absolute_instance_count_error": 0.0,
+          "false_instances": 2.0,
+          "mask_dice": 0.07870076935175147,
+          "mask_iou": 0.041087962962962965,
+          "matched_instance_mask_iou": null,
+          "missed_instances": 2.0
+        },
+        {
+          "absolute_instance_count_error": 5.0,
+          "false_instances": 7.0,
+          "mask_dice": 0.07871713163122783,
+          "mask_iou": 0.041096881557050866,
+          "matched_instance_mask_iou": null,
+          "missed_instances": 2.0
+        }
+      ],
+      "polygon_counts": [
+        12,
+        42
+      ],
+      "gpu_samples": 25,
+      "saved_runs": [
+        {
+          "artifact_sha256": "f8b0d6dcd99178d009a6410d7f060168d956951dbd45c1913f14727bba7b1195",
+          "report_sha256": "5d25bd3762413bd17986bc68e98ad6916d5dc677771242de0c8e0f90b7be1e73",
+          "run": "cf6c4cc1-2313-41cb-8a4c-20ead63a91f5",
+          "workflow_job": "523da18b-1244-461d-9d92-19302eca9e8c"
+        },
+        {
+          "artifact_sha256": "f8b0d6dcd99178d009a6410d7f060168d956951dbd45c1913f14727bba7b1195",
+          "report_sha256": "5d25bd3762413bd17986bc68e98ad6916d5dc677771242de0c8e0f90b7be1e73",
+          "run": "a8547293-669c-40f6-8ff7-bdd2d2fa0098",
+          "workflow_job": "1f74faa3-92d0-4e46-b5fe-906d19712997"
+        }
+      ]
+    },
+    "recovered_five_graphs": {
+      "surface": "Original GitHub Windows MSI frozen sidecar, normal packaged backup and Workflow API, isolated CPU-only loopback; no GUI launch.",
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/official/evidence/managed-recovery-replays/managed-recovery-replays-verified.json",
+        "sha256": "df4fb67235560363ac8f1b7e3f94698830015ff6ec75f391dcd328598ae6de64"
+      },
+      "six_projects": 6,
+      "managed_backup": {
+        "backup_id": "17cd6f82-a5c8-457a-b8b7-696a09dab223",
+        "backup_job_id": "3b7cdf26-e681-4723-ba7b-2bfa6cf1a99d",
+        "restore_job_id": "1ab16d42-8ccd-4a0d-af75-f2c994aec5e6",
+        "manifest_sha256": "0773139c97d35aeddd827d50b5213557147cd899eef1ae3124a083a7416d23b6",
+        "files": 213,
+        "bytes": 60605815,
+        "restored_database_sha256": "cde83bb54a1d8082394ecc855b34ccf33c7ee68012315520db34ffb315051571",
+        "observed_wall_seconds": 10.281
+      },
+      "checked_table_fingerprints": 132,
+      "observed_result": "Exact canonical graph and artifact SHA-256 across old and each new replay; no tolerance used.",
+      "after_restart": {
+        "database_sha256_before_and_after": "fba2b339402b970077c8df5a271591d005201c4c98c4703cdd57c9fd03f5ba24",
+        "run_readback_count": 10
+      },
+      "backup_scope": "The default backup excluded 16 derived detector export files. All 206 non-export managed model and project files matched. The five scientific reports remained available through their normal export paths."
+    },
+    "registered_offline": {
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/official/offline/attempt-44857726714/offline-index.json",
+        "sha256": "11cb13a517153aad035a611352c955eb3a58d967cb31e0683746b23a19be642c"
+      },
+      "workflow": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44857726714",
+      "fresh": {
+        "artifact": {
+          "id": 14689560926,
+          "sha256": "62727d3a68bb59686f35b428843cff69fbe97f88e564665d4199935bbc0fd9dc",
+          "retained_members": 19
+        },
+        "report": "offline-fresh-14689560926\\evidence\\offline-install-report.json",
+        "report_status": "PASS",
+        "actual_error": null,
+        "msi_sha256": "78d52066848afc6aeac975765359ba13cd3d0e2e8b79ef1b90307eecd03c35ed",
+        "offline_seconds": 201.4969727,
+        "offline_controls": {
+          "ordinary": 519,
+          "system": 517
+        },
+        "control_gap_seconds": {
+          "ordinary": 4.857101,
+          "system": 4.8414687
+        },
+        "actual_registered_install": true,
+        "actual_uninstall": true,
+        "reviewed_source_sha256": "11da437ad33072b11627e77994f869a1f92c4c0b94e0b64f920567853ff0674b",
+        "cross_checked_against_original_payload": true
+      },
+      "cached_upgrade": {
+        "artifact": {
+          "id": 14688738190,
+          "sha256": "a9cac73b71ffa94610649665e0397637d8652995d49cefb83e52bf7b560c2e88",
+          "retained_members": 24
+        },
+        "report": "offline-cached-upgrade-14688738190\\evidence\\offline-upgrade-report.json",
+        "report_status": "PASS",
+        "actual_error": null,
+        "msi_sha256": "78d52066848afc6aeac975765359ba13cd3d0e2e8b79ef1b90307eecd03c35ed",
+        "offline_seconds": 368.2743626,
+        "offline_controls": {
+          "ordinary": 870,
+          "system": 873
+        },
+        "control_gap_seconds": {
+          "ordinary": 8.9816864,
+          "system": 8.9816864
+        },
+        "actual_registered_install": true,
+        "actual_uninstall": true,
+        "reviewed_source_sha256": "11da437ad33072b11627e77994f869a1f92c4c0b94e0b64f920567853ff0674b",
+        "cross_checked_against_original_payload": true,
+        "actual_registered_upgrade": true,
+        "prior_version": "1.7.0",
+        "independent_recovery_while_offline": true,
+        "rollback_backup_id": "552b5e31-b3c4-4d14-b955-182a6e4f2902",
+        "restore_job_id": "88cf03ab-6c16-4793-a639-d1e48436aff7",
+        "verified_recovered_files": 7,
+        "recovered_database_sha256": "d056fc3a910c9a941f0bd67003fc63cbf5170f1fb960dce1c5b6809994e29a55"
+      }
+    },
+    "neutral_pose_roundtrip": {
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/official/evidence/neutral-pose/official-native-pose-coco-verified.json",
+        "sha256": "d6da19a1c5ab5a45d9562493b2cf120dff8e94fd8b65d7235432e90940899c3e"
+      },
+      "surface": "Ordinary original MSI WebView2 export, file-picker import and independent process reopen on copies of generated video.",
+      "landmarks": {
+        "frames": 96,
+        "states": {
+          "visible": 191,
+          "occluded": 1
+        },
+        "maximum_source_pixel_delta": 0,
+        "subpixel_visible": {
+          "semantic_label": "Jaw A",
+          "occurrence_index": 0,
+          "x": 31.125,
+          "y": 46.25,
+          "status": "visible"
+        },
+        "subpixel_occluded": {
+          "semantic_label": "Jaw B",
+          "occurrence_index": 0,
+          "x": 55.375,
+          "y": 46.625,
+          "status": "occluded"
+        }
+      },
+      "live_imported_review_state": "imported_review_required",
+      "limitations": "The canonical source export preserved explicit per-frame times in its manifest. Imported observations retained frame indices and positions but lacked live timestamp_seconds. A separate mixed-status source exported both verified and machine-generated tracks without identifying source status."
+    },
+    "registered_clean": {
+      "source": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8",
+      "run": 44853957856,
+      "job": 136703618659,
+      "artifact": 14689805690,
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/official/registered-clean-verification.json",
+        "sha256": "c6f87b4200d0aa6536d27f80ac48419d38a3ade79ab13979644fc98352e00a5a"
+      },
+      "stage_counts": {
+        "PASS": 21,
+        "SKIPPED": 11
+      },
+      "journeys": {
+        "first_use": 1,
+        "workspaces": 7,
+        "research": 6,
+        "spatial": 10,
+        "monitoring": 2,
+        "research_tools": 5
+      },
+      "scheduler_restarts": 2,
+      "standard_user": {
+        "desktop_integrity": 8192,
+        "driver_integrity": 12288,
+        "desktop_sha256": "0b0bac68d35827aa1d2956ddf3f119cd3f525fbe05862ca18b546d07eb94cf30"
+      },
+      "source_box": [
+        20.00393,
+        15.03628,
+        55.00524,
+        40.03721
+      ],
+      "max_source_delta_px": 0.03721,
+      "transport_sha256": "be3c5c40542566339f2d87502d954330fe2baa88b9eae5f923b81b941cb35506"
+    },
+    "original_catalog_limitation": {
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/official/evidence/compatibility-handoff/original-compatibility-handoff.json",
+        "sha256": "c38f05cca3859d6436e7cfbfe6abb5dcdc961abc3f4ee33bbfebb1a82482af26"
+      },
+      "result": "After ordinary import of a fixture with a historical provider, its model card reported ready for offline inference while its provider and capabilities were unavailable. The historical registration and its stored bytes remained readable."
+    },
+    "combined_installed": {
+      "run": 44853957856,
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/official/combined-installed-qualification.json",
+        "sha256": "3ebe7a39efe7360bff8cd0cd902159a36146f254296b11bb8cfb44e8a5e3b13d"
+      },
+      "registered_roles": {
+        "clean": {
+          "job_id": 136703618659,
+          "id": 14689805690,
+          "sha256": "be3c5c40542566339f2d87502d954330fe2baa88b9eae5f923b81b941cb35506",
+          "files_rehashed": 71
+        },
+        "published-1.0.3": {
+          "job_id": 136703618628,
+          "id": 14689611672,
+          "sha256": "2004ab8d9cba0fcbf3862d8c38d5516f4d2a40f6e29d0b70fbf742d3628a482e",
+          "files_rehashed": 6
+        },
+        "validated-1.3": {
+          "job_id": 136703618701,
+          "id": 14690542614,
+          "sha256": "abb89d081512a4db7f03b42dbb9ca1c56b9467f3d9ad80b9212713fd2ec2b5bd",
+          "files_rehashed": 12
+        },
+        "validated-1.4": {
+          "job_id": 136703618656,
+          "id": 14689229378,
+          "sha256": "2323f12022f56a287efc8d7b84d342299c496dc6819a8e2300fe6a6902cd149b",
+          "files_rehashed": 7
+        },
+        "validated-1.5": {
+          "job_id": 136703618658,
+          "id": 14689672615,
+          "sha256": "18fbb020411ac77c73383407631aaf9dbd7650a5210b1c9bb48907728783183b",
+          "files_rehashed": 11
+        },
+        "validated-1.6": {
+          "job_id": 136703618660,
+          "id": 14690691205,
+          "sha256": "b2701fa48a8a440c3ca449bc1e7f4b4623448faa4b1755bb58304c4a088d98a1",
+          "files_rehashed": 11
+        },
+        "validated-1.7": {
+          "job_id": 136703618575,
+          "id": 14689685637,
+          "sha256": "730d88330eb10c6294cd6c9cc81934f454b40008dd45138a9c691a05866d4794",
+          "files_rehashed": 11
+        },
+        "draft-1.4-0038": {
+          "job_id": 136703618715,
+          "id": 14690130222,
+          "sha256": "bbd8f652f6956bdad99b3c8759a5a848c69ecbd0f9635817b91e3093bdf8a922",
+          "files_rehashed": 9
+        },
+        "draft-1.4-0039": {
+          "job_id": 136703618724,
+          "id": 14689356705,
+          "sha256": "a5a649de81f94c92ff76615e59764cf30f3c47b00e699ad16240509fd035d57d",
+          "files_rehashed": 9
+        },
+        "historical-qc": {
+          "job_id": 136703618625,
+          "id": 14688459913,
+          "sha256": "b433420eae65353a36ee7bc107b751710f22024d652a3a731bd638ce6132e940",
+          "files_rehashed": 67
+        }
+      },
+      "result": "All ten registered roles passed on one original MSI and its six matching cabinets, including clean, published 1.0.3, validated 1.3 through 1.7, both historical 1.4 draft schemas, and the historical science/QC collision."
+    },
+    "physical_performance": {
+      "desktop": "Original MSI payload extracted for native WebView2 on the Windows 11 RTX 3090 workstation with disposable generated projects.",
+      "gallery": {
+        "receipt": {
+          "file": "1.8/checkpoints/e3e8ffb63/official/evidence/performance/5000-gallery-1500-boxes.json",
+          "sha256": "d4a52e9477b1b17985fe5656c1bb59c3760625e8c7ce0bec017aa19e42b2c9e1"
+        },
+        "indexed": 5000,
+        "decoded": 5000,
+        "boxes": 1500,
+        "pages": 209,
+        "thumbnail_ms": 231.79999999701977,
+        "editor_ms": 271.23160000000007
+      },
+      "video": {
+        "receipt": {
+          "file": "1.8/checkpoints/e3e8ffb63/official/evidence/performance/18000-frame-video.json",
+          "sha256": "aeed2ace4b615b37fc7a2d1ff141de696b8fde9f92a0f9b0d6be40a928d19753"
+        },
+        "fixture_sha256": "cf8fae086789321f711a322261b0f3b24afce1f322e8cbf78ec0a285d345d9ed",
+        "source_bytes": 362039850,
+        "source_frames": 18000,
+        "frame_rate_hz": 10,
+        "period_seconds": 12,
+        "playback_ready_ms": 1387.6752,
+        "sparse_extraction_ms": 19570.957899999998,
+        "near_end_seek_and_decode_ms": 239.54119999999966,
+        "reopened_reviewed_frame": 17100,
+        "source_pixel_box_xywh": [
+          223,
+          113,
+          122,
+          97
+        ]
+      }
+    },
+    "independent_build_disposition": {
+      "run": 44853957924,
+      "backend_job": 136691608557,
+      "backend": {
+        "passed": 6017,
+        "skipped": 18,
+        "failed": 2
+      },
+      "skipped_installer_job": 136720242699,
+      "installer_created": false,
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/second-build/workflow-disposition.json",
+        "sha256": "58a0d0d4aee3e2cfee53d4652eff94b8cf7d152964125420e972d9a07c471fe3"
+      },
+      "ordinary_linux": {
+        "run": 44853958059,
+        "backend_job": 136691609015,
+        "passed": 6024,
+        "skipped": 11,
+        "failed": 2
+      },
+      "cause": "Both suites failed the two image-adjustment assertions that called Pillow's deprecated pixel accessor. The separate 54a89896c test correction compares identical RGB bytes on both supported Pillow versions."
+    }
+  },
+  "reviewed_retirement_predecessor": {
+    "source": "67b8c1feb3ffe1ceb8f506d0e4997de203f8e67b",
+    "draft": 122,
+    "receipt": {
+      "file": "1.8/checkpoints/67b8c1feb/sleap-runtime-retirement/evidence-index.json",
+      "sha256": "ec0cfbe6dc03b21046ef73f98741db9cc8466ae225a1c28bf14265d4bfc04821"
+    },
+    "pytest": {
+      "passed": 71,
+      "failed": 0,
+      "skipped": 0,
+      "time_seconds": 73.78,
+      "nwb_runtime_cases": 5,
+      "nwb_codec_version": "0.9.2"
+    },
+    "description": "A rebuilt production sidecar removed the callable retired provider and tracking adapter. Model Hub showed its historical data and the unavailable state, and byte-identical historical registrations and optional neutral NWB interchange remained readable."
+  },
+  "prior_9cde_second_build": {
+    "receipt": {
+      "file": "1.8/checkpoints/9cde9e6e7/second-build/workflow-disposition.json",
+      "sha256": "0d1a250d958fb3160b1c89795eec7ea86e01d466b9bad531873d23073b6071cf"
+    },
+    "run": 44847408196,
+    "skipped_windows_job": 136708747216,
+    "linux_backend_job": 136670423314,
+    "linux_pass": 6017,
+    "linux_skips": 18,
+    "linux_failures": 2,
+    "cause": "Two tests used the deprecated Pillow Image.getdata on the newest supported Pillow, which raises with warnings treated as errors. The independent compatibility correction is in 54a89896c484fc0525d9c8e73323d5f5706d3522."
+  },
+  "reviewed_neutral_exchange": {
+    "source": "d80365c77139c4e0bc04ed157d5c5790259cf62a",
+    "draft": 123,
+    "receipt": {
+      "file": "1.8/checkpoints/d80365c77/source/neutral-pose/index.json",
+      "sha256": "8089bb22e511e56e438b8682a854704920463a9965e9079c29cae962a926358b"
+    },
+    "observed": "On generated mixed tracks, default COCO contained 36 reviewed observations. Explicit archival inclusion retained 72 observations and both source statuses. The new imported track required review and all 96 irregular presentation timestamps survived."
+  },
+  "reviewed_native_anatomy": {
+    "source": "57f16152be0b3220a5bc4f85ceff35a42161825a",
+    "draft": 124,
+    "receipt": {
+      "file": "1.8/checkpoints/57f16152b/native-pose-review/evidence-index.json",
+      "sha256": "f9bf4b289a5b3cbf9fb5408042dbf8d8185a0398f9aa9d26b7fd131a982f1b5b"
+    },
+    "run_ids": [
+      "69404350-dace-4ec2-8fec-f331a2dcbb17",
+      "d6b7ef0b-b0a0-4bd9-bcf5-993b0b1b7e23"
+    ],
+    "observed": "Two ordinary saved executions on generated data independently trained on CPU, registered checkpoints, processed a held-out recording, reached two human review gates and exported a ZIP with the verified pose. Keeping the run-derived registration name allowed both runs. Explicitly reusing a fixed name for the second distinct checkpoint was refused."
+  },
+  "reviewed_historical_model_exchange": {
+    "source": "3736712ff3c43bc7063a312244e9ab042c2a0185",
+    "draft": 125,
+    "receipt": {
+      "file": "1.8/checkpoints/3736712ff/source/provider-exchange/index.json",
+      "sha256": "c3e0d76d15315096bbeda5d2df6f56f2bd50e45fbb584b4e9d8252b66c9e3cff"
+    },
+    "two_hop_receipt": {
+      "file": "1.8/checkpoints/3736712ff/source/provider-exchange/two-exchange-generations.json",
+      "sha256": "849053ec92c9bbe5fb46886413a2265741e0238dce9ae20c3da3a670dfdddc28"
+    },
+    "tests": {
+      "focused": 65,
+      "additional_field_binding": 1,
+      "mypy_files": 775,
+      "ruff": "passed"
+    },
+    "observed": "Both public exchange generations preserved opaque vendor metadata, literal class labels, original asset bytes and a historical pending prediction. Known local relationships mapped to new IDs. Unavailable inference created zero new jobs and directed the researcher to Model Hub."
+  },
+  "reviewed_predecessor_integration": {
+    "source": "fd5406597f14f3a984c6bc402f1658672bcad515",
+    "worktree": "C:/rv18-reviewed-predecessors",
+    "drafts": [
+      120,
+      122,
+      123,
+      124,
+      125,
+      126,
+      127
+    ],
+    "frontend_tests": 955,
+    "frontend_files": 140,
+    "frontend_build": "passed",
+    "windows_full_backend": "C:/rvb18-4ac9",
+    "product_version": "1.8.0",
+    "schema": "b18_spectral_0002",
+    "catalog_and_exchange_tests": 26,
+    "windows_full_backend_source": "4ac9fd69be43a9d0045e6dd8816041c4c796b098",
+    "reviewed_corrections": [
+      {
+        "draft": 126,
+        "source": "ead3367e3a84224d8d32cf4a8bf976e82711ae36",
+        "receipt": {
+          "file": "1.8/checkpoints/ead3367e3/stable-pose-marker-drag/evidence-index.json",
+          "sha256": "fefb800c96146fcb40b4960423820bca435b78430e24ba334f458bb19c405635"
+        }
+      },
+      {
+        "draft": 127,
+        "source": "18926b4d6bf89a0f88c04644c09ad2d2043c0059",
+        "receipt": {
+          "file": "1.8/checkpoints/18926b4d6/source/model-hub-availability/index.json",
+          "sha256": "b1ee59fe64d12e2f66b4507a79ce854d46fed53b3f62bcfd8b53c7ba493fa204"
+        }
+      }
+    ]
+  }
+}

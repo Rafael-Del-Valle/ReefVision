@@ -99,6 +99,13 @@ interface VideoTrackingWorkspaceProps {
   onWorkspaceCommandHandled?: (commandId: number) => void;
 }
 
+const POSE_EXPORT_FORMATS = [
+  ["nwb", "NWB"],
+  ["coco", "COCO pose"],
+  ["dlc_csv", "DeepLabCut CSV"],
+  ["ultralytics_pose", "Ultralytics pose ZIP"],
+] as const;
+
 function parseMaskPolygons(
   value: string,
   sourceWidth: number,
@@ -256,6 +263,8 @@ export function VideoTrackingWorkspace({
   const [poseInteropImportFormat, setPoseInteropImportFormat] =
     useState<PoseInteroperabilityFormat>("nwb");
   const [confirmPoseInteropFrameMapping, setConfirmPoseInteropFrameMapping] =
+    useState(false);
+  const [includeUnreviewedInPoseExport, setIncludeUnreviewedInPoseExport] =
     useState(false);
 
   const [trackingModelId, setTrackingModelId] = useState("");
@@ -439,6 +448,14 @@ export function VideoTrackingWorkspace({
       poseConfiguredLandmarkCount === poseExpectedLandmarkCount);
   const selectedTrackPoseSchema = poseLandmarkSchemaFromMetadata(
     selectedTrack?.metadata_json,
+  );
+  const hasVerifiedPoseTracks = tracksQuery.data?.some(
+    (track) =>
+      track.status === "verified" &&
+      poseLandmarkSchemaFromMetadata(track.metadata_json) !== null &&
+      track.keyframes_json.some(
+        (frame) => frame.pose_observations || frame.keypoints,
+      ),
   );
   const activeTrackPoseSchema =
     selectedTrackPoseSchema ??
@@ -653,6 +670,7 @@ export function VideoTrackingWorkspace({
     setCopiedReport(null);
     setPoseInteropImportFile(null);
     setConfirmPoseInteropFrameMapping(false);
+    setIncludeUnreviewedInPoseExport(false);
   }, [selectedVideoId]);
   useEffect(() => {
     if (selectedVideo) {
@@ -2235,48 +2253,47 @@ export function VideoTrackingWorkspace({
             {selectedTrack && selectedTrackPoseSchema && (
               <>
                 <p className="annotation-helper">
-                  Exports use the scientist-reviewed canonical pose state.
-                  Repeated semantic labels receive stable external node names.
-                  NWB, COCO, DeepLabCut, and Ultralytics downloads are ZIP
-                  bundles containing the standard native artifact plus a
+                  Exports include verified pose tracks for this video by
+                  default. Include unreviewed tracks for archival transfer when
+                  you need them. The bundle records each source track's review
+                  status. Repeated semantic labels receive stable external node
+                  names. NWB, COCO, DeepLabCut, and Ultralytics downloads are
+                  ZIP bundles containing the standard native artifact plus a
                   ReefVision manifest for exact frame and identity restoration.
                   The full immutable association/correction audit history
                   remains in ReefVision.
                 </p>
-                <div className="workspace-actions">
-                  <a
-                    href={poseInteroperabilityExportUrl(
-                      selectedVideo.id,
-                      "nwb",
-                    )}
-                  >
-                    NWB
-                  </a>
-                  <a
-                    href={poseInteroperabilityExportUrl(
-                      selectedVideo.id,
-                      "coco",
-                    )}
-                  >
-                    COCO pose
-                  </a>
-                  <a
-                    href={poseInteroperabilityExportUrl(
-                      selectedVideo.id,
-                      "dlc_csv",
-                    )}
-                  >
-                    DeepLabCut CSV
-                  </a>
-                  <a
-                    href={poseInteroperabilityExportUrl(
-                      selectedVideo.id,
-                      "ultralytics_pose",
-                    )}
-                  >
-                    Ultralytics pose ZIP
-                  </a>
-                </div>
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={includeUnreviewedInPoseExport}
+                    onChange={(event) =>
+                      setIncludeUnreviewedInPoseExport(event.target.checked)
+                    }
+                  />
+                  Include unreviewed tracks in archival export
+                </label>
+                {!hasVerifiedPoseTracks && !includeUnreviewedInPoseExport ? (
+                  <p className="annotation-helper">
+                    No verified pose tracks are available. Review a track or
+                    choose an archival export to include it.
+                  </p>
+                ) : (
+                  <div className="workspace-actions">
+                    {POSE_EXPORT_FORMATS.map(([format, label]) => (
+                      <a
+                        key={format}
+                        href={poseInteroperabilityExportUrl(
+                          selectedVideo.id,
+                          format,
+                          includeUnreviewedInPoseExport,
+                        )}
+                      >
+                        {label}
+                      </a>
+                    ))}
+                  </div>
+                )}
               </>
             )}
             <label>

@@ -118,6 +118,7 @@ from reefvision.services.project_exchange_integrated import (
     remap_ecology_evidence,
     remap_reviewed_snapshot,
 )
+from reefvision.services.project_exchange_models import remap_model_registration
 from reefvision.services.project_exchange_monitoring_v17 import (
     preserve_comparison_snapshot,
     validate_monitoring_exchange,
@@ -315,7 +316,11 @@ def _coerce_row(
     id_map: dict[str, str],
 ) -> dict[str, Any]:
     table = model.__table__
-    values = _remap_json(row, id_map)
+    values = (
+        remap_model_registration(row, id_map)
+        if model is ModelRegistration
+        else _remap_json(row, id_map)
+    )
     converted: dict[str, Any] = {}
     for column in table.columns:
         if column.name not in values:

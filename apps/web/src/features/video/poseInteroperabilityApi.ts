@@ -6,8 +6,10 @@ export type PoseInteroperabilityFormat =
 export function poseInteroperabilityExportUrl(
   videoId: string,
   format: PoseInteroperabilityFormat,
+  includeUnreviewed = false,
 ): string {
   const query = new URLSearchParams({ format });
+  if (includeUnreviewed) query.set("include_unreviewed", "true");
   return `${getApiBaseUrl()}/videos/${encodeURIComponent(
     videoId,
   )}/pose-interoperability/export?${query.toString()}`;

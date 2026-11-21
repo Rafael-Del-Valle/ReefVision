@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from stat import S_ISREG
 from typing import Any, cast
 
 from pydantic import ValidationError as PydanticValidationError
@@ -21,9 +22,16 @@ from reefvision import __version__
 from reefvision.config import Settings
 from reefvision.db.models import Job, ModelRegistration, Project
 from reefvision.domain.errors import CatalogResourceError, NotFoundError, ValidationError
+from reefvision.ml.provider_hub import (
+    assist_provider_for_name,
+    get_model_provider,
+    require_image_inference_provider,
+)
+from reefvision.ml.sleap_nn_provider import SLEAP_NN_PROVIDER_ID
 from reefvision.repositories.models import ModelRepository
 from reefvision.repositories.projects import ProjectRepository
 from reefvision.schemas.model_catalog import (
+    CatalogInstallationState,
     CatalogTask,
     CatalogWorkflow,
     ModelCatalogEntryResponse,
@@ -33,6 +41,7 @@ from reefvision.schemas.model_catalog import (
 from reefvision.storage.catalog_models import (
     load_catalog_manifest,
 )
+from reefvision.storage.projects import resolve_managed_project_path
 
 MODEL_CATALOG_FILENAME = "model_catalog.json"
 TRACKER_CATALOG_FILENAME = "tracker_catalog.json"
@@ -353,7 +362,7 @@ class ModelCatalogService:
             for entry in self._dynamic_entries(project_id)
             if _task_allowed_for_workflow(entry.task, workflow)
             and (task is None or entry.task == task)
-            and (include_unavailable or entry.installation_state != "Unavailable")
+            and (include_unavailable or entry.availability != "unavailable")
         ]
         ordered = sorted(
             [*models, *dynamic],
@@ -440,6 +449,66 @@ class ModelCatalogService:
             for model in self.models.list_for_project(project_id)
         ]
 
+    def _registered_provider_issue(
+        self, model: ModelRegistration
+    ) -> tuple[CatalogInstallationState, str] | None:
+        provider_id = model.provider_name.strip().casefold()
+        descriptor_id = provider_id
+        try:
+            if provider_id == SLEAP_NN_PROVIDER_ID:
+                require_image_inference_provider(provider_id, model.task)
+            elif model.task == "classify" and model.purpose == "classifier":
+                from reefvision.ml.classification import classification_provider_for_name
+
+                classification_provider_for_name(provider_id)
+            elif model.task == "assist_segmentation" and model.purpose == "assist":
+                assist_provider_for_name(provider_id)
+            elif model.task == "pose_temporal" and provider_id == "reefpose_temporal":
+                descriptor_id = "reefpose"
+            else:
+                require_image_inference_provider(provider_id, model.task)
+        except ValidationError as exc:
+            return "Unavailable", str(exc)
+
+        if provider_id == "nnunet":
+            from reefvision.ml.semantic_segmentation import nnunet_dependency_status
+
+            runtime = nnunet_dependency_status()
+            if not runtime["ready"]:
+                reason = "; ".join(runtime["issues"])
+                return "Provider Required", f"Install the local nnU-Net runtime. {reason}"
+        else:
+            provider = get_model_provider(descriptor_id, self.settings)
+            if provider.availability_status != "ready":
+                reason = provider.availability_reason or "Provider dependencies are unavailable."
+                return "Provider Required", f"Repair the {provider.display_name} runtime. {reason}"
+        return None
+
+    def _registered_weight_issue(
+        self, model: ModelRegistration
+    ) -> tuple[CatalogInstallationState, str] | None:
+        missing = (
+            "Checkpoint weights are missing. Reimport a project archive that includes weights "
+            "or register a compatible local checkpoint."
+        )
+        try:
+            info = resolve_managed_project_path(self.settings, model.managed_path).stat()
+        except FileNotFoundError:
+            return "Model Required", missing
+        except (OSError, ValidationError):
+            return (
+                "Unavailable",
+                "The managed checkpoint path cannot be read. Check project storage.",
+            )
+        if not S_ISREG(info.st_mode):
+            return "Model Required", missing
+        if info.st_size == 0 or info.st_size != model.file_size_bytes:
+            return (
+                "Corrupted",
+                "Checkpoint file size differs from the registration. Restore its weights.",
+            )
+        return None
+
     def _dynamic_entry_from_model(self, model: ModelRegistration) -> ModelCatalogEntryResponse:
         metadata = dict(model.metadata_json)
         category = (
@@ -451,6 +520,23 @@ class ModelCatalogService:
         task: CatalogTask = "assist_segmentation" if model.purpose == "assist" else "detect"
         if model.task in {"pose", "classify", "segment", "semantic_segment"}:
             task = cast(CatalogTask, model.task)
+        elif model.task == "pose_temporal":
+            task = "pose"
+        weight_issue = self._registered_weight_issue(model)
+        provider_issue = self._registered_provider_issue(model)
+        issue = provider_issue or weight_issue
+        state = issue[0] if issue else "Ready"
+        reason = issue[1] if issue else "The local provider supports this task."
+        if provider_issue and weight_issue:
+            reason = f"{reason} {weight_issue[1]}"
+        ready = issue is None
+        trainable = ready and model.task in {
+            "detect",
+            "segment",
+            "pose",
+            "classify",
+            "semantic_segment",
+        }
         architecture_reference = None
         source_architecture = metadata.get("source_architecture")
         if isinstance(source_architecture, str) and source_architecture.strip():
@@ -479,10 +565,9 @@ class ModelCatalogService:
             architecture=architecture_family,
             variant=str(model_size or model.task),
             task=task,
-            trainable=model.task in {"detect", "segment", "pose", "classify", "semantic_segment"},
-            training_supported=model.task
-            in {"detect", "segment", "pose", "classify", "semantic_segment"},
-            inference_supported=True,
+            trainable=trainable,
+            training_supported=trainable,
+            inference_supported=ready,
             checkpoint_identifier=model.source_filename,
             download_source_type="project_model_registration",
             expected_files=[],
@@ -491,10 +576,10 @@ class ModelCatalogService:
             provider_pack_id=None,
             recommended_ram=None,
             recommended_vram=None,
-            supported_devices=["cpu", "cuda"],
+            supported_devices=["cpu", "cuda"] if ready else [],
             supported_runtimes=supported_runtimes,
             desktop_support="project_data",
-            availability="available",
+            availability="available" if ready else "unavailable",
             provider=model.provider_name,
             provider_version=model.provider_version,
             architecture_family=architecture_family,
@@ -502,9 +587,9 @@ class ModelCatalogService:
             model_size=str(model_size).strip()
             if isinstance(model_size, str) and model_size.strip()
             else None,
-            inference=True,
+            inference=ready,
             video_compatibility=False,
-            prompt_assist_compatibility=model.purpose == "assist",
+            prompt_assist_compatibility=ready and model.purpose == "assist",
             tiling_compatibility=False,
             tuning_compatibility=False,
             checkpoint_source="project_model_registration",
@@ -532,11 +617,11 @@ class ModelCatalogService:
                     "Training compatibility depends on the original training architecture metadata."
                 ]
             ),
-            installation_state="Ready",
-            installation_reason="Managed local model registration is available for offline use.",
-            installed_asset_id=f"registered_model:{model.id}",
-            installed_path=model.managed_path,
-            installed_checksum=model.sha256,
+            installation_state=state,
+            installation_reason=reason,
+            installed_asset_id=f"registered_model:{model.id}" if weight_issue is None else None,
+            installed_path=model.managed_path if weight_issue is None else None,
+            installed_checksum=model.sha256 if weight_issue is None else None,
             advanced_only=advanced_only,
             requires_confirmation=False,
             selection_kind="registered_model",
