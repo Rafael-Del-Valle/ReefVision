@@ -44,18 +44,58 @@ type MergeClassApproval = {
   expectedSourceIdentity: MergeTargetIdentity;
 };
 
-// A partially decoded API response is not a scientific review report.
-// Validate the collections before rendering: missing arrays must not crash the
-// class manager or conceal the reviewer's blocking evidence.
+// A reviewed plan must be complete through its nested records and warnings.
+// Invalid records cannot be rendered or treated as researcher authorization.
+function validReviewText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function validReviewTextList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(validReviewText);
+}
+
+function validReviewGroup(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  return (
+    validReviewText(item.key) &&
+    validReviewText(item.label) &&
+    typeof item.count === "number" &&
+    Number.isSafeInteger(item.count) &&
+    item.count >= 0 &&
+    validReviewTextList(item.record_ids)
+  );
+}
+
+function validReviewImpact(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  return (
+    validReviewText(item.key) &&
+    validReviewText(item.label) &&
+    validReviewText(item.status) &&
+    validReviewText(item.message) &&
+    validReviewTextList(item.record_ids)
+  );
+}
+
 function operationHasDisplayEvidence(operation: ClassOperationRecord): boolean {
   const plan = operation.plan;
   return (
+    (operation.operation_type === "reassign" ||
+      operation.operation_type === "reassign_delete") &&
     Array.isArray(plan?.mutable_records) &&
+    plan.mutable_records.every(validReviewGroup) &&
     Array.isArray(plan.protected_records) &&
+    plan.protected_records.every(validReviewGroup) &&
     Array.isArray(plan.compatibility_impacts) &&
+    plan.compatibility_impacts.every(validReviewImpact) &&
     Array.isArray(plan.blocking_records) &&
-    Array.isArray(plan.blockers) &&
-    Array.isArray(operation.failures)
+    plan.blocking_records.every(validReviewGroup) &&
+    validReviewTextList(plan.warnings) &&
+    validReviewTextList(plan.blockers) &&
+    validReviewTextList(operation.warnings) &&
+    validReviewTextList(operation.failures)
   );
 }
 
@@ -257,6 +297,15 @@ function OperationSummary({
           {item.label}: {item.status}. {item.message}
         </p>
       ))}
+      <div className="class-warning-list">
+        {[...new Set([...operation.plan.warnings, ...operation.warnings])].map(
+          (warning) => (
+            <p key={warning} className="annotation-helper">
+              {warning}
+            </p>
+          ),
+        )}
+      </div>
       {(operation.plan.blocking_records ?? []).map((item) => (
         <p key={item.key} className="form-error">
           {item.label}: {item.count}

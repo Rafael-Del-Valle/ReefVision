@@ -588,6 +588,163 @@ describe("ClassManagerPanel", () => {
     },
   );
 
+  it.each(
+    ([
+      ["reassign", "reassign", "Preview reassign", "Run reassign"],
+      [
+        "reassign-delete",
+        "reassign_delete",
+        "Preview Reassign and Delete",
+        "Run Reassign and Delete",
+      ],
+    ] as const).flatMap(([endpoint, operationType, previewLabel, runLabel]) =>
+      ([
+        ["null mutable record", { mutable_records: [null] }],
+        [
+          "negative protected count",
+          {
+            protected_records: [
+              {
+                key: "dataset_versions",
+                label: "Immutable versions",
+                count: -1,
+                record_ids: ["version-1"],
+              },
+            ],
+          },
+        ],
+        [
+          "missing blocking record IDs",
+          {
+            blocking_records: [
+              { key: "annotations_deleted", label: "Historical records", count: 1 },
+            ],
+          },
+        ],
+        ["null compatibility impact", { compatibility_impacts: [null] }],
+        ["nonstring blocker", { blockers: [null] }],
+        ["nonstring warning", { warnings: [null] }],
+      ] as const).map(([defect, invalidPlan]) => ({
+        endpoint,
+        operationType,
+        previewLabel,
+        runLabel,
+        defect,
+        invalidPlan,
+      })),
+    ),
+  )(
+    "fails closed for $endpoint preview with $defect",
+    async ({
+      endpoint,
+      operationType,
+      previewLabel,
+      runLabel,
+      invalidPlan,
+    }) => {
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async (input, init) => {
+          const url = String(input);
+          if (
+            url.endsWith(
+              `/projects/${project.id}/classes/class-1/${endpoint}/preview`,
+            ) &&
+            init?.method === "POST"
+          ) {
+            return jsonResponse({
+              id: "invalid-evidence-preview",
+              project_id: project.id,
+              source_class_id: "class-1",
+              target_class_id: "class-2",
+              operation_type: operationType,
+              status: "previewed",
+              preview_checksum: "a".repeat(64),
+              plan: {
+                mutable_records: [],
+                protected_records: [],
+                blocking_records: [],
+                compatibility_impacts: [],
+                warnings: [],
+                blockers: [],
+                ...invalidPlan,
+              },
+              warnings: [],
+              failures: [],
+            });
+          }
+          throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`);
+        });
+      renderPanel();
+      const row = sourceClassRow();
+      await userEvent.click(
+        within(row).getByRole("button", { name: previewLabel }),
+      );
+      expect(
+        await within(row).findByText(/Operation evidence is incomplete/),
+      ).toBeInTheDocument();
+      expect(
+        within(row).getByRole("button", { name: runLabel }),
+      ).toBeDisabled();
+      expect(
+        fetchMock.mock.calls.filter(
+          ([input, init]) =>
+            String(input).endsWith(`/classes/class-1/${endpoint}`) &&
+            init?.method === "POST",
+        ),
+      ).toHaveLength(0);
+    },
+  );
+
+  it("shows deduplicated plan and audit warnings for researcher review", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (
+        url.endsWith(`/projects/${project.id}/classes/class-1/reassign/preview`) &&
+        init?.method === "POST"
+      ) {
+        return jsonResponse({
+          id: "warning-preview",
+          project_id: project.id,
+          source_class_id: "class-1",
+          target_class_id: "class-2",
+          operation_type: "reassign",
+          status: "previewed",
+          preview_checksum: "b".repeat(64),
+          plan: {
+            mutable_records: [],
+            protected_records: [],
+            blocking_records: [],
+            compatibility_impacts: [],
+            warnings: ["Historical annotations remain unchanged."],
+            blockers: [],
+          },
+          warnings: [
+            "Historical annotations remain unchanged.",
+            "Review registered model maps before reuse.",
+          ],
+          failures: [],
+        });
+      }
+      throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`);
+    });
+    renderPanel();
+    const row = sourceClassRow();
+    await userEvent.click(
+      within(row).getByRole("button", { name: "Preview reassign" }),
+    );
+    expect(await within(row).findByText("Reassign preview")).toBeInTheDocument();
+    expect(
+      within(row).getAllByText("Historical annotations remain unchanged."),
+    ).toHaveLength(1);
+    expect(
+      within(row).getByText("Review registered model maps before reuse."),
+    ).toBeInTheDocument();
+    expect(
+      within(row).getByRole("button", { name: "Run reassign" }),
+    ).toBeEnabled();
+  });
+
   it.each([
     [
       "reassign",
@@ -686,8 +843,10 @@ describe("ClassManagerPanel", () => {
                 protected_records: [],
                 blocking_records: [],
                 compatibility_impacts: [],
+                warnings: [],
                 blockers: [],
               },
+              warnings: [],
               failures: [],
               ...invalidEvidence,
             });
@@ -1165,8 +1324,10 @@ describe("ClassManagerPanel", () => {
                 protected_records: [],
                 blocking_records: [],
                 compatibility_impacts: [],
+                warnings: [],
                 blockers: [],
               },
+              warnings: [],
               failures: [],
             });
           }
@@ -1262,8 +1423,10 @@ describe("ClassManagerPanel", () => {
             protected_records: [],
             blocking_records: [],
             compatibility_impacts: [],
+            warnings: [],
             blockers: [],
           },
+          warnings: [],
           failures: [],
         });
         if (previewCount === 1) {
@@ -1359,8 +1522,10 @@ describe("ClassManagerPanel", () => {
                 protected_records: [],
                 blocking_records: [],
                 compatibility_impacts: [],
+                warnings: [],
                 blockers: [],
               },
+              warnings: [],
               failures: [],
             });
           }
@@ -1444,8 +1609,10 @@ describe("ClassManagerPanel", () => {
                 protected_records: [],
                 blocking_records: [],
                 compatibility_impacts: [],
+                warnings: [],
                 blockers: [],
               },
+              warnings: [],
               failures: [],
             });
           }
@@ -1465,8 +1632,10 @@ describe("ClassManagerPanel", () => {
                 protected_records: [],
                 blocking_records: [],
                 compatibility_impacts: [],
+                warnings: [],
                 blockers: [],
               },
+              warnings: [],
               failures: [],
             });
           }
@@ -1536,8 +1705,10 @@ describe("ClassManagerPanel", () => {
             protected_records: [],
             blocking_records: [],
             compatibility_impacts: [],
+            warnings: [],
             blockers: [],
           },
+          warnings: [],
           failures: [],
         });
       }
@@ -1557,8 +1728,10 @@ describe("ClassManagerPanel", () => {
             protected_records: [],
             blocking_records: [],
             compatibility_impacts: [],
+            warnings: [],
             blockers: [],
           },
+          warnings: [],
           failures: [],
         });
       }
@@ -1601,8 +1774,10 @@ describe("ClassManagerPanel", () => {
           protected_records: [],
           blocking_records: [],
           compatibility_impacts: [],
+          warnings: [],
           blockers: [],
         },
+        warnings: [],
         failures: [],
       }),
     );

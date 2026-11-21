@@ -60,3 +60,21 @@ backend/frontend/E2E, saved-workflow/scientific and migration acceptance pass,
 the independent 1.1/1.6 Alembic-0038 collision is reconciled, real Windows
 MSI/CAB clean install + upgrade/rollback and installed-GUI usability are
 validated, and the researcher approves. 1.7 and revised 1.8 are untouched.
+
+## Nested preview evidence and explicit warnings (2026-11-20)
+
+The backend returns plan-level and audit-level warnings, but the class manager
+previously hid them; it also accepted malformed entries inside otherwise valid
+record lists. Approval now requires complete nested scientific groups with
+nonnegative safe-integer counts and valid reference IDs, valid compatibility
+impacts, and all required warning/blocker/failure arrays with readable text.
+Both warning sources are rendered once per distinct warning. Incomplete or
+malformed evidence fails closed; the backend checksum, scope checks and human
+authorization remain authoritative. Added twelve parameterized React malformed
+evidence regressions across both operations, plus a warning-display regression;
+updated existing mock API responses to match the required backend schema.
+
+This UI safety increment leaves scientific assets, migrations and typed,
+executable standalone/saved QC Workflow Builder workflows, units, provenance,
+retries and researcher gates untouched. Release remains on HOLD for the
+1.1/1.6 Alembic-0038 collision and full Windows installer/GUI acceptance.
