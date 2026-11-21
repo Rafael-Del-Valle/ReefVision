@@ -282,7 +282,9 @@ IDs actually present in the filtered off-page collection**. It scans recent
 selection IDs in bounded batches and consults earlier selections only when
 a batch contains missing or duplicate records. Each candidate batch and the
 result list stay limited to 200; the usual all-valid selection still reads
-only the newest 200 selected IDs and avoids a full selection copy. A rare
+only the newest 200 selected IDs and avoids a full selection copy. Empty or
+fully mounted filtered modalities return without traversing retained selection
+IDs. A rare
 pathological tail of many stale IDs can require repeated filtered-document
 scans; native performance profiling on representative dense coral images
 remains an acceptance requirement.
