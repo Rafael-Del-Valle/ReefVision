@@ -213,7 +213,16 @@ def main(argv: Sequence[str] | None = None, *, output: Path | None = None) -> in
         with output.open("x", encoding="utf-8", newline="\n") as result:
             result.write(message)
     else:
-        (sys.stderr if status not in {0, 3} else sys.stdout).write(message)
+        stream = sys.stderr if status not in {0, 3} else sys.stdout
+        # Redirected Windows streams can use a legacy code page. Emit the same
+        # UTF-8 bytes as the packaged launcher without changing an embedding stream.
+        buffer = getattr(stream, "buffer", None)
+        if buffer is None:
+            stream.write(message)
+        else:
+            stream.flush()
+            buffer.write(message.encode("utf-8"))
+            buffer.flush()
     return status
 
 
