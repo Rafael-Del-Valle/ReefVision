@@ -1130,7 +1130,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  window.localStorage.setItem("reefvision.onboarding.dismissed.1.9.0", "true");
+  window.localStorage.setItem("reefvision.onboarding.dismissed.2.0.0", "true");
 });
 
 function renderApp() {
@@ -1270,7 +1270,7 @@ describe("App", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: /Welcome to ReefVision 1.9.0/,
+        name: /Welcome to ReefVision 2.0.0/,
       }),
     ).toBeInTheDocument();
 
@@ -1280,7 +1280,7 @@ describe("App", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("heading", { name: /Welcome to ReefVision 1.9.0/ }),
+        screen.queryByRole("heading", { name: /Welcome to ReefVision 2.0.0/ }),
       ).not.toBeInTheDocument(),
     );
   });

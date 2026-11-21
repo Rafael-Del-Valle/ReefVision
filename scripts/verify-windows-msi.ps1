@@ -182,6 +182,25 @@ try {
     if ([int]$SelfTestResult.openapi_path_count -le 0) {
         throw "Packaged API self-test reported no OpenAPI paths."
     }
+    if ([version]$ExpectedVersion -ge [version]'2.0.0') {
+        $WasmtimeVersion = [string]$SelfTestResult.wasmtime_runtime_version
+        if ($WasmtimeVersion -cne '51.0.0') {
+            throw "Packaged API self-test did not execute the pinned Wasmtime runtime."
+        }
+        $RuntimeRoot = Join-Path $SidecarExe.DirectoryName '_internal'
+        foreach ($relativePath in @(
+            'wasmtime\win32-x86_64\_wasmtime.dll',
+            "wasmtime-$WasmtimeVersion.dist-info\METADATA",
+            "wasmtime-$WasmtimeVersion.dist-info\licenses\LICENSE"
+        )) {
+            $RuntimeFile = Get-Item -LiteralPath (Join-Path $RuntimeRoot $relativePath)
+            if ($RuntimeFile.PSIsContainer -or $RuntimeFile.Length -le 0) {
+                throw "Packaged Wasmtime runtime file is missing or empty: $relativePath"
+            }
+            $RuntimeHash = (Get-FileHash -LiteralPath $RuntimeFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            Write-Host "Wasmtime $relativePath SHA-256: $RuntimeHash"
+        }
+    }
 
     $DatabaseFiles = @(Get-ChildItem -Path $SelfTestData -Recurse -File | Where-Object {
         $_.Extension -in @('.db', '.sqlite', '.sqlite3')

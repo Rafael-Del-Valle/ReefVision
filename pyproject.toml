@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reefvision"
-version = "1.9.0"
+version = "2.0.0"
 description = "Local-first scientific image annotation and computer vision platform"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -24,6 +24,7 @@ dependencies = [
   "pyyaml>=6.0,<7",
   "sqlalchemy>=2.0,<3",
   "uvicorn[standard]>=0.34,<1",
+  "wasmtime==51.0.0",
 ]
 
 [project.optional-dependencies]

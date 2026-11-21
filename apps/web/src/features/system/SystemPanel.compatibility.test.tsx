@@ -7,7 +7,7 @@ import { SystemPanel } from "./SystemPanel";
 function renderStatus(failRuntime = false) {
   const sources: Record<string, unknown> = {
     "/system/version": {
-      application_version: "1.9.0",
+      application_version: "2.0.0",
       backup_format_version: "1.0",
       environment: "production",
       current_schema_revision: "current",
