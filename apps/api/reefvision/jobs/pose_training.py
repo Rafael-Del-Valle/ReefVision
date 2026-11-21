@@ -241,6 +241,17 @@ def materialize_pose_training_exports(
     }
 
 
+def _claim_pose_training_output(output: Path) -> None:
+    """Reserve a fresh log or trainer directory without deleting a prior run's evidence."""
+    try:
+        output.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as error:
+        raise ValidationError(
+            f"Pose training output {output.name} already exists; "
+            "refusing to overwrite prior artifacts"
+        ) from error
+
+
 def _process_ultralytics_pose_training_job(
     settings: Settings,
     factory: sessionmaker[Session],
@@ -423,16 +434,9 @@ def _process_ultralytics_pose_training_job(
                 settings,
                 f"{base_relative}/ultralytics",
             )
-
-            shutil.rmtree(
-                save_root,
-                ignore_errors=True,
-            )
-
-            save_root.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
+            _claim_pose_training_output(save_root)
+            trainer_root = resolve_managed_project_path(settings, f"{base_relative}/runs/pose")
+            _claim_pose_training_output(trainer_root)
 
             logs_path = save_root / "training.log"
 
@@ -626,13 +630,9 @@ def _process_ultralytics_pose_training_job(
                 {
                     "data": str(dataset_root / "data.yaml"),
                     "device": (resolve_torch_device(run.device)),
-                    "project": str(
-                        resolve_managed_project_path(
-                            settings,
-                            f"{base_relative}/runs",
-                        )
-                    ),
-                    "name": "pose",
+                    "project": str(trainer_root.parent),
+                    "name": trainer_root.name,
+                    # This is the exact directory this worker already claimed.
                     "exist_ok": True,
                     "save": True,
                     "verbose": False,

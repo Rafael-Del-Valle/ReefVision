@@ -33,6 +33,7 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.pose_training import (
+    _claim_pose_training_output,
     _safe_extract_zip,
     materialize_pose_training_exports,
     process_pose_training_job,
@@ -505,6 +506,24 @@ def test_pose_materialization_cleans_own_partial_extraction_and_retries(
     assert retried["training_image_count"] == retried["validation_image_count"] == 1
     assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed-training"
     assert (destination / "images/val/frame_00000001.png").read_bytes() == b"reviewed-validation"
+
+
+@pytest.mark.parametrize("relative", ["ultralytics", "runs/pose"])
+def test_pose_output_claim_preserves_interrupted_run(tmp_path: Path, relative: str) -> None:
+    previous = tmp_path / "interrupted-run" / relative
+    previous.mkdir(parents=True)
+    marker = previous / "existing-result.txt"
+    marker.write_bytes(b"prior scientific artifact")
+
+    with pytest.raises(ValidationError, match="refusing to overwrite prior artifacts"):
+        _claim_pose_training_output(previous)
+    assert marker.read_bytes() == b"prior scientific artifact"
+
+    new_output = tmp_path / "new-run" / relative
+    _claim_pose_training_output(new_output)
+    assert list(new_output.iterdir()) == []
+    with pytest.raises(ValidationError, match="refusing to overwrite prior artifacts"):
+        _claim_pose_training_output(new_output)
 
 
 def test_pose_training_workflow_node_is_registered_and_executable(
