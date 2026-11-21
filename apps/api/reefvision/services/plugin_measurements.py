@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from importlib.metadata import version
 from uuid import UUID, uuid5
 
 from sqlalchemy import func, select
@@ -55,7 +56,7 @@ class PluginMeasurementService:
         )
         existing = self.session.get(ScientificRecord, identity)
         if existing is not None:
-            return self.science.response(existing)
+            return self._verified_replay(existing, project_id, pin, value)
 
         acquired = datetime.now(UTC)
         observation = image.capture_timestamp
@@ -80,6 +81,9 @@ class PluginMeasurementService:
                     "plugin_record_id": str(pin.plugin_record_id),
                     "package_sha256": pin.package_sha256,
                     "module_sha256": manifest.module_sha256,
+                    "abi": manifest.abi,
+                    "runtime": "wasmtime",
+                    "runtime_version": version("wasmtime"),
                     "image_sha256": pin.image_sha256,
                     "rgb_summary": summary.model_dump(mode="json"),
                 },
@@ -102,7 +106,24 @@ class PluginMeasurementService:
             if winner is None:
                 raise
             row = winner
-        return self.science.response(row)
+        return self._verified_replay(row, project_id, pin, value)
+
+    def _verified_replay(
+        self, row: ScientificRecord, project_id: UUID, pin: PluginMeasurementPin, value: float
+    ) -> ScientificRecordResponse:
+        result = self.science.response(row)
+        parameters = result.provenance.processing_parameters
+        if (
+            result.project_id != project_id
+            or result.subject.image_id != pin.image_id
+            or parameters.get("package_sha256") != pin.package_sha256
+            or parameters.get("image_sha256") != pin.image_sha256
+            or result.value != value
+        ):
+            raise ConflictError(
+                "Plugin replay differs from the saved measurement. The original record is intact."
+            )
+        return result
 
     def history(self, project_id: UUID, limit: int, offset: int) -> ScientificRecordPage:
         self.science.require_project(str(project_id))

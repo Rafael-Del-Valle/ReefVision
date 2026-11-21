@@ -44,9 +44,10 @@ def get_workflow_node_registry(session: DbSession) -> list[WorkflowNodeDefinitio
 def validate_workflow_graph(
     project_id: str,
     payload: WorkflowGraphRequest,
+    request: Request,
     session: DbSession,
 ) -> WorkflowGraphValidationResponse:
-    return WorkflowGraphService(session).validate(project_id, payload)
+    return WorkflowGraphService(session, request.app.state.settings).validate(project_id, payload)
 
 
 @router.post(
@@ -56,9 +57,10 @@ def validate_workflow_graph(
 def plan_workflow_graph(
     project_id: str,
     payload: WorkflowGraphRequest,
+    request: Request,
     session: DbSession,
 ) -> WorkflowGraphPlanResponse:
-    return WorkflowGraphService(session).plan(project_id, payload)
+    return WorkflowGraphService(session, request.app.state.settings).plan(project_id, payload)
 
 
 @router.get(
@@ -80,9 +82,12 @@ def list_saved_workflow_graphs(
 def save_workflow_graph(
     project_id: str,
     payload: WorkflowGraphSaveRequest,
+    request: Request,
     session: DbSession,
 ) -> WorkflowGraphRecordResponse:
-    return WorkflowExecutionService(session).save_graph(project_id, payload)
+    return WorkflowExecutionService(session, request.app.state.settings).save_graph(
+        project_id, payload
+    )
 
 
 @router.get(

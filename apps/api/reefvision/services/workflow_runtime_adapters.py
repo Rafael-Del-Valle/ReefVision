@@ -50,6 +50,12 @@ from reefvision.services.workflow_monitoring_summary import execute_monitoring_s
 from reefvision.services.workflow_multispectral import execute_multispectral
 from reefvision.services.workflow_paired_growth_contrast import execute_paired_growth_contrast
 from reefvision.services.workflow_paired_models_v15 import execute_paired_models
+from reefvision.services.workflow_plugins import (
+    MEASUREMENT_REVIEW,
+    execute_plugin_measurement,
+    measurement_review_context,
+)
+from reefvision.services.workflow_plugins import NODE as PLUGIN_MEASUREMENT
 from reefvision.services.workflow_prompt_assist import create_prompt_assist_mask_proposals
 from reefvision.services.workflow_reproducibility_v15 import execute_reproducibility
 from reefvision.services.workflow_research_reports import execute_research_report
@@ -62,6 +68,8 @@ from reefvision.services.workflow_vlm import VlmClassDefinition, run_vlm_detecti
 from reefvision.storage.projects import resolve_managed_project_path
 
 RUNTIME_ADAPTER_NODE_TYPES = {
+    MEASUREMENT_REVIEW,
+    PLUGIN_MEASUREMENT,
     "underwater_adjustment",
     "segmentation_inference",
     "classification_inference",
@@ -506,9 +514,14 @@ def _review_gate(
     if payload.get("project_id") != project_id:
         raise ValidationError("Human Review received artifacts from another project")
     node_run = _current_review_node(session, source, node_type)
+    records = (
+        measurement_review_context(session, project_id, [source])
+        if node_type == MEASUREMENT_REVIEW
+        else {}
+    )
     approval = dict((node_run.result_json or {}).get("review_approval") or {})
     if not approval:
-        item_count = int(payload.get("count", 0) or 0)
+        item_count = len(records["record_ids"]) if records else int(payload.get("count", 0) or 0)
         raise WorkflowReviewRequired(
             f"{node_run.node_id} is waiting for human review",
             details={
@@ -528,7 +541,9 @@ def _review_gate(
         "source_data_type": source.data_type,
         "review_approval": approval,
     }
-    if source.data_type in {"detection_proposals", "mask_proposals"}:
+    if node_type == MEASUREMENT_REVIEW:
+        reviewed_payload.update(records)
+    elif source.data_type in {"detection_proposals", "mask_proposals"}:
         proposal_ids = [str(value) for value in payload.get("proposal_ids", [])]
         proposals = list(
             session.scalars(
@@ -617,6 +632,24 @@ def _review_gate(
             "payload": reviewed_payload,
         }
     ]
+
+
+def _measurement_review_gate(
+    session: Session,
+    settings: Settings,
+    project_id: str,
+    parameters: dict[str, Any],
+    inputs: dict[str, list[WorkflowArtifact]],
+) -> list[dict[str, Any]]:
+    return _review_gate(
+        session,
+        project_id,
+        inputs,
+        node_type=MEASUREMENT_REVIEW,
+        input_port="measurement",
+        output_port="reviewed",
+        output_type="scientific_record_collection",
+    )
 
 
 def _detection_review_gate(
@@ -1168,6 +1201,8 @@ def _ecology_paired_count_csv_export(
 
 
 _ADAPTERS = {
+    MEASUREMENT_REVIEW: _measurement_review_gate,
+    PLUGIN_MEASUREMENT: execute_plugin_measurement,
     "underwater_adjustment": execute_underwater_adjustment,
     "segmentation_inference": _segmentation_inference,
     "classification_inference": _classification_inference,

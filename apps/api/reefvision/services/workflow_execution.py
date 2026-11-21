@@ -135,7 +135,7 @@ class WorkflowExecutionService:
     def __init__(self, session: Session, settings: Settings | None = None) -> None:
         self.session = session
         self.settings = settings
-        self.graphs = WorkflowGraphService(session)
+        self.graphs = WorkflowGraphService(session, settings)
 
     def _required_settings(self) -> Settings:
         if self.settings is None:

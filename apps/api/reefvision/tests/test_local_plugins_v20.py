@@ -195,3 +195,22 @@ def test_authored_sample_compiles_to_the_published_module_and_rejects_wrong_sign
     result = client.post(PLUGINS, json=incompatible.model_dump(mode="json"))
     assert result.status_code == 400 and "three f64" in result.text
     assert client.get(PLUGINS).json()["total"] == 0
+
+
+def test_replay_detects_a_different_calculation_and_retains_original(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project, image = source(client)
+    plugin = enable(client, install(client, package("f64.const 0.5")))
+    request = {
+        "plugin_record_id": plugin["id"],
+        "package_sha256": plugin["package_sha256"],
+        **image,
+    }
+    endpoint = f"/api/v1/projects/{project}/plugin-measurements"
+    first = client.post(endpoint, json=request)
+    assert first.status_code == 200, first.text
+    monkeypatch.setattr("reefvision.services.plugin_measurements.run_plugin", lambda *_: 0.75)
+    changed = client.post(endpoint, json=request)
+    assert changed.status_code == 409 and "replay" in changed.text.lower()
+    assert client.get(endpoint).json()["items"] == [first.json()]

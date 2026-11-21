@@ -41,8 +41,10 @@ from reefvision.services.workflow_auto_label import (
     ensure_disagreement_active_learning_round,
     materialize_consensus_annotations,
 )
+from reefvision.services.workflow_plugins import MEASUREMENT_REVIEW, measurement_review_context
 
 REVIEW_GATE_NODE_TYPES = {
+    MEASUREMENT_REVIEW,
     "detection_review_gate",
     "mask_review_gate",
     "classification_review_gate",
@@ -509,7 +511,11 @@ def resume_review_gate(
 
     review_context: dict[str, Any] = {}
 
-    if node_run.node_type == "pose_review_gate":
+    if node_run.node_type == MEASUREMENT_REVIEW:
+        review_context["measurement_records"] = measurement_review_context(
+            session, run.project_id, artifacts
+        )
+    elif node_run.node_type == "pose_review_gate":
         if len(artifacts) != 1:
             raise ValidationError("Pose Review requires exactly one temporal-pose artifact")
 
