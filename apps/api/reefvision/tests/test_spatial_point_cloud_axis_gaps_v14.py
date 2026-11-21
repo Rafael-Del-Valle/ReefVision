@@ -190,11 +190,11 @@ def test_imported_and_xyz_gap_science_replays_from_saved_typed_graph(
     points = TIED_POINTS if tied_gap else POINTS
     if source_format == "ply":
         header = (
-            f"ply\\nformat ascii 1.0\\nelement vertex {len(points)}\\n"
+            f"ply\nformat ascii 1.0\nelement vertex {len(points)}\n"
             "property double x\nproperty double y\nproperty double z\nend_header\n"
         )
         params["ply_text"] = header + "".join(
-            f"{x:g} {y:g} {z:g}\\n" for x, y, z in points
+            f"{x:g} {y:g} {z:g}\n" for x, y, z in points
         )
     else:
         params["points"] = points
@@ -216,7 +216,9 @@ def test_imported_and_xyz_gap_science_replays_from_saved_typed_graph(
             "distinct_xyz_loci": 2 if tied_gap else 1,
         },
     }
-    assert ("axis_sampling_multiple_equally_largest_gaps" in expected["qc_warnings"]) is tied_gap
+    assert (
+        "axis_sampling_multiple_equally_largest_gaps" in expected["qc_warnings"]
+    ) is tied_gap
     assert expected["measurement_status"] == "caller_supplied_unverified"
 
     graph = {
