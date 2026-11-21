@@ -748,6 +748,70 @@ def test_parallel_camera_renditions_use_unique_temporary_files(
 
 
 @pytest.mark.parametrize("rendition", ["display", "thumbnail"])
+def test_parallel_camera_publish_prevents_simultaneous_windows_replace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rendition: str
+) -> None:
+    """Windows concurrent replace of one preview must not be mistaken for ACL denial."""
+    source = tmp_path / "CAMERA.JPEG"
+    destination = tmp_path / ("display.png" if rendition == "display" else "thumb.jpg")
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(source, format="JPEG")
+    original_bytes = source.read_bytes()
+    original_publish = image_storage._replace_rendition
+    original_replace = image_storage.os.replace
+    ready = Barrier(2)
+    state_lock = Lock()
+    active_replaces = 0
+    max_active_replaces = 0
+    total_replaces = 0
+
+    def synchronized_publish(temporary: Path, target: Path) -> None:
+        ready.wait(timeout=20)
+        original_publish(temporary, target)
+
+    def windows_replace(temporary: Path, target: Path) -> None:
+        nonlocal active_replaces, max_active_replaces, total_replaces
+        assert target == destination
+        with state_lock:
+            active_replaces += 1
+            total_replaces += 1
+            max_active_replaces = max(max_active_replaces, active_replaces)
+        try:
+            if active_replaces > 1:
+                denial = PermissionError("simulated Windows concurrent replace denial")
+                denial.winerror = 5
+                raise denial
+            # Keep the publication syscall active long enough to expose
+            # overlapping writers if serialization is removed.
+            image_storage.time.sleep(0.05)
+            original_replace(temporary, target)
+        finally:
+            with state_lock:
+                active_replaces -= 1
+
+    monkeypatch.setattr(image_storage, "_replace_rendition", synchronized_publish)
+    monkeypatch.setattr(image_storage.os, "replace", windows_replace)
+
+    def render() -> None:
+        if rendition == "display":
+            create_browser_display(source, destination)
+        else:
+            create_thumbnail(source, destination, max_width=128, max_height=128)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = [executor.submit(render) for _ in range(2)]
+        for result in results:
+            result.result(timeout=30)
+
+    assert total_replaces == 2
+    assert max_active_replaces == 1
+    assert source.read_bytes() == original_bytes
+    assert list(tmp_path.glob(f".{destination.name}.*.part")) == []
+    with Image.open(destination) as decoded:
+        decoded.load()
+        assert decoded.size == (64, 48)
+
+
+@pytest.mark.parametrize("rendition", ["display", "thumbnail"])
 def test_camera_rendition_retries_transient_windows_replace_denial(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rendition: str
 ) -> None:
