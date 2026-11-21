@@ -182,12 +182,9 @@ test("installs a local plugin and replays the pinned image measurement twice", a
   expect(plugin.package_sha256).toMatch(/^[0-9a-f]{64}$/);
   const versionLabel = `${manifest.display_name} ${manifest.version}`;
   const version = panel.getByLabel("Plugin version", { exact: true });
-  await expect(
-    version.getByRole("option", {
-      name: `${versionLabel} · Disabled`,
-      exact: true,
-    }),
-  ).toBeDisabled();
+  const pluginOption = version.locator(`option[value="${plugin.id}"]`);
+  await expect(pluginOption).toHaveText(`${versionLabel} · Disabled`);
+  await expect(pluginOption).toBeDisabled();
   const enabled = responseFor(page, `${api}/plugins/${plugin.id}`, "PATCH");
   await panel
     .getByRole("button", { name: `Enable ${versionLabel}`, exact: true })
@@ -390,12 +387,8 @@ test("installs a local plugin and replays the pinned image measurement twice", a
     enabled: false,
     package_sha256: plugin.package_sha256,
   });
-  await expect(
-    version.getByRole("option", {
-      name: `${versionLabel} · Disabled`,
-      exact: true,
-    }),
-  ).toBeDisabled();
+  await expect(pluginOption).toHaveText(`${versionLabel} · Disabled`);
+  await expect(pluginOption).toBeDisabled();
   await openBuilder();
   const blocked = responseFor(page, `${base}/workflow-runs`);
   await runButton.click();
