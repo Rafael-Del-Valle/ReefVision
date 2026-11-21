@@ -100,7 +100,24 @@
           "file": "1.8/checkpoints/e3e8ffb63/source/preserved/class-lifecycle-evidence.json",
           "sha256": "cf2b29986177e8989dbfb0d021925dfb353d785ab53f7624c197d441d9d2fe6e"
         }
-      ]
+      ],
+      "exported_coral_control": {
+        "method": "paired_projected_coral_length_v1",
+        "source_dates_utc": [
+          "2026-01-01T10:00:00+00:00",
+          "2026-01-03T10:00:00+00:00"
+        ],
+        "reviewed_projected_lengths_mm": [
+          9.75,
+          10.75
+        ],
+        "change_mm_per_day": 0.5,
+        "result_sha256": "d05ecc001c08e77037290d2cbc041a8a71a269aea96582e3a686d53d175b5bcb",
+        "csv": {
+          "file": "1.8/checkpoints/e3e8ffb63/source/preserved/calibrated-coral-growth.csv",
+          "sha256": "dc6420fbb1b34ca7755143edf21024bfd221773a1c1231cd5cb6b78061b26fe2"
+        }
+      }
     },
     "research": {
       "surface": "source Chromium with real local API and queue",
@@ -159,6 +176,44 @@
           "file": "1.8/checkpoints/e3e8ffb63/source/research/domain-shift-evidence.json",
           "sha256": "e3276f52b7216e154c6bf942738f95d014d05eae4a3227b1ccf0789c9a1ba15d"
         }
+      }
+    },
+    "selected_image_segmentation": {
+      "source": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8",
+      "mode": "Actual local CPU instance model trained from scratch. Generated held-out mask stills.",
+      "normal_click": {
+        "distinct_pending_polygons": 2,
+        "selected_image": "c39ab381-30ef-412a-92a6-00b66a37c488",
+        "job": "cd1d7d6b-ae94-4421-9294-a3da9ddf2f65",
+        "receipt": {
+          "file": "1.8/checkpoints/e3e8ffb63/source/segmenter/mask-binding-proof.json",
+          "sha256": "9984e2429f2b7cbb52b8a25dbed2f40609df974fce796e5a1eb4af487d1822a2"
+        }
+      },
+      "adjusted_display": {
+        "distinct_pending_polygons": 2,
+        "job": "73fd0751-0e2c-43cf-8ec7-c4f1b090b3c3",
+        "displayed_rendition": "86d98a50b7f02cade4efe23df0035e84457170a8329c4fda27528b7b09e35ae9",
+        "executed_original": "56f40d103ddd6aa4a09e7133e1529381c47855b760c9a71f9dc5fdacb1d18e0b",
+        "observed": "The topbar Run segmentation action used the original managed image while the saved adjusted preview was visible. The separate Deploy trained model adjustment opt-in was unchecked. Both outputs stayed pending.",
+        "receipt": {
+          "file": "1.8/checkpoints/e3e8ffb63/source/segmenter/mask-while-adjusted-proof.json",
+          "sha256": "5dfaf7e3e12964e6bf06444faf00cb171dfcebb209b98633813b882c4f268311"
+        }
+      },
+      "frozen_reference_sha256": "eec567feb75c011c37e42a62ba6d45d637f48aa544142be537c764e265e37bed",
+      "checkpoint_sha256": "6d1e75012502f3bae40f0d921a2b92c91f3e9c0cc671bc14573afccc2977e101",
+      "source_and_reviewed_masks_preserved": true
+    },
+    "known_recording_pose_control": {
+      "ordinary_gui": "The saved native frame model graph produced tracks and stopped at human review. No pose artifact was accepted.",
+      "separate_temporal_control": "A regular CPU refinement request using an existing learned temporal model completed all 24 held-out frames.",
+      "recordings_rehashed": 10,
+      "source_and_model_files_checked": 21,
+      "run": "ede5707c-4a11-4ecd-9883-c90f27669f13",
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/source/pose/reefpose-1.8-e3e8-predecessor-receipt.json",
+        "sha256": "5a41d1a40d1275b1d14d1c98b683c185dea89b10efe0152d80b1b3d54c5eef6e"
       }
     }
   },
@@ -238,5 +293,49 @@
   "original_windows_build_job": 136691608332,
   "general_ci": 44853958059,
   "separate_scientific_ci": 44853957924,
-  "open_acceptance": "Registered installation, direct historical upgrades, enforced offline rollback, repaired native RTX checks and independent field acceptance are tracked by product and binary identity."
+  "open_acceptance": "Registered installation, direct historical upgrades, enforced offline rollback, repaired native RTX checks and independent field acceptance are tracked by product and binary identity.",
+  "release_test_compatibility": {
+    "failed_prior_run": 44847408327,
+    "failed_prior_job": 136670423624,
+    "hosted_platform": "Ubuntu, Python 3.11, Pillow 12.3.0",
+    "prior_hosted_counts": {
+      "passed": 6024,
+      "skipped": 11,
+      "failed": 2
+    },
+    "diagnosis": "Both underwater test failures came from the deprecated pixel reader in fixture assertions, including the fake detector. The strict warning policy and byte-exact six-pixel known answer are preserved.",
+    "correction": "54a89896c484fc0525d9c8e73323d5f5706d3522",
+    "change": "Compare all decoded RGB bytes in row-major order. The case also checks the worker receives RGB mode.",
+    "focused_windows": {
+      "Pillow 12.3.0 before": "2 failed of 2 selected",
+      "Pillow 12.3.0 after": "5 passed",
+      "Pillow 12.0.0 after": "5 passed"
+    },
+    "test_module_in_e3e8_local_frozen_application": false,
+    "proof": {
+      "red": {
+        "file": "1.8/checkpoints/e3e8ffb63/source/pillow/red.xml",
+        "sha256": "4fa8794a5f9831a7fdfc3cdb0fd539a711765f70ddbbdfe0aea9ae746189337f"
+      },
+      "green": {
+        "file": "1.8/checkpoints/e3e8ffb63/source/pillow/green.xml",
+        "sha256": "36ca429d9176b520bbfdd03abe775c3ae273097922fa926efa895130efee9d1a"
+      },
+      "packaged-green": {
+        "file": "1.8/checkpoints/e3e8ffb63/source/pillow/packaged-green.xml",
+        "sha256": "6b6c6c3ff4311b6f5620bb2e58f5acbabc8e43c48d896a699171e0793a8fb033"
+      }
+    },
+    "exact_corrected_linux_run": 44855074063
+  },
+  "prior_registered_transport_observation": {
+    "source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "job": 136681446504,
+    "original_coral_fixture_request": "Loopback reset on POST /projects before an HTTP response. Nine other spatial tests passed.",
+    "independent_research_failure": "The registered driver also failed its research sidecar path check.",
+    "receipt": {
+      "file": "1.8/checkpoints/e3e8ffb63/source/predecessors/9cde-original-registered-clean-read.json",
+      "sha256": "13c6bda0110caef0f5a0458086046c8f5da383d715f290a04c4249477da772ab"
+    }
+  }
 }
