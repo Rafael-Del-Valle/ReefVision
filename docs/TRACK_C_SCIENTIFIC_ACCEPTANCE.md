@@ -10,9 +10,9 @@ and two genuinely oblique XYZ surfaces, with large translation, reflection
 and reversed face winding. An independent arbitrary-precision integer
 cross-product oracle checks squared magnitudes of 1, 9 and 6 source units
 to the fourth power, corresponding to areas 0.5, 1.5 and sqrt(6)/2 source
-units squared. In the oblique cases, all three nonzero cross-product
-components suffer binary64 cancellation, so a plausible apparent area
-cannot be trusted. The parameterized
+units squared. In the oblique cases, cancellation corrupts two of the three nonzero
+cross-product components in ordinary binary64 arithmetic, so a plausible
+apparent area cannot be trusted. The parameterized
 `test_spatial_mesh_area_cancellation_v14.py` regression checks the source
 kernel, direct service, project-scoped standalone API, and twice-replayed
 persisted typed `mesh_surface_preview` workflows, including deterministic
