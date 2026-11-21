@@ -24,6 +24,10 @@ jobs:
       DRIVER_BLOB: eda1038efb0c38a202c447e82e0b7a56a583e608
       DRIVER_COMMIT: 0058717ad15b5edc98b5d02d33f2f11af45cc39a
       DRIVER_PATH: scripts/lib/windows-spatial-webview2-acceptance.ps1
+      APPLY_ARGV_OVERLAY: '1'
+      SIDECAR_DRIVER_BLOB: f7bbfa040913e075b33b37d910c33b4f0f02de39
+      SIDECAR_DRIVER_COMMIT: fa521bd4c78d9e6f34d7a564feefe93b4bcf3b79
+      SIDECAR_DRIVER_PATH: scripts/acceptance-windows-clean-install.ps1
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,27 +55,40 @@ jobs:
           if ($receipt.build_job_id -ne [long]$env:ORIGINAL_BUILD_JOB -or $receipt.original_msi_sha256 -cnotmatch '^[a-f0-9]{64}$') {
             throw 'The original MSI transport must bind to the exact manufacturing job and its verified MSI digest.'
           }
-          $patch = (Resolve-Path -LiteralPath './proof/.github/windows-installed-proof/native-arguments.patch').Path
-          git -C source apply --unidiff-zero --check $patch
-          if ($LASTEXITCODE) { throw 'The reviewed native argument correction does not apply to the exact source.' }
-          git -C source apply --unidiff-zero $patch
-          if ($LASTEXITCODE) { throw 'The reviewed native argument correction did not apply.' }
+          $patches = @('sidecar-path.patch')
+          $expected = @($env:SIDECAR_DRIVER_PATH)
+          if ($env:APPLY_ARGV_OVERLAY -ceq '1') {
+            $patches += 'native-arguments.patch'
+            $expected += $env:DRIVER_PATH
+          }
+          foreach ($name in $patches) {
+            $patch = (Resolve-Path -LiteralPath "./proof/.github/windows-installed-proof/$name").Path
+            git -C source apply --unidiff-zero --check $patch
+            if ($LASTEXITCODE) { throw "The exact scoped driver correction $name does not apply." }
+            git -C source apply --unidiff-zero $patch
+            if ($LASTEXITCODE) { throw "The exact scoped driver correction $name did not apply." }
+          }
           $files = @(git -C source diff --name-only)
-          if ($files.Count -ne 1 -or $files[0] -cne $env:DRIVER_PATH -or
-              (git -C source hash-object $env:DRIVER_PATH).Trim() -cne $env:DRIVER_BLOB) {
-            throw 'The retest driver must match the exact isolated native argument correction.'
+          if ($files.Count -ne $expected.Count -or (Compare-Object $expected $files -CaseSensitive) -or
+              (git -C source hash-object $env:DRIVER_PATH).Trim() -cne $env:DRIVER_BLOB -or
+              (git -C source hash-object $env:SIDECAR_DRIVER_PATH).Trim() -cne $env:SIDECAR_DRIVER_BLOB) {
+            throw 'The retest must use only the verified native argv and sidecar path driver changes.'
           }
           [ordered]@{
             source_commit=$env:SOURCE_COMMIT; workflow_run_id=[long]$env:ORIGINAL_BUILD_RUN; build_job_id=[long]$env:ORIGINAL_BUILD_JOB
             original_msi_sha256=$receipt.original_msi_sha256; driver_commit=$env:DRIVER_COMMIT
             driver_git_blob=$env:DRIVER_BLOB; changed_paths=$files
             driver_sha256=(Get-FileHash -LiteralPath (Join-Path ./source $env:DRIVER_PATH)).Hash.ToLowerInvariant()
+            sidecar_driver_commit=$env:SIDECAR_DRIVER_COMMIT; sidecar_driver_git_blob=$env:SIDECAR_DRIVER_BLOB
+            sidecar_driver_sha256=(Get-FileHash -LiteralPath (Join-Path ./source $env:SIDECAR_DRIVER_PATH)).Hash.ToLowerInvariant()
           } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath "$env:PROOF_ROOT/evidence/registered-retest-provenance.json"
           npm --prefix source/apps/web ci --no-audit --no-fund
           if ($LASTEXITCODE) { throw 'Could not stage pinned installed acceptance drivers.' }
           ./proof/.github/windows-installed-proof/test-native-arguments.ps1 -NodePath (Get-Command node.exe).Source `
             -Scratch "$env:PROOF_ROOT/argv" -Library (Resolve-Path -LiteralPath (Join-Path './source' $env:DRIVER_PATH)).Path
-      - name: Complete the original registered clean role with the corrected Windows argv
+          ./proof/.github/windows-installed-proof/test-sidecar-path.ps1 -NodePath (Get-Command node.exe).Source `
+            -Scratch "$env:PROOF_ROOT/sidecar-path" -DriverScript (Resolve-Path -LiteralPath (Join-Path './source' $env:SIDECAR_DRIVER_PATH)).Path
+      - name: Complete the original registered clean role with the reviewed driver corrections
         shell: pwsh
         working-directory: source
         run: |
