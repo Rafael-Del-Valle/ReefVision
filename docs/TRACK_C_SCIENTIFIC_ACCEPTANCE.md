@@ -4,6 +4,34 @@ This is a **test plan**, not evidence that ReefVision 1.4 or 1.5 is validated or
 
 ## 1.4: 3D geometry and longitudinal studies
 
+### Retain distinct XYZ locations at maximal projected scan-gap boundaries (synthetic; CI pending)
+
+A second, optional strict-boolean preview policy,
+`preserve_largest_axis_gap_boundary_loci_in_preview`, pins the **first
+acquisition row of every distinct three-dimensional XYZ location** that lies
+at any endpoint coordinate level of an exactly largest adjacent X/Y/Z
+projected source-coordinate gap (including all exact ties). This differs from
+`preserve_largest_axis_gap_boundaries_in_preview`, which pins only one
+source row per projected coordinate level. Both options can be combined with
+extrema and selected-chord endpoint pinning. The 512-point display cap remains
+absolute: when all protected distinct loci exceed it, reject the request
+rather than claim complete display coverage. Redundant acquisition rows are
+**not** protected by the new option; retain omission warnings and counts for
+them even when every distinct location is visible.
+
+The synthetic reference contains 600 acquisition rows representing 300
+distinct XYZ locations and 512 output slots. Default uniform display retains
+267 distinct XYZ locations, whereas locus-preserving display retains all 300
+but only 512/600 acquisition rows. Assert that complete source dimensions,
+axis gaps, unverified calibration, geometry hashes, and absent surface-area
+and anatomical branch-length fields stay unchanged. Verify strict request
+typing, over-budget failure, standalone XYZ and ASCII PLY endpoints, typed
+executable persisted Workflow Builder planning, and **two saved-graph
+executions** with full artifact and SHA-256 equality. This is a source
+visualization completeness option, **not** evidence of continuous coral
+surface, independent biological replicates, verified physical calibration,
+registered identity, or a successful real-world capture.
+
 ### Explicitly preserve maximum scan-gap boundaries in point-cloud display (synthetic; exact-head CI pending)
 
 A caller can now set strict boolean `preserve_largest_axis_gap_boundaries_in_preview` for XYZ or imported ASCII PLY. The existing full-source gap engine identifies **all exactly tied maximum adjacent source-coordinate gaps** on X/Y/Z; the bounded display pins the first source row at each distinct endpoint *coordinate level*, alongside any separately requested axis extrema and measured point-pair endpoints. Additional slots are still distributed across the input. A source whose required protected rows exceed the fixed 512-point budget fails closed instead of claiming a complete preview; the caller may disable this display option without changing any full-source measurement. The result records `preview_largest_axis_gap_boundaries_preservation_requested`, a strategy suffix, the selected source indices, an exact sample fingerprint, and unchanged per-axis visibility/omission QC. This option does **not** preserve all XYZ loci or repeated acquisition rows at a protected coordinate level; their independent omission warnings remain important. A synthetic 600-point, two-tied-gap test requires all 7/8 and 299/300 boundary rows to be visible with the option, whereas default uniform sampling hides row 299. Assert identical source geometry SHA-256, calibrated extents, uncertainty, provisional identity status, and absent (not invented) tissue area/branch lengths across the two display policies. Test strict request typing, optional combination with chord/extrema preservation, explicit over-capacity rejection, standalone XYZ/PLY analysis, typed persisted Workflow Builder planning, and **two saved-graph executions** with identical complete scientific artifacts and payload SHA-256 hashes. These are visualization controls only, not evidence of tissue loss, scanner completeness, verified calibration, or biological identity; independent coral validation and installed Windows/GPU gates remain outstanding.
