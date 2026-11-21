@@ -2,16 +2,16 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T02:54:36Z`
+Updated: `2026-11-21T03:11:40Z`
 Candidate target: `2.0`
 
 ## Status summary
 
 | Status | Count |
 | --- | ---: |
-| blocked | 19 |
+| blocked | 24 |
 | explicitly_deferred | 4 |
-| in_progress | 17 |
+| in_progress | 12 |
 | verified | 37 |
 
 ## Features
@@ -73,11 +73,11 @@ Candidate target: `2.0`
 | 1.7 | Recorded, simulated, and physical acquisition sources | blocked | Project → Acquisition sources |
 | 1.7 | Durable recurring acquisition, inference, QC, and report schedules | verified | Video & automation → Schedules |
 | 1.7 | Environmental and biological monitoring with reviewed anomaly proposals | blocked | Research → Monitoring |
-| 1.8 | Bioacoustics import, annotation, review, and aligned analysis | in_progress | Project assets → Import audio → Review |
-| 1.8 | Domain-shift and group-aware performance comparison | in_progress | Models & AI → Model comparison → Domain shift |
-| 1.8 | Multispectral import, calibration, visualization, and analysis | in_progress | Project assets → Import multispectral image |
-| 1.8 | Taxonomy proposals, review, and detectability evaluation | in_progress | Research → Organisms & ecology → Taxonomy and detectability |
-| 1.8 | Reversible underwater image correction and model-input transforms | in_progress | Annotate → Image adjustments |
+| 1.8 | Bioacoustics import, annotation, review, and aligned analysis | blocked | Project assets → Import audio → Review |
+| 1.8 | Domain-shift and group-aware performance comparison | blocked | Models & AI → Model comparison → Domain shift |
+| 1.8 | Multispectral import, calibration, visualization, and analysis | blocked | Project assets → Import multispectral image |
+| 1.8 | Taxonomy proposals, review, and detectability evaluation | blocked | Research → Organisms & ecology → Taxonomy and detectability |
+| 1.8 | Reversible underwater image correction and model-input transforms | blocked | Annotate → Image adjustments |
 | 1.9 | Full release ancestry, migration, and exchange integration | in_progress | Draft #78 contains only a narrow pose planner repair. |
 | 1.9 | Supported OS, GPU, provider, format, and project compatibility matrix | in_progress | Help → Diagnostics and compatibility |
 | 1.9 | End-to-end detection, segmentation, pose, tracking, and scientific workflows | in_progress | Create/open project → Import → Annotate/Model → Review → Research → Export |
@@ -1338,7 +1338,7 @@ Evidence:
 ### rv18-bioacoustics: Bioacoustics import, annotation, review, and aligned analysis
 
 - Target: `1.8`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv17-device-sources`, `rv15-reviewer-lab`
 - Entry point: Project assets → Import audio → Review
 - Workflow Builder: `required`
@@ -1346,13 +1346,14 @@ Evidence:
 
 Acceptance checks:
 
-- **in_progress** — Preserve original audio, annotate source time, align clocks explicitly, review proposals, and export provenance. (`rv18-bioacoustics-check`)
+- **verified** — Preserve original audio, annotate source time, align clocks explicitly, review proposals, and export provenance. (`rv18-bioacoustics-check`)
 - **blocked** — From Project assets → Import audio → Review, compare reviewed source-sample intervals and aligned event times against the independent references by recording and channel. Retain clock fit, residuals, exclusions and reviewer decisions. (`rv18-bioacoustics-independent-field-check`)
 
 Evidence:
 
 - `source`: The source checks exercised immutable audio originals, half-open sample intervals, linked recording clocks, independent decisions and report checksums. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-bioacoustics-a82cc730e-source`)
 - `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-bioacoustics-managed-restore-542254b8a`)
+- `source`: A researcher saved the graph in the local production desktop on generated inputs. After a verified six-project restore, the original GitHub MSI backend ran this graph twice and produced the original report and artifact hashes. All ten new runs reopened after another restart. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-bioacoustics-restored-original-msi-e3e8ffb63`)
 - `browser`: A stereo PCM recording was played and a source sample range was reviewed and explicitly time-aligned. Two saved graph runs reproduced the same report. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-bioacoustics-a82cc730e-browser`)
 - `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-bioacoustics-frozen-desktop-542254b8a`)
 - `browser`: The corrected Windows source completed two real local training and registration controls and all five research journeys. The application closed through its ordinary owner channel after executing the saved workflows. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-bioacoustics-corrected-source-9cde9e6e7`)
@@ -1369,7 +1370,7 @@ Evidence:
 ### rv18-domain-shift: Domain-shift and group-aware performance comparison
 
 - Target: `1.8`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv15-model-comparison`, `rv18-underwater-correction`
 - Entry point: Models & AI → Model comparison → Domain shift
 - Workflow Builder: `required`
@@ -1377,7 +1378,7 @@ Evidence:
 
 Acceptance checks:
 
-- **in_progress** — Compare frozen acquisition groups without leakage and report uncertainty, missing groups, and training/selection overlap. (`rv18-domain-shift-check`)
+- **verified** — Compare frozen acquisition groups without leakage and report uncertainty, missing groups, and training/selection overlap. (`rv18-domain-shift-check`)
 - **blocked** — From Models & AI → Model comparison → Domain shift, score the same held-out acquisitions for each model, reconcile group identity and excluded overlap, and compare the paired errors and across-unit uncertainty to independently scored results. (`rv18-domain-shift-independent-field-check`)
 
 Evidence:
@@ -1385,6 +1386,7 @@ Evidence:
 - `source`: The frozen roster preserves missing groups and pinning for both registered models, with original or checked adjusted input per eligible image. Numerical tests exercise group-weighted effects, Welch uncertainty, excluded or overlapping units and withheld intervals. A partial source page still finds an eligible older comparison. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv18-domain-shift-group-scores-bdcec01e3`)
 - `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-domain-shift-managed-restore-542254b8a`)
 - `source`: Two real local instance segmenters evaluated six held-out stills in twelve adjusted jobs. Two weight-free archive hops retained the frozen mask and detector reports, CSV and replay hashes. A separate provider-boundary check rejected an omitted mandatory raster before project creation. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-domain-shift-real-mask-exchange-542254b8a`)
+- `source`: A researcher saved the graph in the local production desktop on generated inputs. After a verified six-project restore, the original GitHub MSI backend ran this graph twice and produced the original report and artifact hashes. All ten new runs reopened after another restart. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-domain-shift-restored-original-msi-e3e8ffb63`)
 - `browser`: The five-workflow Windows source trial compared two actual locally trained CPU checkpoints across two generated held-out acquisition groups, kept the third group missing, ran six adjusted evaluations on three original images, withheld intervals at one independent unit per domain, exported JSON and CSV and replayed the report twice. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv18-domain-shift-adjusted-evaluation-bdcec01e3`)
 - `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-domain-shift-frozen-desktop-542254b8a`)
 - `browser`: The corrected Windows source completed two real local training and registration controls and all five research journeys. The application closed through its ordinary owner channel after executing the saved workflows. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-domain-shift-corrected-source-9cde9e6e7`)
@@ -1403,7 +1405,7 @@ Evidence:
 ### rv18-multispectral: Multispectral import, calibration, visualization, and analysis
 
 - Target: `1.8`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv18-underwater-correction`, `rv12-calibration-evidence`
 - Entry point: Project assets → Import multispectral image
 - Workflow Builder: `required`
@@ -1411,13 +1413,14 @@ Evidence:
 
 Acceptance checks:
 
-- **in_progress** — Preserve bands and calibration, render selected composites, align source coordinates, and withhold incompatible indices. (`rv18-multispectral-check`)
+- **verified** — Preserve bands and calibration, render selected composites, align source coordinates, and withhold incompatible indices. (`rv18-multispectral-check`)
 - **blocked** — From Project assets → Import multispectral image, compare registered control-point residuals and calibrated band or index values to the independent references. Retain sensor and band identities, unavailable or excluded samples and uncertainty. (`rv18-multispectral-independent-field-check`)
 
 Evidence:
 
 - `source`: Two successive archives reproduced the analysis from the original band pixels. Import rejected a fabricated index and a changed workflow report before project creation. Calibration, alignment or usable samples can withhold an estimate. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-multispectral-a82cc730e-source`)
 - `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-multispectral-managed-restore-542254b8a`)
+- `source`: A researcher saved the graph in the local production desktop on generated inputs. After a verified six-project restore, the original GitHub MSI backend ran this graph twice and produced the original report and artifact hashes. All ten new runs reopened after another restart. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-multispectral-restored-original-msi-e3e8ffb63`)
 - `browser`: Two aligned generated bands produced the expected composite pixel and a 0.5 normalized reflectance index on three of eight reference pixels. JSON, float TIFF and two saved runs agreed. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-multispectral-a82cc730e-browser`)
 - `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-multispectral-frozen-desktop-542254b8a`)
 - `browser`: The corrected Windows source completed two real local training and registration controls and all five research journeys. The application closed through its ordinary owner channel after executing the saved workflows. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-multispectral-corrected-source-9cde9e6e7`)
@@ -1434,7 +1437,7 @@ Evidence:
 ### rv18-taxonomy-detectability: Taxonomy proposals, review, and detectability evaluation
 
 - Target: `1.8`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv12-organism-identity`, `rv15-reviewer-lab`
 - Entry point: Research → Organisms & ecology → Taxonomy and detectability
 - Workflow Builder: `required`
@@ -1442,13 +1445,14 @@ Evidence:
 
 Acceptance checks:
 
-- **in_progress** — Review taxonomy proposals and estimate detectability only from declared sampling/observation evidence with uncertainty and assumptions. (`rv18-taxonomy-detectability-check`)
+- **verified** — Review taxonomy proposals and estimate detectability only from declared sampling/observation evidence with uncertainty and assumptions. (`rv18-taxonomy-detectability-check`)
 - **blocked** — From Research → Organisms & ecology → Taxonomy and detectability, reconcile adjudicated taxa and per-visit detection histories, then compare eligible sampling units, effort, estimates and uncertainty to the independent survey analysis. (`rv18-taxonomy-detectability-independent-field-check`)
 
 Evidence:
 
 - `source`: Two successive project imports retained the immutable visit and reviewer evidence. The public importer refused a rehashed inconsistent estimate. Concurrent reviews and repeated-original withholding have dedicated regression checks. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-taxonomy-detectability-a82cc730e-source`)
 - `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-taxonomy-detectability-managed-restore-542254b8a`)
+- `source`: A researcher saved the graph in the local production desktop on generated inputs. After a verified six-project restore, the original GitHub MSI backend ran this graph twice and produced the original report and artifact hashes. All ten new runs reopened after another restart. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-taxonomy-detectability-restored-original-msi-e3e8ffb63`)
 - `browser`: Separate fixture role revisions and five generated tanks yielded ten eligible visits, 300 seconds of effort and 50% detection. The downloaded assessment reopened and two saved runs agreed. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-taxonomy-detectability-a82cc730e-browser`)
 - `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-taxonomy-detectability-frozen-desktop-542254b8a`)
 - `browser`: The corrected Windows source completed two real local training and registration controls and all five research journeys. The application closed through its ordinary owner channel after executing the saved workflows. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-taxonomy-detectability-corrected-source-9cde9e6e7`)
@@ -1465,7 +1469,7 @@ Evidence:
 ### rv18-underwater-correction: Reversible underwater image correction and model-input transforms
 
 - Target: `1.8`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv16-class-visibility-dense-editing`
 - Entry point: Annotate → Image adjustments
 - Workflow Builder: `required`
@@ -1473,13 +1477,14 @@ Evidence:
 
 Acceptance checks:
 
-- **in_progress** — Preview reversible corrections, retain original pixels and transform provenance, and map annotations/predictions exactly to source pixels. (`rv18-underwater-correction-check`)
+- **verified** — Preview reversible corrections, retain original pixels and transform provenance, and map annotations/predictions exactly to source pixels. (`rv18-underwater-correction-check`)
 - **blocked** — From Annotate → Image adjustments, compare the original and corrected measurements against the independent targets by acquisition. Retain transform, original and corrected input hashes, uncertainty and reviewer decision. (`rv18-underwater-correction-independent-field-check`)
 
 Evidence:
 
 - `source`: The saved graph ran against the original image and registered model on two restored project copies. All copies reproduced the rendition bytes and original receipt. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-underwater-correction-a82cc730e-source`)
 - `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-underwater-correction-managed-restore-542254b8a`)
+- `source`: A researcher saved the graph in the local production desktop on generated inputs. After a verified six-project restore, the original GitHub MSI backend ran this graph twice and produced the original report and artifact hashes. All ten new runs reopened after another restart. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-underwater-correction-restored-original-msi-e3e8ffb63`)
 - `browser`: The editor reopened the original pixel grid in box, polygon and raster annotation. Its explicitly selected CPU detector emitted pending proposals on the saved rendition. Two saved workflow runs reproduced the adjustment receipt. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-underwater-correction-a82cc730e-browser`)
 - `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-underwater-correction-frozen-desktop-542254b8a`)
 - `browser`: The corrected Windows source completed two real local training and registration controls and all five research journeys. The application closed through its ordinary owner channel after executing the saved workflows. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-underwater-correction-corrected-source-9cde9e6e7`)
