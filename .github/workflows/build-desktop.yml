@@ -269,6 +269,9 @@ jobs:
             .artifacts/windows-clean-acceptance-*/research-tools-playwright/**/spectral-index.json
             .artifacts/windows-clean-acceptance-*/research-tools-playwright/**/spectral-index.tif
             .artifacts/windows-clean-acceptance-*/research-tools-playwright/**/underwater-adjustment-evidence.json
+            .artifacts/windows-clean-acceptance-*/research-tools-playwright/**/domain-shift-evidence.json
+            .artifacts/windows-clean-acceptance-*/research-tools-playwright/**/domain-shift-report.json
+            .artifacts/windows-clean-acceptance-*/research-tools-playwright/**/domain-shift-report.csv
             .artifacts/windows-clean-acceptance-*/research-evidence.json
             .artifacts/windows-clean-acceptance-*/research-playwright.json
             .artifacts/windows-clean-acceptance-*/research-playwright/**/*-evidence.json
