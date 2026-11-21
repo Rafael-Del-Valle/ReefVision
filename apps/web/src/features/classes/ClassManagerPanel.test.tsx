@@ -108,12 +108,15 @@ describe("ClassManagerPanel", () => {
         compatibility_impacts: [],
         blocking_records: [],
         blockers: [],
+        warnings: [],
       };
       it.each([
         ["blank operation identity", { id: " " }],
         ["missing checksum", { preview_checksum: null }],
         ["malformed checksum", { preview_checksum: "invalid-sha256" }],
         ["noncanonical checksum", { preview_checksum: "A".repeat(64) }],
+        ["missing plan warnings", { plan: { ...report, warnings: null } }],
+        ["unreadable operation warning", { warnings: [null] }],
         [
           "missing record groups",
           { plan: { blockers: [], blocking_records: [] } },
@@ -165,6 +168,7 @@ describe("ClassManagerPanel", () => {
             preview_checksum: "a".repeat(64),
             plan: report,
             failures: [],
+            warnings: [],
           };
           const fetchMock = vi
             .spyOn(globalThis, "fetch")
@@ -242,6 +246,7 @@ describe("ClassManagerPanel", () => {
             blocking_records: [],
             compatibility_impacts: [],
             blockers: [],
+            warnings: [],
           },
           failures: [],
           warnings: [],
@@ -283,6 +288,10 @@ describe("ClassManagerPanel", () => {
   );
 
   it("previews and executes a reassignment with the reviewed checksum", async () => {
+    const frozenWarning =
+      "Immutable dataset versions keep their original class map for reproducibility.";
+    const historyWarning =
+      "Historical annotation events remain unchanged for auditability.";
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -352,12 +361,12 @@ describe("ClassManagerPanel", () => {
                   record_ids: ["version-1"],
                 },
               ],
-              warnings: [],
+              warnings: [frozenWarning],
               blockers: [],
             },
             affected_counts: [],
             protected_reference_counts: [],
-            warnings: [],
+            warnings: [frozenWarning, historyWarning],
             failures: [],
             rollback_result: {},
             final_state: null,
@@ -427,7 +436,7 @@ describe("ClassManagerPanel", () => {
               },
             ],
             protected_reference_counts: [],
-            warnings: [],
+            warnings: [historyWarning],
             failures: [],
             rollback_result: { rolled_back: false },
             final_state: "reassigned",
@@ -469,6 +478,8 @@ describe("ClassManagerPanel", () => {
 
     expect(await screen.findByText("Reassign preview")).toBeInTheDocument();
     expect(screen.getByText(/Historical class only/)).toBeInTheDocument();
+    expect(screen.getAllByText(frozenWarning)).toHaveLength(1);
+    expect(screen.getByText(historyWarning)).toBeVisible();
 
     const reassign = within(sourceClassRow()).getByRole("button", {
       name: "Run reassign",
@@ -501,6 +512,7 @@ describe("ClassManagerPanel", () => {
     await waitFor(() =>
       expect(screen.getByText("Latest operation")).toBeInTheDocument(),
     );
+    expect(screen.getByText(historyWarning)).toBeVisible();
 
     const executeCall = fetchMock.mock.calls.find(
       ([request, requestInit]) =>
@@ -649,6 +661,7 @@ describe("ClassManagerPanel", () => {
                 blocking_records: [],
                 compatibility_impacts: [],
                 blockers: [],
+                warnings: [],
               },
               failures: [],
               warnings: [],

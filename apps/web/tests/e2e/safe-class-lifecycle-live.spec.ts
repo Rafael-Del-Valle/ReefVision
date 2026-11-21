@@ -191,6 +191,12 @@ test("reviews class edits and preserves frozen exports after reopening", async (
   );
   await button(renamed, "Preview reassign").click();
   await expect(button(renamed, "Run reassign")).toBeEnabled();
+  const frozenWarning = renamed.getByText(
+    "Immutable dataset versions keep their original class map for reproducibility.",
+    { exact: true },
+  );
+  await expect(frozenWarning).toHaveCount(1);
+  await expect(frozenWarning).toBeVisible();
   const destination = row(target.name);
   await destination
     .getByLabel(`Description for ${target.name}`)
@@ -235,6 +241,7 @@ test("reviews class edits and preserves frozen exports after reopening", async (
     renamed.getByText("Latest operation", { exact: true }),
   ).toBeVisible();
   await expect(otherPlan).toHaveCount(0);
+  await expect(frozenWarning).toBeVisible();
   await expect(button(renamed, "Run Reassign and Delete")).toBeDisabled();
   await button(renamed, "Preview reassign").click();
   await expect(

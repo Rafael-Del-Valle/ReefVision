@@ -100,7 +100,9 @@ function hasClassReviewReport(operation: ClassOperationRecord): boolean {
         hasReviewText(impact.message) &&
         hasReviewTextList(impact.record_ids),
     ) &&
+    hasReviewTextList(plan.warnings) &&
     hasReviewTextList(plan.blockers) &&
+    hasReviewTextList(operation.warnings) &&
     hasReviewTextList(operation.failures)
   );
 }
@@ -331,6 +333,13 @@ function OperationSummary({
       {operation.plan.compatibility_impacts.map((item) => (
         <p key={item.key} className="annotation-helper">
           {item.label}: {item.status}. {item.message}
+        </p>
+      ))}
+      {Array.from(
+        new Set([...operation.plan.warnings, ...operation.warnings]),
+      ).map((warning) => (
+        <p key={warning} className="annotation-helper">
+          {warning}
         </p>
       ))}
       {(operation.plan.blocking_records ?? []).map((item) => (
