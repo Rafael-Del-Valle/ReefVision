@@ -81,7 +81,7 @@ def test_full_xyz_locus_retention_replays_in_persisted_typed_graph(
     project_id = str(create_project(client, "Distinct XYZ preview retention")["id"])
     base = f"/api/v1/projects/{project_id}"
     params = _params(source_format)
-    node_catalog = client.get(f"{base}/workflow-graphs/node-registry")
+    node_catalog = client.get("/api/v1/workflow-graphs/node-registry")
     assert node_catalog.status_code == 200, node_catalog.text
     # Graph execution contract and UI registry must advertise the same control.
     nodes = node_catalog.json()
