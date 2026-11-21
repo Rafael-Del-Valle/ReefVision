@@ -100,6 +100,9 @@ if ($TauriConfig.bundle.resources.'../../../.desktop/release-2.0.0/backend/' -ne
 if ($TauriConfig.bundle.resources.'../../../.desktop/release-2.0.0/bundled-models/' -ne 'bundled-models/') {
     throw "Tauri must package the weight-free manifest as bundled-models/."
 }
+if ($TauriConfig.bundle.resources.'../../../.desktop/release-2.0.0/automation/' -ne 'automation/') {
+    throw 'Tauri must package the separate Windows automation launcher and offline SDK wheel.'
+}
 
 if (-not (Test-Path ".venv" -PathType Container)) {
     throw "Run .\scripts\bootstrap.ps1 first."
@@ -115,6 +118,20 @@ $ModelAuditScript = Join-Path $PSScriptRoot "audit-model-downloadability.py"
 Write-ReefVisionStep "Checking ReefVision 2.0.0 public versions"
 & $VenvPython (Join-Path $PSScriptRoot "check-release-version.py")
 if ($LASTEXITCODE -ne 0) { throw "Release version consistency check failed." }
+
+Write-ReefVisionStep 'Staging the Windows automation console and offline SDK'
+$AutomationDirectory = Join-Path $Root '.desktop\release-2.0.0\automation'
+$AutomationCargoTarget = Join-Path $Root '.desktop\release-2.0.0\automation-target'
+$AutomationCargoManifest = Join-Path $Root 'apps\windows-automation\Cargo.toml'
+& $RustTools.Cargo build --locked --release --target $TargetTriple --target-dir $AutomationCargoTarget --manifest-path $AutomationCargoManifest
+if ($LASTEXITCODE -ne 0) { throw 'Could not build the native Windows automation console.' }
+New-Item -ItemType Directory -Path $AutomationDirectory -Force | Out-Null
+$AutomationConsole = Join-Path $AutomationDirectory 'reefvision.exe'
+Copy-Item -LiteralPath (Join-Path $AutomationCargoTarget "$TargetTriple\release\reefvision.exe") -Destination $AutomationConsole
+$AutomationSdk = & $VenvPython (Join-Path $PSScriptRoot 'build-automation-sdk-wheel.py') --output (Join-Path $AutomationDirectory 'sdk')
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $AutomationSdk -PathType Leaf)) {
+    throw 'Could not build the offline SDK wheel from the canonical SDK source.'
+}
 
 Write-ReefVisionStep "Auditing the architecture-first model catalog"
 & $VenvPython $ModelAuditScript --catalog $ModelCatalog
@@ -265,6 +282,13 @@ if ((git rev-parse HEAD) -ne $BuildCommit -or -not (Test-ReefVisionSourceTreeCle
     }
     runtime = [ordered]@{
         backend = 'Bundled PyInstaller runtime; Python installation is not required'
+        automation = [ordered]@{
+            console = 'automation/reefvision.exe'
+            console_sha256 = (Get-FileHash -LiteralPath $AutomationConsole -Algorithm SHA256).Hash.ToLowerInvariant()
+            sdk_wheel = "automation/sdk/$([IO.Path]::GetFileName($AutomationSdk))"
+            sdk_wheel_sha256 = (Get-FileHash -LiteralPath $AutomationSdk -Algorithm SHA256).Hash.ToLowerInvariant()
+            sdk_source_sha256 = (Get-FileHash -LiteralPath (Join-Path $Root 'apps/api/reefvision_sdk/__init__.py') -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
         webview2_install_mode = $TauriConfig.bundle.windows.webviewInstallMode.type
         gpu = 'Compatible NVIDIA driver for CUDA inference; CPU supported'
         copernicus = 'Optional local Python worker with Copernicus Marine and configured credentials'
