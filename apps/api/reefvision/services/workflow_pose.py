@@ -66,6 +66,7 @@ from reefvision.services.pose_training_datasets import (
 from reefvision.services.pose_training_exports import (
     PoseTrainingExportService,
 )
+from reefvision.services.workflow_pose_sources import verify_video_source_pin
 from reefvision.services.workflow_review import (
     WorkflowReviewRequired,
     biological_event_review_status,
@@ -260,6 +261,8 @@ def execute_pose_inference_adapter(
 
     if video is None or video.project_id != project_id:
         raise ValidationError("Pose Inference requires a video from this project")
+    pinned_video_digest = video_payload.get("video_sha256")
+    verify_video_source_pin(pinned_video_digest, video.sha256)
 
     if model is None or model.project_id != project_id:
         raise ValidationError("Pose Inference requires a model from this project")
@@ -301,6 +304,11 @@ def execute_pose_inference_adapter(
                 request_json={
                     "video_id": video.id,
                     "model_id": model.id,
+                    **(
+                        {"expected_video_sha256": pinned_video_digest}
+                        if pinned_video_digest
+                        else {}
+                    ),
                     "tracker": str(
                         parameters.get(
                             "tracker",

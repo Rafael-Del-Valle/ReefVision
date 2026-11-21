@@ -16,6 +16,7 @@ from reefvision.db.models import (
     Project,
     VideoAsset,
 )
+from reefvision.domain.errors import ValidationError
 from reefvision.schemas.review_queues import parse_workflow_review_weights
 from reefvision.schemas.workflow_graphs import (
     WorkflowEdge,
@@ -28,6 +29,10 @@ from reefvision.schemas.workflow_graphs import (
     WorkflowPlanStep,
 )
 from reefvision.services.workflow_node_registry import workflow_node_registry
+from reefvision.services.workflow_pose_sources import (
+    resolve_frozen_pose_dataset,
+    verify_video_source_pin,
+)
 from reefvision.services.workflow_vlm import SUPPORTED_VLM_PROVIDERS
 
 SUPPORTED_GRAPH_SCHEMA = "workflow-graph-0001"
@@ -360,6 +365,11 @@ class WorkflowGraphService:
                     node_id=node_id,
                 )
             )
+            return
+        try:
+            verify_video_source_pin(parameters.get("video_sha256"), video.sha256)
+        except ValidationError as error:
+            issues.append(self._issue("error", "video_source_stale", str(error), node_id=node_id))
 
     def _validate_vlm_node(
         self,
@@ -553,6 +563,17 @@ class WorkflowGraphService:
                     issues,
                     referenced_video_ids,
                 )
+            elif node.node_type == "pose_training_dataset" and node.parameters.get("dataset_id"):
+                try:
+                    resolve_frozen_pose_dataset(
+                        self.session, project_id=project_id, payload=node.parameters, role="source"
+                    )
+                except ValidationError as error:
+                    issues.append(
+                        self._issue(
+                            "error", "invalid_pose_dataset_source", str(error), node_id=node.node_id
+                        )
+                    )
             elif node.node_type == "vlm_detection":
                 self._validate_vlm_node(project_id, node.node_id, node.parameters, issues)
             elif node.node_type == "model_training":

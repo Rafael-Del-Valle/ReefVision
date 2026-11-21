@@ -80,6 +80,7 @@ from reefvision.services.workflow_consensus import build_detection_consensus
 from reefvision.services.workflow_datasets import create_workflow_dataset_version
 from reefvision.services.workflow_graphs import WorkflowGraphService
 from reefvision.services.workflow_image_adjustment_v18 import adjusted_workflow_binding
+from reefvision.services.workflow_pose_sources import verify_video_source_pin
 from reefvision.services.workflow_runtime_adapters import (
     RUNTIME_ADAPTER_NODE_TYPES,
     execute_runtime_adapter,
@@ -1476,6 +1477,8 @@ class WorkflowExecutionService:
         video = self.session.get(VideoAsset, video_id)
         if video is None or video.project_id != project_id:
             raise ValidationError("Video does not belong to this project")
+        pinned_digest = parameters.get("video_sha256")
+        verify_video_source_pin(pinned_digest, video.sha256)
         return [
             WorkflowArtifactSpec(
                 port_id="video",
@@ -1484,6 +1487,7 @@ class WorkflowExecutionService:
                     "project_id": project_id,
                     "video_id": video.id,
                     "sha256": video.sha256,
+                    **({"video_sha256": pinned_digest} if pinned_digest else {}),
                     "frame_count": video.frame_count,
                     "fps": video.fps,
                     "duration_seconds": video.duration_seconds,

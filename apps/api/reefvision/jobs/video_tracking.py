@@ -540,12 +540,24 @@ def process_video_tracking_job(
 
         checkpoint_path = resolve_managed_project_path(settings, model_path)
         source_video_path = resolve_managed_project_path(settings, video_path)
+        expected_video_sha256 = request.get("expected_video_sha256")
+        actual_video_sha256 = None
+        if expected_video_sha256:
+            if not source_video_path.is_file():
+                raise ValidationError(
+                    "Pinned video original is missing; restore the selected source file"
+                )
+            actual_video_sha256 = sha256_file(source_video_path)
+            if actual_video_sha256 != expected_video_sha256:
+                raise ValidationError(
+                    "Pinned video original changed; restore the selected source file"
+                )
         # Record actual input hashes for scientific provenance. Existing fake/provider
         # fixtures may lack managed files and retain their ordinary inference behavior.
         input_hashes = (
             {
                 "model_sha256": sha256_file(checkpoint_path),
-                "video_sha256": sha256_file(source_video_path),
+                "video_sha256": actual_video_sha256 or sha256_file(source_video_path),
             }
             if model_task == "pose" and checkpoint_path.is_file() and source_video_path.is_file()
             else {}

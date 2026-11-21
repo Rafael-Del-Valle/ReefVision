@@ -457,7 +457,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
             input_ports=[_input("project", "Project", "project_reference")],
             output_ports=[_output("video", "Video", "video_reference")],
             required_parameters=["video_id"],
-            optional_parameters={},
+            optional_parameters={"video_sha256": None},
             execution_state="executable_source",
             executable=True,
             implementation_notes=["The video must belong to the selected project."],
