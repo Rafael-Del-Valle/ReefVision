@@ -96,3 +96,28 @@ validation. Tests cover complete evidence and unsafe incomplete,
 duplicate, unknown, contradictory and misclassified breakdowns.
 No scientific record or Workflow Builder graph is modified; a user
 metadata deletion command does not introduce a new analysis node.
+
+## 2026-11-21 — Reject misleading class-operation group inventories
+
+Class reassign and reassign-and-delete previews now validate each displayed
+record group's **category as well as its identifiers and counts**. Categories
+must be known in the appropriate mutable, protected, or blocking inventory,
+and may occur only once per inventory. An unfamiliar category, repeated
+category, or a protected reference disguised as mutable evidence fails
+closed instead of letting the researcher approve an incomplete view.
+
+Reassign-and-delete also requires protected deleted annotations, historical
+prediction proposals, and unhandled mask/image-label references to appear
+again as **matching blocking evidence**. Missing or substituted deletion
+blockers invalidate the preview; the server remains authoritative and
+independently checks the checksum, scoped identities, and actual references
+before any action. The response is not silently repaired, and a fresh
+explicit preview is required. React regressions cover both operations,
+six malformed group-inventory cases each, and two deleted-annotation blocker
+failures. No scientific data, historical class map, or saved typed Workflow
+Builder QC operation is modified.
+
+This is a fail-closed UI review improvement, not a migration reconciliation
+or a version acceptance. The independent Alembic-0038 conflict, complete
+exact-head CI, biological saved-workflow checks, genuine installed Windows
+MSI/CAB GUI/upgrade/rollback, and explicit owner approval still block 1.6.

@@ -602,6 +602,25 @@ describe("ClassManagerPanel", () => {
     record_ids: ["version-1"],
   };
 
+  const activePreviewAnnotation = {
+    key: "annotations_active",
+    label: "Active annotations",
+    count: 1,
+    record_ids: ["annotation-1"],
+  };
+  const historicalPreviewAnnotation = {
+    key: "annotation_history",
+    label: "Annotation history",
+    count: 1,
+    record_ids: ["event-1"],
+  };
+  const deletedPreviewAnnotation = {
+    key: "annotations_deleted",
+    label: "Deleted annotations",
+    count: 1,
+    record_ids: ["annotation-1"],
+  };
+
   it.each(
     (
       [
@@ -616,6 +635,60 @@ describe("ClassManagerPanel", () => {
     ).flatMap(([endpoint, operationType, previewLabel, runLabel]) =>
       (
         [
+          [
+            "duplicate mutable inventory category",
+            {
+              mutable_records: [
+                activePreviewAnnotation,
+                { ...activePreviewAnnotation, record_ids: ["annotation-2"] },
+              ],
+            },
+          ],
+          [
+            "protected dataset category disguised as mutable",
+            {
+              mutable_records: [
+                { ...activePreviewAnnotation, key: "dataset_versions" },
+              ],
+            },
+          ],
+          [
+            "duplicate non-dataset protected category",
+            {
+              protected_records: [
+                historicalPreviewAnnotation,
+                { ...historicalPreviewAnnotation, record_ids: ["event-2"] },
+              ],
+            },
+          ],
+          [
+            "blocking-only category disguised as protected",
+            {
+              protected_records: [
+                {
+                  ...historicalPreviewAnnotation,
+                  key: "review_queue_items_workflow",
+                },
+              ],
+            },
+          ],
+          [
+            "duplicate deletion blocker category",
+            {
+              blocking_records: [
+                deletedPreviewAnnotation,
+                { ...deletedPreviewAnnotation, record_ids: ["annotation-2"] },
+              ],
+            },
+          ],
+          [
+            "mutable category disguised as deletion blocker",
+            {
+              blocking_records: [
+                { ...deletedPreviewAnnotation, key: "annotations_active" },
+              ],
+            },
+          ],
           ["null mutable record", { mutable_records: [null] }],
           [
             "negative protected count",
@@ -865,6 +938,70 @@ describe("ClassManagerPanel", () => {
         fetchMock.mock.calls.filter(
           ([input, init]) =>
             String(input).endsWith(`/classes/class-1/${endpoint}`) &&
+            init?.method === "POST",
+        ),
+      ).toHaveLength(0);
+    },
+  );
+
+  it.each([
+    ["omitted", []],
+    [
+      "substituted",
+      [{ ...deletedPreviewAnnotation, record_ids: ["different-annotation"] }],
+    ],
+  ])(
+    "rejects reassign-and-delete with %s protected deletion evidence",
+    async (_reason, blockingRecords) => {
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async (input, init) => {
+          const url = String(input);
+          if (
+            url.endsWith(
+              `/projects/${project.id}/classes/class-1/reassign-delete/preview`,
+            ) &&
+            init?.method === "POST"
+          ) {
+            return jsonResponse({
+              id: "incomplete-deletion-evidence",
+              project_id: project.id,
+              source_class_id: "class-1",
+              target_class_id: "class-2",
+              operation_type: "reassign_delete",
+              status: "previewed",
+              preview_checksum: "a".repeat(64),
+              plan: {
+                mutable_records: [],
+                protected_records: [deletedPreviewAnnotation],
+                blocking_records: blockingRecords,
+                compatibility_impacts: [],
+                warnings: [],
+                blockers: [],
+              },
+              warnings: [],
+              failures: [],
+            });
+          }
+          throw new Error(
+            `Unexpected request: ${init?.method ?? "GET"} ${url}`,
+          );
+        });
+      renderPanel();
+      const row = sourceClassRow();
+      await userEvent.click(
+        within(row).getByRole("button", { name: "Preview Reassign and Delete" }),
+      );
+      expect(
+        await within(row).findByText(/Operation evidence is incomplete/),
+      ).toBeInTheDocument();
+      expect(
+        within(row).getByRole("button", { name: "Run Reassign and Delete" }),
+      ).toBeDisabled();
+      expect(
+        fetchMock.mock.calls.filter(
+          ([input, init]) =>
+            String(input).endsWith("/classes/class-1/reassign-delete") &&
             init?.method === "POST",
         ),
       ).toHaveLength(0);

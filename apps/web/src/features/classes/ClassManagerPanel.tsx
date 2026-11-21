@@ -71,6 +71,76 @@ function validReviewGroup(value: unknown): boolean {
   );
 }
 
+// Reassignment preview groups are a typed inventory, not arbitrary display
+// rows. An unfamiliar or repeated category could conceal scientific references
+// while still passing checks on individual record counts and identifiers.
+const MUTABLE_PREVIEW_KEYS = new Set([
+  "annotations_active",
+  "prediction_proposals_pending",
+  "quality_control_issues_open",
+  "review_queue_items_open",
+]);
+const PROTECTED_PREVIEW_KEYS = new Set([
+  "annotations_deleted",
+  "annotation_history",
+  "prediction_proposals_historical",
+  "quality_control_issues_closed",
+  "review_queue_items_closed",
+  "dataset_versions",
+  "model_registrations",
+  ...UNSUPPORTED_MERGE_CATEGORIES,
+]);
+const BLOCKING_PREVIEW_KEYS = new Set([
+  "review_queue_items_workflow",
+  "annotations_deleted",
+  "prediction_proposals_historical",
+  ...UNSUPPORTED_MERGE_CATEGORIES,
+]);
+const DELETION_BLOCKER_KEYS = new Set([
+  "annotations_deleted",
+  "prediction_proposals_historical",
+  ...UNSUPPORTED_MERGE_CATEGORIES,
+]);
+
+function validReviewInventory(
+  value: unknown,
+  allowedKeys: ReadonlySet<string>,
+): boolean {
+  if (!Array.isArray(value)) return false;
+  const keys = new Set<string>();
+  return value.every((item: unknown) => {
+    if (!validReviewGroup(item)) return false;
+    const key = (item as { key: string }).key;
+    if (!allowedKeys.has(key) || keys.has(key)) return false;
+    keys.add(key);
+    return true;
+  });
+}
+
+// In reassign-and-delete, every protected historical annotation, proposal
+// and unsupported modality must also be explicitly disclosed as a deletion
+// blocker. Omission or substitution cannot stand in for researcher review.
+function deletionBlockersMatchProtectedInventory(
+  operation: ClassOperationRecord,
+): boolean {
+  if (operation.operation_type !== "reassign_delete") return true;
+  const blocked = new Map(
+    operation.plan.blocking_records.map((group) => [
+      group.key,
+      group.record_ids,
+    ]),
+  );
+  return operation.plan.protected_records.every((group) => {
+    if (!DELETION_BLOCKER_KEYS.has(group.key)) return true;
+    const disclosed = blocked.get(group.key);
+    return (
+      disclosed !== undefined &&
+      disclosed.length === group.record_ids.length &&
+      group.record_ids.every((id, index) => id === disclosed[index])
+    );
+  });
+}
+
 function validReviewImpact(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
@@ -119,15 +189,13 @@ function operationHasDisplayEvidence(operation: ClassOperationRecord): boolean {
   return (
     (operation.operation_type === "reassign" ||
       operation.operation_type === "reassign_delete") &&
-    Array.isArray(plan?.mutable_records) &&
-    plan.mutable_records.every(validReviewGroup) &&
-    Array.isArray(plan.protected_records) &&
-    plan.protected_records.every(validReviewGroup) &&
+    validReviewInventory(plan?.mutable_records, MUTABLE_PREVIEW_KEYS) &&
+    validReviewInventory(plan.protected_records, PROTECTED_PREVIEW_KEYS) &&
     Array.isArray(plan.compatibility_impacts) &&
     plan.compatibility_impacts.every(validReviewImpact) &&
     compatibilityImpactsMatchProtectedInventory(plan) &&
-    Array.isArray(plan.blocking_records) &&
-    plan.blocking_records.every(validReviewGroup) &&
+    validReviewInventory(plan.blocking_records, BLOCKING_PREVIEW_KEYS) &&
+    deletionBlockersMatchProtectedInventory(operation) &&
     validReviewTextList(plan.warnings) &&
     validReviewTextList(plan.blockers) &&
     validReviewTextList(operation.warnings) &&
