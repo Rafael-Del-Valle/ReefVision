@@ -91,3 +91,21 @@ def test_cross_branch_audit_flags_distinct_branch_only_revisions(tmp_path: Path)
         "missing parent deleted_parent for 0002_review",
     ]
     assert invalid_report["refs"]["review"]["commit"] != report["refs"]["review"]["commit"]
+
+
+    # Reassigning Alembic identity in one migration must fail the static
+    # audit rather than silently treating the last assignment as canonical.
+    (migrations / "0002_review.py").write_text(
+        'revision = "0002_review"\nrevision = "overwritten"\ndown_revision = "0001"\n'
+    )
+    git("add", ".")
+    git("commit", "-q", "-m", "duplicate Alembic revision declaration")
+    duplicate = subprocess.run(
+        [sys.executable, str(audit), "science", "review"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert duplicate.returncode == 1, duplicate.stderr
+    assert "Duplicate Alembic revision declaration" in duplicate.stderr
