@@ -12,7 +12,6 @@ from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.spatial_point_cloud_v14 import measure_point_cloud_preview
 from reefvision.tests.test_annotations import create_project
 
-
 POINTS = [
     [0.0, 0.0, 0.0],
     [1.0, 0.0, 1.0],
@@ -413,6 +412,105 @@ def test_imported_and_xyz_gap_science_replays_from_saved_typed_graph(
     graph = {
         "graph_id": f"point-cloud-axis-gaps-{source_format}-{tied_gap}-v14",
         "name": "Review projected coordinate gaps, not coral tissue gaps",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-to-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    hashes = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            artifact
+            for artifact in detail.json()["artifacts"]
+            if artifact["data_type"] == "point_cloud_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == expected
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+def test_distinct_xyz_gap_boundary_loci_audited_in_saved_workflow(
+    client: TestClient, source_format: str
+) -> None:
+    # Every x-axis gap endpoint coordinate appears in the display, while
+    # bounded index sampling omits 88 unique XYZ loci at those boundaries.
+    # Axis-level visibility is therefore not complete acquisition support.
+    points = [
+        [0.0 if i < 300 else 100.0, float(i % 300), 0.0]
+        for i in range(600)
+    ]
+    direct = _direct(points)
+    params = dict(PARAMS)
+    if source_format == "ply":
+        params["ply_text"] = (
+            f"ply\nformat ascii 1.0\nelement vertex {len(points)}\n"
+            "property double x\nproperty double y\nproperty double z\nend_header\n"
+            + "".join(f"{x:g} {y:g} {z:g}\n" for x, y, z in points)
+        )
+    else:
+        params["points"] = points
+
+    project_id = str(create_project(client, "Distinct gap-boundary XYZ display QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    support = expected["preview_largest_axis_gap_boundary_locus_support"]
+    assert support["x"] == {
+        "source_distinct_xyz_loci": 600,
+        "preview_distinct_xyz_loci": 512,
+        "fraction_of_source_loci_displayed": pytest.approx(512 / 600),
+    }
+    assert direct["preview_largest_axis_gap_boundary_locus_support"] == support
+    assert expected["preview_largest_axis_gap_endpoint_support"]["x"] == {
+        "lower": True,
+        "upper": True,
+    }
+    assert expected["preview_largest_axis_gap_interval_coverage"]["x"] == {
+        "total_intervals": 1,
+        "fully_displayed_intervals": 1,
+        "partially_displayed_intervals": 0,
+        "hidden_intervals": 0,
+    }
+    assert "x" in expected["preview_omitted_largest_gap_boundary_locus_axes"]
+    assert "x" not in expected["preview_omitted_largest_gap_boundary_axes"]
+    assert "preview_omits_largest_axis_gap_boundary_xyz_loci" in expected["qc_warnings"]
+    assert "preview_omits_largest_axis_gap_endpoint" not in expected["qc_warnings"]
+    assert expected["axis_largest_adjacent_coordinate_gaps"]["x"][
+        "largest_adjacent_source_gap_units"
+    ] == 100.0
+    assert expected["surface_area_m2"] is None
+    assert expected["branch_length_m"] is None
+    assert expected["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": f"boundary-xyz-loci-{source_format}-v14",
+        "name": "Audit displayed XYZ loci at projected largest-gap boundaries",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
             {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
