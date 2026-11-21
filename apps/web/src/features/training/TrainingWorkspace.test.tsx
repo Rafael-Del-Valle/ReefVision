@@ -20,6 +20,7 @@ vi.mock("../../api/client", async (importOriginal) => ({
   getDatasetVersions: vi.fn(),
   getModels: vi.fn(),
   getExperiments: vi.fn(),
+  registerModelFromRun: vi.fn(),
   runTrainingPreflight: vi.fn(),
   createTrainingRun: vi.fn(),
   updateTrainingDraft: vi.fn(),
@@ -302,6 +303,84 @@ describe("TrainingWorkspace launch", () => {
 });
 
 describe("TrainingWorkspace progress freshness", () => {
+  it("registers a completed pose run from Models without a draft", async () => {
+    const completed = {
+      ...run,
+      draft_id: null,
+      provider_id: "ultralytics",
+      task: "pose",
+      run_name: "Frozen pose run",
+      status: "completed",
+      stage: "completed",
+      notes: "Reviewed landmarks",
+      result_checkpoint_path: "training/pose/best.pt",
+    } satisfies api.TrainingRun;
+    vi.mocked(api.getTrainingWorkspaceBootstrap).mockResolvedValue({
+      providers: [],
+      catalog: { models: [] },
+      draft_summaries: [],
+      selected_draft: null,
+    } as unknown as api.TrainingWorkspaceBootstrapResponse);
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([completed]);
+    vi.mocked(api.registerModelFromRun).mockResolvedValue({
+      id: "pose-model-1",
+    } as api.ModelRegistration);
+
+    renderWorkspace();
+    await screen.findByRole("heading", { name: "No training draft selected" });
+    fireEvent.click(screen.getByRole("tab", { name: "Models" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Run artifacts" }),
+    ).toBeVisible();
+    expect(screen.queryByText("No training draft selected")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Register best pose model" }),
+    );
+    await waitFor(() =>
+      expect(api.registerModelFromRun).toHaveBeenCalledWith(project.id, {
+        training_run_id: completed.id,
+        display_name: "Frozen pose run best",
+        notes: "Reviewed landmarks",
+      }),
+    );
+  });
+
+  it("labels completed mask and detector registrations by task with a draft open", async () => {
+    const completed = ["detect", "segment", "semantic_segment"].map(
+      (task) =>
+        ({
+          ...run,
+          id: `${task}-run`,
+          task,
+          run_name: `${task} reference run`,
+          status: "completed",
+          stage: "completed",
+          result_checkpoint_path: `training/${task}/best.pt`,
+        }) satisfies api.TrainingRun,
+    );
+    vi.mocked(api.getTrainingRuns).mockResolvedValue(completed);
+    renderWorkspace();
+    await screen.findByLabelText("Run name");
+    fireEvent.click(screen.getByRole("tab", { name: "Models" }));
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Register best detector",
+      }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", {
+        name: "Register best segmenter",
+      }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", {
+        name: "Register best semantic segmenter",
+      }),
+    ).toBeEnabled();
+  });
+
   it("opens completed workflow runs and experiments in a project without a draft", async () => {
     const completedRun = {
       ...run,
