@@ -70,9 +70,9 @@ def test_axis_gap_is_projection_only_duplicate_invariant_and_scale_bounded() -> 
         assert gaps[axis]["largest_adjacent_source_gap_units"] == 1.0
         assert gaps[axis]["equally_largest_adjacent_gap_count"] == 1
         assert gaps[axis]["calibrated_gap_m"] == pytest.approx(0.25)
-    assert original["provenance"]["geometry_sha256"] == reversed_rows["provenance"][
-        "geometry_sha256"
-    ]
+    assert (
+        original["provenance"]["geometry_sha256"] == reversed_rows["provenance"]["geometry_sha256"]
+    )
     assert original["axis_aligned_dimensions_m"] == pytest.approx([2.25, 0.25, 0.25])
     assert original["provenance"]["calibration_verified"] is False
     assert original["provenance"]["coordinate_registration_verified"] is False
@@ -124,12 +124,11 @@ def test_gap_boundary_support_distinguishes_rows_and_distinct_xyz_loci() -> None
         "source_rows": 4,
         "distinct_xyz_loci": 2,
     }
-    assert original["axis_largest_adjacent_coordinate_gaps"] == reordered[
-        "axis_largest_adjacent_coordinate_gaps"
-    ]
-    assert original["provenance"]["geometry_sha256"] == reordered["provenance"][
-        "geometry_sha256"
-    ]
+    assert (
+        original["axis_largest_adjacent_coordinate_gaps"]
+        == reordered["axis_largest_adjacent_coordinate_gaps"]
+    )
+    assert original["provenance"]["geometry_sha256"] == reordered["provenance"]["geometry_sha256"]
     assert original["provenance"]["calibration_verified"] is False
     assert original["surface_area_m2"] is None
     assert original["branch_length_m"] is None
@@ -149,9 +148,9 @@ def test_exact_tied_largest_gaps_preserve_row_support_and_disclose_ambiguity() -
     }
     assert "axis_sampling_multiple_equally_largest_gaps" in original["qc_warnings"]
     assert original["qc_warnings"] == reversed_rows["qc_warnings"]
-    assert original["provenance"]["geometry_sha256"] == reversed_rows["provenance"][
-        "geometry_sha256"
-    ]
+    assert (
+        original["provenance"]["geometry_sha256"] == reversed_rows["provenance"]["geometry_sha256"]
+    )
     assert original["provenance"]["calibration_verified"] is False
     assert original["surface_area_m2"] is None
     assert original["branch_length_m"] is None
@@ -186,8 +185,7 @@ def test_all_tied_maximum_gap_boundaries_are_audited_in_saved_workflow(
     # Uniform 512/600 display sampling shows indices 7 and 8, but hides
     # index 299 while showing 300. The representative first gap is visible.
     points = [
-        [float(i + (100 if i >= 8 else 0) + (100 if i >= 300 else 0)), 0.0, 0.0]
-        for i in range(600)
+        [float(i + (100 if i >= 8 else 0) + (100 if i >= 300 else 0)), 0.0, 0.0] for i in range(600)
     ]
     params = dict(PARAMS)
     if source_format == "ply":
@@ -204,12 +202,14 @@ def test_all_tied_maximum_gap_boundaries_are_audited_in_saved_workflow(
     response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert response.status_code == 200, response.text
     expected = response.json()
-    assert expected["axis_largest_adjacent_coordinate_gaps"]["x"][
-        "equally_largest_adjacent_gap_count"
-    ] == 2
-    assert expected["axis_largest_adjacent_coordinate_gaps"]["x"][
-        "source_endpoint_values"
-    ] == [7.0, 108.0]
+    assert (
+        expected["axis_largest_adjacent_coordinate_gaps"]["x"]["equally_largest_adjacent_gap_count"]
+        == 2
+    )
+    assert expected["axis_largest_adjacent_coordinate_gaps"]["x"]["source_endpoint_values"] == [
+        7.0,
+        108.0,
+    ]
     assert 7 in expected["preview_point_indices"]
     assert 8 in expected["preview_point_indices"]
     assert 299 not in expected["preview_point_indices"]
@@ -304,9 +304,10 @@ def test_hidden_maximum_gap_boundary_is_disclosed_on_saved_workflow_replay(
     response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert response.status_code == 200, response.text
     expected = response.json()
-    assert expected["axis_largest_adjacent_coordinate_gaps"]["x"][
-        "source_endpoint_values"
-    ] == [6.0, 107.0]
+    assert expected["axis_largest_adjacent_coordinate_gaps"]["x"]["source_endpoint_values"] == [
+        6.0,
+        107.0,
+    ]
     assert 6 not in expected["preview_point_indices"]
     assert 7 in expected["preview_point_indices"]
     assert expected["preview_axis_extrema_covered"] is True
@@ -381,32 +382,26 @@ def test_imported_and_xyz_gap_science_replays_from_saved_typed_graph(
             f"ply\nformat ascii 1.0\nelement vertex {len(points)}\n"
             "property double x\nproperty double y\nproperty double z\nend_header\n"
         )
-        params["ply_text"] = header + "".join(
-            f"{x:g} {y:g} {z:g}\n" for x, y, z in points
-        )
+        params["ply_text"] = header + "".join(f"{x:g} {y:g} {z:g}\n" for x, y, z in points)
     else:
         params["points"] = points
     response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert response.status_code == 200, response.text
     expected = response.json()
-    assert expected["axis_largest_adjacent_coordinate_gaps"]["x"][
-        "source_endpoint_values"
-    ] == ([0.0, 2.0] if tied_gap else [2.0, 9.0])
+    assert expected["axis_largest_adjacent_coordinate_gaps"]["x"]["source_endpoint_values"] == (
+        [0.0, 2.0] if tied_gap else [2.0, 9.0]
+    )
     assert expected["axis_largest_adjacent_coordinate_gaps"]["x"][
         "equally_largest_adjacent_gap_count"
     ] == (3 if tied_gap else 1)
-    assert expected["axis_largest_adjacent_coordinate_gaps"]["x"][
-        "gap_endpoint_support"
-    ] == {
+    assert expected["axis_largest_adjacent_coordinate_gaps"]["x"]["gap_endpoint_support"] == {
         "lower": {"source_rows": 1, "distinct_xyz_loci": 1},
         "upper": {
             "source_rows": 3 if tied_gap else 1,
             "distinct_xyz_loci": 2 if tied_gap else 1,
         },
     }
-    assert (
-        "axis_sampling_multiple_equally_largest_gaps" in expected["qc_warnings"]
-    ) is tied_gap
+    assert ("axis_sampling_multiple_equally_largest_gaps" in expected["qc_warnings"]) is tied_gap
     assert expected["measurement_status"] == "caller_supplied_unverified"
 
     graph = {
@@ -455,13 +450,17 @@ def test_imported_and_xyz_gap_science_replays_from_saved_typed_graph(
 
 
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
+@pytest.mark.parametrize("duplicate_loci", [False, True], ids=["distinct-loci", "repeat-rows"])
 def test_distinct_xyz_gap_boundary_loci_audited_in_saved_workflow(
-    client: TestClient, source_format: str
+    client: TestClient, source_format: str, duplicate_loci: bool
 ) -> None:
-    # Every x-axis gap endpoint coordinate appears in the display, while
-    # bounded index sampling omits 88 unique XYZ loci at those boundaries.
-    # Axis-level visibility is therefore not complete acquisition support.
-    points = [[0.0 if i < 300 else 100.0, float(i % 300), 0.0] for i in range(600)]
+    # Each endpoint level has 300 acquisition rows. A bounded 512-row preview
+    # loses 88 raw rows, but repeated XYZ locations do not become biological
+    # replicates. Only the nonduplicate cloud loses distinct XYZ loci.
+    points = [
+        [0.0 if i < 300 else 100.0, 0.0 if duplicate_loci else float(i % 300), 0.0]
+        for i in range(600)
+    ]
     direct = _direct(points)
     params = dict(PARAMS)
     if source_format == "ply":
@@ -479,10 +478,15 @@ def test_distinct_xyz_gap_boundary_loci_audited_in_saved_workflow(
     assert response.status_code == 200, response.text
     expected = response.json()
     support = expected["preview_largest_axis_gap_boundary_locus_support"]
+    expected_loci = 2 if duplicate_loci else 600
+    displayed_loci = 2 if duplicate_loci else 512
     assert support["x"] == {
-        "source_distinct_xyz_loci": 600,
-        "preview_distinct_xyz_loci": 512,
-        "fraction_of_source_loci_displayed": pytest.approx(512 / 600),
+        "source_acquisition_rows": 600,
+        "preview_acquisition_rows": 512,
+        "fraction_of_source_rows_displayed": pytest.approx(512 / 600),
+        "source_distinct_xyz_loci": expected_loci,
+        "preview_distinct_xyz_loci": displayed_loci,
+        "fraction_of_source_loci_displayed": pytest.approx(displayed_loci / expected_loci),
     }
     assert direct["preview_largest_axis_gap_boundary_locus_support"] == support
     assert expected["preview_largest_axis_gap_endpoint_support"]["x"] == {
@@ -495,19 +499,26 @@ def test_distinct_xyz_gap_boundary_loci_audited_in_saved_workflow(
         "partially_displayed_intervals": 0,
         "hidden_intervals": 0,
     }
-    assert "x" in expected["preview_omitted_largest_gap_boundary_locus_axes"]
+    assert ("x" in expected["preview_omitted_largest_gap_boundary_locus_axes"]) is (
+        not duplicate_loci
+    )
+    assert expected["preview_omitted_largest_gap_boundary_acquisition_axes"] == ["x"]
     assert "x" not in expected["preview_omitted_largest_gap_boundary_axes"]
-    assert "preview_omits_largest_axis_gap_boundary_xyz_loci" in expected["qc_warnings"]
+    assert (
+        "preview_omits_largest_axis_gap_boundary_xyz_loci" in expected["qc_warnings"]
+    ) is (not duplicate_loci)
+    assert "preview_omits_largest_axis_gap_boundary_acquisition_rows" in expected["qc_warnings"]
     assert "preview_omits_largest_axis_gap_endpoint" not in expected["qc_warnings"]
-    assert expected["axis_largest_adjacent_coordinate_gaps"]["x"][
-        "largest_adjacent_source_gap_units"
-    ] == 100.0
+    assert (
+        expected["axis_largest_adjacent_coordinate_gaps"]["x"]["largest_adjacent_source_gap_units"]
+        == 100.0
+    )
     assert expected["surface_area_m2"] is None
     assert expected["branch_length_m"] is None
     assert expected["provenance"]["calibration_verified"] is False
 
     graph = {
-        "graph_id": f"boundary-xyz-loci-{source_format}-v14",
+        "graph_id": f"boundary-xyz-loci-{source_format}-{duplicate_loci}-v14",
         "name": "Audit displayed XYZ loci at projected largest-gap boundaries",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
