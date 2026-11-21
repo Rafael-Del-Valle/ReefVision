@@ -282,6 +282,43 @@ def test_camera_exif_explicit_offset_converts_to_utc_without_rewriting_capture(
 
 
 @pytest.mark.parametrize(
+    ("suffix", "subseconds", "expected_utc", "precision_warning"),
+    [
+        (".JPG", "123", "2026-04-03T11:55:30.123000+00:00", False),
+        (".jpeg", "123456789", "2026-04-03T11:55:30.123456+00:00", True),
+    ],
+)
+def test_real_camera_jpeg_fractional_exposure_preserves_qc_and_source(
+    tmp_path, suffix: str, subseconds: str, expected_utc: str, precision_warning: bool
+) -> None:
+    """Preserve subsecond acquisition precision without rewriting source JPEGs."""
+    path = tmp_path / ("fractional_exposure" + suffix)
+    exif = Image.Exif()
+    exif[36867] = "2026:04:03 14:25:30"
+    exif[36881] = "+02:30"
+    exif[37521] = subseconds
+    Image.new("RGB", (23, 17), (30, 65, 115)).save(path, format="JPEG", exif=exif)
+    original = path.read_bytes()
+    digest = hashlib.sha256(original).hexdigest()
+
+    inspected = inspect_staged_image(path, digest, len(original))
+
+    assert inspected.capture_timestamp is not None
+    assert inspected.capture_timestamp.isoformat() == expected_utc
+    assert inspected.metadata["exif"]["SubsecTimeOriginal"] == subseconds
+    if precision_warning:
+        assert "exceeds microsecond precision" in inspected.metadata[
+            "capture_time_precision_warning"
+        ]
+    else:
+        assert "capture_time_precision_warning" not in inspected.metadata
+    assert inspected.sha256 == digest
+    assert inspected.extension == ".jpg"
+    assert inspected.media_type == "image/jpeg"
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize(
     ("nested_override", "conflict_field"),
     [
         ({36867: "2026:10:02 12:30:00"}, "DateTimeOriginal"),
