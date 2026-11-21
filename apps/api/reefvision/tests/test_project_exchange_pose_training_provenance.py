@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from hashlib import sha256
 from io import BytesIO
 from typing import Any, cast
@@ -10,6 +11,7 @@ from zipfile import ZipFile
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from httpx import Response
 
 from reefvision.config import Settings
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
@@ -23,6 +25,11 @@ from reefvision.tests.test_scientific_project_exchange import import_archive, re
 from reefvision.tests.test_workflow_pose_training_phase10 import (
     _native_pose_workflow_graph,
     _synthetic_exact_frames,
+)
+
+import_project_archive = cast(Callable[[TestClient, bytes], Response], import_archive)
+rewrite_project_archive = cast(
+    Callable[[bytes, Callable[[dict[str, Any], dict[str, Any]], None]], bytes], rewrite
 )
 
 
@@ -109,11 +116,11 @@ def _archive(
     )
     downloaded = client.get(f"/api/v1/exchange-packages/{exported['package']['id']}/download")
     assert downloaded.status_code == 200, downloaded.text
-    return downloaded.content
+    return cast(bytes, downloaded.content)
 
 
 def _restore(client: TestClient, archive: bytes) -> tuple[str, dict[str, str]]:
-    restored = import_archive(client, archive)
+    restored = import_project_archive(client, archive)
     assert restored.status_code == 201, restored.text
     receipt = restored.json()
     return receipt["project_id"], receipt["package"]["options_json"]["id_map"]
@@ -249,8 +256,10 @@ def test_pose_training_exchange_does_not_reseal_an_inconsistent_source(
         artifact["pose_split_manifest_sha256"] = split_hash
 
     before = {item["id"] for item in client.get("/api/v1/projects").json()}
-    damaged = rewrite(_archive(client, test_settings, source), choose_inconsistent_split)
-    imported = import_archive(client, damaged)
+    damaged = rewrite_project_archive(
+        _archive(client, test_settings, source), choose_inconsistent_split
+    )
+    imported = import_project_archive(client, damaged)
     if imported.status_code == 400:
         assert {item["id"] for item in client.get("/api/v1/projects").json()} == before
         return
