@@ -144,8 +144,8 @@ export function translateAnnotations(
       !Number.isFinite(item.y_max) ||
       item.x_min < 0 ||
       item.y_min < 0 ||
-      item.x_min > item.x_max ||
-      item.y_min > item.y_max ||
+      item.x_min >= item.x_max ||
+      item.y_min >= item.y_max ||
       item.x_max > imageSize.width ||
       item.y_max > imageSize.height
     ) {

@@ -121,6 +121,8 @@ describe("annotation editor geometry", () => {
       { ...valid, id: "nan-coordinate", x_min: Number.NaN },
       { ...valid, id: "infinite-coordinate", y_max: Infinity },
       { ...valid, id: "inverted-box", x_min: 16 },
+      { ...valid, id: "zero-width", x_max: valid.x_min },
+      { ...valid, id: "zero-height", y_max: valid.y_min },
       { ...valid, id: "off-image", x_max: 101 },
       { ...valid, id: "negative-coordinate", y_min: -1 },
     ]) {
@@ -159,6 +161,31 @@ describe("annotation editor geometry", () => {
     ).toBe(selection);
     expect(selection[0]).toBe(original);
     expect(selection[0].x_min).toBe(10);
+  });
+
+  it("refuses dense group translation with a degenerate final annotation", () => {
+    const selection = Array.from({ length: 20_000 }, (_, index) => ({
+      id: `coral-${index}`,
+      label_class_id: "swiftia",
+      x_min: 10 + (index % 100),
+      y_min: 10 + Math.floor(index / 100),
+      x_max: 12 + (index % 100),
+      y_max: 12 + Math.floor(index / 100),
+    }));
+    const first = selection[0];
+    const last = selection[selection.length - 1];
+    selection[selection.length - 1] = { ...last, y_max: last.y_min };
+
+    expect(
+      translateAnnotations(
+        selection,
+        { x: 50, y: -50 },
+        { width: 200, height: 300 },
+      ),
+    ).toBe(selection);
+    expect(selection[0]).toBe(first);
+    expect(selection[0].x_min).toBe(10);
+    expect(selection[selection.length - 1].y_max).toBe(last.y_min);
   });
 
   it("rejects invalid image dimensions or pointer deltas before changing coordinates", () => {

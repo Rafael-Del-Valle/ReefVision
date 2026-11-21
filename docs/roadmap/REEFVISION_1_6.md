@@ -1,3 +1,10 @@
+## 2026-11-21 — Reject degenerate imported boxes during dense group moves (Track D)
+
+- **Audited:** isolated 1.6 draft PR #77 and exact-head backend/frontend/native-Windows CI, existing class management/QC/typed saved Workflow Builder, prior 1.0–1.5 geometry support, and migration guard. The 1.6 group-translation guard rejected nonfinite/inverted/out-of-bounds boxes but still accepted zero-width and zero-height restored observations, unlike the existing single-box resize guard. Those invalid measurements could be translated alongside otherwise healthy coral labels.
+- **Fix:** reject any selected source box with non-positive width or height before computing or applying the group transform. Preserve the original entire selection and all source-pixel coordinates; the editor reports rejection without creating a dirty revision or autosave. Normal valid group translation, including bounds clamping, is unchanged. No new scientific workflow node is appropriate for a local editor gesture; executable typed QC graphs, units, provenance, retries and researcher review remain intact.
+- **Regressions:** direct zero-width/zero-height atomicity, 20,000-object late corrupt observation, and React move/resize/no-autosave scenarios for off-image, zero-width and zero-height imported geometry. CI must exercise the committed tests; independent locally runnable Windows GUI/MSI evidence is unavailable in this environment.
+- **HOLD:** independently reconcile 1.1/1.6 Alembic 0038, repeat full exact-head CI, representative biological and saved-workflow acceptance, genuine Windows MSI/CAB clean install/upgrade/rollback and installed GUI, then explicit owner approval. No branch blending, release, model download or research-data removal.
+
 ## 2026-11-17 — Complete QC source inventory and rule attribution (Track D)
 
 - **Audit:** isolated draft PR #77, issue #76, 1.0–1.5 overlap, already executable saved Workflow Builder QC and [exact-head CI #44171880909](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44171880909). The previous head passed frontend and Windows preservation jobs but backend stopped before pytest on one extra blank line.

@@ -920,11 +920,27 @@ describe("AnnotationEditor", () => {
     expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
   });
 
-  it("reports and rejects an invalid imported move and resize without making scientific edits dirty", async () => {
+  it.each([
+    {
+      description: "off-image",
+      xMax: session.image.width_px + 1,
+      yMax: session.annotations[0].y_max,
+    },
+    {
+      description: "zero-width",
+      xMax: session.annotations[0].x_min,
+      yMax: session.annotations[0].y_max,
+    },
+    {
+      description: "zero-height",
+      xMax: session.annotations[0].x_max,
+      yMax: session.annotations[0].y_min,
+    },
+  ])("rejects $description edits", async ({ xMax, yMax }) => {
     const corruptSession: AnnotationSession = {
       ...session,
       annotations: [
-        { ...session.annotations[0], x_max: session.image.width_px + 1 },
+        { ...session.annotations[0], x_max: xMax, y_max: yMax },
       ],
     };
     const writes: string[] = [];
@@ -970,7 +986,7 @@ describe("AnnotationEditor", () => {
     expect(screen.getByText("All changes synced")).toBeInTheDocument();
     expect(screen.getByTestId("annotation-annotation-1")).toHaveAttribute(
       "width",
-      String(session.image.width_px + 1 - session.annotations[0].x_min),
+      String(xMax - session.annotations[0].x_min),
     );
 
     const resizeHandle = annotation.parentElement?.querySelector("circle");
@@ -991,9 +1007,8 @@ describe("AnnotationEditor", () => {
     );
     expect(screen.getByText("All changes synced")).toBeInTheDocument();
     expect(writes).toHaveLength(0);
-    expect(corruptSession.annotations[0].x_max).toBe(
-      session.image.width_px + 1,
-    );
+    expect(corruptSession.annotations[0].x_max).toBe(xMax);
+    expect(corruptSession.annotations[0].y_max).toBe(yMax);
   });
 
   it("culls offscreen boxes while preserving the full object list and restores on reset", async () => {
