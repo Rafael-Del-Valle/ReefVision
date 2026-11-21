@@ -303,6 +303,15 @@ def register_workflow_trained_model(
             "pose_schema_revision": manifest.get("pose_schema_revision"),
             "pose_schema_content_hash": manifest.get("pose_schema_content_hash"),
         }
+        # A changed landmark schema is a distinct, scientist-actionable lineage
+        # failure. Detect it before the broader immutable-training guard, so
+        # registration remains fail-closed with a useful provenance diagnosis.
+        if training_payload.get("pose_schema_content_hash") != manifest.get(
+            "pose_schema_content_hash"
+        ):
+            raise ValidationError(
+                "Pose registration landmark-schema provenance does not match frozen training lineage"
+            )
         if (
             not isinstance(manifest_digest, str)
             or len(manifest_digest) != 64
