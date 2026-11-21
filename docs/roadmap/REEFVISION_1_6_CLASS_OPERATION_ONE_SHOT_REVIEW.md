@@ -30,6 +30,29 @@ changes no stored biological observations, annotations, models, provenance,
 migration schemas or workflow serialization. Existing typed standalone/saved
 QC workflows, retry semantics, human approval and offline behavior are preserved.
 
+## Incomplete preview response guard (2026-11-20)
+
+A second review of this existing UI found that a malformed or partially decoded
+API preview could enable **Run reassign** or **Run Reassign and Delete** even
+when its opaque operation ID or SHA-256 preview checksum was empty/missing.
+The backend would reject such an execution, but the interface inaccurately
+presented it as approved. An incomplete scientific reference report could also
+throw during summary rendering before the researcher could recover.
+
+Both operations now require a nonblank operation ID, a syntactically complete
+64-hex-digit checksum and all required display/review arrays. Missing arrays
+produce a visible non-executable incomplete-evidence message rather than
+rendering an incomplete inventory or crashing. Eight parameterized React
+regressions cover both actions under blank IDs, missing/malformed checksums,
+and truncated scientific reference reports. This is a fail-closed client-side
+contract; the **server's immutable preview checksum, current project scope,
+reference inventory and concurrency controls remain the authority**.
+
+No new schema, model, Workflow Builder node or science data change was needed:
+existing typed executable standalone/saved QC nodes, units, provenance, retries
+and explicit human-review gates are unaffected. This correction does not
+qualify the MSI or remove the separate release acceptance hold.
+
 ## Release hold
 
 The isolated 1.6 draft PR remains on HOLD until full exact-head lint/type,
