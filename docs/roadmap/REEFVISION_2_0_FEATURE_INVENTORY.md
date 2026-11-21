@@ -9,10 +9,10 @@ Candidate target: `2.0`
 
 | Status | Count |
 | --- | ---: |
-| blocked | 24 |
+| blocked | 27 |
 | explicitly_deferred | 4 |
-| in_progress | 12 |
-| verified | 37 |
+| in_progress | 8 |
+| verified | 38 |
 
 ## Features
 
@@ -78,10 +78,10 @@ Candidate target: `2.0`
 | 1.8 | Multispectral import, calibration, visualization, and analysis | blocked | Project assets → Import multispectral image |
 | 1.8 | Taxonomy proposals, review, and detectability evaluation | blocked | Research → Organisms & ecology → Taxonomy and detectability |
 | 1.8 | Reversible underwater image correction and model-input transforms | blocked | Annotate → Image adjustments |
-| 1.9 | Full release ancestry, migration, and exchange integration | in_progress | Draft #78 contains only a narrow pose planner repair. |
-| 1.9 | Supported OS, GPU, provider, format, and project compatibility matrix | in_progress | Help → Diagnostics and compatibility |
-| 1.9 | End-to-end detection, segmentation, pose, tracking, and scientific workflows | in_progress | Create/open project → Import → Annotate/Model → Review → Research → Export |
-| 1.9 | Large-project/video performance and restart/resume resilience | in_progress | Normal project, gallery, video, import, and job flows |
+| 1.9 | Full release ancestry, migration, and exchange integration | blocked | The validated predecessor lineages and supported generated profiles passed. The concurrent pose donor has a separate head and CI record. |
+| 1.9 | Supported OS, GPU, provider, format, and project compatibility matrix | blocked | Help → Diagnostics and compatibility |
+| 1.9 | End-to-end detection, segmentation, pose, tracking, and scientific workflows | blocked | Create/open project → Import → Annotate/Model → Review → Research → Export |
+| 1.9 | Large-project/video performance and restart/resume resilience | verified | Normal project, gallery, video, import, and job flows |
 | 2.0 | CLI, Python SDK, and headless infer/benchmark/export | in_progress | Help → Automation API / installed reefvision CLI |
 | 2.0 | Local compute resource scheduling, checkpointing, cancel, resume, and retry | in_progress | Models & AI → Jobs and resources |
 | 2.0 | Experiment registry and research package lineage | in_progress | Research → Experiments |
@@ -1514,7 +1514,7 @@ Evidence:
 ### rv19-ancestry-integration: Full release ancestry, migration, and exchange integration
 
 - Target: `1.9`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv16-lineage-reconciliation`, `rv18-multispectral`, `rv18-bioacoustics`
 - Entry point: Not user-facing
 - Workflow Builder: `not_applicable`
@@ -1522,7 +1522,7 @@ Evidence:
 
 Acceptance checks:
 
-- **in_progress** — Integrate all validated predecessor histories, preserve unknown provider/plugin metadata, and pass upgrade/downgrade/exchange/restore matrices. (`rv19-ancestry-integration-check`)
+- **verified** — Integrate all validated predecessor histories, preserve unknown provider/plugin metadata, and pass upgrade/downgrade/exchange/restore matrices. (`rv19-ancestry-integration-check`)
 - **blocked** — Upgrade the authorized profile on disposable Windows, compare IDs, source bytes, model and training links, units and review history, then restore the verified backup and reopen it with the original application. (`rv19-ancestry-integration-historical-profile`)
 
 Evidence:
@@ -1553,7 +1553,7 @@ Evidence:
 ### rv19-compatibility-matrix: Supported OS, GPU, provider, format, and project compatibility matrix
 
 - Target: `1.9`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv19-performance-resilience`, `rv15-provider-foundations`
 - Entry point: Help → Diagnostics and compatibility
 - Workflow Builder: `not_applicable`
@@ -1561,7 +1561,7 @@ Evidence:
 
 Acceptance checks:
 
-- **in_progress** — Publish exact supported configurations from fresh installed evidence and provide actionable unavailable states for unsupported combinations. (`rv19-compatibility-matrix-check`)
+- **verified** — Publish exact supported configurations from fresh installed evidence and provide actionable unavailable states for unsupported combinations. (`rv19-compatibility-matrix-check`)
 - **blocked** — Record the policy before installation, the exact signing identity and hashes of the reviewed media, installer and launch outcomes under an ordinary account, and the corresponding Code Integrity decision. (`rv19-compatibility-matrix-enforcing-device`)
 
 Evidence:
@@ -1583,7 +1583,7 @@ Evidence:
 ### rv19-end-to-end-workflows: End-to-end detection, segmentation, pose, tracking, and scientific workflows
 
 - Target: `1.9`
-- Status: `in_progress`
+- Status: `blocked`
 - Dependencies: `rv19-ancestry-integration`, `rv15-model-comparison`
 - Entry point: Create/open project → Import → Annotate/Model → Review → Research → Export
 - Workflow Builder: `required`
@@ -1591,7 +1591,7 @@ Evidence:
 
 Acceptance checks:
 
-- **in_progress** — Complete each primary workflow in the installed app and saved Workflow Builder without bypassing review or provenance gates. (`rv19-end-to-end-workflows-check`)
+- **verified** — Complete each primary workflow in the installed app and saved Workflow Builder without bypassing review or provenance gates. (`rv19-end-to-end-workflows-check`)
 - **blocked** — Use the installed coral and native ReefPose entries and saved graphs. Compare the same immutable observations to the independent references. Record exclusions, observation effort and measurement uncertainty. (`rv19-end-to-end-workflows-independent-field`)
 
 Evidence:
@@ -1638,14 +1638,14 @@ Evidence:
 ### rv19-performance-resilience: Large-project/video performance and restart/resume resilience
 
 - Target: `1.9`
-- Status: `in_progress`
+- Status: `verified`
 - Dependencies: `rv19-end-to-end-workflows`, `rv17-durable-schedules`
 - Entry point: Normal project, gallery, video, import, and job flows
 - Workflow Builder: `required`
 
 Acceptance checks:
 
-- **in_progress** — Meet declared launch/scroll/import/video budgets and recover safely from restart, cancellation, provider failure, low storage, and offline install. (`rv19-performance-resilience-check`)
+- **verified** — Meet declared launch/scroll/import/video budgets and recover safely from restart, cancellation, provider failure, low storage, and offline install. (`rv19-performance-resilience-check`)
 
 Evidence:
 

@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T12:28:26.061961+00:00",
+  "updated_utc": "2026-11-21T13:27:35.883602+00:00",
   "candidate_pr": 152,
   "integrated_source": "272ee64e929bdfd2ebbf5e1f912221862ec5f9d2",
   "selected_qualification": "workflow_cancellation",
@@ -1966,6 +1966,33 @@
       "msi": "5d1ee924f3aeb09dd0b6e02d438ede8cc8dcec23f63f71092cb355cc895440ce",
       "cabinets": 6,
       "backup_files": 112
+    },
+    "concurrent_drafts_before_2_0": {
+      "file": "1.9/checkpoints/272ee64e9/source/checks/concurrent-drafts-before-2.0.json",
+      "sha256": "6b9b2e73558f8ac29678ebcc3a44c5cd2bccc4bd61f3f39de707b1b9d85db151"
+    },
+    "technical_boundary": {
+      "source": "272ee64e929bdfd2ebbf5e1f912221862ec5f9d2",
+      "version": "1.9",
+      "windows_backend": {
+        "file": "1.9/checkpoints/272ee64e9/full-windows-backend/verified-summary.json",
+        "sha256": "b303224370121e4f3bf031bfce8a851ed96a4e5312ef23897e4a259497a011cc",
+        "outcomes": {
+          "passed": 6093,
+          "skipped": 12
+        },
+        "distinct": 6105
+      },
+      "native_windows": {
+        "file": "1.9/checkpoints/272ee64e9/local-production/verified-workflows.json",
+        "sha256": "e83181ba7cab41e3efec57d202c84097921621206f27553ac7cb8a39825ddfe8"
+      },
+      "status": "Engineering verified on generated studies, prior registered installations and the current native package. Historical-profile, independent field and enforcing signed-device acceptance remain open.",
+      "official_build": 44902072714,
+      "receipt": {
+        "file": "1.9/checkpoints/272ee64e9/engineering-qualification.json",
+        "sha256": "9f1bda0fa9440a9502e1fccfa789598986d0a2864d048ff922d8d4a835cab841"
+      }
     }
   },
   "registered_predecessor_media": {
