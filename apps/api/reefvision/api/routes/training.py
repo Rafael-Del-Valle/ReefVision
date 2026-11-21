@@ -279,9 +279,7 @@ def _safe_terminal_log_text(payload: bytes) -> str:
         for offset, char in enumerate(record):
             codepoint = ord(char)
             invisible_unicode = unicodedata.category(char) in {"Cf", "Zl", "Zp"}
-            stripped_terminal_byte = (
-                (codepoint < 32 and char != "\t") or 127 <= codepoint <= 159
-            )
+            stripped_terminal_byte = (codepoint < 32 and char != "\t") or 127 <= codepoint <= 159
             if not invisible_unicode and not stripped_terminal_byte:
                 continue
             before = record[offset - 1 : offset]
