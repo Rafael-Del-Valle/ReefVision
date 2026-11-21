@@ -271,6 +271,39 @@ describe("dense object-browser window", () => {
     expect(allMasks).toHaveLength(300);
   });
 
+  it("bounds filtered-record reads when many stale selected IDs precede valid ones", () => {
+    const source = Array.from({ length: 5_000 }, (_, index) => ({
+      id: `box-${index}`,
+    }));
+    let indexedReads = 0;
+    const annotations = new Proxy(source, {
+      get(target, property, receiver) {
+        if (typeof property === "string" && /^\\d+$/.test(property)) {
+          indexedReads += 1;
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const selectedIds = [
+      "box-4999",
+      ...Array.from({ length: 5_000 }, (_, index) => `stale-${index}`),
+    ];
+    const rows = boundedDenseObjectRows(
+      annotations,
+      [],
+      200,
+      selectedIds,
+      [],
+    );
+    expect(rows).toHaveLength(201);
+    expect(rows[200].position).toBe(4_999);
+    // Prefix, one candidate scan and one exceptional-path index build.
+    // A repeated full scan for each 200 stale IDs exceeds this bound.
+    expect(indexedReads).toBeLessThanOrEqual(2 * source.length + 200);
+    expect(selectedIds).toHaveLength(5_001);
+    expect(source).toHaveLength(5_000);
+  });
+
   it("fills the bounded 200-pin budget with matching rows, not stale IDs", () => {
     const annotations = Array.from({ length: 1_000 }, (_, index) => ({
       id: `box-${index}`,
