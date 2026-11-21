@@ -55,7 +55,7 @@ async function runSpatialWorkflow(
   const scaleEvidence = "Synthetic scale bar with known reference length";
 
   await page.addInitScript(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.8.0", "true"),
+    localStorage.setItem("reefvision.onboarding.dismissed.1.9.0", "true"),
   );
   const openWorkflow = async () => {
     await page.goto(web);
