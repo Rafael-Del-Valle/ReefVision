@@ -322,7 +322,7 @@ def _safe_extract_zip(
             _canonical_pose_export_schema(header.decode("utf-8"))
         except UnicodeDecodeError as exc:
             raise ValidationError("Ultralytics pose export has noncanonical data.yaml") from exc
-        _preflight_pose_zip_frame_inventory(archive)
+        _preflight_pose_zip_labels(archive)
 
         # Invalid or ambiguous archives must not leave even an empty run
         # directory behind: that would block a corrected frozen export retry.
@@ -373,6 +373,79 @@ def _safe_extract_zip(
                 )
 
 
+def _verify_pose_label_rows(
+    rows: list[str], *, class_count: int, keypoint_count: int
+) -> None:
+    """Validate frozen pose label truth before and after materialization."""
+
+    if not rows:
+        raise ValidationError("Ultralytics pose export contains an invalid label class index")
+    for row in rows:
+        tokens = row.split()
+        if (
+            not tokens
+            or re.fullmatch(r"(0|[1-9][0-9]*)", tokens[0]) is None
+            or int(tokens[0]) >= class_count
+        ):
+            raise ValidationError(
+                "Ultralytics pose export contains an invalid label class index"
+            )
+
+        # Each reviewed pose must have class, normalized box geometry,
+        # and exactly three values for every frozen schema landmark.
+        if len(tokens) != 5 + 3 * keypoint_count:
+            raise ValidationError("Ultralytics pose export has invalid landmark layout")
+        try:
+            numbers = [float(value) for value in tokens[1:]]
+        except ValueError as exc:
+            raise ValidationError(
+                "Ultralytics pose export has invalid label coordinates"
+            ) from exc
+        if (
+            not all(math.isfinite(value) for value in numbers)
+            or not all(0 <= value <= 1 for value in numbers[:4])
+            or numbers[2] <= 0
+            or numbers[3] <= 0
+            # A normalized center and size can individually be in [0, 1]
+            # while the reviewed box still extends beyond the frame.
+            or numbers[0] - numbers[2] / 2 < -1e-6
+            or numbers[0] + numbers[2] / 2 > 1 + 1e-6
+            or numbers[1] - numbers[3] / 2 < -1e-6
+            or numbers[1] + numbers[3] / 2 > 1 + 1e-6
+            or any(
+                not (
+                    0 <= numbers[index] <= 1
+                    and 0 <= numbers[index + 1] <= 1
+                    and numbers[index + 2] in (0, 1, 2)
+                )
+                for index in range(4, len(numbers), 3)
+            )
+        ):
+            raise ValidationError("Ultralytics pose export has invalid label coordinates")
+
+
+def _preflight_pose_zip_labels(archive: zipfile.ZipFile) -> None:
+    """Reject invalid frozen labels before claiming the immutable run directory."""
+
+    try:
+        header = archive.read("data.yaml").decode("utf-8")
+    except KeyError as exc:
+        raise ValidationError("Ultralytics pose export is missing data.yaml") from exc
+    except UnicodeDecodeError as exc:
+        raise ValidationError("Ultralytics pose export has noncanonical data.yaml") from exc
+    class_count, keypoint_count = _canonical_pose_export_schema(header)
+    _preflight_pose_zip_frame_inventory(archive)
+    for member in archive.infolist():
+        member_name = member.filename.replace("\\", "/")
+        if member.is_dir() or not member_name.startswith("labels/train/"):
+            continue
+        try:
+            rows = archive.read(member).decode("utf-8").splitlines()
+        except UnicodeDecodeError as exc:
+            raise ValidationError("Ultralytics pose export has invalid label coordinates") from exc
+        _verify_pose_label_rows(rows, class_count=class_count, keypoint_count=keypoint_count)
+
+
 def _verify_pose_export_frame_pairs(
     source_root: Path,
     *,
@@ -400,51 +473,11 @@ def _verify_pose_export_frame_pairs(
     # misinterpreted or fail only after an expensive offline GPU launch.
     # Check both frozen training truth and independently reviewed validation.
     for label_path in label_files:
-        rows = label_path.read_text(encoding="utf-8").splitlines()
-        if not rows:
-            raise ValidationError("Ultralytics pose export contains an invalid label class index")
-        for row in rows:
-            tokens = row.split()
-            if (
-                not tokens
-                or re.fullmatch(r"(0|[1-9][0-9]*)", tokens[0]) is None
-                or int(tokens[0]) >= class_count
-            ):
-                raise ValidationError(
-                    "Ultralytics pose export contains an invalid label class index"
-                )
-
-            # Each reviewed pose must have class, normalized box geometry,
-            # and exactly three values for every frozen schema landmark.
-            if len(tokens) != 5 + 3 * keypoint_count:
-                raise ValidationError("Ultralytics pose export has invalid landmark layout")
-            try:
-                numbers = [float(value) for value in tokens[1:]]
-            except ValueError as exc:
-                raise ValidationError(
-                    "Ultralytics pose export has invalid label coordinates"
-                ) from exc
-            if (
-                not all(math.isfinite(value) for value in numbers)
-                or not all(0 <= value <= 1 for value in numbers[:4])
-                or numbers[2] <= 0
-                or numbers[3] <= 0
-                # A normalized center and size can individually be in [0, 1]
-                # while the reviewed box still extends beyond the frame.
-                or numbers[0] - numbers[2] / 2 < -1e-6
-                or numbers[0] + numbers[2] / 2 > 1 + 1e-6
-                or numbers[1] - numbers[3] / 2 < -1e-6
-                or numbers[1] + numbers[3] / 2 > 1 + 1e-6
-                or any(
-                    not (
-                        0 <= numbers[index] <= 1
-                        and 0 <= numbers[index + 1] <= 1
-                        and numbers[index + 2] in (0, 1, 2)
-                    )
-                    for index in range(4, len(numbers), 3)
-                )
-            ):
-                raise ValidationError("Ultralytics pose export has invalid label coordinates")
+        _verify_pose_label_rows(
+            label_path.read_text(encoding="utf-8").splitlines(),
+            class_count=class_count,
+            keypoint_count=keypoint_count,
+        )
 
 
 def _reject_overlapping_pose_validation_frames(
@@ -688,8 +721,8 @@ def materialize_pose_training_exports(
                     )
                 # Do not create a training directory if the holdout has
                 # incomplete scientist-reviewed frame pairs.
-                _preflight_pose_zip_frame_inventory(training_archive)
-                _preflight_pose_zip_frame_inventory(validation_archive)
+                _preflight_pose_zip_labels(training_archive)
+                _preflight_pose_zip_labels(validation_archive)
         except KeyError as exc:
             raise ValidationError("Ultralytics pose export is missing data.yaml") from exc
         except (zipfile.BadZipFile, EOFError, zlib.error) as exc:
