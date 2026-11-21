@@ -877,9 +877,7 @@ def test_16bit_tiff_display_preserves_raw_intensity(
 
 
 @pytest.mark.parametrize("parser_stage", ["top_level", "nested_ifd"])
-@pytest.mark.parametrize(
-    "error_type", [KeyError, IndexError, OverflowError, RecursionError]
-)
+@pytest.mark.parametrize("error_type", [KeyError, IndexError, OverflowError, RecursionError])
 def test_decodable_camera_jpeg_with_broken_exif_parser_preserves_original(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

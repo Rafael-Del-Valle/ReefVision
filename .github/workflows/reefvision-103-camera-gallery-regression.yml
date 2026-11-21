@@ -89,6 +89,16 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
           python -m pip install opencv-python-headless boto3
+      - name: Enforce backend Ruff formatting on Windows camera regression tests
+        shell: pwsh
+        run: |
+          # Catch source-formatting failures on the same SHA as the camera
+          # acceptance suite; this does not touch images or training jobs.
+          $cameraTests = @(Get-ChildItem -LiteralPath apps/api/reefvision/tests -Filter 'test_camera_*_103.py' -File |
+            Sort-Object Name | ForEach-Object { $_.FullName })
+          if ($cameraTests.Count -eq 0) { throw 'No camera regression tests found for Ruff.' }
+          python -m ruff format --check @cameraTests
+          if ($LASTEXITCODE -ne 0) { throw 'Camera regression tests fail backend Ruff formatting.' }
       - name: Verify MSI/CAB artifact, upgrade, and offline-policy regression guards
         shell: pwsh
         run: python -m pytest apps/api/reefvision/tests/test_windows_installer_preflight_103.py -q
