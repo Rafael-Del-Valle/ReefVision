@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
-import { getModelHubBootstrap, type Project } from "../../api/client";
+import { getModelHubBootstrap, retryJob, type Project } from "../../api/client";
 import { getApiBaseUrl } from "../../runtime";
 import { getPoseTrainingDatasets } from "../video/poseActiveLearningApi";
 import {
@@ -410,6 +410,24 @@ export function WorkflowGraphWorkspace({
       void runDetailQuery.refetch();
     },
   });
+  const retryMutation = useMutation({
+    mutationFn: (request: {
+      projectId: string;
+      runId: string;
+      jobId: string;
+    }) => retryJob(request.jobId),
+    onSettled: async (_job, _error, { projectId, runId }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["workflow-runs", projectId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["workflow-run", projectId, runId],
+          refetchType: "all",
+        }),
+      ]);
+    },
+  });
 
   const mutationError =
     validationMutation.error ??
@@ -420,6 +438,11 @@ export function WorkflowGraphWorkspace({
     resumeReviewMutation.error ??
     cancelMutation.error;
   const selectedRun = runDetailQuery.data?.run;
+  const retryJobId =
+    selectedRun?.status === "failed" ? selectedRun.job_id : null;
+  const retryIsForSelectedRun =
+    retryMutation.variables?.projectId === project.id &&
+    retryMutation.variables.runId === selectedRun?.id;
   useEffect(() => {
     if (selectedRun?.status === "succeeded") {
       void queryClient.invalidateQueries({
@@ -873,6 +896,35 @@ export function WorkflowGraphWorkspace({
               )}
               {selectedRun.error_message && (
                 <p className="form-error">{selectedRun.error_message}</p>
+              )}
+              {retryJobId && (
+                <div>
+                  <p className="muted-copy">
+                    Resolve the reported issue before retrying. Completed steps
+                    and their artifacts are reused.
+                  </p>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={retryMutation.isPending}
+                    onClick={() =>
+                      retryMutation.mutate({
+                        projectId: project.id,
+                        runId: selectedRun.id,
+                        jobId: retryJobId,
+                      })
+                    }
+                  >
+                    {retryIsForSelectedRun && retryMutation.isPending
+                      ? "Retrying workflow…"
+                      : "Retry failed workflow"}
+                  </button>
+                </div>
+              )}
+              {retryIsForSelectedRun && retryMutation.error && (
+                <p className="form-error" role="alert">
+                  {retryMutation.error.message}
+                </p>
               )}
               {(selectedProvenanceSha || selectedProvenanceManifest) && (
                 <div className="workflow-provenance-summary">
