@@ -543,6 +543,7 @@ def measure_point_cloud_preview(
     axis_sampling_gaps: dict[str, dict[str, Any]] = {}
     sampling_gap_nominal_underflow = False
     sampling_gap_interval_unresolved = False
+    multiple_tied_largest_axis_gaps = False
     for axis, label in enumerate(("x", "y", "z")):
         level_source_rows = Counter(vertex[axis] for vertex in vertices)
         level_distinct_loci = Counter(vertex[axis] for vertex in coordinate_multiplicities)
@@ -551,6 +552,7 @@ def measure_point_cloud_preview(
             "distinct_source_coordinate_levels": len(levels),
             "source_endpoint_values": None,
             "gap_endpoint_support": None,
+            "equally_largest_adjacent_gap_count": 0,
             "largest_adjacent_source_gap_units": None,
             "fraction_of_source_axis_span": None,
             "calibrated_gap_m": None,
@@ -565,6 +567,16 @@ def measure_point_cloud_preview(
             left = levels[largest_index]
             right = levels[largest_index + 1]
             gap = right - left
+            # Report exact source-coordinate ties instead of implying that
+            # the representative lower-coordinate interval is the only one.
+            # This does not imply empty 3D space or biological tissue loss.
+            tied_count = sum(
+                levels[index + 1] - levels[index] == gap
+                for index in range(len(levels) - 1)
+            )
+            gap_details["equally_largest_adjacent_gap_count"] = tied_count
+            if tied_count > 1:
+                multiple_tied_largest_axis_gaps = True
             gap_details["source_endpoint_values"] = [left, right]
             # Count raw acquisition rows separately from distinct observed
             # XYZ loci. Neither is an independent biological replicate nor
@@ -807,6 +819,11 @@ def measure_point_cloud_preview(
                 else []
             )
             + (["preview_omits_axis_extrema"] if preview_omitted_axis_extrema else [])
+            + (
+                ["axis_sampling_multiple_equally_largest_gaps"]
+                if multiple_tied_largest_axis_gaps
+                else []
+            )
             + (
                 ["axis_sampling_gap_below_numeric_resolution"]
                 if sampling_gap_nominal_underflow
