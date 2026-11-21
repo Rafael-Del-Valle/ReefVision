@@ -659,13 +659,14 @@ def materialize_pose_training_exports(
     validation_mode = "none"
 
     if validation_content is not None:
-        # The staging location was checked before extracting any training files.
+        # Another worker may claim this stage after the initial occupancy check.
+        # Only enter the cleanup scope after extraction claims the stage, or a
+        # failed exclusive mkdir could delete that other worker's reviewed data.
+        _safe_extract_zip(
+            validation_content,
+            validation_stage,
+        )
         try:
-            _safe_extract_zip(
-                validation_content,
-                validation_stage,
-            )
-
             # A separate frozen split must use exactly the training export's
             # landmark ordering and class map. Otherwise Ultralytics silently
             # interprets validation labels using the wrong scientific schema.
