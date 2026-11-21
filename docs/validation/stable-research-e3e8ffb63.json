@@ -771,6 +771,179 @@
     "receipt": {
       "file": "1.8/checkpoints/c572964dc/source/class-review/class-review-qualification.json",
       "sha256": "511528e732672892b5484ba4b0743359fd127fee8c2c49090ab60e77e182ae79"
+    },
+    "followup": {
+      "source": "89a6fffee3b6189d97b2faa41372db583af7cedb",
+      "draft": 120,
+      "normal_browser_checks": 4,
+      "component_tests": 28,
+      "full_frontend_tests": 948,
+      "full_frontend_files": 140,
+      "prior_three_cases": {
+        "file": "1.8/checkpoints/89a6fffee/source/class-review/prior-class-review-c572964dc.json",
+        "sha256": "5ba2b45d09baad4266bfef4d24e488dccf78ce29fcdb371ec87a9a8b02ec5c4b"
+      },
+      "ordinary_recovery": {
+        "file": "1.8/checkpoints/89a6fffee/source/class-review/independent-corrected-review.json",
+        "sha256": "627c236b43867db31031a5ffa9d70cbe0154227420c52fb1ddc6693dc868f803"
+      },
+      "full_frontend": {
+        "file": "1.8/checkpoints/89a6fffee/source/class-review/pr77-full-ui-89a6fffee.json",
+        "sha256": "7f29644f34f27278743549af1de9532056b8217e3a0205eb1ad1f417ce28cce1"
+      },
+      "result": "On three incomplete preview cases the page stayed mounted, Run stayed disabled and the reviewed annotation stayed at revision 2. A fresh complete preview displayed the actual record ID. Only confirmation sent the single accepted request, advancing the annotation to revision 3. The frozen export and protected records reopened intact."
+    }
+  },
+  "original_hosted_package": {
+    "product": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8",
+    "workflow": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44853957856",
+    "build_job": 136691608332,
+    "msi_sha256": "78d52066848afc6aeac975765359ba13cd3d0e2e8b79ef1b90307eecd03c35ed",
+    "external_cabs": 6,
+    "files": {
+      "ReefVision_1.8.0_x64_en-US.msi": "78d52066848afc6aeac975765359ba13cd3d0e2e8b79ef1b90307eecd03c35ed",
+      "build-provenance.json": "5f9bf934e2fe442ec7c9da5817ddd7fe7bb03ad30035708429d8d1f70b1361f6",
+      "rv1.cab": "39f00a5c2f38acbde8cbd4f4a3bfe11ea59475b5bdbf49c29367ebd76c2aaec1",
+      "rv2.cab": "dd2a0ca112eaf7835dd83aeb416c148a0b7dc3386e796298a264d668dfa56c45",
+      "rv3.cab": "6c7925a6e1ccb5c7ebc225a7f503c01c9ec4034a26d56499d9d2959956bf45a5",
+      "rv4.cab": "21497ce7d33712dea95fdd0c722f5ca6883e65416399434abdc46798d2f4cad0",
+      "rv5.cab": "32bcf3e249e99e88401087e8e86da87b5c32b1c2aaf695546ff2e6bac752a65f",
+      "rv6.cab": "8a0afba11b3b0d02c27d2076218042685c2492c5575e3ff034cda79de216256e"
+    },
+    "msi_cab_bytes": 2973028189,
+    "checksum_manifest": {
+      "file": "1.8/checkpoints/e3e8ffb63/official/installer/SHA256SUMS.txt",
+      "sha256": "162a1dfa8c5606f179df03b42987eac1297ba215e16fd059f79bf9439636989b"
+    },
+    "desktop_sha256": "0b0bac68d35827aa1d2956ddf3f119cd3f525fbe05862ca18b546d07eb94cf30",
+    "backend_sha256": "a0321796d4291bad26d4c33a0e7e04d2b3208c4e47835de122c2903165585375",
+    "certificate": {
+      "file": "1.8/checkpoints/e3e8ffb63/official/independent-package-validation.json",
+      "sha256": "f513a990e84b23c2d40a11c89233dca1b25fcef05404b11ea886afe676ae22a3"
+    },
+    "archive_audit": {
+      "file": "1.8/checkpoints/e3e8ffb63/official/payload-audit.json",
+      "sha256": "1d80414c0dcb8bee60052bab5e190ccc994192940f96e931ec47a775a9e3eec1"
+    },
+    "signature_and_policy": {
+      "file": "1.8/checkpoints/e3e8ffb63/official/smart-app-control.json",
+      "sha256": "255fea0c1421b1fc6fdc07db18aa631e605362444e9a06030ea65d372072e80e"
+    },
+    "forced_original_image_geometry": {
+      "file": "1.8/checkpoints/e3e8ffb63/official/evidence/first-use-geometry/evidence-index.json",
+      "sha256": "b3367e1003173b34ee829a18c4fee41f2c82ee40f3ac18e70ac958d7033e7c9e"
+    },
+    "saved_source_box": {
+      "x_min": 20.00333835767664,
+      "y_min": 15.001663871433424,
+      "x_max": 55.004633364470116,
+      "y_max": 40.00259001358695
+    },
+    "prior_1_7_projects": 5,
+    "preserved_project_files": 21,
+    "prior_1_7_rollback": {
+      "backup_id": "817c0122-f10d-480f-9048-23472e85b833",
+      "manifest_sha256": "4eb8a7ea93e98f4c1b151ed45f7897d6b38ebbcaa9e9172f57f8006326e3cadc",
+      "restore_job_id": "faac80b4-480d-483e-bfe6-bc05496efb15",
+      "verified_members": 26,
+      "verified_bytes": 20378834,
+      "restored_database_sha256": "6bc931d9f708d35bf0e6f7ca1e6eef21a6cb01def0d74f387d08343df9a35ea4",
+      "original_predecessor_read_and_write": true
+    },
+    "prior_1_7_receipt": {
+      "file": "1.8/checkpoints/e3e8ffb63/official/evidence/rich-direct-rollback/rich-upgrade-and-rollback.json",
+      "sha256": "c5ab70b87512a6d81ef21545a9292b88d0981f7b970bb2f564786909d976a0b4"
+    },
+    "registered_clean_job": 136703618659,
+    "offline_run": 44857726714,
+    "offline_draft": 121,
+    "physical-rtx3090": {
+      "file": "1.8/checkpoints/e3e8ffb63/official/evidence/physical-rtx3090/evidence-index.json",
+      "sha256": "848a6e535241e12807934f80f96ec5431937b3260adb98b99f30667b0e2630d0"
+    },
+    "reviewed_detector_runs": [
+      {
+        "id": "9993120e-e720-435c-86b0-68fe16c3cb5a",
+        "digest": "d3733d459e2462f7bfaa0756a99f80465092bbe31f9f07af9870d08913245069",
+        "child_job_id": "1184099a-dc69-4b5f-ad07-1bc5d77a0e3f",
+        "matched_proposals": 9
+      },
+      {
+        "id": "873ddd74-c386-456c-afbe-e3c701274cff",
+        "digest": "d3733d459e2462f7bfaa0756a99f80465092bbe31f9f07af9870d08913245069",
+        "child_job_id": "f3851063-a782-447e-8a55-afcc54064616",
+        "matched_proposals": 9
+      }
+    ],
+    "physical-rtx3090-segmentation": {
+      "file": "1.8/checkpoints/e3e8ffb63/official/evidence/physical-rtx3090-segmentation/evidence-index.json",
+      "sha256": "24bab26bf3a00949198aaa6999f115d2c6e76afdb57f2f8e1fec7d7da6b6e26d"
+    },
+    "mask_comparison": {
+      "frozen_images": 6,
+      "reference_masks": 12,
+      "group_balanced_metrics": [
+        {
+          "absolute_instance_count_error": 0.0,
+          "false_instances": 2.0,
+          "mask_dice": 0.07870076935175147,
+          "mask_iou": 0.041087962962962965,
+          "matched_instance_mask_iou": null,
+          "missed_instances": 2.0
+        },
+        {
+          "absolute_instance_count_error": 5.0,
+          "false_instances": 7.0,
+          "mask_dice": 0.07871713163122783,
+          "mask_iou": 0.041096881557050866,
+          "matched_instance_mask_iou": null,
+          "missed_instances": 2.0
+        }
+      ],
+      "polygon_counts": [
+        12,
+        42
+      ],
+      "gpu_samples": 25,
+      "saved_runs": [
+        {
+          "artifact_sha256": "f8b0d6dcd99178d009a6410d7f060168d956951dbd45c1913f14727bba7b1195",
+          "report_sha256": "5d25bd3762413bd17986bc68e98ad6916d5dc677771242de0c8e0f90b7be1e73",
+          "run": "cf6c4cc1-2313-41cb-8a4c-20ead63a91f5",
+          "workflow_job": "523da18b-1244-461d-9d92-19302eca9e8c"
+        },
+        {
+          "artifact_sha256": "f8b0d6dcd99178d009a6410d7f060168d956951dbd45c1913f14727bba7b1195",
+          "report_sha256": "5d25bd3762413bd17986bc68e98ad6916d5dc677771242de0c8e0f90b7be1e73",
+          "run": "a8547293-669c-40f6-8ff7-bdd2d2fa0098",
+          "workflow_job": "1f74faa3-92d0-4e46-b5fe-906d19712997"
+        }
+      ]
+    },
+    "recovered_five_graphs": {
+      "surface": "Original GitHub Windows MSI frozen sidecar, normal packaged backup and Workflow API, isolated CPU-only loopback; no GUI launch.",
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/official/evidence/managed-recovery-replays/managed-recovery-replays-verified.json",
+        "sha256": "df4fb67235560363ac8f1b7e3f94698830015ff6ec75f391dcd328598ae6de64"
+      },
+      "six_projects": 6,
+      "managed_backup": {
+        "backup_id": "17cd6f82-a5c8-457a-b8b7-696a09dab223",
+        "backup_job_id": "3b7cdf26-e681-4723-ba7b-2bfa6cf1a99d",
+        "restore_job_id": "1ab16d42-8ccd-4a0d-af75-f2c994aec5e6",
+        "manifest_sha256": "0773139c97d35aeddd827d50b5213557147cd899eef1ae3124a083a7416d23b6",
+        "files": 213,
+        "bytes": 60605815,
+        "restored_database_sha256": "cde83bb54a1d8082394ecc855b34ccf33c7ee68012315520db34ffb315051571",
+        "observed_wall_seconds": 10.281
+      },
+      "checked_table_fingerprints": 132,
+      "observed_result": "Exact canonical graph and artifact SHA-256 across old and each new replay; no tolerance used.",
+      "after_restart": {
+        "database_sha256_before_and_after": "fba2b339402b970077c8df5a271591d005201c4c98c4703cdd57c9fd03f5ba24",
+        "run_readback_count": 10
+      },
+      "backup_scope": "The default backup excluded 16 derived detector export files. All 206 non-export managed model and project files matched. The five scientific reports remained available through their normal export paths."
     }
   }
 }

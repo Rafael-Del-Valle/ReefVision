@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T02:42:50Z`
+Updated: `2026-11-21T02:54:36Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1142,6 +1142,7 @@ Evidence:
 - `browser`: The integrated Classes journey withdrew the other review after reassignment, preserved the completed receipt during a new preview and retained source pixels and frozen exports. Two corresponding unit cases failed on the predecessor, and all ten corrected panel cases passed. — `docs/validation/reviewed-operations-dd3c7207e.json` (`rv16-class-management-single-use-dd3c7207e`)
 - `browser`: The corrected 1.8 local MSI's extracted ordinary WebView2 consumed both preview approvals, preserved the earlier class export and retained original media and annotation, mask and label evidence. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv16-class-management-native-class-provenance-9cde9e6e7`)
 - `browser`: On the separately reviewed source c572964dc, ordinary Classes navigation detected a truncated real preview, kept Run disabled, accepted the fresh complete response, preserved the frozen export and reopened the reviewed box. The exact source passed all 942 frontend tests. Draft #120 contains the correction. — `docs/validation/stable-research-e3e8ffb63.json` (`rv16-class-management-preview-recovery-c572964dc`)
+- `browser`: Independent production-browser checks on #120 kept the class page open and the generated annotation at revision 2 with a missing affected ID, absent compatibility row, or unusable token. Each fresh preview recovered, and one explicit confirmation advanced to revision 3. The complete 948-test frontend suite passed. — `docs/validation/stable-research-e3e8ffb63.json` (`rv16-class-management-complete-record-review-89a6fffee`)
 - `windows_installed`: On the original 1.6 MSI under an ordinary Windows account, the class lifecycle test passed. The researcher reviewed the reassignment, reopened the project and verified the earlier frozen export. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44768324452/job/136420579045` (`rv16-class-management-original-msi-used-classes`)
 - `windows_installed`: The corrected original MSI passed the standard-user class lifecycle, including explicit reassignment after annotations exist and reopening the frozen export. — `docs/validation/installed-workflows-a580042e8.json` (`rv16-class-management-original-a580042e8`)
 - `physical_hardware`: In native Classes, confirmed reassignment advanced the live annotation from revision 2 to 3. Mask and image-classification references remained protected. The frozen dataset manifest and YOLO mapping survived reopening. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-class-management-physical-83b0`)
