@@ -631,7 +631,8 @@ try {
     $initialInstaller = if ($PreviousInstallerPath -and -not $SkipUpgrade) { $PreviousInstallerPath } else { $InstallerPath }
     $exitCode = Run-Msi -Action Install -PackageOrProduct $initialInstaller -LogName 'install.log' -TargetRoot $InstallRoot
     if (-not (Test-Path (Join-Path $InstallRoot 'ReefVision.exe'))) { throw 'Installed ReefVision.exe is missing.' }
-    if (-not (Test-Path (Join-Path $InstallRoot 'backend\reefvision-api\reefvision-api.exe'))) { throw 'Installed reefvision-api.exe is missing.' }
+    $installedSidecarPath = Join-Path $InstallRoot 'backend/reefvision-api/reefvision-api.exe'
+    if (-not (Test-Path -LiteralPath $installedSidecarPath -PathType Leaf)) { throw 'Installed reefvision-api.exe is missing.' }
     $report.install = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "msiexec exit code $exitCode; desktop and sidecar present"
     $shortcutCandidates = @(
         (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'ReefVision.lnk'),
@@ -692,7 +693,7 @@ try {
                             NodePath=$SpatialWorkflowNodePath; RepositoryRoot=$RepositoryRoot; EvidenceRoot=$EvidenceRoot
                             Profile=$SpatialDataRoot; BackendPort=$spatialPort; DebugPort=$debugPort; DesktopProcessId=$spatialDesktop.Id
                             BrowserSid=$browserSid; BrowserArtifactsDirectory=$browserArtifacts
-                            BackendExecutable=(Join-Path $InstallRoot 'backendeefvision-apieefvision-api.exe')
+                            BackendExecutable=$installedSidecarPath
                             Version=$ProductVersion; Revision=$ExpectedSchemaRevision
                         }
                         $tools = Invoke-ReefVisionInstalledResearchToolsAcceptance @researchToolsArgs
@@ -723,7 +724,7 @@ try {
                             -RepositoryRoot $RepositoryRoot -EvidenceRoot $EvidenceRoot -Profile $SpatialDataRoot `
                             -BackendPort $spatialPort -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id `
                             -BrowserSid $browserSid -BrowserArtifactsDirectory $browserArtifacts `
-                            -BackendExecutable (Join-Path $InstallRoot 'backend\reefvision-api\reefvision-api.exe') `
+                            -BackendExecutable $installedSidecarPath `
                             -Version $ProductVersion -Revision $ExpectedSchemaRevision
                         $monitoring | ConvertTo-Json -Depth 32 | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'monitoring-workflow-evidence.json')
                         $report.monitoring_workflow = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Two installed WebView2 journeys verified recorded recovery, scheduled simulation, alert review, project-local comparison, export and saved workflow replays.'
