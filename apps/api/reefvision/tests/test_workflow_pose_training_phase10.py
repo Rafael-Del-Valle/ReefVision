@@ -984,12 +984,24 @@ def test_pose_materialization_rejects_overridden_frozen_dataset_paths(
                 content += extra_yaml.encode("utf-8")
             modified.writestr(entry, content)
 
+    destination = tmp_path / "pose-dataset"
     with pytest.raises(ValidationError, match=expected_error):
         materialize_pose_training_exports(
             training_content=stream.getvalue(),
             validation_content=None,
-            destination=tmp_path / "pose-dataset",
+            destination=destination,
         )
+
+    # Invalid frozen YAML must not occupy the immutable run directory or
+    # prevent the saved workflow from retrying with the correct reviewed export.
+    assert not destination.exists()
+    corrected = materialize_pose_training_exports(
+        training_content=_pose_export_zip(b"reviewed"),
+        validation_content=None,
+        destination=destination,
+    )
+    assert corrected["training_image_count"] == 1
+    assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed"
 
 
 @pytest.mark.parametrize(
