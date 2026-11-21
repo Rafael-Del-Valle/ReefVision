@@ -92,6 +92,8 @@ jobs:
           $path = $proof[0].FullName
           $report = Get-Content -LiteralPath (Join-Path $path 'report.json') -Raw | ConvertFrom-Json
           $guided = Get-Content -LiteralPath (Join-Path $path 'guided-pose-evidence.json') -Raw | ConvertFrom-Json
+          $identity = Get-Content -LiteralPath (Join-Path $path 'spatial-standard-user-identity.log') -Raw | ConvertFrom-Json
+          $cleanup = Get-Content -LiteralPath (Join-Path $path 'spatial-standard-user-cleanup.log') -Raw | ConvertFrom-Json
           $compact = Join-Path $path 'guided-pose-workflow.json'
           $transport = Get-Content -LiteralPath "$env:PROOF_ROOT/evidence/verified-transport.json" -Raw | ConvertFrom-Json
           foreach ($stage in 'install','first_launch','frontend_backend_connectivity','webview2','guided_pose_workflow','project_persistence','restart','uninstall','data_retention') {
@@ -102,6 +104,9 @@ jobs:
               $guided.original_msi_sha256 -cne $transport.original_msi_sha256 -or
               $guided.source_commit -cne $env:SOURCE_COMMIT -or $guided.status -cne 'PASS' -or
               $guided.backend.integrity -ne 8192 -or -not $guided.backend.exact_profile_verified -or
+              $identity.desktop_integrity -ne 8192 -or $identity.driver_integrity -le $identity.desktop_integrity -or
+              $identity.desktop_pid -ne $guided.desktop_pid -or $identity.desktop_owner_sid -cne $guided.browser_sid -or
+              -not ($cleanup.desktop_closed -and $cleanup.launch_process_closed -and $cleanup.profile_removed -and $cleanup.account_removed) -or
               $guided.completed_workflow_runs -ne 2 -or $guided.completed_human_gates -ne 4 -or
               (Get-FileHash -LiteralPath $compact -Algorithm SHA256).Hash -ine $guided.workflow_receipt_sha256 -or
               -not (Test-Path -LiteralPath $guidedDatabase -PathType Leaf)) {
@@ -122,8 +127,7 @@ jobs:
             source/.artifacts/windows-clean-acceptance-*/report.json
             source/.artifacts/windows-clean-acceptance-*/guided-pose-*.json
             source/.artifacts/windows-clean-acceptance-*/guided-pose-*.log
-            source/.artifacts/windows-clean-acceptance-*/spatial-credential-launch.json
-            source/.artifacts/windows-clean-acceptance-*/spatial-credential-cleanup.log
+            source/.artifacts/windows-clean-acceptance-*/spatial-standard-user-*.log
             source/.artifacts/windows-clean-acceptance-*/spatial.api.log.tail.log
             source/.artifacts/windows-clean-acceptance-*/spatial.backend.log.tail.log
             source/.artifacts/windows-clean-acceptance-*/first-use-playwright.json
