@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T06:34:16Z`
+Updated: `2026-11-21T06:41:13Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1517,10 +1517,12 @@ Evidence:
 - Dependencies: `rv16-lineage-reconciliation`, `rv18-multispectral`, `rv18-bioacoustics`
 - Entry point: Not user-facing
 - Workflow Builder: `not_applicable`
+- Missing input: An authorized copy of a genuine earlier research profile, its exact application version and verified pre-upgrade backup, including original media, managed weights, frozen class maps, annotations and review history.
 
 Acceptance checks:
 
 - **in_progress** — Integrate all validated predecessor histories, preserve unknown provider/plugin metadata, and pass upgrade/downgrade/exchange/restore matrices. (`rv19-ancestry-integration-check`)
+- **blocked** — Upgrade the authorized profile on disposable Windows, compare IDs, source bytes, model and training links, units and review history, then restore the verified backup and reopen it with the original application. (`rv19-ancestry-integration-historical-profile`)
 
 Evidence:
 
@@ -1543,10 +1545,12 @@ Evidence:
 - Dependencies: `rv19-performance-resilience`, `rv15-provider-foundations`
 - Entry point: Help → Diagnostics and compatibility
 - Workflow Builder: `not_applicable`
+- Missing input: A disposable Windows 11 device already enforcing Smart App Control and access to the authorized publisher signing identity for the signed candidate.
 
 Acceptance checks:
 
 - **in_progress** — Publish exact supported configurations from fresh installed evidence and provide actionable unavailable states for unsupported combinations. (`rv19-compatibility-matrix-check`)
+- **blocked** — Record the policy before installation, the exact signing identity and hashes of the reviewed media, installer and launch outcomes under an ordinary account, and the corresponding Code Integrity decision. (`rv19-compatibility-matrix-enforcing-device`)
 
 Evidence:
 
@@ -1565,10 +1569,12 @@ Evidence:
 - Dependencies: `rv19-ancestry-integration`, `rv15-model-comparison`
 - Entry point: Create/open project → Import → Annotate/Model → Review → Research → Export
 - Workflow Builder: `required`
+- Missing input: Independently reviewed, calibrated matched coral observations with reference measurements and held-out animal recordings with identity, event and timing labels, reviewer authority, sampling units and prespecified acceptance margins.
 
 Acceptance checks:
 
 - **in_progress** — Complete each primary workflow in the installed app and saved Workflow Builder without bypassing review or provenance gates. (`rv19-end-to-end-workflows-check`)
+- **blocked** — Use the installed coral and native ReefPose entries and saved graphs. Compare the same immutable observations to the independent references. Record exclusions, observation effort and measurement uncertainty. (`rv19-end-to-end-workflows-independent-field`)
 
 Evidence:
 

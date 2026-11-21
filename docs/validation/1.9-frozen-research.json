@@ -726,6 +726,34 @@
       "physical_rtx3090": {
         "file": "1.9/checkpoints/9124acdb0/source/9124-cuda-results.xml",
         "sha256": "2ee6a0e08e4ca45e0af00074c45d22fd69df4728e5691075cb62ae298ff92ba8"
+      },
+      "frontend_unit_tests": {
+        "file": "1.9/checkpoints/9124acdb0/source/9124-frontend-run-test.log",
+        "sha256": "b8ab6d8bf7ee18969358e25ecd58498ddff77b3fef6e37609fd5d192c76abbd8"
+      },
+      "frontend_production": {
+        "file": "1.9/checkpoints/9124acdb0/source/9124-frontend-run-build.log",
+        "sha256": "9ff8f6f50aa15ffd33083c142c073b9f4cbc8f6d6f376489ef5d761608b5a01f"
+      },
+      "frontend_format": {
+        "file": "1.9/checkpoints/9124acdb0/source/9124-frontend-run-format-check.log",
+        "sha256": "4666969f85835307e8d360234a1877ad8ae96cd6cecd0f578932384d65aa6967"
+      },
+      "frontend_types": {
+        "file": "1.9/checkpoints/9124acdb0/source/9124-frontend-run-typecheck.log",
+        "sha256": "9a53ffb62f6e9f9632ad62a970c0e93c7f82dc97e021622cbf8c53cd61a7ce34"
+      },
+      "frontend_dependency_lock": {
+        "file": "1.9/checkpoints/9124acdb0/source/9124-frontend-run-lockfile-check.log",
+        "sha256": "c705de73d6d0224a5dc8b71369ec3ae3aa1ee6d5a97b559658b97954413d495a"
+      },
+      "default_browser_journeys": {
+        "file": "1.9/checkpoints/9124acdb0/source/9124-standard-browser.log",
+        "sha256": "d0f432c9a85dbd562c4eb9d633b2d23766d9bb7a6f7820d3ec82d2aa02317b1e"
+      },
+      "rust": {
+        "file": "1.9/checkpoints/9124acdb0/source/9124-rust.log",
+        "sha256": "6ab7979cad469ad4a4d76dc7f15961f19348db054f7ac02caa2de793502c3634"
       }
     },
     "previous_unchanged_surface": {
@@ -765,6 +793,10 @@
       "checkout": "C:/rv19n-9124acdb",
       "staging": "C:/rv19e-9124acdb",
       "owner_location": "1.9/checkpoints/9124acdb0/local-production"
+    },
+    "donor_heads_and_ci": {
+      "file": "1.9/evidence/concurrent-prs-20261121-064238-utc.json",
+      "sha256": "e6bfb3f6e0076fda2f25225cefcc9bdbade2abcbd5eed122c2b734761254cf6e"
     }
   }
 }
