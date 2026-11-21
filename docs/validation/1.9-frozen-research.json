@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T06:21:05.940115+00:00",
+  "updated_utc": "2026-11-21T07:34:42.385327+00:00",
   "candidate_pr": 131,
   "scope": "Generated research projects. Registered installer trials identify their own package.",
   "reviewed_predecessors": {
@@ -982,6 +982,174 @@
     "ordinary_workflow_builder_audit": {
       "file": "1.9/checkpoints/15be85268/source/heldout-independence-ui/index.json",
       "sha256": "71ebe04cd7c0fa41b2a8527973ac25e579c37226fe2b9866bbc1d47f9683c98a"
+    },
+    "affected_suite_verification": {
+      "file": "1.9/checkpoints/15be85268/affected-windows-backend/verified-summary.json",
+      "sha256": "075915a854d60c42fd5ded97b7306f399d6ed9a6e223d744339118cf404e3071"
+    },
+    "five_rtx_regressions": {
+      "results": {
+        "file": "1.9/checkpoints/15be85268/source-independent-pose-validation/physical-rtx-results.xml",
+        "sha256": "b96c8d37333a5c258226211cbe095d932957b79b48efa9e2f7a2f80edc1ea09c"
+      },
+      "log": {
+        "file": "1.9/checkpoints/15be85268/source-independent-pose-validation/physical-rtx-run.log",
+        "sha256": "f3554d2b7200237c14825dd9a9c010cbb507122d79c0ca6c39b85879c9df3125"
+      },
+      "test_names": [
+        "test_native_reefpose_cuda_scientific_evaluation",
+        "test_async_two_model_reefpose_cuda_comparison",
+        "test_native_reefpose_cuda_workflow_registration_and_inference",
+        "test_chunked_inference_matches_one_batch_with_boundary_context[cuda]",
+        "test_training_uses_partial_reviewed_targets_and_resume_matches_uninterrupted[cuda]"
+      ]
+    },
+    "qualified_local_package": {
+      "source": "15be85268fc0cf4f801152fa79b4901adffddc3d",
+      "version": "1.9.0",
+      "schema": "b19_registration_0001",
+      "build_surface": "local-production",
+      "msi_sha256": "2808f684dd6aacf30a1e985fcaf6ab54c6ee7fa8ab88c0036427739eb9530272",
+      "manifest_sha256": "3c8e31d110846e761816da2204b75a75f461ef4362ce8da3c5b5706c7b707851",
+      "external_cabinets": 6,
+      "manifest_members": 8,
+      "payload_bytes": 2979560782,
+      "package": {
+        "file": "1.9/checkpoints/15be85268/local-production/owner-media-verification.json",
+        "sha256": "b3f987f7a5f4c78a18107a0e6a8801e9de7055ccff1d98b512695a74f64a3bee"
+      },
+      "distribution": {
+        "file": "1.9/checkpoints/15be85268/local-production/payload-audit.json",
+        "sha256": "bcb1ebfbb7775dfbd637638d7ba65b9318a72698e7e4a67d0aba153ffb0ce6f5"
+      },
+      "administrator_extraction": {
+        "file": "1.9/checkpoints/15be85268/local-production/administrative-extraction.json",
+        "sha256": "8ac50bbeb5337baa8ea8c486e0f7051f4e2071c17b91ec9ac3eb579f71cb1833"
+      },
+      "actual_signing_and_policy": {
+        "file": "1.9/checkpoints/15be85268/local-production/physical-signing-policy.json",
+        "sha256": "1d9740bdededea85d9247753e870d75722a7fec7be8dba49a2dd8a9d3c573b6e"
+      },
+      "embedded_offline_runtime": {
+        "file": "1.9/checkpoints/15be85268/local-production/embedded-webview2.json",
+        "sha256": "bca4c29eb6f1931371a88309bd9bc1909ede1db585293403688f7d18b3a90f65"
+      },
+      "ordinary_advanced_graph_retry_and_new_run": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/native-heldout-independence/index.json",
+        "sha256": "334996ce74921a0c7942dee191df9684846d4b63a2ccab90b35d6ac07df4cae7"
+      },
+      "both_negative_and_positive_controls": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/pose-validation-independence-worker/four-worker-controls.json",
+        "sha256": "068c1cb291a4515de0713a42706b219e8f6cbc1bf9b7a24ebe98239d48f3409a"
+      },
+      "guided_rtx_replays": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/physical-guided-rtx3090/evidence-index.json",
+        "sha256": "1603526558558be3b33a661f306165422b6fac56f76211e57407bfde2a6b3ca9"
+      },
+      "physical_run_model_chain": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/physical-guided-rtx3090/native-checkpoint-lineage.json",
+        "sha256": "6159921942a46535b8b44dfc20f29346eace17b38ca7a80516e32c49e2408be7"
+      },
+      "actual_local_upgrade_and_previous_original_restore": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/pose-rollback/installed-backends-1.8-to-1.9-and-restore.json",
+        "sha256": "ae58ad13350e00f5bf6fe96e6d50058db9a022bf312a4598ed3af14e93853b68"
+      }
+    },
+    "original_offline_trial": {
+      "product_source": "15be85268fc0cf4f801152fa79b4901adffddc3d",
+      "producer": 44878790843,
+      "producer_job": 136769291129,
+      "harness_source": "4a8eaf33a2902a189a58d6b2148ba9b8c4518ee0",
+      "worktree": "C:/rv19-independence-offline",
+      "submit_after_verified_parts": "C:/rv19-starting-point/submit-15be-offline-after-media.py"
+    },
+    "concurrent_heads": {
+      "file": "1.9/evidence/concurrent-prs-20261121-073206-utc.json",
+      "sha256": "d392155f963a7c7d2fe8d41d300f808a33d978d7d0e1e90dc1a7420b752c098b"
+    },
+    "selection_after_concurrent_update": {
+      "pr_79": "db122455ba68eda08942c904cb63a33bfba3278a",
+      "pr_78": "c7f7de898a24828db5fbf23936f43a475d6208eb",
+      "finding": "The 1.4 saved mesh coverage preview stays on its existing branch. The 1.9 donor moves checks earlier for a noncanonical intermediate ZIP sent to the materializer. Supported frozen project revisions, including exchanged studies, regenerate canonical YAML in pose_training_exports.py on each attempt. Public Retry either reuses a verified completed run or creates a fresh training stage. The donor also enforces raw YAML equality that would reject a supported disjoint validation class subset on the integrated candidate. Both sibling histories are preserved."
     }
+  },
+  "original_1_9_msi_research_and_recovery": {
+    "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+    "original_run": 44867493658,
+    "manufacturer": 136734331397,
+    "msi_sha256": "86bc21d9bffbafd514b355e9d57266cfea5d93df7e6ee46fb653e15f599e2f5f",
+    "media": {
+      "file": "1.9/checkpoints/96476bc46/official/independent-package-validation.json",
+      "sha256": "b8a9f9cc9bd9fc86aeefe09328aa290338307acf8f1a9057c489546556341fff"
+    },
+    "registered_guided_replay": {
+      "file": "1.9/checkpoints/96476bc46/official/registered-guided-pose/narrow-driver/registered-guided-index.json",
+      "sha256": "d1075a13ebc0825262edeb6d4174f11f0243371a5e607d771b53436fbee830f5"
+    },
+    "registered_stages": [
+      "data_retention",
+      "external_annotation_imports",
+      "first_launch",
+      "first_use_workflow",
+      "frontend_backend_connectivity",
+      "guided_pose_workflow",
+      "install",
+      "model_policy",
+      "project_exchange",
+      "project_persistence",
+      "provider_manifests",
+      "restart",
+      "schema_migration",
+      "shortcuts",
+      "spatial_workflow",
+      "uninstall",
+      "webview2"
+    ],
+    "hosted_cpu_runs": [
+      "06a7b738-d7bb-40c7-b9b4-7143c1b28ae1",
+      "01a1d3d1-a464-48fc-82ef-324b110634c3"
+    ],
+    "physical_rtx_workflow": {
+      "file": "1.9/checkpoints/96476bc46/official/evidence/physical-guided-rtx3090/evidence-index.json",
+      "sha256": "1acb395d000ba45c906b440469f3eb651e3499a9fbcb449c27e9ce06d8f9fc10"
+    },
+    "device_observation": "Both runs reported CUDA. Three GPU samples fell within training on each run. The first 0.440-second inference ended between samples; one sample fell inside the second inference.",
+    "original_18_19_rollback": {
+      "file": "1.9/checkpoints/96476bc46/official/evidence/pose-rollback/original-pose-upgrade-and-rollback.json",
+      "sha256": "8b6c738a287475bfb3973d88ea8309f37915d9d0b482c432ae90e14ee2b52953"
+    },
+    "timing": {
+      "file": "1.9/checkpoints/96476bc46/official/evidence/native-performance/index.json",
+      "sha256": "131ab5a48a23942d688f129fa21ad07587137f9937dd052203a9c6679e2ad7fd"
+    },
+    "observed_ms": {
+      "cold_launcher_upper_bound_ms": 7832,
+      "first_decoded_gallery_ms": 284,
+      "dense_editor_full_source_ms": 426.29420000000005,
+      "video_import_ack_ms": 1187.3873,
+      "video_playable_ms": 1520.9791,
+      "video_presented_seek_ms": 104.69800000000009,
+      "extracted_review_seek_ms": 360.2060999999994
+    },
+    "offline_runtime_payload": {
+      "file": "1.9/checkpoints/96476bc46/official/embedded-webview2.json",
+      "sha256": "303036a8f93e85775bac507b8dfdd5ec54ab440059a7e1f77db7ad81d0d54836"
+    },
+    "bounded_storage_first_attempt": {
+      "file": "1.9/checkpoints/96476bc46/official/evidence/bounded-volume-recovery/attempt-1/index.json",
+      "sha256": "e6753b92c5a2a26838582a5732bec186c00aca50acb77c9e8a211422a9233f26"
+    },
+    "bounded_storage_next_attempt": {
+      "qa_source": "cec3744bb7442bb591f3b7b34e512d1e8cc78764",
+      "run": 44879955097,
+      "job": 136772839520
+    },
+    "offline_after_producer_available": {
+      "run": 44867740231,
+      "attempt": 2,
+      "fresh": 136770405841,
+      "cached_upgrade": 136770405714
+    },
+    "generated_fixture_only": true
   }
 }
