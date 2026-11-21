@@ -318,6 +318,8 @@ export function VideoTrackingWorkspace({
     queryKey: ["video-tracks", selectedVideoId],
     queryFn: ({ signal }) => getVideoTracks(selectedVideoId, signal),
     enabled: Boolean(selectedVideoId),
+    staleTime:
+      workspaceCommand?.type === "open_workflow_pose_review" ? 0 : undefined,
     refetchInterval: 3000,
   });
   const trackingRunsQuery = useQuery({
@@ -1468,6 +1470,17 @@ export function VideoTrackingWorkspace({
         !tracksQuery.data
       )
         return;
+      if (
+        targetExists &&
+        workspaceCommand.type === "open_workflow_pose_review" &&
+        !tracksQuery.isFetchedAfterMount &&
+        !tracksQuery.data?.some(
+          (track) => track.id === workspaceCommand.trackId,
+        )
+      ) {
+        // A replay can create another track while this recording's prior list is cached.
+        return;
+      }
     }
 
     lastWorkspaceCommandIdRef.current = workspaceCommand.id;
@@ -1579,6 +1592,7 @@ export function VideoTrackingWorkspace({
     modelsQuery.data,
     selectedVideo,
     tracksQuery.data,
+    tracksQuery.isFetchedAfterMount,
     videosQuery.data,
     workspaceCommand,
   ]);
