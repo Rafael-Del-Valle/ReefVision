@@ -797,6 +797,52 @@
     "donor_heads_and_ci": {
       "file": "1.9/evidence/concurrent-prs-20261121-064238-utc.json",
       "sha256": "e6bfb3f6e0076fda2f25225cefcc9bdbade2abcbd5eed122c2b734761254cf6e"
+    },
+    "qualified_local_package": {
+      "source": "9124acdb0696871208c69f2ffc7601722329daac",
+      "version": "1.9.0",
+      "surface": "Locally manufactured MSI, administrative extraction on physical Windows 11, ordinary WebView2 and packaged API processes.",
+      "msi_sha256": "cdf87c98d58730b6ecfc434034ca2060fd8f4f21be717ad77fe9939ee5ccf089",
+      "external_cabs": 5,
+      "payload_bytes": 2979870459,
+      "shell_sha256": "5136200ea3459077907c48f496d5273674dbd0339fbb9bc3660fccf2b8cd0cb6",
+      "sidecar_sha256": "dc46e88692c8ece2971ff145414c6e6278000b29e067cc204838f9b117620c80",
+      "checksums": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/installer/SHA256SUMS.txt",
+        "sha256": "4636015a3b592b027f9cdfb7ae19e48ad100ed1f8e819ff2029c0ff62d3de8fe"
+      },
+      "owner_guide_verification": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/owner-media-verification.json",
+        "sha256": "02703d7648e91bfbdef88a04acf843d4014a1b2065c4d8c25e289adf6b9aed0e"
+      },
+      "payload_audit": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/payload-audit.json",
+        "sha256": "7f2e75773316a4738bd40ad4a8266ef4b179c821981b49e87d7654750edc5fd7"
+      },
+      "physical_signing_and_policy": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/physical-signing-policy.json",
+        "sha256": "0688285a64ec84254495f8e27a34fc02bd97be4a932a3545e146d83c44eafcb2"
+      },
+      "extraction": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/administrative-extraction.json",
+        "sha256": "8b24954dd30f98c7e84026bdb2ddc4dcf1003c1af489a95a45da4afd1388f8b6"
+      },
+      "workflow_builder_retry": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/evidence/native-checkpoint-recovery/index.json",
+        "sha256": "9c80fae6b23b2c6cac7782de33d7fe455e5aaca97188a248b30e40b1ca70958f"
+      },
+      "two_frozen_splits": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/evidence/pose-training-holdout-identity/two-split-checkpoint-reopen.json",
+        "sha256": "e8f8851ea7d244ad254b3975f7adcdf1c5e14be3c2df8c65e5d8816f1352f5f3"
+      },
+      "checkpoint_recovery": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/evidence/pose-checkpoint-recovery/selected-checkpoint-recovery.json",
+        "sha256": "fa09fb23a27ee8020250eb79df65887c6bc91a375ddedd881d738cc35a802666"
+      },
+      "predecessor_upgrade_and_rollback": {
+        "file": "1.9/checkpoints/9124acdb0/local-production/evidence/pose-rollback/installed-backends-1.8-to-1.9-and-restore.json",
+        "sha256": "4c8033782597aa8d1298015eaa46692e9a352394a34fb7105258e0326b629fa9"
+      }
     }
   }
 }
