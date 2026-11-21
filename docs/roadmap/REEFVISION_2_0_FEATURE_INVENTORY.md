@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T02:24:19Z`
+Updated: `2026-11-21T02:30:30Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -648,7 +648,7 @@ Acceptance checks:
 Evidence:
 
 - `source`: Sequence grouping, causal isolation, training, checkpoint reload, cancel/resume tests. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/87` (`rv13-temporal-train-src`)
-- `browser`: none recorded
+- `browser`: The 1.8 native ReefPose controls froze three fixture recordings and trained and selected a new causal CPU checkpoint. — `docs/validation/stable-research-e3e8ffb63.json` (`rv13-temporal-dataset-training-ordinary-temporal-training-e3e8ffb63`)
 - `windows_installed`: none recorded
 - `physical_hardware`: On the official Windows 1b0f29cff package, two real training jobs on the RTX 3090 registered the same immutable checkpoint. Project Exchange recovered both training histories, their metrics, the original producing run and the identical checkpoint bytes. — `docs/REEFVISION_1.4.0_REPORT.md#official-windows-build-and-recovery-at-1b0f29cff` (`rv13-packaged-repeat-exchange`)
 - `physical_hardware`: The official 1.5 Windows sidecar trained and registered native frame and temporal checkpoints on a physical RTX 3090 using disjoint generated recording groups. The native Temporal panel then ran a 24-frame causal refinement with zero future-frame use. Physical receipt SHA-256 9539c37a38e7c3a486bfd3503c5d2c1647783869a0ce8ae74059ad61cbd4f637. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv13-temporal-dataset-training-physical-3c8e2d070`)
@@ -670,6 +670,7 @@ Evidence:
 
 - `source`: Refinement, boundary context, identity/revision staleness, and review tests. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/87` (`rv13-refine-src`)
 - `browser`: In the corrected 1.8 local MSI's ordinary extracted WebView2, disconnect, selection change and reconnect cancelled only the clicked queued identity job. The raw reopened database preserved both job/run outcomes. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv13-temporal-refinement-review-native-identity-cancel-9cde9e6e7`)
+- `browser`: The application refined 12 frames, persisted six explicit review decisions, measured movement and exported six measurements with their review history. Its comparison recorded the limits of group verification. — `docs/validation/stable-research-e3e8ffb63.json` (`rv13-temporal-refinement-review-ordinary-temporal-review-e3e8ffb63`)
 - `windows_installed`: Installed 1.2 to 1.3 temporal workflow acceptance. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/87` (`rv13-refine-win`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1021,6 +1022,7 @@ Evidence:
 - `physical_hardware`: The original installer payload opened Models on the physical RTX 3090. A reviewed locally trained detector completed direct inference and two saved graph runs, each with nine matched proposals. Both saved digests were b0dc4cea1b7b7cfaab2329547230f56107a9ee2c8224f79ff37c508730f52f48. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/97` (`rv15-runtime-original-msi-rtx-b846f57e9`)
 - `physical_hardware`: In the packaged Workflow Builder two saved CPU runs used the reviewed checkpoint and only the two frozen validation images, excluded four training images and returned the same 15 proposals with independent IDs. — `docs/validation/restored-projects-3a9ce1622.json` (`rv15-frozen-detector-runtime-3a9`)
 - `physical_hardware`: The corrected locally manufactured 1.8 MSI's extracted WebView2 on RTX 3090 generated nine detector proposals on one source image. Its two saved runs each processed six images and 54 proposals using the same reviewed CUDA selection. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv15-model-catalog-runtime-local-reviewed-cuda-9cde9e6e7`)
+- `physical_hardware`: Three separate native local 1.8 CUDA detector jobs used the selected registered checkpoint. The two saved executions retained the same reviewed selection and produced exactly the same artifact. — `docs/validation/stable-research-e3e8ffb63.json` (`rv15-model-catalog-runtime-reviewed-cuda-detector-e3e8ffb63`)
 - `representative_data`: none recorded
 
 ### rv15-model-comparison: Unified detector, mask, pose, tracking, and event comparison
@@ -1050,6 +1052,7 @@ Evidence:
 - `windows_installed`: The original clean MSI compared two locally trained detectors on untouched held-out fixtures. The saved comparison ran twice in standard-user WebView2. Independent label and performance acceptance remains open. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44748544977/job/136346825319` (`rv15-paired-clean-research-b846f57e9`)
 - `physical_hardware`: The packaged RTX 3090 ran both registered segmentation checkpoints on the same six held-out fixture images in two groups with twelve reference masks. Two saved executions reproduced artifact SHA-256 74edffb4568870ecee97e0a7401e8f55d04d50844ba8fa2c26686ba2619c7958. The redacted physical receipt has SHA-256 82a6f7a7ee1f6c39e37abac9f01cf2f8715193c9046ea189838dbf5fea04cc7e. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/96` (`rv15-model-comparison-native-mask-pairs-3c8e2d070`)
 - `physical_hardware`: On b846f57e9 a physical RTX 3090 ran three generated-fixture source checks with CUDA 12.1. Direct native ReefPose evaluation, a queued two-model comparison and offline training through registration and inference passed. The comparison report had SHA-256 965d4d6907496f326147a814e484356221575592304d6288f5da840dc57b11e4. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/97` (`rv15-model-comparison-source-cuda-b846f57e9`)
+- `physical_hardware`: The native local 1.8 desktop compared two scratch-trained CUDA mask models on six frozen images in two groups, retained the actual matched and missed values and reproduced the same saved report twice. — `docs/validation/stable-research-e3e8ffb63.json` (`rv15-model-comparison-paired-cuda-masks-e3e8ffb63`)
 - `representative_data`: none recorded
 
 ### rv15-provider-foundations: Early local provider and plugin foundations

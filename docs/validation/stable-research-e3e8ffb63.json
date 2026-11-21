@@ -215,6 +215,56 @@
         "file": "1.8/checkpoints/e3e8ffb63/source/pose/reefpose-1.8-e3e8-predecessor-receipt.json",
         "sha256": "5a41d1a40d1275b1d14d1c98b683c185dea89b10efe0152d80b1b3d54c5eef6e"
       }
+    },
+    "temporal_review_gui": {
+      "surface": "exact Windows source Chromium with API and real queue",
+      "preparation": "Repository seed generated three tiny videos and hand-authored synthetic supervision, registered the local deterministic frame checkpoint with its schema and ran its three frame tracking jobs. The user-path witness did not train the frame seed.",
+      "frozen_dataset": {
+        "id": "5e0b52a5-ec95-4a4f-9b96-8a15632dd409",
+        "sha256": "002f692256fa9836c6a108debcf7300f261154c3ed8d794b73540b70b87943ee"
+      },
+      "trained_checkpoint": {
+        "id": "3bbb9768-13f2-46eb-822a-8942e89e7f82",
+        "sha256": "735efd8749c4208295bfc44f74155d09a93c487933e3b618d22ccb13a5dd4337",
+        "provider": "reefpose_temporal",
+        "task": "pose_temporal"
+      },
+      "refinement": {
+        "id": "e3ac41b9-8bcb-4853-9cb0-84403ea1175a",
+        "job": "44d89346-6c46-431d-81f0-cfb176bc7da6",
+        "frames": 12,
+        "future_frames": 0
+      },
+      "review": {
+        "id": "7c6d475b-4e3a-45ad-bae8-8de9d8d7c642",
+        "revision": 1,
+        "identity_run_id": "61fdb3c9-22c2-4149-bc4e-06fb662f687e",
+        "identity_id": "c2abcb11-5d36-4bb2-82eb-7837a4beff2c",
+        "accepted_frame_count": 6,
+        "source_stale": false
+      },
+      "evaluation": {
+        "id": "e67e345d-458a-45bf-b947-a9046c697bb3",
+        "job": "cf55de65-59ea-4e32-bcac-0a140ed6167e",
+        "status": "exploratory",
+        "frame": "unverified",
+        "temporal": "recording_disjoint_group_unverified"
+      },
+      "export": {
+        "sha256": "7f34c91df4f26bf32d29d96aa88cfe1cfe60995581e85bb6a9fef80bad82db91",
+        "members_and_rows": {
+          "events.csv": 0,
+          "individual_summaries.csv": 1,
+          "measurements.csv": 6,
+          "review_history.csv": 1
+        },
+        "event_run_id": "533e5f9d-147e-43d5-811c-6df1469eedd6",
+        "event_reviewed_only_count": 0
+      },
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/source/temporal-review/e3e8-ordinary-temporal-panel-compact.json",
+        "sha256": "a22d769a6cb3cb15002d4273d29965d3d06f2d0a4df1f61ea1e92ee7ad774f68"
+      }
     }
   },
   "frontend": {
@@ -404,6 +454,14 @@
       "native-research-tools": {
         "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/native-research-tools/evidence-index.json",
         "sha256": "d201c925c4139dea3038bcf5beceb21e0241fef87452483532c3d468f9bd6bd9"
+      },
+      "physical-rtx3090": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/physical-rtx3090/evidence-index.json",
+        "sha256": "90861854f8ecb528b19f7668e6f1958f1e524e954123120a1b568cb743b23e7c"
+      },
+      "physical-rtx3090-segmentation": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/physical-rtx3090-segmentation/evidence-index.json",
+        "sha256": "a91cf1bb6ae66d65dfb8d335617f5e048e19105992799631085f1baf8357ae77"
       }
     },
     "previous_1_8_reopened": {
@@ -418,6 +476,111 @@
         "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/same-version-profile/same-version-profile-reopen.json",
         "sha256": "931f210255e11169005ed5d041e8b8fbd0b24836c53c7e0d3f1f0f0e8f42549b"
       }
+    },
+    "physical_fixture_results": {
+      "device": "NVIDIA GeForce RTX 3090",
+      "reviewed_detector": {
+        "jobs": [
+          {
+            "id": "3ab10b84-0d5c-4e7a-95ec-3f440d7db1db",
+            "device": "cuda",
+            "processed_images": 1,
+            "proposals": 9,
+            "selection_sha256": "d75ee901165015628a7b1dbf3d93106fa69bf53c05c4641a43fa9e879524ea65",
+            "status": "succeeded"
+          },
+          {
+            "id": "e001f814-7ddb-4639-9fbb-3a71ccc55cfb",
+            "device": "cuda",
+            "processed_images": 6,
+            "proposals": 54,
+            "selection_sha256": "d75ee901165015628a7b1dbf3d93106fa69bf53c05c4641a43fa9e879524ea65",
+            "status": "succeeded"
+          },
+          {
+            "id": "32e28b3f-4197-4e3c-b45c-90c324989312",
+            "device": "cuda",
+            "processed_images": 6,
+            "proposals": 54,
+            "selection_sha256": "d75ee901165015628a7b1dbf3d93106fa69bf53c05c4641a43fa9e879524ea65",
+            "status": "succeeded"
+          }
+        ],
+        "runs": [
+          {
+            "id": "8f6dca7c-f220-4dd3-b3ca-776fa3e6755a",
+            "digest": "d8320fea81fc272bd4ce960c774c3e2bbaad9785e1029e80e50948c4721b6473",
+            "child_job_id": "e001f814-7ddb-4639-9fbb-3a71ccc55cfb",
+            "matched_proposals": 9
+          },
+          {
+            "id": "ce86d8b6-fa04-4bc1-919d-4d4de64aa753",
+            "digest": "d8320fea81fc272bd4ce960c774c3e2bbaad9785e1029e80e50948c4721b6473",
+            "child_job_id": "32e28b3f-4197-4e3c-b45c-90c324989312",
+            "matched_proposals": 9
+          }
+        ]
+      },
+      "paired_segmentation": {
+        "fixture_images": 6,
+        "fixture_masks": 12,
+        "distinct_cuda_jobs": 6,
+        "models": [
+          {
+            "checkpoint_sha256": "6d1e75012502f3bae40f0d921a2b92c91f3e9c0cc671bc14573afccc2977e101",
+            "metrics": {
+              "absolute_instance_count_error": 0.0,
+              "false_instances": 2.0,
+              "mask_dice": 0.07870076935175147,
+              "mask_iou": 0.041087962962962965,
+              "matched_instance_mask_iou": null,
+              "missed_instances": 2.0
+            },
+            "model_id": "5088500b-6c67-4b71-8938-bc5b81ec3f71",
+            "per_group": {
+              "mask-test-0": 6,
+              "mask-test-1": 6
+            },
+            "predicted_polygons": 12,
+            "training_run": "0edd2218-79b5-4049-b67f-648edfff06a9",
+            "training_seed": 13
+          },
+          {
+            "checkpoint_sha256": "1ef714a61f5941bb8f43cef00616f64511b3b69f20275ab349d9a499a78ffd7b",
+            "metrics": {
+              "absolute_instance_count_error": 5.0,
+              "false_instances": 7.0,
+              "mask_dice": 0.07871713163122783,
+              "mask_iou": 0.041096881557050866,
+              "matched_instance_mask_iou": null,
+              "missed_instances": 2.0
+            },
+            "model_id": "435a480f-9d9f-4910-8a91-beed263f3e63",
+            "per_group": {
+              "mask-test-0": 21,
+              "mask-test-1": 21
+            },
+            "predicted_polygons": 42,
+            "training_run": "fcc125fc-ddb6-4161-bb2a-221822c36ee5",
+            "training_seed": 29
+          }
+        ],
+        "saved_runs": [
+          {
+            "artifact_sha256": "70515eac3a67cd4f439659dfad6d9c8257013a4f845dc5e0a5bbffc4b6380a63",
+            "report_sha256": "c82408fd858b497f3655fed02c91d04a692073a9532aab73e0a9a27c68142d19",
+            "run": "88cb102e-b04c-4816-8b50-9e67f2f5301f",
+            "workflow_job": "797e5c3c-b447-417f-be0f-d2bdc9e8f2e1"
+          },
+          {
+            "artifact_sha256": "70515eac3a67cd4f439659dfad6d9c8257013a4f845dc5e0a5bbffc4b6380a63",
+            "report_sha256": "c82408fd858b497f3655fed02c91d04a692073a9532aab73e0a9a27c68142d19",
+            "run": "a23a3b22-c725-4e9f-80e1-8ec9aa1b47af",
+            "workflow_job": "ef6c09fe-b704-49d7-8301-470967ccdf39"
+          }
+        ],
+        "exact_sidecar_gpu_samples": 26
+      }
     }
   },
   "earlier_qualified_registered_suite": {
@@ -426,6 +589,34 @@
     "receipt": {
       "file": "1.8/checkpoints/542254b8a/official/combined-installed-qualification.json",
       "sha256": "faa9b84dc0c00792ae615c1e8e54c6b4eab1497b76a2a42f9a1f34db17fe6b27"
+    }
+  },
+  "earlier_clean_9cde_diagnostic": {
+    "source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "msi_sha256": "7d8a5d4d4b0eebd2274a17de6676204eac724ebe06ffc3c87d7cbef353532511",
+    "workflow": "https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44852831817",
+    "artifact": {
+      "id": 14686984376,
+      "sha256": "c1e03b1edb0ad3342904b290e89d6b15a591c1b00ca6c7d76c6d9a445ed33987",
+      "retained_files": 78
+    },
+    "registered_stages": 21,
+    "ordinary_journeys": 30,
+    "scheduler_phases": 2,
+    "already_loaded_at_pointer_down": true,
+    "geometry": [
+      20.015298594599187,
+      14.98771335767663,
+      55.00042459239131,
+      39.97707201086957
+    ],
+    "capture": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/registered-retest/attempt-44852831817/registered-clean-14686984376/windows-clean-acceptance-8353a7469a96/first-use-playwright/ordinary-project-live-impo-12fa6-iewed-edit-and-exports-YOLO-chromium/first-use-box-evidence.json",
+      "sha256": "a1592905a9ab94bf4502600a014cc5c16e57c4c2d105799d6e7f91b1606a61b3"
+    },
+    "receipt": {
+      "file": "1.8/checkpoints/9cde9e6e7/official/registered-retest/attempt-44852831817/registered-retest-index.json",
+      "sha256": "70ba57a7b209e4aa5ca8d9259113c3892a8493fded33cab278c6e7094b608749"
     }
   }
 }
