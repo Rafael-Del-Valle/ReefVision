@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import sqrt
 from typing import Any, cast
 
 import pytest
@@ -15,17 +16,17 @@ from reefvision.tests.test_annotations import create_project
 
 
 @pytest.mark.parametrize(
-    ("case", "vertices", "expected_area"),
+    ("case", "vertices", "expected_cross_squared"),
     [
         (
             "rounded-zero",
             [[0, 0, 0], [100000001, 100000000, 0], [100000000, 99999999, 0]],
-            0.5,
+            1,
         ),
         (
             "incorrect-nonzero",
             [[0, 0, 0], [99999990, 99999991, 0], [99999993, 99999994, 0]],
-            1.5,
+            9,
         ),
         (
             "translated-and-reflected-xy",
@@ -34,7 +35,7 @@ from reefvision.tests.test_annotations import create_project
                 [200000001, -300000000, 70000000],
                 [200000000, -299999999, 70000000],
             ],
-            0.5,
+            1,
         ),
         (
             "nearly-parallel-yz-plane",
@@ -43,7 +44,7 @@ from reefvision.tests.test_annotations import create_project
                 [300000000, 100000001, 100000000],
                 [300000000, 100000000, 99999999],
             ],
-            0.5,
+            1,
         ),
         (
             "nearly-parallel-xz-plane",
@@ -52,7 +53,25 @@ from reefvision.tests.test_annotations import create_project
                 [99999990, -300000000, 99999991],
                 [99999993, -300000000, 99999994],
             ],
-            1.5,
+            9,
+        ),
+        (
+            "oblique-nearly-parallel-xyz",
+            [
+                [0, 0, 0],
+                [100000001, 100000000, 99999999],
+                [100000000, 99999999, 99999998],
+            ],
+            6,
+        ),
+        (
+            "oblique-reflected-and-translated-xyz",
+            [
+                [200000000, -300000000, 400000000],
+                [99999999, -200000000, 499999999],
+                [100000000, -200000001, 499999998],
+            ],
+            6,
         ),
     ],
 )
@@ -60,11 +79,11 @@ def test_exact_triangle_area_replays_standalone_and_saved_graph(
     client: TestClient,
     case: str,
     vertices: list[list[float]],
-    expected_area: float,
+    expected_cross_squared: int,
 ) -> None:
-    """Exact integer XY determinants are -1 and -3, independent of vertex ordering."""
+    """Exact integer cross products must survive arbitrary oblique source frames."""
     # Independent integer arithmetic is exact for these source coordinates;
-    # each adversarial triangle lies in an orthogonal plane.
+    # the oblique cases exercise all three nonzero cross-product axes.
     first_edge = [vertices[1][axis] - vertices[0][axis] for axis in range(3)]
     second_edge = [vertices[2][axis] - vertices[0][axis] for axis in range(3)]
     integer_cross = [
@@ -72,8 +91,8 @@ def test_exact_triangle_area_replays_standalone_and_saved_graph(
         first_edge[2] * second_edge[0] - first_edge[0] * second_edge[2],
         first_edge[0] * second_edge[1] - first_edge[1] * second_edge[0],
     ]
-    assert sum(component != 0 for component in integer_cross) == 1
-    assert max(abs(component) for component in integer_cross) / 2 == expected_area
+    assert sum(component * component for component in integer_cross) == expected_cross_squared
+    expected_area = sqrt(expected_cross_squared) / 2
 
     points = [(vertex[0], vertex[1], vertex[2]) for vertex in vertices]
     assert triangle_area(points[0], points[1], points[2]) == expected_area
