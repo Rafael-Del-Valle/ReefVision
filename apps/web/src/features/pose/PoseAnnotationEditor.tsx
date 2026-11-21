@@ -569,27 +569,6 @@ export function PoseAnnotationEditor({
         </label>
       </div>
 
-      {selectedObservation && (
-        <aside aria-label="Selected landmark details">
-          <strong>{selectedObservation.semantic_label}</strong>
-          <span data-testid="selected-landmark-occurrence">
-            Occurrence {selectedObservation.occurrence_index + 1}
-          </span>
-          <span data-testid="selected-landmark-source">
-            Source: {selectedObservation.source}
-          </span>
-          <span data-testid="selected-landmark-confidence">
-            Confidence:{" "}
-            {selectedObservation.confidence === null
-              ? "n/a"
-              : selectedObservation.confidence.toFixed(3)}
-          </span>
-          <span data-testid="selected-landmark-status">
-            Status: {selectedObservation.status}
-          </span>
-        </aside>
-      )}
-
       <svg
         ref={svgRef}
         data-testid="pose-stage"
@@ -669,6 +648,28 @@ export function PoseAnnotationEditor({
           })}
         </g>
       </svg>
+
+      {/* Revealing details below the canvas keeps it in place on pointer down. */}
+      {selectedObservation && (
+        <aside aria-label="Selected landmark details">
+          <strong>{selectedObservation.semantic_label}</strong>
+          <span data-testid="selected-landmark-occurrence">
+            Occurrence {selectedObservation.occurrence_index + 1}
+          </span>
+          <span data-testid="selected-landmark-source">
+            Source: {selectedObservation.source}
+          </span>
+          <span data-testid="selected-landmark-confidence">
+            Confidence:{" "}
+            {selectedObservation.confidence === null
+              ? "n/a"
+              : selectedObservation.confidence.toFixed(3)}
+          </span>
+          <span data-testid="selected-landmark-status">
+            Status: {selectedObservation.status}
+          </span>
+        </aside>
+      )}
 
       <footer>
         <button
