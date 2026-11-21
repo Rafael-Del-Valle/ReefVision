@@ -67,7 +67,6 @@ def _declaration(source: bytes, path: str) -> tuple[str, list[str], list[str]]:
     return revision, links("down_revision"), links("depends_on")
 
 
-
 def _branch_graph_errors(migrations: list[dict[str, object]]) -> list[str]:
     """Fail closed on invalid migration ancestry within each inspected ref."""
     by_id: dict[str, list[dict[str, object]]] = defaultdict(list)
