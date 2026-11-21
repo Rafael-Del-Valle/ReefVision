@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import io
+import json
 import shutil
 import sys
 import zipfile
@@ -43,6 +44,7 @@ from reefvision.ml.dependencies import (
 )
 from reefvision.ml.providers import resolve_torch_device
 from reefvision.services.pose_training_exports import (
+    EXPORT_MANIFEST_FILENAME,
     PoseTrainingExportService,
 )
 from reefvision.storage.models import hash_model_file
@@ -110,13 +112,45 @@ def _safe_extract_zip(
         raise
 
 
+def _frozen_pose_class_indices(content: bytes) -> dict[str, int]:
+    """Read the stable class IDs bound to the export's split-local YOLO indices."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            manifest = json.loads(archive.read(EXPORT_MANIFEST_FILENAME))
+    except (KeyError, ValueError, zipfile.BadZipFile) as error:
+        raise ValidationError("Pose export is missing its frozen class mapping") from error
+
+    classes = manifest.get("classes") if isinstance(manifest, dict) else None
+    if not isinstance(classes, list) or not classes:
+        raise ValidationError("Pose export is missing its frozen class mapping")
+
+    indices: dict[str, int] = {}
+    for record in classes:
+        if not isinstance(record, dict):
+            raise ValidationError("Pose export has an invalid frozen class mapping")
+        label_id = record.get("label_class_id")
+        index = record.get("class_index")
+        if (
+            not isinstance(label_id, str)
+            or not label_id
+            or label_id in indices
+            or type(index) is not int
+        ):
+            raise ValidationError("Pose export has an invalid frozen class mapping")
+        indices[label_id] = index
+    if sorted(indices.values()) != list(range(len(indices))):
+        raise ValidationError("Pose export has an invalid frozen class mapping")
+    return indices
+
+
 def _copy_split(
     source_root: Path,
     destination_root: Path,
     *,
     split_name: str,
+    class_projection: dict[int, int],
 ) -> None:
-    """Copy one exported Ultralytics train split into another named split."""
+    """Copy validation images and project their labels into the training class indices."""
 
     source_images = source_root / "images" / "train"
     source_labels = source_root / "labels" / "train"
@@ -148,9 +182,21 @@ def _copy_split(
 
     for source in sorted(source_labels.iterdir()):
         if source.is_file():
-            shutil.copy2(
-                source,
-                target_labels / source.name,
+            projected_rows = []
+            for row in source.read_text(encoding="utf-8").splitlines(keepends=True):
+                if not row.strip():
+                    projected_rows.append(row)
+                    continue
+                index, separator, pose = row.partition(" ")
+                try:
+                    projected_index = class_projection[int(index)]
+                except (KeyError, ValueError) as error:
+                    raise ValidationError(
+                        "Pose validation label references an unknown export class index"
+                    ) from error
+                projected_rows.append(f"{projected_index}{separator}{pose}")
+            (target_labels / source.name).write_text(
+                "".join(projected_rows), encoding="utf-8", newline="\n"
             )
 
 
@@ -170,6 +216,21 @@ def materialize_pose_training_exports(
             f"Pose export stage {validation_stage.name} already exists; "
             "refusing to overwrite prior scientific data"
         )
+
+    class_projection: list[tuple[str, int, int]] = []
+    if validation_content is not None:
+        training_classes = _frozen_pose_class_indices(training_content)
+        validation_classes = _frozen_pose_class_indices(validation_content)
+        if missing := validation_classes.keys() - training_classes.keys():
+            raise ValidationError(
+                "Validation classes were not present in training ("
+                + ", ".join(sorted(missing))
+                + ")"
+            )
+        class_projection = [
+            (label_id, index, training_classes[label_id])
+            for label_id, index in validation_classes.items()
+        ]
 
     _safe_extract_zip(
         training_content,
@@ -202,6 +263,7 @@ def materialize_pose_training_exports(
                 validation_stage,
                 destination,
                 split_name="val",
+                class_projection={old: new for _, old, new in class_projection},
             )
         finally:
             shutil.rmtree(validation_stage)
@@ -231,6 +293,14 @@ def materialize_pose_training_exports(
     )
 
     return {
+        "validation_class_projection": [
+            {
+                "label_class_id": label_id,
+                "validation_class_index": old,
+                "training_class_index": new,
+            }
+            for label_id, old, new in class_projection
+        ],
         "validation_mode": validation_mode,
         "data_yaml": str(yaml_path),
         "training_image_count": len(list((destination / "images" / "train").glob("*"))),
@@ -480,6 +550,7 @@ def _process_ultralytics_pose_training_job(
                 "pose_schema_revision": (training_dataset.pose_schema_revision),
                 "pose_schema_content_hash": (training_dataset.pose_schema_content_hash),
                 "validation_mode": (materialized["validation_mode"]),
+                "validation_class_projection": materialized["validation_class_projection"],
                 "training_export_bundle_sha256": (training_export.bundle_sha256),
                 "validation_export_bundle_sha256": (
                     validation_export.bundle_sha256 if validation_export is not None else None

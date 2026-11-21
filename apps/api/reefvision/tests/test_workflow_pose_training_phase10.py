@@ -51,7 +51,10 @@ from reefvision.ml.reefpose.provider import ReefPoseRegistrationProvider
 from reefvision.ml.reefpose.training import ReefPoseTrainer
 from reefvision.schemas.models import RegisterModelFromRunRequest
 from reefvision.services.jobs import JobService
-from reefvision.services.pose_training_exports import PoseTrainingExportService
+from reefvision.services.pose_training_exports import (
+    EXPORT_MANIFEST_FILENAME,
+    PoseTrainingExportService,
+)
 from reefvision.services.semantic_models import SemanticModelService
 from reefvision.services.workflow_execution import WorkflowExecutionService
 from reefvision.services.workflow_pose_training import (
@@ -276,6 +279,9 @@ def _fake_pose_processor(
 
 def _pose_export_zip(
     marker: bytes,
+    *,
+    classes: tuple[tuple[str, str], ...] = (("stable-fixture-animal", "animal"),),
+    labels: str = "0 0.5 0.5 0.5 0.5 0.5 0.5 2\n",
 ) -> bytes:
     stream = io.BytesIO()
 
@@ -290,7 +296,7 @@ def _pose_export_zip(
         )
         archive.writestr(
             "labels/train/frame_00000001.txt",
-            "0 0.5 0.5 0.5 0.5 0.5 0.5 2\n",
+            labels,
         )
         archive.writestr(
             "data.yaml",
@@ -300,7 +306,20 @@ def _pose_export_zip(
                 "val: images/train\n"
                 "kpt_shape: [1, 3]\n"
                 "names:\n"
-                '  0: "animal"\n'
+                + "".join(
+                    f"  {index}: {json.dumps(name)}\n" for index, (_, name) in enumerate(classes)
+                )
+            ),
+        )
+        archive.writestr(
+            EXPORT_MANIFEST_FILENAME,
+            json.dumps(
+                {
+                    "classes": [
+                        {"class_index": index, "label_class_id": ident, "display_name": name}
+                        for index, (ident, name) in enumerate(classes)
+                    ],
+                }
             ),
         )
 
@@ -424,6 +443,44 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
     assert exploratory["validation_mode"] == "none"
 
     assert exploratory["validation_image_count"] == 0
+
+
+def test_pose_holdout_uses_training_ordinal_for_the_same_stable_class(tmp_path: Path) -> None:
+    training = _pose_export_zip(
+        b"train", classes=(("assigned", "animal"), ("unassigned", "neutral"))
+    )
+    original_labels = "0 0.5 0.5 0.5 0.5 0.27 0.36 1\n\n"
+    validation = _pose_export_zip(
+        b"validation", classes=(("unassigned", "renamed neutral"),), labels=original_labels
+    )
+    output = tmp_path / "pose-dataset"
+    materialized = materialize_pose_training_exports(
+        training_content=training, validation_content=validation, destination=output
+    )
+    assert (output / "labels/val/frame_00000001.txt").read_text() == "1" + original_labels[1:]
+    assert (output / "labels/train/frame_00000001.txt").read_text().startswith("0 ")
+    assert materialized["validation_class_projection"] == [
+        {"label_class_id": "unassigned", "validation_class_index": 0, "training_class_index": 1}
+    ]
+    with zipfile.ZipFile(io.BytesIO(validation)) as archive:
+        assert archive.read("labels/train/frame_00000001.txt").decode() == original_labels
+
+
+def test_pose_holdout_refuses_a_different_class_even_with_the_same_name(tmp_path: Path) -> None:
+    output = tmp_path / "pose-dataset"
+    previous = tmp_path / "previous-checkpoint.pt"
+    previous.write_bytes(b"existing generated scientific result")
+    with pytest.raises(ValidationError, match="Validation classes were not present in training"):
+        materialize_pose_training_exports(
+            training_content=_pose_export_zip(b"train", classes=(("stable-a", "shared name"),)),
+            validation_content=_pose_export_zip(
+                b"validation", classes=(("stable-b", "shared name"),)
+            ),
+            destination=output,
+        )
+    assert not output.exists()
+    assert not (tmp_path / ".pose-dataset-validation").exists()
+    assert previous.read_bytes() == b"existing generated scientific result"
 
 
 def test_pose_materialization_preserves_validation_stage_raced_after_precheck(
