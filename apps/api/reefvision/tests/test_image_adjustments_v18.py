@@ -39,6 +39,7 @@ ADJUSTED_PIXELS = [
     (180, 190, 15),
     (255, 220, 55),
 ]
+ADJUSTED_RGB_BYTES = b"".join(bytes(pixel) for pixel in ADJUSTED_PIXELS)
 PARAMETERS = {"red_gain_percent": 200, "blue_gain_percent": 50}
 
 
@@ -114,7 +115,7 @@ def test_known_answer_recipe_preserves_raw_axes_original_and_history(
     with Image.open(BytesIO(preview.content)) as decoded:
         assert decoded.mode == "RGB" and decoded.size == (3, 2)
         assert decoded.getexif().get(274) is None
-        assert list(decoded.getdata()) == ADJUSTED_PIXELS
+        assert decoded.tobytes() == ADJUSTED_RGB_BYTES
     assert client.get(endpoint).json()["items"] == []
 
     saved = save_recipe(client, image_id, original)
@@ -202,7 +203,7 @@ def test_worker_uses_exact_adjusted_input_with_source_pixel_predictions(
             with Image.open(BytesIO(payload)) as image:
                 assert image.size == (3, 2)
                 if digest == receipt["rendition_sha256"]:
-                    assert list(image.getdata()) == ADJUSTED_PIXELS
+                    assert image.mode == "RGB" and image.tobytes() == ADJUSTED_RGB_BYTES
             return [
                 DetectionPrediction(
                     label="soft coral",
