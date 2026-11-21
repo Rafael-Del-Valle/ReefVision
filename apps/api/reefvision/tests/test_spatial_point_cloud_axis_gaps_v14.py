@@ -453,6 +453,7 @@ def test_imported_and_xyz_gap_science_replays_from_saved_typed_graph(
     assert len(hashes[0]) == 64
     assert hashes[0] == hashes[1]
 
+
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
 def test_distinct_xyz_gap_boundary_loci_audited_in_saved_workflow(
     client: TestClient, source_format: str
@@ -460,10 +461,7 @@ def test_distinct_xyz_gap_boundary_loci_audited_in_saved_workflow(
     # Every x-axis gap endpoint coordinate appears in the display, while
     # bounded index sampling omits 88 unique XYZ loci at those boundaries.
     # Axis-level visibility is therefore not complete acquisition support.
-    points = [
-        [0.0 if i < 300 else 100.0, float(i % 300), 0.0]
-        for i in range(600)
-    ]
+    points = [[0.0 if i < 300 else 100.0, float(i % 300), 0.0] for i in range(600)]
     direct = _direct(points)
     params = dict(PARAMS)
     if source_format == "ply":
