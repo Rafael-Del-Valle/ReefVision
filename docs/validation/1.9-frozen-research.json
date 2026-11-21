@@ -1071,6 +1071,30 @@
       "pr_79": "db122455ba68eda08942c904cb63a33bfba3278a",
       "pr_78": "c7f7de898a24828db5fbf23936f43a475d6208eb",
       "finding": "The 1.4 saved mesh coverage preview stays on its existing branch. The 1.9 donor moves checks earlier for a noncanonical intermediate ZIP sent to the materializer. Supported frozen project revisions, including exchanged studies, regenerate canonical YAML in pose_training_exports.py on each attempt. Public Retry either reuses a verified completed run or creates a fresh training stage. The donor also enforces raw YAML equality that would reject a supported disjoint validation class subset on the integrated candidate. Both sibling histories are preserved."
+    },
+    "native_research_and_exchanged_study": {
+      "exchange-and-reopen.json": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/exchanged-pose-registration/exchange-and-reopen.json",
+        "sha256": "5aaaa6b78d7e9809f13aa8199a95743f2166bd2a7aefdc83851c947907c01d37"
+      },
+      "registration-before-and-after-transfer-red.json": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/exchanged-pose-registration/registration-before-and-after-transfer-red.json",
+        "sha256": "16d9d2bfd209a61dcf2dfbd39a499e8f9cf74324272690fe21d4bd83f7d8abe8"
+      },
+      "native_registration_refusal": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/native-transferred-pose-registration-red/index.json",
+        "sha256": "b74b2842631281fd8f18eb67ea0072902f06c86dc2c274477f0cdff358ba4d65"
+      },
+      "native_coral_and_temporal": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/native-coral-and-temporal/index.json",
+        "sha256": "7af6831737063f3f0e932a1ca46d21c44c76408585b1ad2177b02d8d732b50d3"
+      },
+      "native_detector_and_paired_comparison": {
+        "file": "1.9/checkpoints/15be85268/local-production/evidence/native-detector-and-paired-comparison/evidence-index.json",
+        "sha256": "4de7519fa74a1fa1d955e44610ffd14c04751faa3f82d766160bc45565d4230a"
+      },
+      "open_defect": "A valid independently held-out completed training run registered before exchange and failed after import. All six transferred checkpoint files matched their completion digests. The original archived study stayed intact. The #149 interface re-enabled Register best pose model and did not display the returned HTTP 400 reason.",
+      "source_profile": "C:/rv19-starting-point/15be-study-exchange-c8297a2b/destination"
     }
   },
   "original_1_9_msi_research_and_recovery": {
@@ -1151,5 +1175,6 @@
       "cached_upgrade": 136770405714
     },
     "generated_fixture_only": true
-  }
+  },
+  "active_product_pr": 149
 }
