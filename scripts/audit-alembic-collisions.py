@@ -5,8 +5,9 @@ Usage (from a checkout with both remote refs fetched):
     python scripts/audit-alembic-collisions.py \
         origin/develop/reefvision-1.1 origin/develop/reefvision-1.6
 
-The output is JSON. Exit 2 means colliding or branch-only revisions require
-reviewed integration; exit 1 means an unreadable ref or migration declaration.
+The output is JSON. Exit 2 means colliding revisions, branch-only revisions,
+or invalid branch ancestry require reviewed integration; exit 1 means an unreadable
+ref or migration declaration.
 No checkout, migrations or writes.
 """
 
@@ -66,12 +67,62 @@ def _declaration(source: bytes, path: str) -> tuple[str, list[str], list[str]]:
     return revision, links("down_revision"), links("depends_on")
 
 
+
+def _branch_graph_errors(migrations: list[dict[str, object]]) -> list[str]:
+    """Fail closed on invalid migration ancestry within each inspected ref."""
+    by_id: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for entry in migrations:
+        by_id[str(entry["revision"])].append(entry)
+
+    errors: list[str] = []
+    parents: dict[str, list[str]] = {}
+    for revision, entries in sorted(by_id.items()):
+        if len(entries) != 1:
+            errors.append(f"duplicate revision {revision} within branch")
+        entry = entries[0]
+        ancestry = list(entry["down_revision"])
+        parents[revision] = ancestry
+        if len(ancestry) > 1:
+            errors.append(f"nonlinear merge revision {revision}")
+        if entry["depends_on"]:
+            errors.append(f"nonlinear dependency for {revision}")
+        for parent in ancestry:
+            if parent not in by_id:
+                errors.append(f"missing parent {parent} for {revision}")
+
+    children = {parent for ancestry in parents.values() for parent in ancestry}
+    heads = sorted(set(by_id) - children)
+    if len(heads) != 1:
+        errors.append(f"expected one revision head, got {heads}")
+
+    visited: set[str] = set()
+    visiting: set[str] = set()
+
+    def visit(revision: str) -> None:
+        if revision in visiting:
+            errors.append(f"cycle involving {revision}")
+            return
+        if revision in visited:
+            return
+        visiting.add(revision)
+        for parent in parents[revision]:
+            if parent in parents:
+                visit(parent)
+        visiting.remove(revision)
+        visited.add(revision)
+
+    for revision in sorted(parents):
+        visit(revision)
+    return sorted(set(errors))
+
+
 def audit(refs: list[str]) -> dict[str, object]:
     if len(refs) < 2 or len(refs) != len(set(refs)):
         raise ValueError("Provide at least two distinct, locally available Git refs")
 
     records: dict[str, dict[str, object]] = {}
     by_revision: dict[str, list[dict[str, object]]] = defaultdict(list)
+    invalid_branch_graphs: dict[str, list[str]] = {}
     for ref in refs:
         # Resolve once: a branch advancing during inspection must not mix files
         # from multiple commits in a supposedly reproducible migration report.
@@ -97,6 +148,9 @@ def audit(refs: list[str]) -> dict[str, object]:
         if not migrations:
             raise ValueError(f"No Alembic migration files found at {ref}")
         records[ref] = {"commit": commit, "migration_count": len(migrations)}
+        graph_errors = _branch_graph_errors(migrations)
+        if graph_errors:
+            invalid_branch_graphs[ref] = graph_errors
 
     collisions = []
     for revision, entries in sorted(by_revision.items()):
@@ -129,7 +183,11 @@ def audit(refs: list[str]) -> dict[str, object]:
         "collisions": collisions,
         "branch_only_revision_count": len(branch_only),
         "branch_only_revisions": branch_only,
-        "requires_reviewed_data_preserving_reconciliation": bool(collisions or branch_only),
+        "invalid_branch_graph_count": len(invalid_branch_graphs),
+        "invalid_branch_graphs": invalid_branch_graphs,
+        "requires_reviewed_data_preserving_reconciliation": bool(
+            collisions or branch_only or invalid_branch_graphs
+        ),
     }
 
 
