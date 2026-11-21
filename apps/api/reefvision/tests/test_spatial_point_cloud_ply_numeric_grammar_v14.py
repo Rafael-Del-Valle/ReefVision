@@ -10,7 +10,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.services.spatial_point_cloud_v14 import parse_ascii_ply_points
+from reefvision.schemas.spatial_point_cloud_v14 import PointCloudPreviewRequest
+from reefvision.services.spatial_point_cloud_v14 import (
+    parse_ascii_ply_points,
+    preview_point_cloud_from_request,
+)
 from reefvision.tests.test_annotations import create_project
 
 PLY = (
@@ -102,6 +106,29 @@ def test_non_ascii_point_cloud_ply_fails_cleanly_at_parser_and_api(
         # Other versions pass surrogates through; the ASCII parser rejects
         # those together with all well-formed non-ASCII source characters.
         assert response.json()["detail"] == "Point-cloud PLY must contain ASCII text only"
+
+
+@pytest.mark.parametrize(
+    ("invalid", "diagnostic"),
+    [
+        (PLY.replace("end_header", "comment survey \\ud800\\nend_header"), "ASCII text only"),
+        (PLY.replace("1 2 3", "1 2 3\\udfff"), "ASCII text only"),
+        (PLY.replace("end_header", "comment caf\\u00e9\\nend_header"), "ASCII text only"),
+        (PLY.replace("1 2 3", "1\\x0b2 3"), "unsupported control"),
+    ],
+)
+def test_untrusted_point_cloud_ply_is_validated_before_provenance_encoding(
+    invalid: str, diagnostic: str
+) -> None:
+    """Bypassed model validation must not turn bad imported bytes into a 500 error.
+
+    Saved graphs deserialize typed parameters, but the service itself must
+    remain fail-closed even if an older artifact or direct caller supplies text
+    containing unpaired surrogate code points. No source digest is published.
+    """
+    payload = PointCloudPreviewRequest.model_construct(**{**PARAMS, "ply_text": invalid})
+    with pytest.raises(ValueError, match=diagnostic):
+        preview_point_cloud_from_request(payload)
 
 
 def test_non_ascii_point_cloud_ply_saved_workflow_fails_without_measurement(
