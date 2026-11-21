@@ -1,9 +1,9 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T10:59:40.007657+00:00",
-  "candidate_pr": 150,
-  "integrated_source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
-  "selected_qualification": "exchanged_pose_training",
+  "updated_utc": "2026-11-21T11:09:19.557814+00:00",
+  "candidate_pr": 151,
+  "integrated_source": "91027e893172d500897058dbb2c1cc5b9de5d50a",
+  "selected_qualification": "frozen_frame_separation",
   "initial_candidate_pr": 131,
   "initial_integrated_source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
   "initial_qualification_sections": [
@@ -1292,7 +1292,7 @@
       "sha256": "fdf8ea494b767e63d20b1014a2a56e0ef72a1349690357b890b585d551d89c45"
     }
   },
-  "active_product_pr": 150,
+  "active_product_pr": 151,
   "exchanged_pose_training": {
     "source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
     "version": "1.9.0",
@@ -1608,5 +1608,130 @@
     "successor_worktree": "C:/rv19-frame-holdout",
     "successor_branch": "codex/reefvision-1.9-frozen-frame-separation",
     "qualification": "Original #150 media, full backend and stock installation retain their individual observations. The corrected package receives the final registered guided and offline scenarios."
+  },
+  "frozen_frame_separation": {
+    "source": "91027e893172d500897058dbb2c1cc5b9de5d50a",
+    "branch": "codex/reefvision-1.9-frozen-frame-separation",
+    "draft": 151,
+    "base_draft": 150,
+    "previous_source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
+    "frozen_frame_trials": {
+      "reefpose": {
+        "worker_and_reopen": {
+          "file": "1.9/checkpoints/91027e893/source/public/reefpose.json",
+          "sha256": "683ab906a684c893bef7abfff20c8d224540177f1ff245bf3fdd2710645dde7c"
+        },
+        "prior_child_recovery_and_registration": {
+          "file": "1.9/checkpoints/91027e893/source/historical/reefpose.json",
+          "sha256": "f42256773dd5d8b7449b1b2e13a9a857502866a04437a6a6287f06a8c7b25d95"
+        },
+        "generated_disjoint_checkpoint_sha256": "416dedd6fac34138d08439b6552df3f51748f27baa2d024113e510172953309b",
+        "generated_disjoint_model_id": "5ee37775-68a7-4c4f-8685-a8a9736134b6"
+      },
+      "ultralytics": {
+        "worker_and_reopen": {
+          "file": "1.9/checkpoints/91027e893/source/public/ultralytics.json",
+          "sha256": "63bd5646361f440e06f160d2578885160db91af51ad9c98768f27c9baa39fb8a"
+        },
+        "prior_child_recovery_and_registration": {
+          "file": "1.9/checkpoints/91027e893/source/historical/ultralytics.json",
+          "sha256": "814b00936a82cb30f74aba0bda3a2694caa9747179b34712e7f2256a64bd7c9b"
+        },
+        "generated_disjoint_checkpoint_sha256": "46c701fba7fa1a2978df7d497fae7a0c920b96f356c0d39690ee421feb5fa56c",
+        "generated_disjoint_model_id": "d9965c72-2d31-40f8-baae-abdd3207e6cb"
+      }
+    },
+    "tests": {
+      "frame-final-regressions": {
+        "passed": 5,
+        "junit": {
+          "file": "1.9/checkpoints/91027e893/source/checks/frame-final-regressions.xml",
+          "sha256": "eb3647692f10476c04d24d6709aba24873563c9cbc4378311256dba0e57d8895"
+        }
+      },
+      "frame-stored-check": {
+        "passed": 9,
+        "junit": {
+          "file": "1.9/checkpoints/91027e893/source/checks/frame-stored-check.xml",
+          "sha256": "28c0d50c54c08f54d9a59169a44503f0ee1d4c3a0d50b040719e6bc936807bcf"
+        }
+      },
+      "frame-transfer": {
+        "passed": 4,
+        "junit": {
+          "file": "1.9/checkpoints/91027e893/source/checks/frame-transfer.xml",
+          "sha256": "9d36c12df48ea3d2dea7df222ef365f18410d0e08082a27aade9803a252f6b88"
+        }
+      },
+      "frame-pose-phase": {
+        "passed": 33,
+        "junit": {
+          "file": "1.9/checkpoints/91027e893/source/checks/frame-pose-phase.xml",
+          "sha256": "e480cad2289cea2a82c40ad2e3f6584570e6c713b2f6f841cb97cffd3a58a780"
+        }
+      },
+      "91027-gpu": {
+        "passed": 5,
+        "junit": {
+          "file": "1.9/checkpoints/91027e893/source/checks/91027-gpu.xml",
+          "sha256": "04b51bd3039b07ea08106443a50ec38fc91d8d6a872d10f7748bd9b51f4ab121"
+        }
+      }
+    },
+    "full_windows": {
+      "output": "C:/rvb19-91027",
+      "source": "91027e893172d500897058dbb2c1cc5b9de5d50a",
+      "cases": 6099,
+      "workers": 16,
+      "ordered_collection_sha256": "6b31f967415095a9e9d0036098cf0f1a6b20a99a5d78b70401e67a672769f263"
+    },
+    "schema": "b19_registration_0001",
+    "new_migrations": [],
+    "migration_roundtrip": {
+      "file": "1.9/checkpoints/91027e893/source/checks/migration-roundtrip.log",
+      "sha256": "0c3040c05dc906eb69e8fb87f06118e3f33accddb329721e9583c47d2f12df6d"
+    },
+    "transfer_browser": {
+      "fresh": {
+        "worker": {
+          "file": "1.9/checkpoints/91027e893/source/transfers/fresh.json",
+          "sha256": "3a5b6481d5779995bfd1b26e8616d708dd576f286db18433f13d4602e9b4a1fd"
+        },
+        "playwright": {
+          "file": "1.9/checkpoints/91027e893/source/transfers/fresh-playwright.json",
+          "sha256": "db92485ef85746ed374a4c97b04e0df75bc7fd56b9dcf51c627df05b85d21811"
+        }
+      },
+      "historical": {
+        "worker": {
+          "file": "1.9/checkpoints/91027e893/source/transfers/historical.json",
+          "sha256": "ae369fe82346448630660822536fe4673484522eef70d50f218ca90623ac062e"
+        },
+        "playwright": {
+          "file": "1.9/checkpoints/91027e893/source/transfers/historical-playwright.json",
+          "sha256": "98b5dc0bf0454236a0fab8729cd899342699136af0c8f3b6c9759c193eb5f09e"
+        }
+      }
+    },
+    "existing_study_exchange": {
+      "file": "1.9/checkpoints/91027e893/source/transfers/preserved-legacy-history.json",
+      "sha256": "29a4916af4e2c69c69f10f8220b692024b8e0becf57e5623ca69cbaa4df52642"
+    },
+    "quality": {
+      "ruff_checked": true,
+      "ruff_format_checked_files": 1349,
+      "mypy_checked_files": 779
+    },
+    "hosted": {
+      "build_run": 44897196611,
+      "producer": 136825277972,
+      "general": 44897196447,
+      "pose": 44897196416
+    },
+    "scientific_scope": "Generated recordings, reviewed fixture frames and real local model fitting. Independent field data and review remain open.",
+    "retained_record": {
+      "file": "1.9/checkpoints/91027e893/source/qualification.json",
+      "sha256": "21375b03a17c5b300e277f913f1860c244b6998514ad3bca10789ae7b82189a0"
+    }
   }
 }
