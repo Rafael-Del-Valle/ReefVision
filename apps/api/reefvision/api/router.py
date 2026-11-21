@@ -59,9 +59,12 @@ from reefvision.api.routes.model_runtime import router as model_runtime_router
 from reefvision.api.routes.models import router as models_router
 from reefvision.api.routes.monitoring import router as monitoring_router
 from reefvision.api.routes.monitoring_summaries import router as monitoring_summaries_router
+from reefvision.api.routes.multimodal import router as multimodal_router
 from reefvision.api.routes.multispectral import router as multispectral_router
 from reefvision.api.routes.paired_models_v15 import router as paired_models_router
+from reefvision.api.routes.plugins import router as plugins_router
 from reefvision.api.routes.pose_active_learning import router as pose_active_learning_router
+from reefvision.api.routes.pose_appearance import router as pose_appearance_router
 from reefvision.api.routes.pose_biological_measurement import (
     router as pose_biological_measurement_router,
 )
@@ -180,11 +183,14 @@ api_router.include_router(pose_active_learning_router)
 api_router.include_router(pose_evaluation_router)
 api_router.include_router(reefpose_validation_router)
 api_router.include_router(temporal_reefpose_router)
+api_router.include_router(pose_appearance_router)
+api_router.include_router(multimodal_router)
 api_router.include_router(pose_identity_tracking_router)
 api_router.include_router(pose_biological_measurement_router)
 api_router.include_router(pose_schemas_router)
 api_router.include_router(pose_training_datasets_router)
 api_router.include_router(advanced_providers_router)
+api_router.include_router(plugins_router)
 api_router.include_router(advanced_provider_execution_router)
 api_router.include_router(workflow_graphs_router)
 api_router.include_router(workflow_schedule_receipt_router)

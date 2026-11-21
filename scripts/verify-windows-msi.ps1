@@ -88,18 +88,19 @@ try {
         throw 'MSI extraction completed without producing files.'
     }
 
-    $DesktopExe = @($ExtractedFiles | Where-Object { $_.Name -ieq 'ReefVision.exe' }) | Select-Object -First 1
-    if (-not $DesktopExe) {
-        throw 'Extracted MSI does not contain ReefVision.exe.'
+    $DesktopCandidates = @($ExtractedFiles | Where-Object {
+        $_.Name -ieq 'ReefVision.exe' -and
+        (Test-Path -LiteralPath (Join-Path $_.DirectoryName 'backend\reefvision-api\reefvision-api.exe') -PathType Leaf)
+    })
+    if ($DesktopCandidates.Count -ne 1) {
+        throw 'Extracted MSI must contain one primary ReefVision.exe beside its backend directory.'
     }
+    $DesktopExe = $DesktopCandidates[0]
     $DesktopVersion = $DesktopExe.VersionInfo.ProductVersion
     if ($DesktopVersion -notin @($ExpectedVersion, "$ExpectedVersion.0")) {
         throw "Desktop version $DesktopVersion does not match expected $ExpectedVersion."
     }
-    $SidecarExe = @($ExtractedFiles | Where-Object { $_.Name -ieq 'reefvision-api.exe' }) | Select-Object -First 1
-    if (-not $SidecarExe) {
-        throw 'Extracted MSI does not contain reefvision-api.exe.'
-    }
+    $SidecarExe = Get-Item -LiteralPath (Join-Path $DesktopExe.DirectoryName 'backend\reefvision-api\reefvision-api.exe')
     $ModelCatalog = @($ExtractedFiles | Where-Object { $_.Name -ieq 'model_catalog.json' }) | Select-Object -First 1
     if (-not $ModelCatalog) {
         throw 'Extracted MSI does not contain model_catalog.json.'
@@ -181,6 +182,36 @@ try {
     }
     if ([int]$SelfTestResult.openapi_path_count -le 0) {
         throw "Packaged API self-test reported no OpenAPI paths."
+    }
+    if ([version]$ExpectedVersion -ge [version]'2.0.0') {
+        $WasmtimeVersion = [string]$SelfTestResult.wasmtime_runtime_version
+        if ($WasmtimeVersion -cne '51.0.0') {
+            throw "Packaged API self-test did not execute the pinned Wasmtime runtime."
+        }
+        $RuntimeRoot = Join-Path $SidecarExe.DirectoryName '_internal'
+        foreach ($relativePath in @(
+            'wasmtime\win32-x86_64\_wasmtime.dll',
+            "wasmtime-$WasmtimeVersion.dist-info\METADATA",
+            "wasmtime-$WasmtimeVersion.dist-info\licenses\LICENSE"
+        )) {
+            $RuntimeFile = Get-Item -LiteralPath (Join-Path $RuntimeRoot $relativePath)
+            if ($RuntimeFile.PSIsContainer -or $RuntimeFile.Length -le 0) {
+                throw "Packaged Wasmtime runtime file is missing or empty: $relativePath"
+            }
+            $RuntimeHash = (Get-FileHash -LiteralPath $RuntimeFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            Write-Host "Wasmtime $relativePath SHA-256: $RuntimeHash"
+        }
+        $AutomationConsole = Join-Path $DesktopExe.DirectoryName 'automation\reefvision.exe'
+        $AutomationSdkDirectory = Join-Path $DesktopExe.DirectoryName 'automation\sdk'
+        $AutomationSdkWheels = @(Get-ChildItem -LiteralPath $AutomationSdkDirectory -File -Filter '*.whl')
+        if (-not (Test-Path -LiteralPath $AutomationConsole -PathType Leaf) -or $AutomationSdkWheels.Count -ne 1) {
+            throw 'Extracted MSI must contain the separate Windows console and exactly one offline SDK wheel.'
+        }
+        & $AuditPython (Join-Path $PSScriptRoot 'build-automation-sdk-wheel.py') --verify-wheel $AutomationSdkWheels[0].FullName
+        if ($LASTEXITCODE -ne 0) { throw 'The packaged offline SDK wheel differs from the canonical package.' }
+        . (Join-Path $PSScriptRoot 'lib/windows-automation-acceptance.ps1')
+        Invoke-ReefVisionPackagedAutomationProof -ConsolePath $AutomationConsole `
+            -Scratch (Join-Path $SelfTestData 'automation-proof') -ExpectedVersion $ExpectedVersion
     }
 
     $DatabaseFiles = @(Get-ChildItem -Path $SelfTestData -Recurse -File | Where-Object {

@@ -14,6 +14,7 @@ import threading
 from collections.abc import Sequence
 from contextlib import suppress
 from dataclasses import dataclass
+from importlib.metadata import version as distribution_version
 from pathlib import Path
 from typing import Protocol, TextIO, cast
 
@@ -29,6 +30,7 @@ from reefvision.logging_utils import configure_rotating_json_logging
 LOGGER = logging.getLogger("reefvision.desktop")
 _WINDOWED_STREAMS: list[TextIO] = []
 SELF_TEST_RESULT_FILENAME = "self-test-result.json"
+WASMTIME_RUNTIME_VERSION = "51.0.0"
 
 
 class SupportsShouldExit(Protocol):
@@ -67,9 +69,8 @@ def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
         "--self-test",
         action="store_true",
         help=(
-            "Validate packaged migrations, ML provider imports, Scale Assistant marker "
-            "runtime, and FastAPI/OpenAPI construction, then exit without starting the "
-            "API server"
+            "Validate packaged migrations, ML provider imports, Scale Assistant markers, "
+            "Wasmtime and FastAPI/OpenAPI construction, then exit without starting the API server"
         ),
     )
     parser.add_argument(
@@ -292,11 +293,38 @@ def require_scale_assistant_marker_runtime() -> None:
         )
 
 
+def require_wasmtime_runtime() -> str:
+    """Check bundled Wasmtime metadata and execute one built-in known-answer module."""
+    from wasmtime import Config, Engine, Func, Instance, Module, Store
+
+    actual = distribution_version("wasmtime")
+    if actual != WASMTIME_RUNTIME_VERSION:
+        raise RuntimeError(f"Expected Wasmtime {WASMTIME_RUNTIME_VERSION}, found {actual}")
+
+    config = Config()
+    config.consume_fuel = True
+    engine = Engine(config)
+    store = Store(engine)
+    store.set_limits(memory_size=0, table_elements=0, instances=1, tables=0, memories=0)
+    store.set_fuel(100)
+    module = Module(
+        engine,
+        """(module
+            (func (export "add") (param i32 i32) (result i32)
+                local.get 0 local.get 1 i32.add))""",
+    )
+    add = Instance(store, module, []).exports(store)["add"]
+    if not isinstance(add, Func) or add(store, 19, 23) != 42:
+        raise RuntimeError("Packaged Wasmtime did not produce the expected self-test result")
+    return actual
+
+
 def write_self_test_result(
     data_dir: Path,
     *,
     version: str,
     openapi_path_count: int,
+    wasmtime_runtime_version: str,
 ) -> Path:
     """Write deterministic machine-readable evidence for packaged self-test success."""
     result_path = data_dir / SELF_TEST_RESULT_FILENAME
@@ -306,6 +334,7 @@ def write_self_test_result(
         "status": "PASS",
         "application_version": version,
         "openapi_path_count": openapi_path_count,
+        "wasmtime_runtime_version": wasmtime_runtime_version,
     }
     temporary.write_text(
         json.dumps(payload, sort_keys=True) + "\n",
@@ -453,6 +482,7 @@ def run_self_test(settings: Settings) -> int:
     require_all_implemented_providers_ready()
     require_scale_assistant_marker_runtime()
     require_annotated_video_encoder_runtime()
+    wasmtime_runtime_version = require_wasmtime_runtime()
     resolve_video_depth_anything_source(settings)
 
     from reefvision.main import create_app
@@ -466,6 +496,7 @@ def run_self_test(settings: Settings) -> int:
         settings.resolved_data_dir,
         version=str(schema["info"]["version"]),
         openapi_path_count=len(paths),
+        wasmtime_runtime_version=wasmtime_runtime_version,
     )
     LOGGER.info(
         "Desktop self-test validated ReefVision version %s; %s OpenAPI paths",
@@ -590,4 +621,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
+    if len(sys.argv) >= 4 and sys.argv[1] == "--automation-cli-output" and sys.argv[3] == "--":
+        ensure_standard_streams()
+        from reefvision.automation_cli import main as automation_main
+
+        raise SystemExit(automation_main(sys.argv[4:], output=Path(sys.argv[2])))
+    if len(sys.argv) == 3 and sys.argv[1] == "--plugin-worker":
+        from reefvision.ml.plugin_worker import run_plugin_worker
+
+        run_plugin_worker(Path(sys.argv[2]))
+        raise SystemExit(0)
     raise SystemExit(main())

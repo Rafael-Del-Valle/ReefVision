@@ -34,6 +34,7 @@ from reefvision.services.project_exchange_taxonomy_v18 import (
 from reefvision.storage.datasets import canonical_json_sha256
 
 FORMAT = "1.8"
+RESEARCH_FORMATS = {FORMAT, "2.0"}
 SECTIONS = ("image_adjustment_recipes", *TAXONOMY_SECTIONS, *SPECTRAL_SECTIONS)
 
 
@@ -67,7 +68,7 @@ def validate_research_format(
     has_domain_output = any(
         row.get("data_type") == "domain_shift_report" for row in rows.get("workflow_artifacts", [])
     )
-    if version != FORMAT:
+    if version not in RESEARCH_FORMATS:
         if (
             sections
             or has_domain
@@ -77,7 +78,11 @@ def validate_research_format(
         ):
             raise ValidationError("Multimodal research records require Project Exchange 1.8")
         return
-    if not has_domain and not any(rows.get(name) for name in (*sections, *AUDIO_SECTION_MODELS)):
+    if (
+        version == FORMAT
+        and not has_domain
+        and not any(rows.get(name) for name in (*sections, *AUDIO_SECTION_MODELS))
+    ):
         raise ValidationError("The 1.8 archive is missing its multimodal research records")
     if any(rows.get(name) for name in TAXONOMY_SECTIONS):
         if not all(name in rows for name in TAXONOMY_SECTIONS):

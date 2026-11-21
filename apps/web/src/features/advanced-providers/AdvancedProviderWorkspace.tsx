@@ -2,6 +2,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { getJob, getProjectModelCatalog, type Project } from "../../api/client";
+import { PluginWorkspace } from "../plugins/PluginWorkspace";
+import type { WorkflowGraphRecord } from "../workflow-graphs/workflowGraphApi";
 import {
   executeAdvancedProvider,
   getAdvancedProviderManifests,
@@ -13,6 +15,7 @@ import {
 
 interface AdvancedProviderWorkspaceProps {
   project: Project;
+  onOpenPluginWorkflow?: (graph: WorkflowGraphRecord) => void;
 }
 
 const MANAGED_PROVIDER_CATALOG_IDS: Record<string, string> = {
@@ -61,6 +64,7 @@ function defaultPromptFields(
 
 export function AdvancedProviderWorkspace({
   project,
+  onOpenPluginWorkflow,
 }: AdvancedProviderWorkspaceProps) {
   const [providerId, setProviderId] = useState("");
   const [task, setTask] = useState("");
@@ -218,12 +222,21 @@ export function AdvancedProviderWorkspace({
           <p className="eyebrow">Models &amp; AI</p>
           <h3>Providers</h3>
           <p>
-            Inspect provider availability and run supported optional vision
-            providers through a guided, fail-closed workflow. Local JSON
-            manifests are inspected without loading provider code.
+            Manage local image-measurement plugins and inspect optional vision
+            providers.
+          </p>
+          <p>
+            In the v1 provider catalog, local JSON manifests are inspected
+            without loading provider code.
           </p>
         </div>
       </div>
+
+      <PluginWorkspace
+        key={project.id}
+        projectId={project.id}
+        onOpenWorkflow={onOpenPluginWorkflow}
+      />
 
       <div className="feature-grid">
         <div className="panel-card">

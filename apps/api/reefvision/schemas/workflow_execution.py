@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from reefvision.schemas.model_runtime import Digest
 from reefvision.schemas.workflow_graphs import WorkflowGraphRequest
 
 
@@ -32,6 +33,7 @@ class WorkflowGraphSaveRequest(BaseModel):
 
 class WorkflowRunCreateRequest(BaseModel):
     graph_record_id: str = Field(min_length=1, max_length=36)
+    expected_graph_sha256: Digest | None = None
     inputs: dict[str, Any] = Field(default_factory=dict)
 
 

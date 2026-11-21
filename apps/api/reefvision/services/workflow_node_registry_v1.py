@@ -25,13 +25,21 @@ from reefvision.services.workflow_metric_depth_3d import (
 )
 from reefvision.services.workflow_monitoring import monitoring_assessment_node
 from reefvision.services.workflow_monitoring_summary import monitoring_summary_node
+from reefvision.services.workflow_multimodal import register as register_multimodal
 from reefvision.services.workflow_multispectral import multispectral_node
 from reefvision.services.workflow_node_registry import (
     workflow_node_registry as base_workflow_node_registry,
 )
 from reefvision.services.workflow_paired_growth_contrast import paired_growth_contrast_node
 from reefvision.services.workflow_paired_models_v15 import paired_models_node
+from reefvision.services.workflow_plugins import (
+    MEASUREMENT_REVIEW,
+    measurement_review_node,
+    plugin_node,
+)
+from reefvision.services.workflow_plugins import NODE as PLUGIN_MEASUREMENT
 from reefvision.services.workflow_pose import register_pose_workflow_adapters
+from reefvision.services.workflow_pose_appearance import register_appearance_node
 from reefvision.services.workflow_pose_evaluation import (
     register_pose_evaluation_workflow_adapter,
 )
@@ -967,8 +975,12 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
     registry["research_publication_figure"] = research_report_node()
     registry["image_acquisition_quality"] = acquisition_quality_node()
     add_underwater_adjustment(registry)
+    registry[PLUGIN_MEASUREMENT] = plugin_node()
+    registry[MEASUREMENT_REVIEW] = measurement_review_node()
     registry.update(register_scientific_comparison_nodes())
     registry.update(register_temporal_reefpose_nodes())
+    registry["reefpose_appearance_replay"] = register_appearance_node()
+    registry["multimodal_study_replay"] = register_multimodal()
 
     registry["ecology_connected_branch_preview"] = WorkflowNodeDefinitionResponse(
         node_type="ecology_connected_branch_preview",

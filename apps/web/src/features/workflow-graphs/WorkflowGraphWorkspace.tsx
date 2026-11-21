@@ -26,6 +26,7 @@ import {
   saveWorkflowGraph,
   validateWorkflowGraph,
   type WorkflowArtifact,
+  type WorkflowGraphRecord,
   type WorkflowNodeRun,
 } from "./workflowGraphApi";
 import {
@@ -41,6 +42,10 @@ import { MeshArtifactViewer } from "./MeshArtifactViewer";
 import { PointCloudArtifactViewer } from "./PointCloudArtifactViewer";
 import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
 import {
+  MeasurementReviewSummary,
+  measurementReviewInput,
+} from "./MeasurementReviewSummary";
+import {
   WorkflowPoseSourceFields,
   type WorkflowSourceEdge,
   type WorkflowSourceNode,
@@ -52,6 +57,7 @@ interface WorkflowGraphWorkspaceProps {
   initialPoseArchitecture?: string | null;
   initialRunId?: string | null;
   initialGraph?: Record<string, unknown>;
+  onSelectSavedRevision?: (record: WorkflowGraphRecord) => void;
   onOpenScience?: (
     view: "ecology" | "models" | "quality_control" | "video",
   ) => void;
@@ -379,6 +385,7 @@ export function WorkflowGraphWorkspace({
   initialPoseArchitecture,
   initialRunId,
   initialGraph,
+  onSelectSavedRevision,
   onOpenScience,
   onOpenPoseReview,
   onOpenReviewQueue,
@@ -502,7 +509,10 @@ export function WorkflowGraphWorkspace({
   });
   const saveMutation = useMutation({
     mutationFn: () => saveWorkflowGraph(project.id, parsedGraph()),
-    onSuccess: () => void savedGraphsQuery.refetch(),
+    onSuccess: (saved) => {
+      onSelectSavedRevision?.(saved);
+      void savedGraphsQuery.refetch();
+    },
   });
   const saveAndRunMutation = useMutation({
     mutationFn: async () => {
@@ -517,7 +527,8 @@ export function WorkflowGraphWorkspace({
       const run = await queueWorkflowRun(project.id, saved.id);
       return { saved, run };
     },
-    onSuccess: ({ run }) => {
+    onSuccess: ({ saved, run }) => {
+      onSelectSavedRevision?.(saved);
       setSelectedRunId(run.id);
       void savedGraphsQuery.refetch();
       void runsQuery.refetch();
@@ -934,9 +945,10 @@ export function WorkflowGraphWorkspace({
                   <button
                     type="button"
                     className="secondary"
-                    onClick={() =>
-                      setGraphJson(JSON.stringify(record.graph_json, null, 2))
-                    }
+                    onClick={() => {
+                      setGraphJson(JSON.stringify(record.graph_json, null, 2));
+                      onSelectSavedRevision?.(record);
+                    }}
                   >
                     Load
                   </button>
@@ -1059,37 +1071,57 @@ export function WorkflowGraphWorkspace({
               )}
               <h5>Nodes</h5>
               <ol>
-                {runDetailQuery.data?.nodes.map((node) => (
-                  <li key={node.id}>
-                    <strong>{node.node_id}</strong> · {node.node_type} ·{" "}
-                    {node.status}
-                    {node.error_message ? ` — ${node.error_message}` : ""}
-                    {node.status === "waiting_for_review" && (
-                      <div className="button-row">
-                        <PoseReviewActions
-                          node={node}
-                          runId={selectedRun.id}
-                          projectId={project.id}
-                          artifacts={runDetailQuery.data?.artifacts ?? []}
-                          onOpen={onOpenPoseReview}
-                        />
-                        <button
-                          type="button"
-                          disabled={resumeReviewMutation.isPending}
-                          onClick={() => resumeReviewMutation.mutate(node.id)}
-                        >
-                          Resume after review
-                        </button>
-                      </div>
-                    )}
-                    {Object.keys(node.result_json).length > 0 && (
-                      <details>
-                        <summary>Node result</summary>
-                        <pre>{JSON.stringify(node.result_json, null, 2)}</pre>
-                      </details>
-                    )}
-                  </li>
-                ))}
+                {runDetailQuery.data?.nodes.map((node) => {
+                  const reviewMeasurement =
+                    node.node_type === "measurement_review_gate";
+                  const input = reviewMeasurement
+                    ? measurementReviewInput(
+                        node,
+                        runDetailQuery.data?.artifacts ?? [],
+                      )
+                    : undefined;
+                  return (
+                    <li key={node.id}>
+                      <strong>{node.node_id}</strong> · {node.node_type} ·{" "}
+                      {node.status}
+                      {node.error_message ? ` — ${node.error_message}` : ""}
+                      {node.status === "waiting_for_review" && (
+                        <>
+                          {reviewMeasurement && (
+                            <MeasurementReviewSummary artifact={input} />
+                          )}
+                          <div className="button-row">
+                            <PoseReviewActions
+                              node={node}
+                              runId={selectedRun.id}
+                              projectId={project.id}
+                              artifacts={runDetailQuery.data?.artifacts ?? []}
+                              onOpen={onOpenPoseReview}
+                            />
+                            <button
+                              type="button"
+                              disabled={
+                                resumeReviewMutation.isPending ||
+                                (reviewMeasurement && !input)
+                              }
+                              onClick={() =>
+                                resumeReviewMutation.mutate(node.id)
+                              }
+                            >
+                              Resume after review
+                            </button>
+                          </div>
+                        </>
+                      )}
+                      {Object.keys(node.result_json).length > 0 && (
+                        <details>
+                          <summary>Node result</summary>
+                          <pre>{JSON.stringify(node.result_json, null, 2)}</pre>
+                        </details>
+                      )}
+                    </li>
+                  );
+                })}
               </ol>
               <h5>Artifacts</h5>
               <ul>

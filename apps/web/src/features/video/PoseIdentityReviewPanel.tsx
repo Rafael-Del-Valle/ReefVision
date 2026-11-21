@@ -21,6 +21,8 @@ import {
 
 import type { PoseEvidenceNavigation } from "./videoWorkspaceBridge";
 
+import { PoseAppearancePanel } from "./PoseAppearancePanel";
+
 interface PoseIdentityReviewPanelProps {
   evidence?: PoseEvidenceNavigation | null;
   projectId: string;
@@ -643,6 +645,7 @@ export function PoseIdentityReviewPanel({
           Identity tracking data could not be loaded.
         </p>
       )}
+      <PoseAppearancePanel projectId={projectId} videoId={videoId} />
     </section>
   );
 }

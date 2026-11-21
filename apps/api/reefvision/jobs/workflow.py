@@ -233,7 +233,7 @@ def process_workflow_run_job(
             run.completed_at = job.completed_at
             session.commit()
             return False
-        graphs = WorkflowGraphService(session)
+        graphs = WorkflowGraphService(session, settings)
         plan = graphs.plan(run.project_id, graph)
         if not plan.valid:
             job.status = "failed"

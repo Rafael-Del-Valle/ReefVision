@@ -30,6 +30,7 @@ import { EnhancedAnnotationEditor } from "./features/annotation-editor/EnhancedA
 import { ClassManagerPanel } from "./features/classes/ClassManagerPanel";
 import { ClassificationWorkspace } from "./features/classification/ClassificationWorkspace";
 import { ComputedMetricsPanel } from "./features/computed-metrics/ComputedMetricsPanel";
+import { ComputeWorkspace } from "./features/compute/ComputeWorkspace";
 import { DatasetVersionsPanel } from "./features/dataset-versions/DatasetVersionsPanel";
 import { EnvironmentalContextPanel } from "./features/environmental-context/EnvironmentalContextPanel";
 import { FieldCaptureWorkspace } from "./features/field-capture/FieldCaptureWorkspace";
@@ -42,8 +43,10 @@ import {
   type OnboardingWorkspace,
 } from "./features/onboarding/OnboardingModal";
 import { QualityControlDashboard } from "./features/quality-control/QualityControlDashboard";
+import { MultimodalWorkspace } from "./features/multimodal/MultimodalWorkspace";
 import { ReproducibilityWorkspace } from "./features/reproducibility/ReproducibilityWorkspace";
 import type { WorkflowGraphRecord } from "./features/workflow-graphs/workflowGraphApi";
+import { getApiBaseUrl } from "./runtime";
 import { ReviewerLab } from "./features/reviewer-lab/ReviewerLab";
 import { ReviewQueueDashboard } from "./features/review-queues/ReviewQueueDashboard";
 import { SystemPanel } from "./features/system/SystemPanel";
@@ -112,6 +115,7 @@ type ProjectView =
   | "computed_metrics"
   | "scientific_heatmaps"
   | "ecology"
+  | "multimodal"
   | "research_ecology"
   | "study_design"
   | "monitoring"
@@ -127,11 +131,12 @@ type ProjectView =
   | "review_queue"
   | "reviewer_lab"
   | "advanced_providers"
+  | "compute"
   | "workflows"
   | "workflow_schedules"
   | "system";
 
-const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.1.9.0";
+const ONBOARDING_DISMISS_KEY = "reefvision.onboarding.dismissed.2.0.0";
 
 type ProjectTab = Exclude<ProjectView, "system">;
 
@@ -242,9 +247,15 @@ const PROJECT_NAV_GROUPS: Array<{
       },
       {
         id: "advanced_providers",
-        label: "Providers",
+        label: "Plugins and providers",
         description:
           "Inspect local manifests and use supported prompt, segmentation, depth, OCR, and VLM provider tools.",
+      },
+      {
+        id: "compute",
+        label: "Jobs and resources",
+        description:
+          "Set local CPU and GPU limits and recover interrupted jobs.",
       },
     ],
   },
@@ -258,6 +269,11 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Monitoring",
         description:
           "Assess observation windows, review alerts, and compare local projects.",
+      },
+      {
+        id: "multimodal",
+        label: "Multimodal analysis",
+        description: "Align reviewed acoustic and optical survey observations.",
       },
       {
         id: "study_design",
@@ -348,6 +364,11 @@ function ReefVisionMainApp() {
   const [showImport, setShowImport] = useState(false);
   const [researchGraph, setResearchGraph] =
     useState<WorkflowGraphRecord | null>(null);
+  const [automationRevision, setAutomationRevision] = useState<{
+    projectId: string;
+    openedFromId?: string;
+    recordId: string;
+  }>();
   const [scheduledRunId, setScheduledRunId] = useState<string | null>(null);
   const [workflowReviewOrigin, setWorkflowReviewOrigin] = useState<
     string | null
@@ -361,6 +382,7 @@ function ReefVisionMainApp() {
   const [classificationArchitecture, setClassificationArchitecture] = useState<
     string | null
   >(null);
+  const [updatesFocus, setUpdatesFocus] = useState(0);
   const [activeView, setActiveView] = useState<ProjectView>("gallery");
   const [environmentProjectId, setEnvironmentProjectId] = useState<
     string | null
@@ -667,6 +689,7 @@ function ReefVisionMainApp() {
 
   function openSystemStatus() {
     if (preventQcNavigation()) return false;
+    setUpdatesFocus(0);
     setSelectedProjectId(null);
     setEditorLaunch(null);
     setActiveView("system");
@@ -674,8 +697,9 @@ function ReefVisionMainApp() {
   }
 
   function openOnboardingWorkspace(workspace: OnboardingWorkspace) {
-    if (workspace === "system") {
+    if (workspace === "system" || workspace === "updates") {
       if (!openSystemStatus()) return false;
+      if (workspace === "updates") setUpdatesFocus(Date.now());
     } else {
       if (!navigateToView(workspace)) return false;
       setEditorLaunch(null);
@@ -1009,7 +1033,10 @@ function ReefVisionMainApp() {
             ref={systemSurfaceRef}
             tabIndex={-1}
           >
-            <SystemPanel onOpenOnboarding={() => setShowOnboarding(true)} />
+            <SystemPanel
+              updatesFocus={updatesFocus}
+              onOpenOnboarding={() => setShowOnboarding(true)}
+            />
           </section>
         )}
 
@@ -1051,6 +1078,7 @@ function ReefVisionMainApp() {
               "Work with project data, models, review, and reproducible outputs."
             }
             activePreset={workspacePresetId}
+            activeInspectorView={activeView as Exclude<ProjectView, "system">}
             onPresetChange={selectWorkspacePreset}
             onHome={() => {
               if (preventQcNavigation()) return;
@@ -1269,6 +1297,12 @@ function ReefVisionMainApp() {
                 }}
               />
             )}
+            {activeView === "multimodal" && (
+              <MultimodalWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+              />
+            )}
             {activeView === "reproducibility" && (
               <ReproducibilityWorkspace
                 key={selectedProject.id}
@@ -1311,8 +1345,22 @@ function ReefVisionMainApp() {
                 initialArchitecture={classificationArchitecture}
               />
             )}
+            {activeView === "compute" && (
+              <ComputeWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
+              />
+            )}
             {activeView === "advanced_providers" && (
-              <AdvancedProviderWorkspace project={selectedProject} />
+              <AdvancedProviderWorkspace
+                project={selectedProject}
+                onOpenPluginWorkflow={(graph) => {
+                  if (graph.project_id !== selectedProject.id) return;
+                  setResearchGraph(graph);
+                  setScheduledRunId(null);
+                  setActiveView("workflows");
+                }}
+              />
             )}
             {activeView === "workflow_schedules" && (
               <WorkflowSchedulesWorkspace
@@ -1342,6 +1390,13 @@ function ReefVisionMainApp() {
                   researchGraph?.project_id === selectedProject.id
                     ? researchGraph.graph_json
                     : undefined
+                }
+                onSelectSavedRevision={(record) =>
+                  setAutomationRevision({
+                    projectId: record.project_id,
+                    openedFromId: researchGraph?.id,
+                    recordId: record.id,
+                  })
                 }
                 onOpenScience={setActiveView}
                 onOpenPoseReview={(target) => {
@@ -1591,6 +1646,17 @@ function ReefVisionMainApp() {
         <OnboardingModal
           version={health.data?.version ?? applicationVersion}
           hasProject={Boolean(selectedProject)}
+          automationApiBaseUrl={getApiBaseUrl()}
+          automationProject={selectedProject ?? undefined}
+          preferredWorkflowRevisionId={
+            automationRevision &&
+            automationRevision.projectId === selectedProject?.id &&
+            automationRevision.openedFromId === researchGraph?.id
+              ? automationRevision.recordId
+              : researchGraph?.project_id === selectedProject?.id
+                ? researchGraph?.id
+                : undefined
+          }
           onStartProject={(action) => {
             if (preventQcNavigation()) return;
             setSelectedProjectId(null);

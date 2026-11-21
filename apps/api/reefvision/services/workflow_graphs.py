@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from reefvision.config import Settings
 from reefvision.db.models import (
     DatasetVersion,
     LabelClass,
@@ -31,6 +32,8 @@ from reefvision.schemas.workflow_graphs import (
     WorkflowPlanStep,
 )
 from reefvision.services.workflow_node_registry import workflow_node_registry
+from reefvision.services.workflow_plugins import MEASUREMENT_REVIEW, plugin_plan_issue
+from reefvision.services.workflow_plugins import NODE as PLUGIN_MEASUREMENT
 from reefvision.services.workflow_pose_sources import (
     resolve_frozen_pose_dataset,
     verify_pose_dataset_separation,
@@ -65,6 +68,8 @@ _MODEL_PURPOSES_BY_NODE: dict[str, set[str]] = {
 }
 
 _ACTIONS: dict[str, str] = {
+    "multimodal_study_replay": "Recompute a frozen paired acoustic and optical survey.",
+    "reefpose_appearance_replay": "Recompute a frozen appearance study and its held-out scores.",
     "reefpose_reference_source": "Freeze or resolve an independent scientific reference revision.",
     "reefpose_scientific_validation": "Score original pose outputs and persist a report.",
     "project_source": "Resolve the project selected in the API route.",
@@ -221,6 +226,8 @@ _ACTIONS: dict[str, str] = {
     "detectability_assessment": "Read a frozen detectability estimate and its reviewed evidence.",
     "workflow_schedule_receipt": "Verify one completed schedule occurrence and its artifacts.",
     "underwater_adjustment": "Verify and replay the original and output of one saved adjustment.",
+    PLUGIN_MEASUREMENT: "Verify the package and original image, then save the derived measurement.",
+    MEASUREMENT_REVIEW: "Wait for an explicit acknowledgement of the measured records.",
     "domain_shift_report": "Replay a pinned domain shift report and acquisition-group declaration.",
     "temporal_reefpose_dataset": "Freeze or load a recording-group-split temporal pose dataset.",
     "temporal_reefpose_training": "Train or replay a native temporal pose checkpoint.",
@@ -253,8 +260,9 @@ _ACTIONS: dict[str, str] = {
 
 
 class WorkflowGraphService:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, settings: Settings | None = None) -> None:
         self.session = session
+        self.settings = settings
         self.registry = workflow_node_registry()
 
     def node_registry(self) -> list[WorkflowNodeDefinitionResponse]:
@@ -666,6 +674,16 @@ class WorkflowGraphService:
                 self._validate_training_node(node.node_id, node.parameters, issues)
             elif node.node_type == "qc_review_queue":
                 self._validate_qc_review_queue_node(node.node_id, node.parameters, issues)
+            elif node.node_type == PLUGIN_MEASUREMENT:
+                blocker = plugin_plan_issue(
+                    self.session, self.settings, project_id, node.parameters
+                )
+                if blocker:
+                    issues.append(
+                        self._issue(
+                            "error", "plugin_binding_unavailable", blocker, node_id=node.node_id
+                        )
+                    )
 
         edge_counts = Counter(edge.edge_id for edge in graph.edges)
         for edge_id, count in edge_counts.items():

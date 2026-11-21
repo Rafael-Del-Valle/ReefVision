@@ -1130,7 +1130,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  window.localStorage.setItem("reefvision.onboarding.dismissed.1.9.0", "true");
+  window.localStorage.setItem("reefvision.onboarding.dismissed.2.0.0", "true");
 });
 
 function renderApp() {
@@ -1270,7 +1270,7 @@ describe("App", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: /Welcome to ReefVision 1.9.0/,
+        name: /Welcome to ReefVision 2.0.0/,
       }),
     ).toBeInTheDocument();
 
@@ -1280,7 +1280,7 @@ describe("App", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("heading", { name: /Welcome to ReefVision 1.9.0/ }),
+        screen.queryByRole("heading", { name: /Welcome to ReefVision 2.0.0/ }),
       ).not.toBeInTheDocument(),
     );
   });
@@ -1378,12 +1378,13 @@ describe("App", () => {
       await screen.findByRole("button", { name: /CPT Coral Study/ }),
     );
     await userEvent.click(screen.getByRole("tab", { name: "Models & AI" }));
-    await userEvent.click(screen.getByRole("tab", { name: "Providers" }));
-
-    expect(screen.getByRole("tab", { name: "Providers" })).toHaveAttribute(
-      "aria-selected",
-      "true",
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Plugins and providers" }),
     );
+
+    expect(
+      screen.getByRole("tab", { name: "Plugins and providers" }),
+    ).toHaveAttribute("aria-selected", "true");
     expect(
       await screen.findAllByRole("heading", { name: "Providers" }),
     ).not.toHaveLength(0);
@@ -1392,6 +1393,52 @@ describe("App", () => {
         /Local JSON manifests are inspected without loading provider code/i,
       ),
     ).toBeInTheDocument();
+  });
+
+  it("pauses the GPU queue through project Models & AI and reopens the saved limit", async () => {
+    const fetchMock = mockApi({ projects: [project] });
+    const original = fetchMock.getMockImplementation()!;
+    let gpuSlots = 1;
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/compute/resources")) {
+        if (init?.method === "PUT")
+          gpuSlots = JSON.parse(String(init.body)).gpu_slots;
+        return Response.json({
+          cpu_slots: 1,
+          gpu_slots: gpuSlots,
+          cpu_in_use: 0,
+          gpu_in_use: 0,
+        });
+      }
+      if (url.includes("/compute/jobs?"))
+        return Response.json({ items: [], total: 0 });
+      return original(input, init);
+    });
+    renderApp();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /CPT Coral Study/ }),
+    );
+    await userEvent.click(screen.getByRole("tab", { name: "Models & AI" }));
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Jobs and resources" }),
+    );
+    await userEvent.selectOptions(
+      await screen.findByLabelText("GPU slots"),
+      "0",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save resource limits" }),
+    );
+    await screen.findByText("Resource limits saved.");
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Plugins and providers" }),
+    );
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Jobs and resources" }),
+    );
+    expect(await screen.findByLabelText("GPU slots")).toHaveValue("0");
+    expect(screen.getByText("No jobs in this project.")).toBeInTheDocument();
   });
 
   it("opens the managed image gallery for a project", async () => {

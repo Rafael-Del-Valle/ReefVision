@@ -6,11 +6,12 @@ import asyncio
 import logging
 import subprocess
 import sys
+import time
 from contextlib import suppress
 from datetime import UTC, datetime
 from typing import cast
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
@@ -25,6 +26,7 @@ from reefvision.db.models import (
     WorkflowNodeRun,
     WorkflowRun,
 )
+from reefvision.db.models.job import LocalComputeLease
 from reefvision.jobs.backups import process_backup_job
 from reefvision.jobs.classification_inference import process_classification_inference_job
 from reefvision.jobs.classification_training import process_classification_training_job
@@ -32,6 +34,7 @@ from reefvision.jobs.diagnostics import process_diagnostics_job
 from reefvision.jobs.export import process_export_job
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.model_install import process_model_install_job
+from reefvision.jobs.pose_appearance import process_appearance
 from reefvision.jobs.pose_biological_measurement import process_pose_biological_measurement_job
 from reefvision.jobs.pose_evaluation import process_pose_evaluation_job
 from reefvision.jobs.pose_identity_tracking import process_pose_identity_tracking_job
@@ -50,22 +53,14 @@ from reefvision.jobs.video_metric_depth import process_video_metric_depth_job
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.repositories.jobs import JobRepository
+from reefvision.services.compute_resources import Claim, claim_next, heartbeat, release
 from reefvision.services.sam2_install import process_sam2_install
 from reefvision.services.segmentation_evaluation_queue import SegmentationEvaluationQueueService
 from reefvision.storage.images import create_thumbnail
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.worker_lock import worker_leadership
 
 LOGGER = logging.getLogger("reefvision.worker")
-
-
-def _next_queued_job_identity(
-    factory: sessionmaker[Session],
-) -> tuple[str, str] | None:
-    with factory() as session:
-        job = JobRepository(session).next_queued()
-        if job is None:
-            return None
-        return job.id, job.job_type
 
 
 def _claim_isolated_job(
@@ -329,6 +324,9 @@ def recover_interrupted_jobs(
     settings: Settings | None = None,
 ) -> int:
     with factory() as session:
+        # The new leader holds the OS profile lock. No dispatch from the previous leader
+        # can still be running. Existing job-specific recovery preserves resumable outputs.
+        session.execute(delete(LocalComputeLease))
         interrupted_training_jobs = list(
             session.scalars(
                 select(Job).where(
@@ -710,13 +708,21 @@ def process_next_waiting_segmentation_evaluation(
 
 
 def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session]) -> bool:
-    with factory() as session:
-        job = JobRepository(session).next_queued()
-        job_id = job.id if job is not None else None
-        job_type = job.job_type if job is not None else None
-    if job_id is None:
+    claim = claim_next(factory)
+    if claim is None:
         return process_next_waiting_segmentation_evaluation(settings, factory)
+    try:
+        return _dispatch_job(settings, factory, claim.job_id, claim.job_type)
+    finally:
+        release(factory, claim)
 
+
+def _dispatch_job(
+    settings: Settings,
+    factory: sessionmaker[Session],
+    job_id: str,
+    job_type: str,
+) -> bool:
     try:
         if job_type == "thumbnail":
             return process_thumbnail_job(settings, factory, job_id)
@@ -772,6 +778,8 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
             from reefvision.services.domain_shift_v18 import process_domain_shift
 
             return process_domain_shift(settings, factory, job_id)
+        if job_type == "pose_appearance":
+            return process_appearance(settings, factory, job_id)
         if job_type == "pose_identity_tracking":
             return process_pose_identity_tracking_job(settings, factory, job_id)
         if job_type == "temporal_reefpose":
@@ -917,45 +925,73 @@ async def process_isolated_annotated_video_export_job(
     return True
 
 
+async def _run_claim(
+    settings: Settings, factory: sessionmaker[Session], stop: asyncio.Event, claim: Claim
+) -> None:
+    try:
+        if claim.job_type == "video_tracking":
+            await process_isolated_video_tracking_job(settings, factory, claim.job_id, stop)
+        elif claim.job_type == "video_annotated_export":
+            await process_isolated_annotated_video_export_job(settings, factory, claim.job_id, stop)
+        else:
+            await asyncio.to_thread(_dispatch_job, settings, factory, claim.job_id, claim.job_type)
+    except Exception:
+        LOGGER.exception("Dispatch failed for local job %s", claim.job_id)
+        await asyncio.to_thread(
+            _fail_job, factory, claim.job_id, "The local worker could not finish this job."
+        )
+    finally:
+        await asyncio.to_thread(release, factory, claim)
+
+
+async def _dispatch_available(
+    settings: Settings, factory: sessionmaker[Session], stop: asyncio.Event
+) -> None:
+    active: dict[asyncio.Task[None], Claim] = {}
+    last_heartbeat = time.monotonic()
+    await asyncio.to_thread(recover_interrupted_jobs, factory, settings)
+    try:
+        while not stop.is_set():
+            try:
+                for task in list(active):
+                    if task.done():
+                        active.pop(task)
+                        task.result()
+                if active and time.monotonic() - last_heartbeat >= 5:
+                    await asyncio.to_thread(heartbeat, factory, [c.token for c in active.values()])
+                    last_heartbeat = time.monotonic()
+                claim = await asyncio.to_thread(claim_next, factory)
+                if claim is not None:
+                    active[asyncio.create_task(_run_claim(settings, factory, stop, claim))] = claim
+                    continue
+                if not active and await asyncio.to_thread(
+                    process_next_waiting_segmentation_evaluation, settings, factory
+                ):
+                    continue
+            except Exception:
+                LOGGER.exception(
+                    "Background worker iteration failed",
+                    extra={
+                        "event_id": "background_worker_iteration_failure",
+                        "component": "worker",
+                    },
+                )
+            with suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), timeout=settings.worker_poll_seconds)
+    finally:
+        if active:
+            await asyncio.gather(*active, return_exceptions=True)
+
+
 async def thumbnail_worker_loop(
     settings: Settings,
     factory: sessionmaker[Session],
     stop_event: asyncio.Event,
 ) -> None:
-    recover_interrupted_jobs(factory, settings)
     while not stop_event.is_set():
-        try:
-            queued = _next_queued_job_identity(factory)
-
-            if queued is not None and queued[1] == "video_tracking":
-                processed = await process_isolated_video_tracking_job(
-                    settings,
-                    factory,
-                    queued[0],
-                    stop_event,
-                )
-            elif queued is not None and queued[1] == "video_annotated_export":
-                processed = await process_isolated_annotated_video_export_job(
-                    settings,
-                    factory,
-                    queued[0],
-                    stop_event,
-                )
-            else:
-                processed = await asyncio.to_thread(
-                    process_next_thumbnail_job,
-                    settings,
-                    factory,
-                )
-        except Exception:
-            LOGGER.exception(
-                "Background worker iteration failed",
-                extra={
-                    "event_id": "background_worker_iteration_failure",
-                    "component": "worker",
-                },
-            )
-            processed = False
-        if not processed:
-            with suppress(TimeoutError):
-                await asyncio.wait_for(stop_event.wait(), timeout=settings.worker_poll_seconds)
+        with worker_leadership(settings.resolved_data_dir) as leader:
+            if leader:
+                await _dispatch_available(settings, factory, stop_event)
+                return
+        with suppress(TimeoutError):
+            await asyncio.wait_for(stop_event.wait(), timeout=settings.worker_poll_seconds)

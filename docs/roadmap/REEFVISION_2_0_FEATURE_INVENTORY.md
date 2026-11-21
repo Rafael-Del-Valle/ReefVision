@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T12:28:26Z`
+Updated: `2026-11-21T14:44:29Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1686,7 +1686,7 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
+- `source`: Stock Windows pipes returned UTF-8 inference, held-out benchmark, export and error receipts. Six stale or foreign requests and an existing ZIP were refused. The real review workflow paused and resumed with an explicit reviewer and note. — `docs/validation/2.0-research-candidate.json` (`rv20-cli-sdk-headless-headless-9064024f6`)
 - `browser`: none recorded
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -1706,8 +1706,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Concurrent workers respected local resource limits. A real interrupted CPU epoch resumed under the same logical job with checksummed checkpoints. Tampered bytes were refused. — `docs/validation/2.0-research-candidate.json` (`rv20-compute-scheduling-recovery-10a3d60ab`)
+- `browser`: Pausing CPU work held a newly imported image job across navigation and reload. Resuming the CPU queue completed the same job and preserved the original digest. — `docs/validation/2.0-research-candidate.json` (`rv20-compute-scheduling-jobs-a7ba8b62c`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1747,7 +1747,7 @@ Acceptance checks:
 Evidence:
 
 - `source`: none recorded
-- `browser`: none recorded
+- `browser`: Keyboard reorder and visibility persisted at 960 × 640 with 1.5 simulated scaling. Reset retained an open graph draft. A missing plugin panel recovered after exact reinstall. — `docs/validation/2.0-research-candidate.json` (`rv20-modular-layout-keyboard-1c84788c5`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1766,8 +1766,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: Two successive project exchanges replayed the paired optical and acoustic study. Conflicting time, identity, calibration, frame and coverage withheld shared analysis. — `docs/validation/2.0-research-candidate.json` (`rv20-multimodal-analysis-transfers-3c848d3bf`)
+- `browser`: The researcher saved and reopened a common-grid paired study with a 0.3 fixture difference and replayed its pinned Workflow Builder graph. — `docs/validation/2.0-research-candidate.json` (`rv20-multimodal-analysis-paired-3c848d3bf`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1786,8 +1786,9 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: The source API installed, disabled, reinstalled and executed checksum-pinned local packages. A trapped plugin left no output and the next one ran. A replay that produced a different value preserved the previous result. — `docs/validation/2.0-research-candidate.json` (`rv20-plugin-sdk-scalar-library-6f9b9313a`)
+- `browser`: The researcher installed the bundled example on a fresh desktop backend, enabled it, measured an original image at 0.5, and disabled it. Its saved, unassessed result remained readable. — `docs/validation/2.0-research-candidate.json` (`rv20-plugin-sdk-guided-image-d4feb080f`)
+- `browser`: The original frozen 2.0 service and same-source Chromium renderer measured 0.5 in two reviewed runs, then refused a disabled plugin replay. — `docs/validation/2.0-research-candidate.json` (`rv20-plugin-sdk-frozen-service-78496d000`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1807,10 +1808,11 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: The native encoder used the registered model on reviewed crops. Two successive transferred projects re-executed the saved graph, including its original study checksum and adjudicated result. — `docs/validation/2.0-research-candidate.json` (`rv20-reefpose-long-gap-reidentification-exchange-72af8d740`)
+- `browser`: Identity review exposed the two source crops, candidate scores, separate reviewer decisions and adjudication. The researcher reopened the saved study and ran it in Workflow Builder. — `docs/validation/2.0-research-candidate.json` (`rv20-reefpose-long-gap-reidentification-review-72af8d740`)
 - `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `physical_hardware`: The physical RTX 3090 ran the native appearance model. The generated held-out fixture comprised two animals and two recording groups, with zero false links in eight impostor pairs and zero missed links in eight genuine pairs. — `docs/validation/2.0-research-candidate.json` (`rv20-reefpose-long-gap-reidentification-rtx3090-72af8d740`)
+- `physical_hardware`: The original frozen 2.0 service ran both CPU and physical RTX 3090 CUDA appearance review on a generated held-out fixture. Each run retained its model, source, device and reviewer receipts. — `docs/validation/2.0-research-candidate.json` (`rv20-reefpose-long-gap-reidentification-frozen-78496d000`)
 - `representative_data`: none recorded
 
 ### rv20-release-journeys: 2.0 security, update/offline release, and complete user journeys
@@ -1848,8 +1850,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: The typed graph rejected a mismatched edge and an unavailable pin, paused for a recorded decision, and preserved source and plugin bindings through project exchange. — `docs/validation/2.0-research-candidate.json` (`rv20-workflow-builder-pin-exchange-6f9b9313a`)
+- `browser`: Two separate runs of the guided graph presented value, unit, original and package digests. Both returned the same measurement digest and retained distinct human approval receipts. — `docs/validation/2.0-research-candidate.json` (`rv20-workflow-builder-review-d4feb080f`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import Job
@@ -42,8 +42,9 @@ class JobRepository:
             connection.exec_driver_sql("BEGIN IMMEDIATE")
         return self.session.get(Job, job_id, populate_existing=True, with_for_update=True)
 
-    def next_queued(self) -> Job | None:
-        statement = (
+    @staticmethod
+    def queued_statement() -> Select[Job]:
+        return (
             select(Job)
             .where(
                 Job.status == "queued",
@@ -58,9 +59,10 @@ class JobRepository:
                 | (func.coalesce(Job.request_json["paired_owner_run_id"].as_string(), "") == ""),
             )
             .order_by(Job.created_at, Job.id)
-            .limit(1)
         )
-        return self.session.scalar(statement)
+
+    def next_queued(self) -> Job | None:
+        return self.session.scalar(self.queued_statement().limit(1))
 
     def has_active_jobs(self) -> bool:
         statement = select(Job.id).where(Job.status.in_(("queued", "running", "cancel_requested")))

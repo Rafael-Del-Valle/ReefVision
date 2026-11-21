@@ -1,6 +1,7 @@
 """Workflow registry, validation, persistence, and execution endpoints."""
 
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
@@ -44,9 +45,10 @@ def get_workflow_node_registry(session: DbSession) -> list[WorkflowNodeDefinitio
 def validate_workflow_graph(
     project_id: str,
     payload: WorkflowGraphRequest,
+    request: Request,
     session: DbSession,
 ) -> WorkflowGraphValidationResponse:
-    return WorkflowGraphService(session).validate(project_id, payload)
+    return WorkflowGraphService(session, request.app.state.settings).validate(project_id, payload)
 
 
 @router.post(
@@ -56,9 +58,10 @@ def validate_workflow_graph(
 def plan_workflow_graph(
     project_id: str,
     payload: WorkflowGraphRequest,
+    request: Request,
     session: DbSession,
 ) -> WorkflowGraphPlanResponse:
-    return WorkflowGraphService(session).plan(project_id, payload)
+    return WorkflowGraphService(session, request.app.state.settings).plan(project_id, payload)
 
 
 @router.get(
@@ -80,9 +83,19 @@ def list_saved_workflow_graphs(
 def save_workflow_graph(
     project_id: str,
     payload: WorkflowGraphSaveRequest,
+    request: Request,
     session: DbSession,
 ) -> WorkflowGraphRecordResponse:
-    return WorkflowExecutionService(session).save_graph(project_id, payload)
+    return WorkflowExecutionService(session, request.app.state.settings).save_graph(
+        project_id, payload
+    )
+
+
+@router.get("/projects/{project_id}/workflow-graphs/{graph_id}")
+def saved_graph_revision(
+    project_id: UUID, graph_id: UUID, session: DbSession
+) -> WorkflowGraphRecordResponse:
+    return WorkflowExecutionService(session).get_graph(str(project_id), str(graph_id))
 
 
 @router.get(

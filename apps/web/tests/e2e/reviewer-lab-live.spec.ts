@@ -17,7 +17,7 @@ test("assigns blinded reviews, adjudicates, and replays the sealed agreement", a
   const resolvedReason = "Retain the pair and mark suitability uncertain";
   await page.addInitScript(() => {
     localStorage.setItem("reefvision.onboarding.dismissed.1.4.0", "true");
-    localStorage.setItem("reefvision.onboarding.dismissed.1.9.0", "true");
+    localStorage.setItem("reefvision.onboarding.dismissed.2.0.0", "true");
   });
 
   const created = await page.request.post(api + "/projects", {

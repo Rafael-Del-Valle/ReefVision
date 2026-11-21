@@ -28,8 +28,8 @@ from create_windows_qc_history_controls import (
     verify_original_api,
 )
 
-CURRENT_VERSION = "1.9.0"
-CURRENT = "b19_registration_0001"
+CURRENT_VERSION = "2.0.0"
+CURRENT = "b20_integrated_0001"
 PREVIOUS = "b15_integrated_0002"
 
 

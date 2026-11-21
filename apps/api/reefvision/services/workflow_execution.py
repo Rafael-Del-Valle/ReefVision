@@ -135,7 +135,7 @@ class WorkflowExecutionService:
     def __init__(self, session: Session, settings: Settings | None = None) -> None:
         self.session = session
         self.settings = settings
-        self.graphs = WorkflowGraphService(session)
+        self.graphs = WorkflowGraphService(session, settings)
 
     def _required_settings(self) -> Settings:
         if self.settings is None:
@@ -159,6 +159,14 @@ class WorkflowExecutionService:
         if run is None:
             raise NotFoundError("Workflow run not found")
         return run
+
+    def get_graph(self, project_id: str, graph_id: str) -> WorkflowGraphRecordResponse:
+        graph = self._graph_record(graph_id)
+        if graph.project_id != project_id:
+            raise NotFoundError("Saved graph not found in this project")
+        if canonical_json_sha256(graph.graph_json) != graph.graph_sha256:
+            raise ConflictError("The saved graph content differs from its checksum.")
+        return WorkflowGraphRecordResponse.model_validate(graph)
 
     def list_graphs(self, project_id: str) -> list[WorkflowGraphRecordResponse]:
         self._project(project_id)
@@ -254,6 +262,11 @@ class WorkflowExecutionService:
         request: WorkflowRunCreateRequest,
     ) -> WorkflowRunResponse:
         record, plan = self.prepare_run(project_id, request.graph_record_id)
+        if request.expected_graph_sha256 is not None and (
+            record.graph_sha256 != request.expected_graph_sha256
+            or canonical_json_sha256(record.graph_json) != request.expected_graph_sha256
+        ):
+            raise ConflictError("The saved graph checksum differs from the requested revision.")
         run = self.stage_run(record, plan, request.inputs)
         self.session.commit()
         self.session.refresh(run)

@@ -11,6 +11,7 @@ export type WorkspaceInspectorView =
   | "computed_metrics"
   | "scientific_heatmaps"
   | "ecology"
+  | "multimodal"
   | "research_ecology"
   | "study_design"
   | "monitoring"
@@ -26,6 +27,7 @@ export type WorkspaceInspectorView =
   | "review_queue"
   | "reviewer_lab"
   | "advanced_providers"
+  | "compute"
   | "workflows"
   | "workflow_schedules";
 
@@ -63,6 +65,7 @@ export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "scientific_heatmaps",
   "ecology",
   "research_ecology",
+  "multimodal",
   "study_design",
   "monitoring",
   "reproducibility",
@@ -77,6 +80,7 @@ export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "review_queue",
   "reviewer_lab",
   "advanced_providers",
+  "compute",
   "workflows",
   "workflow_schedules",
 ];
@@ -85,6 +89,20 @@ const WORKSPACE_INSPECTORS: Record<
   WorkspaceInspectorView,
   WorkspaceInspectorDefinition
 > = {
+  compute: {
+    title: "Jobs and resources",
+    summary: "Inspect this project's running jobs, queue and checkpoints.",
+    boundary: "record",
+    recordPolicy:
+      "Local CPU and GPU limits apply to every project. A resumed job keeps its original identity and verified outputs.",
+    actions: [
+      {
+        label: "Training",
+        target: "training",
+        description: "Inspect training progress and registered checkpoints.",
+      },
+    ],
+  },
   acquisition_sources: {
     title: "Acquisition sources",
     summary: "Inspect the source, recording clock and capture history.",
@@ -151,6 +169,21 @@ const WORKSPACE_INSPECTORS: Record<
         label: "Model comparison",
         target: "model_comparison",
         description: "Open paired comparisons.",
+      },
+    ],
+  },
+  multimodal: {
+    title: "Multimodal analysis",
+    summary:
+      "Compare paired optical measurements on a reviewed acoustic clock and spatial footprint.",
+    boundary: "record",
+    recordPolicy:
+      "A frozen study retains source measurements, alignment uncertainties, decision and reviewer.",
+    actions: [
+      {
+        label: "Organisms & ecology",
+        target: "research_ecology",
+        description: "Review registered identities and linked image evidence.",
       },
     ],
   },

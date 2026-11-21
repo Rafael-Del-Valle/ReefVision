@@ -37,6 +37,8 @@ from reefvision.services.project_exchange_reviewer_lab_v15 import REVIEWER_LAB_P
 from reefvision.services.project_exchange_schedules import SECTIONS as SCHEDULE_SECTIONS
 from reefvision.services.project_exchange_temporal_reefpose import validate_temporal_exchange
 from reefvision.services.project_exchange_v15 import SECTIONS as V15_SECTIONS
+from reefvision.services.project_exchange_v20 import SECTIONS as PLATFORM_SECTIONS
+from reefvision.services.project_exchange_v20 import remap_appearance
 from reefvision.services.project_exchange_workflows import validate_workflow_rows
 from reefvision.services.reefpose_validation import heldout_scope
 from reefvision.services.static_comparison import STATIC_COMPARISON_JOB
@@ -81,6 +83,7 @@ _NEW_SECTION_NAMES = (
 )
 _PARENTS = {
     **REVIEWER_LAB_PARENTS,
+    "pose_appearance_decisions": ("study_id", "pose_appearance_studies"),
     "pose_animal_identities": ("association_run_id", "pose_identity_association_runs"),
     "pose_identity_observations": ("association_run_id", "pose_identity_association_runs"),
     "pose_identity_association_decisions": ("association_run_id", "pose_identity_association_runs"),
@@ -133,6 +136,7 @@ def integrated_models() -> dict[str, type[Base]]:
             *MONITORING_SECTIONS,
             *RESEARCH_SECTIONS,
             *AUDIO_SECTION_MODELS,
+            *PLATFORM_SECTIONS,
         )
     }
 
@@ -530,6 +534,7 @@ def remap_reviewed_snapshot(
     mapping: dict[str, str],
     digests: dict[str, str],
 ) -> None:
+    remap_appearance(name, row, values, mapping)
     if name == "ecology_pose_link_revisions":
         payload, digest = remap_pose_link_source(
             row["source_json"],

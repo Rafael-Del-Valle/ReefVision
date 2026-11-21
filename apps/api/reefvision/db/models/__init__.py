@@ -72,6 +72,7 @@ from reefvision.db.models.monitoring import (
     MonitoringProjectSummary,
     MonitoringRule,
 )
+from reefvision.db.models.multimodal import MultimodalStudy
 from reefvision.db.models.multispectral import (
     SpectralAcquisition,
     SpectralBandBinding,
@@ -81,6 +82,7 @@ from reefvision.db.models.pose_active_learning import (
     PoseActiveLearningCandidate,
     PoseActiveLearningRound,
 )
+from reefvision.db.models.pose_appearance import PoseAppearanceDecision, PoseAppearanceStudy
 from reefvision.db.models.pose_biological_measurement import (
     PoseBiologicalEventRevision,
     PoseEventDetectionRun,
@@ -237,9 +239,12 @@ __all__ = [
     "MonitoringAssessment",
     "MonitoringProjectSummary",
     "MonitoringRule",
+    "MultimodalStudy",
     "PoseActiveLearningCandidate",
     "PoseActiveLearningRound",
     "PoseAnimalIdentity",
+    "PoseAppearanceDecision",
+    "PoseAppearanceStudy",
     "PoseBiologicalEventRevision",
     "PoseEvaluationRun",
     "PoseEventDetectionRun",

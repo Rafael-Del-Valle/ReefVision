@@ -48,9 +48,9 @@ def _utc_slot(value: str) -> datetime:
 
 def validate_schedule_exchange(version: str, project_id: str, rows: Rows) -> None:
     present = any(rows.get(name) for name in SECTIONS)
-    if version == "1.8" and not present:
+    if version in {"1.8", "2.0"} and not present:
         return
-    if version not in {FORMAT, MONITORING_FORMAT, "1.8"}:
+    if version not in {FORMAT, MONITORING_FORMAT, "1.8", "2.0"}:
         if present:
             raise ValidationError("Scheduled workflow history requires Project Exchange 1.7")
         return

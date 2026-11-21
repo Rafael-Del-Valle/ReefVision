@@ -74,6 +74,8 @@ WorkflowDataType = Literal[
     "pose_identity_tracks",
     "reviewed_pose_identity_tracks",
     "pose_identity_evaluation",
+    "pose_appearance_report",
+    "multimodal_study_report",
     "pose_identity_package",
     "pose_measurement_series",
     "pose_event_candidates",

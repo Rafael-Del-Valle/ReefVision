@@ -1,5 +1,15 @@
+import type { ReactNode } from "react";
+
 import type { ReviewQueueItem } from "../../api/client";
 import type { VideoWorkspaceContext } from "../../features/video/videoWorkspaceBridge";
+import {
+  panelPluginStatus,
+  useContextualPanelLayout,
+} from "./ContextualPanelLayout";
+import {
+  contextualPanels,
+  emptyPanelPreferences,
+} from "./contextualPanelPreferences";
 import { ProjectInferenceInspector } from "./ProjectInferenceInspector";
 import { ProjectMorphometricsInspector } from "./ProjectMorphometricsInspector";
 import { ProjectTrainingMonitor } from "./ProjectTrainingMonitor";
@@ -58,13 +68,13 @@ export function ScientistWorkspaceInspector({
   const guidance = workspacePresetInspectorGuidance(activePreset);
   const preset = workspacePreset(activePreset);
   const reviewMode = activePreset === "review";
+  const layout = useContextualPanelLayout();
+  const panels =
+    layout?.panels ??
+    contextualPanels(emptyPanelPreferences(), activeView, activePreset);
 
-  return (
-    <div
-      className="rv-scientist-inspector"
-      data-workspace-view={activeView}
-      data-workspace-preset={activePreset}
-    >
+  const cards: Record<string, ReactNode> = {
+    "workflow-context": (
       <section
         className="rv-inspector-card"
         aria-label="Scientist workflow context"
@@ -86,53 +96,47 @@ export function ScientistWorkspaceInspector({
           <p>{definition.recordPolicy}</p>
         </details>
       </section>
+    ),
 
-      {activeView === "gallery" &&
-        activePreset !== "morphometrics" &&
-        projectId && (
-          <ProjectInferenceInspector
-            projectId={projectId}
-            selectedImageIds={inferenceSelectedImageIds}
-            onOpenModelHub={() => onNavigate("models")}
-            onOpenAdvancedProviders={() => onNavigate("advanced_providers")}
-          />
-        )}
+    "image-inference": projectId && (
+      <ProjectInferenceInspector
+        projectId={projectId}
+        selectedImageIds={inferenceSelectedImageIds}
+        onOpenModelHub={() => onNavigate("models")}
+        onOpenAdvancedProviders={() => onNavigate("advanced_providers")}
+      />
+    ),
 
-      {activeView === "gallery" &&
-        activePreset === "morphometrics" &&
-        projectId &&
-        onOpenMeasurements && (
-          <ProjectMorphometricsInspector
-            projectId={projectId}
-            imageId={focusedImageId}
-            onOpenMeasurements={onOpenMeasurements}
-          />
-        )}
+    morphometrics: projectId && onOpenMeasurements && (
+      <ProjectMorphometricsInspector
+        projectId={projectId}
+        imageId={focusedImageId}
+        onOpenMeasurements={onOpenMeasurements}
+      />
+    ),
 
-      {activeView === "training" && projectId && (
-        <ProjectTrainingMonitor projectId={projectId} />
-      )}
+    "training-monitor": projectId && (
+      <ProjectTrainingMonitor projectId={projectId} />
+    ),
 
-      {activeView === "review_queue" && projectId && onOpenReviewItem && (
-        <ProjectReviewInspector
-          projectId={projectId}
-          selectedQueueId={selectedReviewQueueId}
-          onOpenItem={onOpenReviewItem}
-        />
-      )}
+    "review-queue": projectId && onOpenReviewItem && (
+      <ProjectReviewInspector
+        projectId={projectId}
+        selectedQueueId={selectedReviewQueueId}
+        onOpenItem={onOpenReviewItem}
+      />
+    ),
 
-      {activeView === "video" &&
-        onVideoSelect &&
-        onVideoFrameChange &&
-        onVideoTrackChange && (
-          <ProjectVideoPoseInspector
-            context={videoWorkspaceContext}
-            onSelectVideo={onVideoSelect}
-            onSeekFrame={onVideoFrameChange}
-            onSelectTrack={onVideoTrackChange}
-          />
-        )}
+    "video-pose": onVideoSelect && onVideoFrameChange && onVideoTrackChange && (
+      <ProjectVideoPoseInspector
+        context={videoWorkspaceContext}
+        onSelectVideo={onVideoSelect}
+        onSeekFrame={onVideoFrameChange}
+        onSelectTrack={onVideoTrackChange}
+      />
+    ),
 
+    "truth-boundary": (
       <section
         className="rv-inspector-card rv-inspector-truth"
         aria-label="Scientific truth boundary"
@@ -169,7 +173,9 @@ export function ScientistWorkspaceInspector({
           </div>
         </div>
       </section>
+    ),
 
+    "preset-guidance": (
       <details
         className="rv-inspector-card"
         aria-label="Workspace preset guidance"
@@ -177,7 +183,9 @@ export function ScientistWorkspaceInspector({
         <summary>{guidance.title}</summary>
         <p>{guidance.description}</p>
       </details>
+    ),
 
+    "related-workspaces": (
       <section className="rv-inspector-card" aria-label="Related workspaces">
         <strong>Related workspaces</strong>
 
@@ -195,7 +203,9 @@ export function ScientistWorkspaceInspector({
           ))}
         </div>
       </section>
+    ),
 
+    "project-context": (
       <details
         className="rv-inspector-card"
         aria-label="Project inspector context"
@@ -217,6 +227,42 @@ export function ScientistWorkspaceInspector({
           </div>
         </dl>
       </details>
+    ),
+  };
+
+  return (
+    <div
+      className="rv-scientist-inspector"
+      data-workspace-view={activeView}
+      data-workspace-preset={activePreset}
+    >
+      {panels.map((panel) => {
+        const content =
+          panel.pluginRecordId && layout ? (
+            <section
+              className="rv-inspector-card"
+              aria-label={`${panel.label} plugin panel`}
+            >
+              <strong>{panel.label}</strong>
+              <p>{panelPluginStatus(layout, panel)}</p>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => onNavigate("advanced_providers")}
+              >
+                Open Plugins and providers
+              </button>
+            </section>
+          ) : (
+            cards[panel.id]
+          );
+        if (!content || layout?.hidden.includes(panel.id)) return null;
+        return (
+          <div key={panel.id} data-contextual-panel={panel.id}>
+            {content}
+          </div>
+        );
+      })}
     </div>
   );
 }

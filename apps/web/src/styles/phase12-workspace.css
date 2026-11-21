@@ -2099,6 +2099,41 @@
   gap: 0.35rem;
 }
 
+.rv-contextual-panel-manager {
+  padding: 0.8rem 1.15rem;
+  border-bottom: 1px solid var(--rv-border);
+}
+
+.rv-contextual-panel-manager-heading,
+.rv-contextual-panel-order > li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+}
+
+.rv-contextual-panel-manager-heading h4 {
+  margin: 0;
+}
+
+.rv-contextual-panel-order {
+  display: grid;
+  gap: 0.4rem;
+  padding-inline-start: 0;
+  list-style-position: inside;
+}
+
+.rv-contextual-panel-order > li {
+  justify-content: space-between;
+  padding-block: 0.3rem;
+  border-bottom: 1px solid var(--rv-border);
+  overflow-wrap: anywhere;
+}
+
+.rv-contextual-panel-manager select {
+  max-inline-size: 100%;
+}
+
 .rv-panel-layout-error,
 .rv-detached-panel-banner {
   display: flex;

@@ -6,7 +6,7 @@ import hashlib
 import json
 from copy import deepcopy
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -133,11 +133,14 @@ class ScientificDataService:
         items: list[ScientificRecordCreate],
         *,
         environmental_cache_key: str | None = None,
+        record_ids: list[UUID] | None = None,
     ) -> list[ScientificRecord]:
         """Stage a validated batch; the caller owns the transaction/commit."""
         self.require_project(project_id)
+        if record_ids is not None and len(record_ids) != len(items):
+            raise ValidationError("Each scientific record needs one stable identifier.")
         rows = []
-        for item in items:
+        for index, item in enumerate(items):
             image = self.validate_subject(project_id, item.subject, item.pixel)
             payload = item.model_dump(mode="json")
             try:
@@ -164,7 +167,7 @@ class ScientificDataService:
             )
             rows.append(
                 ScientificRecord(
-                    id=str(uuid4()),
+                    id=str(uuid4() if record_ids is None else record_ids[index]),
                     project_id=project_id,
                     variable=item.variable,
                     source_kind=item.source_kind,

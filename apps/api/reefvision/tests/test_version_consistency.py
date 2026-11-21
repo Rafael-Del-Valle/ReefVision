@@ -7,7 +7,7 @@ from pathlib import Path
 
 from reefvision import __version__
 
-EXPECTED_VERSION = "1.9.0"
+EXPECTED_VERSION = "2.0.0"
 
 
 def test_authoritative_version_sources_match_release_line() -> None:
@@ -74,6 +74,7 @@ def test_desktop_build_and_rust_guard_stage_the_candidate_version() -> None:
     version = config["version"]
     staging = f"release-{version}"
     assert config["bundle"]["resources"] == {
+        f"../../../.desktop/{staging}/automation/": "automation/",
         f"../../../.desktop/{staging}/backend/": "backend/",
         f"../../../.desktop/{staging}/bundled-models/": "bundled-models/",
     }

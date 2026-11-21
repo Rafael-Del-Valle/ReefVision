@@ -8,7 +8,7 @@ import re
 import tomllib
 from pathlib import Path
 
-EXPECTED_VERSION = "1.9.0"
+EXPECTED_VERSION = "2.0.0"
 
 
 def check_versions(root: Path) -> dict[str, str]:
@@ -26,6 +26,7 @@ def check_versions(root: Path) -> dict[str, str]:
     for filename, key in (
         ("pyproject.toml", "project"),
         ("apps/web/src-tauri/Cargo.toml", "package"),
+        ("apps/windows-automation/Cargo.toml", "package"),
     ):
         versions[filename] = tomllib.loads((root / filename).read_text(encoding="utf-8"))[key][
             "version"
@@ -33,6 +34,13 @@ def check_versions(root: Path) -> dict[str, str]:
     lock = tomllib.loads((root / "apps/web/src-tauri/Cargo.lock").read_text(encoding="utf-8"))
     versions["Cargo.lock"] = next(
         p["version"] for p in lock["package"] if p["name"] == "reefvision-desktop"
+    )
+    console_lock_path = "apps/windows-automation/Cargo.lock"
+    console_lock = tomllib.loads((root / console_lock_path).read_text(encoding="utf-8"))
+    versions[console_lock_path] = next(
+        p["version"]
+        for p in console_lock["package"]
+        if p["name"] == "reefvision-windows-automation"
     )
     sources = {
         "apps/api/reefvision/__init__.py": r'__version__\s*=\s*"([^"]+)"',
