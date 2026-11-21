@@ -693,6 +693,27 @@ def measure_point_cloud_preview(
             preview_omitted_axis_extrema.append(f"{label}_min")
         if max(sampled_values) != max(source_values):
             preview_omitted_axis_extrema.append(f"{label}_max")
+    # Even when a bounded preview retains the source-axis extrema, it may
+    # hide an endpoint of the largest observed scan-coordinate gap. Disclose
+    # the display omission separately from the full-cloud measurement. A
+    # missing endpoint is not evidence of missing coral tissue.
+    preview_largest_axis_gap_endpoint_support: dict[str, dict[str, bool] | None] = {}
+    for axis, label in enumerate(("x", "y", "z")):
+        endpoints = axis_sampling_gaps[label]["source_endpoint_values"]
+        sampled_levels = {vertices[index][axis] for index in preview_indices}
+        preview_largest_axis_gap_endpoint_support[label] = (
+            {
+                "lower": endpoints[0] in sampled_levels,
+                "upper": endpoints[1] in sampled_levels,
+            }
+            if endpoints is not None
+            else None
+        )
+    preview_omitted_largest_gap_boundary_axes = [
+        label
+        for label, support in preview_largest_axis_gap_endpoint_support.items()
+        if support is not None and not all(support.values())
+    ]
     preview_points = []
     for index in preview_indices:
         preview_points.append([coordinate * scale for coordinate in vertices[index]])
@@ -725,6 +746,8 @@ def measure_point_cloud_preview(
         "preview_selected_chord_endpoints_covered": not omitted_chord_endpoints,
         "preview_omitted_axis_extrema": preview_omitted_axis_extrema,
         "preview_axis_extrema_covered": not preview_omitted_axis_extrema,
+        "preview_largest_axis_gap_endpoint_support": preview_largest_axis_gap_endpoint_support,
+        "preview_omitted_largest_gap_boundary_axes": preview_omitted_largest_gap_boundary_axes,
         "preview_points_in_source_frame_m": preview_points,
         "preview_point_scale_intervals_m": (
             [coordinate_scale_intervals(point) for point in preview_points]
@@ -819,6 +842,11 @@ def measure_point_cloud_preview(
                 else []
             )
             + (["preview_omits_axis_extrema"] if preview_omitted_axis_extrema else [])
+            + (
+                ["preview_omits_largest_axis_gap_endpoint"]
+                if preview_omitted_largest_gap_boundary_axes
+                else []
+            )
             + (
                 ["axis_sampling_multiple_equally_largest_gaps"]
                 if multiple_tied_largest_axis_gaps
