@@ -130,6 +130,8 @@ def extend_mesh_registry(
                 "point_index_pairs": None,
                 "preserve_axis_extrema_in_preview": False,
                 "preserve_measured_chord_endpoints_in_preview": False,
+                "preserve_largest_axis_gap_boundaries_in_preview": False,
+                "preserve_largest_axis_gap_boundary_loci_in_preview": False,
                 "expected_source_payload_sha256": None,
                 "relative_scale_uncertainty": None,
                 "calibration_review": None,
@@ -149,6 +151,9 @@ def extend_mesh_registry(
                 "Calibration and coordinate registration remain unverified.",
                 "No surface area or biological branch length is inferred.",
                 "Selected point-pair chords are not biological branch lengths.",
+                "Optional largest-gap boundary pinning retains projected levels or distinct "
+                "XYZ locations for display only, subject to the 512-point limit.",
+                "Pinned boundary loci are not complete acquisition-row retention.",
                 "Optional source SHA-256 binding rejects changed ASCII PLY bytes on replay.",
                 "Project-owned PLY originals are verified at run time, not on graph save.",
                 "Not an asset importer or a full interactive asset picker.",
