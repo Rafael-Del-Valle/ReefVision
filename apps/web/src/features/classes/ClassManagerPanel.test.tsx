@@ -1541,7 +1541,10 @@ describe("ClassManagerPanel", () => {
           failures: [],
         });
       }
-      if (url.endsWith("/classes/class-1/reassign") && init?.method === "POST") {
+      if (
+        url.endsWith("/classes/class-1/reassign") &&
+        init?.method === "POST"
+      ) {
         return jsonResponse({
           id: "completed-operation",
           project_id: project.id,
@@ -1611,5 +1614,4 @@ describe("ClassManagerPanel", () => {
     expect(runDelete).toBeDisabled();
     expect(within(row).getByText("Latest operation")).toBeInTheDocument();
   });
-
 });
