@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +9,7 @@ import {
   openDetachedPanelWindow,
 } from "./detachedPanelBridge";
 import { ProjectWorkbenchShell } from "./ProjectWorkbenchShell";
+import { ScientistWorkspaceInspector } from "./ScientistWorkspaceInspector";
 
 vi.mock("./detachedPanelBridge", async () => {
   const actual = await vi.importActual<typeof import("./detachedPanelBridge")>(
@@ -86,6 +88,88 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+});
+
+it("reorders and hides contextual panels, restores defaults, and preserves an open draft", async () => {
+  function shell() {
+    return render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ProjectWorkbenchShell
+          project={project}
+          navigation={<nav>Navigation</nav>}
+          contextTitle="Models"
+          contextDescription="Review registered models."
+          activePreset="annotation"
+          activeInspectorView="models"
+          onPresetChange={vi.fn()}
+          onHome={vi.fn()}
+          onSystem={vi.fn()}
+          onArchive={vi.fn()}
+          inspector={
+            <ScientistWorkspaceInspector
+              activeView="models"
+              activePreset="annotation"
+              activeClassCount={1}
+              annotationType="bbox"
+              projectId={project.id}
+              onNavigate={vi.fn()}
+            />
+          }
+        >
+          <label>
+            Unsaved workflow name
+            <input defaultValue="" />
+          </label>
+        </ProjectWorkbenchShell>
+      </QueryClientProvider>,
+    );
+  }
+
+  function panelNames() {
+    return Array.from(
+      screen
+        .getByRole("complementary", { name: "Workspace inspector" })
+        .querySelectorAll("[data-contextual-panel]"),
+      (panel) => panel.getAttribute("data-contextual-panel"),
+    );
+  }
+
+  const view = shell();
+  const draft = screen.getByRole("textbox", { name: "Unsaved workflow name" });
+  await userEvent.type(draft, "Uncommitted graph edit");
+  await userEvent.click(screen.getByRole("button", { name: "Panels" }));
+  expect(panelNames().slice(0, 2)).toEqual([
+    "workflow-context",
+    "truth-boundary",
+  ]);
+  await userEvent.click(
+    screen.getByRole("button", { name: "Move Scientific truth boundary up" }),
+  );
+  expect(panelNames().slice(0, 2)).toEqual([
+    "truth-boundary",
+    "workflow-context",
+  ]);
+  await userEvent.click(
+    screen.getByRole("checkbox", { name: "Show Related workspaces" }),
+  );
+  expect(panelNames()).not.toContain("related-workspaces");
+  await userEvent.click(screen.getByRole("button", { name: "Reset layout" }));
+  expect(panelNames().slice(0, 2)).toEqual([
+    "workflow-context",
+    "truth-boundary",
+  ]);
+  expect(panelNames()).toContain("related-workspaces");
+  expect(draft).toBe(
+    screen.getByRole("textbox", { name: "Unsaved workflow name" }),
+  );
+  expect(draft).toHaveValue("Uncommitted graph edit");
+
+  await userEvent.click(
+    screen.getByRole("checkbox", { name: "Show Related workspaces" }),
+  );
+  view.unmount();
+  shell();
+  expect(panelNames()).not.toContain("related-workspaces");
 });
 
 describe("ProjectWorkbenchShell detachable panels", () => {

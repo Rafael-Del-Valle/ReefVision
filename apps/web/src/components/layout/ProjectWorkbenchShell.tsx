@@ -1,6 +1,11 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 
 import type { Project } from "../../api/client";
+import {
+  ContextualPanelLayoutProvider,
+  useContextualPanelLayout,
+} from "./ContextualPanelLayout";
+import { ContextualPanelManager } from "./ContextualPanelManager";
 import {
   closeDetachedPanelWindow,
   detachedPanelChannelName,
@@ -12,6 +17,7 @@ import {
   workspacePreset,
   type WorkspacePresetId,
 } from "./workspacePresets";
+import type { WorkspaceInspectorView } from "./workspaceInspector";
 
 interface WorkbenchLayoutPreferences {
   navigationCollapsed: boolean;
@@ -47,13 +53,46 @@ function persistLayoutPreferences(
   projectId: string,
   layout: WorkbenchLayoutPreferences,
 ): void {
-  window.localStorage.setItem(
-    layoutStorageKey(projectId),
-    JSON.stringify(layout),
+  try {
+    window.localStorage.setItem(
+      layoutStorageKey(projectId),
+      JSON.stringify(layout),
+    );
+  } catch {
+    // A session can still change its presentation when storage is unavailable.
+  }
+}
+
+interface WorkbenchProps {
+  project: Project;
+  navigation: ReactNode;
+  contextTitle: string;
+  contextDescription: string;
+  activePreset: WorkspacePresetId;
+  activeInspectorView?: WorkspaceInspectorView;
+  onPresetChange: (presetId: WorkspacePresetId) => void;
+  onHome: () => void;
+  onSystem: () => void;
+  onArchive: () => void;
+  children: ReactNode;
+  inspector?: ReactNode;
+}
+
+export function ProjectWorkbenchShell(props: WorkbenchProps) {
+  if (!props.activeInspectorView) return <Workbench {...props} />;
+  return (
+    <ContextualPanelLayoutProvider
+      key={props.project.id}
+      projectId={props.project.id}
+      view={props.activeInspectorView}
+      preset={props.activePreset}
+    >
+      <Workbench {...props} />
+    </ContextualPanelLayoutProvider>
   );
 }
 
-export function ProjectWorkbenchShell({
+function Workbench({
   project,
   navigation,
   contextTitle,
@@ -65,25 +104,15 @@ export function ProjectWorkbenchShell({
   onArchive,
   children,
   inspector,
-}: {
-  project: Project;
-  navigation: ReactNode;
-  contextTitle: string;
-  contextDescription: string;
-  activePreset: WorkspacePresetId;
-  onPresetChange: (presetId: WorkspacePresetId) => void;
-  onHome: () => void;
-  onSystem: () => void;
-  onArchive: () => void;
-  children: ReactNode;
-  inspector?: ReactNode;
-}) {
+}: WorkbenchProps) {
   const [layout, setLayout] = useState<WorkbenchLayoutPreferences>(() =>
     readLayoutPreferences(project.id),
   );
 
   const [panelBusy, setPanelBusy] = useState(false);
   const [panelError, setPanelError] = useState<string | null>(null);
+  const panelManagerId = useId();
+  const panelLayout = useContextualPanelLayout();
 
   function patchLayout(patch: Partial<WorkbenchLayoutPreferences>): void {
     setLayout((current) => {
@@ -224,6 +253,32 @@ export function ProjectWorkbenchShell({
     }
   }
 
+  async function resetLayout(): Promise<void> {
+    if (!panelLayout || panelBusy) return;
+    setPanelError(null);
+    if (layout.inspectorDetached) {
+      setPanelBusy(true);
+      try {
+        await closeDetachedPanelWindow(project.id, "inspector");
+      } catch (error) {
+        setPanelError(
+          error instanceof Error
+            ? error.message
+            : "The detached inspector could not be docked.",
+        );
+        return;
+      } finally {
+        setPanelBusy(false);
+      }
+    }
+    patchLayout({
+      navigationCollapsed: false,
+      inspectorCollapsed: false,
+      inspectorDetached: false,
+    });
+    panelLayout.reset();
+  }
+
   const preset = workspacePreset(activePreset);
 
   return (
@@ -361,6 +416,19 @@ export function ProjectWorkbenchShell({
             className="rv-workbench-toolbar-meta"
             aria-label="Workspace context"
           >
+            {panelLayout && (
+              <button
+                type="button"
+                className="secondary"
+                aria-expanded={panelLayout.managerOpen}
+                aria-controls={panelManagerId}
+                onClick={() =>
+                  panelLayout.setManagerOpen(!panelLayout.managerOpen)
+                }
+              >
+                Panels
+              </button>
+            )}
             {inspector && (
               <div
                 className="rv-panel-layout-actions"
@@ -407,6 +475,14 @@ export function ProjectWorkbenchShell({
             )}
           </div>
         </header>
+
+        {panelLayout?.managerOpen && (
+          <ContextualPanelManager
+            id={panelManagerId}
+            onReset={() => void resetLayout()}
+            resetPending={panelBusy}
+          />
+        )}
 
         {panelError && (
           <div className="rv-panel-layout-error" role="alert">

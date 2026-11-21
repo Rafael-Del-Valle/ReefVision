@@ -1051,6 +1051,7 @@ function ReefVisionMainApp() {
               "Work with project data, models, review, and reproducible outputs."
             }
             activePreset={workspacePresetId}
+            activeInspectorView={activeView as Exclude<ProjectView, "system">}
             onPresetChange={selectWorkspacePreset}
             onHome={() => {
               if (preventQcNavigation()) return;
