@@ -40,3 +40,20 @@ def test_phase11c_refuses_ambiguous_native_acceptance_report_selection() -> None
     assert "Sort-Object LastWriteTimeUtc -Descending" not in wrapper
     selection = wrapper.split("$CurrentReports = @(", 1)[1].split("$ReportPath", 1)[0]
     assert "Select-Object -First 1" not in selection
+
+
+def test_phase11c_track16_report_is_bound_to_the_child_invocation() -> None:
+    wrapper = _script("phase11c-acceptance.ps1")
+    child = _script("acceptance-windows-clean-install.ps1")
+    helper = _script("lib/phase11c-track16.ps1")
+
+    assert "Assert-ReefVisionPhase11CEvidenceToken" in helper
+    assert '^[0-9a-f]{12}$' in helper
+    assert "$Arguments += @('-EvidenceToken', $EvidenceToken)" in wrapper
+    assert "$ExpectedReportDirectory" in wrapper
+    assert "[string]$Report.evidence_run_token -cne $EvidenceToken" in wrapper
+    assert '"reefvision-clean-$EvidenceToken"' in wrapper
+    assert "[string]$EvidenceToken = ''" in child
+    assert "Assert-ReefVisionPhase11CEvidenceToken -Token $EvidenceToken" in child
+    assert "Test-Path -LiteralPath $EvidenceRoot" in child
+    assert "evidence_run_token = if ($EvidenceToken) { $Token } else { $null }" in child

@@ -19,6 +19,16 @@ function Assert-Rejected {
     if (-not $rejected) { throw "Expected Phase 11C fail-closed refusal was not raised." }
 }
 
+$validToken = 'a1b2c3d4e5f6'
+$roundTripToken = Assert-ReefVisionPhase11CEvidenceToken -Token $validToken
+if ($roundTripToken -cne $validToken) { throw 'Evidence token was not preserved.' }
+foreach ($badToken in @('', 'A1B2C3D4E5F6', 'a1b2c3d4e5', 'a1b2c3d4e5f60',
+    'a1b2c3d4e5fz', '../a1b2c3d4e5f6', ' a1b2c3d4e5f6')) {
+    Assert-Rejected -MessagePattern '12 lowercase hexadecimal' -Action {
+        Assert-ReefVisionPhase11CEvidenceToken -Token $badToken
+    }
+}
+
 $old = 'C:\disposable\windows-clean-acceptance-old'
 $own = 'C:\disposable\windows-clean-acceptance-own'
 $other = 'C:\disposable\windows-clean-acceptance-other'
@@ -58,4 +68,4 @@ Assert-Rejected -MessagePattern 'exact checked-out commit' -Action {
     Assert-ReefVisionPhase11CBuildSource -HarnessHead $head -InstallerSourceCommit ('b' * 40) -TrackD16
 }
 
-Write-Host 'Phase 11C isolated report-selection and exact-head gates passed.'
+Write-Host 'Phase 11C invocation-bound evidence, legacy selection, and exact-head gates passed.'

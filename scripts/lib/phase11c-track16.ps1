@@ -33,6 +33,15 @@ function Assert-ReefVisionPhase11CBuildSource {
     }
 }
 
+function Assert-ReefVisionPhase11CEvidenceToken {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Token)
+
+    if ($Token -cnotmatch '^[0-9a-f]{12}$') {
+        throw 'Phase 11C evidence token must be exactly 12 lowercase hexadecimal characters.'
+    }
+    return $Token
+}
+
 # A child harness can run beside other isolated acceptance runs. Never
 # attribute its evidence by directory modification time: another run may
 # finish later, yielding a false PASS for this invocation.

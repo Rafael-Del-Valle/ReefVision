@@ -6,6 +6,7 @@ param(
     [switch]$DisposableTest,
     [switch]$PlanOnly,
     [switch]$KeepArtifacts,
+    [string]$EvidenceToken = '',
     [switch]$SkipUpgrade,
     [switch]$SkipUninstall,
     [switch]$LiveSam2Acceptance,
@@ -16,6 +17,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'lib\windows-clean-acceptance.ps1')
+. (Join-Path $PSScriptRoot 'lib\phase11c-track16.ps1')
 
 if (-not $DisposableTest -and -not $PlanOnly) {
     throw 'Refusing destructive MSI acceptance. Supply -DisposableTest on a disposable Windows VM/machine, or use -PlanOnly.'
@@ -40,12 +42,20 @@ if ($PreviousInstallerPath -and -not $PreviousInstallerSupportsIsolatedAcceptanc
 }
 $DefaultDataRoot = Join-Path $env:APPDATA 'org.reefvision.desktop'
 $AcceptanceRoot = Assert-ReefVisionSafeAcceptanceRoot -Path $AcceptanceRoot -RepositoryRoot $RepositoryRoot -DefaultDataRoot $DefaultDataRoot
-$Token = [guid]::NewGuid().ToString('N').Substring(0, 12)
+$Token = if ($EvidenceToken) {
+    Assert-ReefVisionPhase11CEvidenceToken -Token $EvidenceToken
+} else {
+    [guid]::NewGuid().ToString('N').Substring(0, 12)
+}
 $RunRoot = Join-Path $AcceptanceRoot "reefvision-clean-$Token"
 $InstallRoot = Join-Path $RunRoot 'install'
 $DataRoot = Join-Path $RunRoot 'data'
 $EvidenceRoot = Join-Path $RepositoryRoot ".artifacts\windows-clean-acceptance-$Token"
 $ReportPath = Join-Path $EvidenceRoot 'report.json'
+if ($EvidenceToken -and ((Test-Path -LiteralPath $RunRoot) -or
+    (Test-Path -LiteralPath $EvidenceRoot))) {
+    throw 'Phase 11C evidence token already exists; refusing to reuse an earlier run.'
+}
 $InstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
 # Validate the entire function result, not just the COM record's value:
 # leaked PowerShell pipeline output must never enter evidence or upgrade checks.
@@ -58,6 +68,7 @@ if ($PreviousInstallerPath -and -not $SkipUpgrade) {
 
 $report = [ordered]@{
     schema_version = 'reefvision-windows-clean-acceptance-1'
+    evidence_run_token = if ($EvidenceToken) { $Token } else { $null }
     started_at_utc = [DateTime]::UtcNow.ToString('o')
     completed_at_utc = $null
     reefvision_version = $ProductVersion

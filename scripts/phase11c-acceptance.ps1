@@ -113,6 +113,18 @@ if ($PreviousInstallerPath) {
     }
 }
 
+$EvidenceToken = ''
+$ExpectedReportDirectory = ''
+if ($TrackD16) {
+    # An invocation-owned random token is stronger than even a unique new
+    # directory: a concurrent unrelated test cannot supply this report.
+    $EvidenceToken = Assert-ReefVisionPhase11CEvidenceToken -Token ([guid]::NewGuid().ToString('N').Substring(0, 12))
+    $ExpectedReportDirectory = Join-Path (Join-Path $Repo '.artifacts') "windows-clean-acceptance-$EvidenceToken"
+    if (Test-Path -LiteralPath $ExpectedReportDirectory) {
+        throw 'Track D 1.6 evidence token unexpectedly reused an existing report.'
+    }
+}
+
 $ExistingReports = @(
     Get-ChildItem -LiteralPath (Join-Path $Repo ".artifacts") -Directory -Filter "windows-clean-acceptance-*" -ErrorAction SilentlyContinue |
         Select-Object -ExpandProperty FullName
@@ -155,6 +167,9 @@ else {
 if ($KeepArtifacts) {
     $Arguments += "-KeepArtifacts"
 }
+if ($TrackD16) {
+    $Arguments += @('-EvidenceToken', $EvidenceToken)
+}
 if ($PreviousInstallerPath) {
     $Arguments += @(
         "-PreviousInstallerPath",
@@ -172,12 +187,27 @@ $CurrentReports = @(
     Get-ChildItem -LiteralPath (Join-Path $Repo ".artifacts") -Directory -Filter "windows-clean-acceptance-*" -ErrorAction SilentlyContinue |
         Select-Object -ExpandProperty FullName
 )
-$NewReportDirectory = Assert-ReefVisionPhase11CUniqueNewReport -PriorDirectories $ExistingReports -CurrentDirectories $CurrentReports
+$NewReportDirectory = if ($TrackD16) {
+    $ExpectedReportDirectory
+} else {
+    Assert-ReefVisionPhase11CUniqueNewReport -PriorDirectories $ExistingReports -CurrentDirectories $CurrentReports
+}
 $ReportPath = Join-Path $NewReportDirectory "report.json"
 if (-not (Test-Path -LiteralPath $ReportPath -PathType Leaf)) {
     throw "Clean-install evidence report is missing: $ReportPath"
 }
 $Report = Get-Content -LiteralPath $ReportPath -Raw | ConvertFrom-Json
+if ($TrackD16) {
+    if ([string]$Report.evidence_run_token -cne $EvidenceToken) {
+        throw 'Track D 1.6 acceptance report token does not match this invocation.'
+    }
+    $ReportedRunDirectory = [System.IO.Path]::GetFileName(
+        [System.IO.Path]::GetDirectoryName([string]$Report.isolated_data_root)
+    )
+    if ($ReportedRunDirectory -cne "reefvision-clean-$EvidenceToken") {
+        throw 'Track D 1.6 report references another disposable research-data run.'
+    }
+}
 
 if ([bool]$Report.plan_only) {
     Write-Host ""
