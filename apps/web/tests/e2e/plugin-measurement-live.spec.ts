@@ -181,10 +181,13 @@ test("installs a local plugin and replays the pinned image measurement twice", a
   expect(plugin).toMatchObject({ manifest, available: true, enabled: false });
   expect(plugin.package_sha256).toMatch(/^[0-9a-f]{64}$/);
   const versionLabel = `${manifest.display_name} ${manifest.version}`;
-  const version = panel.getByLabel("Plugin version", { exact: true });
+  const version = panel.getByRole("combobox", {
+    name: "Plugin version",
+    exact: true,
+  });
   const pluginOption = version.locator(`option[value="${plugin.id}"]`);
   await expect(pluginOption).toHaveText(`${versionLabel} · Disabled`);
-  await expect(pluginOption).toBeDisabled();
+  await expect(pluginOption).toHaveAttribute("disabled", "");
   const enabled = responseFor(page, `${api}/plugins/${plugin.id}`, "PATCH");
   await panel
     .getByRole("button", { name: `Enable ${versionLabel}`, exact: true })
@@ -196,7 +199,7 @@ test("installs a local plugin and replays the pinned image measurement twice", a
 
   await version.selectOption(plugin.id);
   await panel
-    .getByLabel("Source image", { exact: true })
+    .getByRole("combobox", { name: "Source image", exact: true })
     .selectOption(image.id);
   const pins = {
     plugin_record_id: plugin.id,
@@ -260,11 +263,11 @@ test("installs a local plugin and replays the pinned image measurement twice", a
     exact: true,
   });
   await expect(
-    guided.getByLabel("Plugin version", { exact: true }),
+    guided.getByRole("combobox", { name: "Plugin version", exact: true }),
   ).toHaveValue(plugin.id);
-  await expect(guided.getByLabel("Source image", { exact: true })).toHaveValue(
-    image.id,
-  );
+  await expect(
+    guided.getByRole("combobox", { name: "Source image", exact: true }),
+  ).toHaveValue(image.id);
   await expect(guided.getByText(imageSha, { exact: true })).toBeVisible();
 
   const graphRow = page.getByRole("listitem").filter({
@@ -346,6 +349,7 @@ test("installs a local plugin and replays the pinned image measurement twice", a
       record_ids: [record.id],
       content_sha256: { [record.id]: record.content_sha256 },
       value: 0.5,
+      qc: "unassessed",
       plugin: { package_sha256: plugin.package_sha256, image_sha256: imageSha },
     });
     const reviewed = detail.artifacts.find(
@@ -353,9 +357,10 @@ test("installs a local plugin and replays the pinned image measurement twice", a
     );
     expect(reviewed?.payload_json).toMatchObject({
       record_ids: [record.id],
-      qc: "unassessed",
       review_approval: {
         reviewed_by: "local_user",
+        note: acknowledgement.request().postDataJSON().note,
+        approved_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
         input_artifact_ids: [result?.id],
       },
     });
@@ -388,7 +393,7 @@ test("installs a local plugin and replays the pinned image measurement twice", a
     package_sha256: plugin.package_sha256,
   });
   await expect(pluginOption).toHaveText(`${versionLabel} · Disabled`);
-  await expect(pluginOption).toBeDisabled();
+  await expect(pluginOption).toHaveAttribute("disabled", "");
   await openBuilder();
   const blocked = responseFor(page, `${base}/workflow-runs`);
   await runButton.click();
