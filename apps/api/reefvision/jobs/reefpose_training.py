@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 from torch.utils.data import DataLoader
 
@@ -22,7 +21,6 @@ from reefvision.db.models import (
     PoseModelSchemaBinding,
     PoseTrainingDataset,
     Project,
-    ProjectExchangePackage,
     TrainingRun,
 )
 from reefvision.domain.errors import ValidationError
@@ -38,6 +36,7 @@ from reefvision.ml.reefpose.training import (
     ReefPoseTrainingResult,
 )
 from reefvision.services.pose_training_exports import PoseTrainingExportService
+from reefvision.services.project_exchange_pose_training import checkpoint_schema_matches
 from reefvision.services.workflow_pose_sources import verify_pose_dataset_separation
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import hash_model_file
@@ -133,22 +132,7 @@ def _is_transferred_seed_anatomy(
     ):
         return False
 
-    package = session.scalar(
-        select(ProjectExchangePackage).where(
-            ProjectExchangePackage.project_id == model.project_id,
-            ProjectExchangePackage.direction == "import",
-            ProjectExchangePackage.status == "complete",
-        )
-    )
-    if package is None or canonical_json_sha256(package.manifest_json) != package.manifest_sha256:
-        return False
-    mapping = package.options_json.get("id_map", {})
-    if source.id not in mapping.values():
-        return False
-    origin = package.manifest_json.get("origin") or {}
-    incoming_schema_id = origin.get("id_map", {}).get(original.schema_id, original.schema_id)
-    local_schema_id = mapping.get(incoming_schema_id)
-    return isinstance(local_schema_id, str) and local_schema_id == destination.schema_id
+    return checkpoint_schema_matches(session, source, original.schema_id, destination.schema_id)
 
 
 def _metrics_history(rows: list[dict[str, float]]) -> dict[str, list[float | int]]:

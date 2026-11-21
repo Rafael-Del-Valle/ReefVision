@@ -13,12 +13,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import Response
+from sqlalchemy import select
 
 from reefvision.config import Settings
-from reefvision.db.models import TrainingRun
+from reefvision.db.models import ExperimentRecord, TrainingRun, WorkflowRun
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
 from reefvision.services import project_exchange_pose
 from reefvision.services.pose_training_exports import PoseTrainingExportService
+from reefvision.services.project_exchange import ProjectExchangeService
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
@@ -253,7 +255,40 @@ def test_legacy_pose_exchange_reexports_before_first_registration(
         path = resolve_managed_project_path(test_settings, run.result_checkpoint_path)
         assert hash_model_file(path)[0] == original_hash
 
+    def source_history() -> str:
+        with app.state.session_factory() as session:
+            run = session.get(TrainingRun, legacy_run_id)
+            experiment = session.scalar(
+                select(ExperimentRecord).where(ExperimentRecord.training_run_id == legacy_run_id)
+            )
+            workflow = session.scalar(select(WorkflowRun).where(WorkflowRun.project_id == legacy))
+            assert run is not None and experiment is not None and workflow is not None
+            return canonical_json_sha256(
+                [
+                    run.split_manifest_sha256,
+                    run.dataset_manifest_sha256,
+                    run.artifact_manifest_json,
+                    experiment.split_manifest_sha256,
+                    experiment.dataset_manifest_sha256,
+                    experiment.artifact_manifest_json,
+                    workflow.result_json,
+                ]
+            )
+
+    original_history = source_history()
+    queued = client.post(f"/api/v1/projects/{legacy}/exchange-packages", json={})
+    assert queued.status_code == 202, queued.text
+    with patch.object(
+        ProjectExchangeService, "_export_row", side_effect=OSError("fixture export interruption")
+    ):
+        assert not process_project_exchange_export_job(
+            test_settings, app.state.session_factory, queued.json()["job_id"]
+        )
+    failed = client.get(f"/api/v1/jobs/{queued.json()['job_id']}").json()
+    assert failed["status"] == "failed" and "fixture export interruption" in failed["error_message"]
+    assert source_history() == original_history
     reexported = _archive(client, test_settings, legacy)
+    assert source_history() == original_history
     reexported_project, rebound_map = _restore(client, reexported)
     registered_legacy = _assert_pose_registration(
         client,

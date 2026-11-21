@@ -108,6 +108,7 @@ from reefvision.services.project_exchange_monitoring_v17 import FORMAT as MONITO
 from reefvision.services.project_exchange_monitoring_v17 import SECTIONS as MONITORING_SECTIONS
 from reefvision.services.project_exchange_monitoring_v17 import has_monitoring_records
 from reefvision.services.project_exchange_paired_models_v15 import paired_comparison_raster_paths
+from reefvision.services.project_exchange_pose_training import project_legacy_pose_export
 from reefvision.services.project_exchange_qc_v16 import FORMAT as QC_FORMAT
 from reefvision.services.project_exchange_qc_v16 import SECTIONS as QC_SECTIONS
 from reefvision.services.project_exchange_qc_v16 import has_qc_history, is_qc_graph
@@ -633,6 +634,7 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         if with_qc or any(integrated.values()):
             sections.update(integrated)
         sections.update(field_exchange_records(self.session, project.id))
+        project_legacy_pose_export(self.session, sections)
         return sections
 
     def _telemetry_sidecars(
@@ -961,9 +963,13 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             "existing_projects_must_not_be_overwritten": True,
             "source_ids_are_preserved_in_import_provenance": True,
         }
-        if package.format_version in INTEGRATED_FORMATS or any(
-            has_portable_workflow_inputs(graph.graph_json)
-            for graph in cast(Sequence[WorkflowGraphRecord], records["workflow_graphs"])
+        if (
+            package.format_version in INTEGRATED_FORMATS
+            or records.get("pose_training_datasets")
+            or any(
+                has_portable_workflow_inputs(graph.graph_json)
+                for graph in cast(Sequence[WorkflowGraphRecord], records["workflow_graphs"])
+            )
         ):
             parent = self.session.scalar(
                 select(ProjectExchangePackage)

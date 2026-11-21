@@ -55,6 +55,40 @@ def _managed_path(value: object) -> str:
     return value
 
 
+def local_pose_manifest_paths(
+    manifest: dict[str, Any], source_root: str, target_root: str
+) -> dict[str, Any]:
+    """Rebase managed paths recorded by the training worker, preserving other metadata."""
+    source_prefix = source_root.rstrip("/") + "/"
+    target_prefix = target_root.rstrip("/") + "/"
+
+    def local(value: Any) -> Any:
+        if isinstance(value, str) and value.startswith(source_prefix):
+            return target_prefix + _managed_path(value)[len(source_prefix) :]
+        return value
+
+    result = dict(manifest)
+    for field in (
+        *_CHECKPOINT_PATHS,
+        "result_checkpoint_path",
+        "logs_path",
+        "run_save_dir",
+        "results_csv",
+        "dataset_output_path",
+    ):
+        if field in result:
+            result[field] = local(result[field])
+    artifacts = result.get("artifacts")
+    if isinstance(artifacts, list):
+        result["artifacts"] = [
+            {**item, "relative_path": local(item["relative_path"])}
+            if isinstance(item, dict) and "relative_path" in item
+            else item
+            for item in artifacts
+        ]
+    return result
+
+
 @dataclass(frozen=True)
 class _TrainingBinding:
     run: TrainingRun
@@ -144,6 +178,9 @@ class _TrainingBinding:
             self._path(manifest, field, run.artifact_manifest_json.get(field))
         self._path(manifest, "logs_path", run.logs_path)
         self._path(manifest, "result_checkpoint_path", run.result_checkpoint_path)
+        result["artifact_manifest"] = local_pose_manifest_paths(
+            manifest, self.source_root, self.target_root
+        )
         return result
 
     def model_source(self, payload: dict[str, Any], *, checkpoint_field: str) -> dict[str, Any]:
