@@ -566,8 +566,9 @@ def measure_point_cloud_preview(
             right = levels[largest_index + 1]
             gap = right - left
             gap_details["source_endpoint_values"] = [left, right]
-            # Count acquisition rows separately from independent XYZ loci at
-            # each boundary. Neither is proof of missing coral tissue.
+            # Count raw acquisition rows separately from distinct observed
+            # XYZ loci. Neither is an independent biological replicate nor
+            # evidence of missing coral tissue.
             gap_details["gap_endpoint_support"] = {
                 "lower": {
                     "source_rows": level_source_rows[left],
