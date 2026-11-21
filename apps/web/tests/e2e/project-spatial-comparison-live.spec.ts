@@ -14,7 +14,7 @@ test("compares two project originals, reviews identity, reopens and exports the 
   expect(project.ok(), await project.text()).toBeTruthy();
   const { id: projectId } = await project.json();
   await page.addInitScript(() =>
-    localStorage.setItem("reefvision.onboarding.dismissed.1.8.0", "true"),
+    localStorage.setItem("reefvision.onboarding.dismissed.1.9.0", "true"),
   );
   async function openProject(projectName: string) {
     await page.goto(web);
