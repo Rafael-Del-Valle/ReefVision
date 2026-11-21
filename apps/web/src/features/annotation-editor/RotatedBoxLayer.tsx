@@ -283,6 +283,7 @@ export function RotatedBoxLayer({
     state: Omit<DragState, "pointerId">,
   ): void {
     event.stopPropagation();
+    if (drag !== null || event.button !== 0) return;
     const svg = event.currentTarget.ownerSVGElement;
     if (!svg) return;
     svg.setPointerCapture(event.pointerId);
@@ -292,6 +293,7 @@ export function RotatedBoxLayer({
   function handleBackgroundDown(event: PointerEvent<SVGSVGElement>): void {
     if (
       event.button !== 0 ||
+      drag !== null ||
       event.target !== event.currentTarget ||
       activeClassId === null
     )
@@ -342,6 +344,16 @@ export function RotatedBoxLayer({
     setPreview(null);
   }
 
+  function cancel(event: PointerEvent<SVGSVGElement>): void {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    // A cancelled edit is a preview, never a committed scientific revision.
+    setDrag(null);
+    setPreview(null);
+  }
+
   const rendered = rotatedMasks.map((mask) =>
     preview?.id === mask.id ? preview : mask,
   );
@@ -356,7 +368,8 @@ export function RotatedBoxLayer({
       onPointerDown={handleBackgroundDown}
       onPointerMove={handleMove}
       onPointerUp={finish}
-      onPointerCancel={finish}
+      onPointerCancel={cancel}
+      onLostPointerCapture={cancel}
       style={{
         position: "absolute",
         inset: 0,
@@ -385,6 +398,10 @@ export function RotatedBoxLayer({
               vectorEffect="non-scaling-stroke"
               style={{ cursor: "move" }}
               onPointerDown={(event) => {
+                if (drag !== null || event.button !== 0) {
+                  event.stopPropagation();
+                  return;
+                }
                 const svg = event.currentTarget.ownerSVGElement;
                 if (!svg) return;
                 onSelectionChange([mask.id]);
@@ -424,6 +441,10 @@ export function RotatedBoxLayer({
                   vectorEffect="non-scaling-stroke"
                   style={{ cursor: "grab" }}
                   onPointerDown={(event) => {
+                    if (drag !== null || event.button !== 0) {
+                      event.stopPropagation();
+                      return;
+                    }
                     const svg = event.currentTarget.ownerSVGElement;
                     if (!svg) return;
                     setPreview(mask);
@@ -453,6 +474,10 @@ export function RotatedBoxLayer({
                     vectorEffect="non-scaling-stroke"
                     style={{ cursor: "nwse-resize" }}
                     onPointerDown={(event) => {
+                      if (drag !== null || event.button !== 0) {
+                        event.stopPropagation();
+                        return;
+                      }
                       const svg = event.currentTarget.ownerSVGElement;
                       if (!svg) return;
                       setPreview(mask);

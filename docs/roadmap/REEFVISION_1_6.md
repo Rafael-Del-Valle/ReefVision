@@ -1,3 +1,10 @@
+## 2026-11-21 — Cancel unapproved raster/rotated mask pointer gestures (Track D)
+
+- **Scope audit:** 1.0–1.5 image/mask operations and current 1.6 dense class/QC editor and saved, typed executable Workflow Builder were inspected. The polygon layer already handled cancellation and initiating-pointer identity; separate raster brush and rotated-box layers still committed the in-progress mask on `pointercancel`, and a second pointer could replace active preview state.
+- **Integrity correction:** only the initiating pointer can begin, change or finish an active raster/rotated-box gesture. A browser pointer cancellation or unexpected capture loss discards the unapproved preview instead of calling the source-pixel scientific mutation callback. A later intentional stroke/draw/edit can proceed; originals, accepted review decisions and persisted workflow runs are not modified.
+- **Regression matrix:** raster cancellation/recovery, secondary touch/pen takeover, capture loss; rotated-box cancellation/recovery, foreign-pointer isolation, saved source geometry preservation and capture loss. These local gesture guards are not a separate Workflow Builder scientific node; existing typed executable saved QC graphs, provenance, units, reliable retries and explicit human-review gates remain intact.
+- **RELEASE HOLD:** complete exact-head frontend/backend/E2E CI including these regressions, independent 1.1/1.6 Alembic-0038 reconciliation, representative saved-workflow/biological acceptance, genuine Windows MSI/CAB clean install/upgrade/rollback and installed-GUI validation, explicit researcher approval.
+
 ## 2026-11-21 — Multi-pointer polygon mask review integrity (Track D)
 
 - **Audit:** Isolated 1.6 draft PR #77 and master issue #76 against existing 1.0–1.5 box/polygon tools and 1.6 dense editor, QC and typed executable saved Workflow Builder. Unlike the box editor, PolygonMaskLayer did not check initiating pointer identity on moves and treated browser `pointercancel` as approval. A second touch/pen could change a mask preview before a legitimate release.

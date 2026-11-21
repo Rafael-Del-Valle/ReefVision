@@ -53,7 +53,7 @@ export function RasterBrushLayer({
   }
 
   function handlePointerDown(event: PointerEvent<SVGSVGElement>) {
-    if (disabled || event.button !== 0) return;
+    if (disabled || event.button !== 0 || pointerId !== null) return;
     const point = sourcePoint(event);
     event.currentTarget.setPointerCapture(event.pointerId);
     setPointerId(event.pointerId);
@@ -62,6 +62,7 @@ export function RasterBrushLayer({
   }
 
   function handlePointerMove(event: PointerEvent<SVGSVGElement>) {
+    if (pointerId !== null && pointerId !== event.pointerId) return;
     const point = sourcePoint(event);
     setHoverPoint(point);
     if (pointerId !== event.pointerId) return;
@@ -85,6 +86,16 @@ export function RasterBrushLayer({
     if (completed.length > 0) onStroke(completed);
   }
 
+  function cancelStroke(event: PointerEvent<SVGSVGElement>) {
+    if (pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    // Browser cancellation or capture loss must never paint an unapproved mask.
+    setPointerId(null);
+    setPoints([]);
+  }
+
   const previewFill =
     mode === "paint" ? "rgba(87, 204, 153, 0.35)" : "rgba(244, 96, 108, 0.35)";
   const previewStroke = mode === "paint" ? "#57cc99" : "#f4606c";
@@ -99,7 +110,8 @@ export function RasterBrushLayer({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={finishStroke}
-      onPointerCancel={finishStroke}
+      onPointerCancel={cancelStroke}
+      onLostPointerCapture={cancelStroke}
       onPointerLeave={() => {
         if (pointerId === null) setHoverPoint(null);
       }}
