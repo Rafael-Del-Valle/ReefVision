@@ -2,10 +2,23 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
+
+
+def filesystem_io_path(path: Path) -> Path:
+    """Use an extended Windows path for filesystem operations, never stored metadata."""
+    if os.name != "nt" or not path.is_absolute():
+        return path
+    text = str(path)
+    if text.startswith(("\\\\?\\", "\\\\.\\")):
+        return path
+    if text.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + text[2:])
+    return Path("\\\\?\\" + text)
 
 
 def resolve_managed_project_path(settings: Settings, relative_path: str) -> Path:

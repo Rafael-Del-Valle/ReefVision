@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from reefvision.config import Settings
-from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.projects import filesystem_io_path, resolve_managed_project_path
 
 if TYPE_CHECKING:
     from reefvision.db.models.dataset_version import DatasetVersion
@@ -70,6 +70,11 @@ def _compact_export_identifier(value: str) -> str:
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
+def copy_export_image(source: Path, destination: Path) -> None:
+    """Copy image bytes and metadata to an export under its full managed path."""
+    shutil.copy2(filesystem_io_path(source), filesystem_io_path(destination))
+
+
 def safe_export_filename(image_id: str, original_filename: str) -> str:
     """Build a collision-resistant export name that stays practical on Windows."""
 
@@ -93,10 +98,12 @@ def remove_export_artifacts(
     output_path: str,
     archive_path: str | None = None,
 ) -> None:
-    output_root = resolve_managed_project_path(settings, output_path)
+    output_root = filesystem_io_path(resolve_managed_project_path(settings, output_path))
     shutil.rmtree(output_root, ignore_errors=True)
     if archive_path is not None:
-        resolve_managed_project_path(settings, archive_path).unlink(missing_ok=True)
+        filesystem_io_path(resolve_managed_project_path(settings, archive_path)).unlink(
+            missing_ok=True
+        )
 
 
 def write_yolo_detection_export(
@@ -110,7 +117,7 @@ def write_yolo_detection_export(
     manifest_path: str,
     archive_path: str,
 ) -> dict[str, Any]:
-    output_root = resolve_managed_project_path(settings, output_path)
+    output_root = filesystem_io_path(resolve_managed_project_path(settings, output_path))
     output_root.mkdir(parents=True, exist_ok=False)
     images_root = output_root / "images"
     labels_root = output_root / "labels"
@@ -141,7 +148,7 @@ def write_yolo_detection_export(
         target_filename = safe_export_filename(item.image_id, item.original_filename)
         source_path = image_paths[item.image_id]
         target_image = images_root / split_directory / target_filename
-        shutil.copy2(source_path, target_image)
+        copy_export_image(source_path, target_image)
         label_path = (labels_root / split_directory / Path(target_filename).stem).with_suffix(
             ".txt"
         )
@@ -201,10 +208,10 @@ def write_yolo_detection_export(
         "class_map": class_map,
         "items": manifest_items,
     }
-    export_manifest_file = resolve_managed_project_path(settings, manifest_path)
+    export_manifest_file = filesystem_io_path(resolve_managed_project_path(settings, manifest_path))
     export_manifest_file.write_bytes(canonical_json_bytes(export_manifest))
 
-    archive_file = resolve_managed_project_path(settings, archive_path)
+    archive_file = filesystem_io_path(resolve_managed_project_path(settings, archive_path))
     with zipfile.ZipFile(archive_file, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(output_root.rglob("*")):
             if path.is_file():

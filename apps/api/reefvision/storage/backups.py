@@ -21,6 +21,7 @@ from reefvision import __version__
 from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
 from reefvision.storage.datasets import canonical_json_bytes, canonical_json_sha256
+from reefvision.storage.projects import filesystem_io_path as backup_io_path
 from reefvision.storage.projects import resolve_managed_project_path
 
 BACKUP_FORMAT_VERSION = "1.0"
@@ -92,18 +93,6 @@ def _live_profile_entries(data_root: Path) -> Iterator[Path]:
             yield from entry.rglob("*")
         else:
             yield entry
-
-
-def backup_io_path(path: Path) -> Path:
-    """Use an extended Windows path for filesystem operations, never stored metadata."""
-    if os.name != "nt" or not path.is_absolute():
-        return path
-    text = str(path)
-    if text.startswith(("\\\\?\\", "\\\\.\\")):
-        return path
-    if text.startswith("\\\\"):
-        return Path("\\\\?\\UNC\\" + text[2:])
-    return Path("\\\\?\\" + text)
 
 
 def backup_member_path(root: Path, member: str) -> Path:
