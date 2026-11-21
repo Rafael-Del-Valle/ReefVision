@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 from contextlib import suppress
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -14,19 +15,28 @@ from sqlalchemy.orm import Session, sessionmaker
 from torch.utils.data import DataLoader
 
 from reefvision.config import Settings
-from reefvision.db.models import Job, PoseTrainingDataset, Project, TrainingRun
+from reefvision.db.models import (
+    Job,
+    ModelRegistration,
+    PoseModelSchemaBinding,
+    PoseTrainingDataset,
+    Project,
+    TrainingRun,
+)
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.training import _complete_training_run, _relative_to_data_dir
 from reefvision.ml.reefpose.checkpoints import load_checkpoint
 from reefvision.ml.reefpose.data import ReefPoseDataset, load_reefvision_pose_export
 from reefvision.ml.reefpose.errors import ReefPoseCancelledError
 from reefvision.ml.reefpose.model import ReefPoseConfig, ReefPoseS
+from reefvision.ml.reefpose.schema import AnatomySchema
 from reefvision.ml.reefpose.training import (
     ReefPoseTrainer,
     ReefPoseTrainingConfig,
     ReefPoseTrainingResult,
 )
 from reefvision.services.pose_training_exports import PoseTrainingExportService
+from reefvision.services.project_exchange_pose_training import checkpoint_schema_matches
 from reefvision.services.workflow_pose_sources import verify_pose_dataset_separation
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import hash_model_file
@@ -76,6 +86,53 @@ def _validate_bundle(bundle: Any, dataset: PoseTrainingDataset, *, role: str) ->
         raise ValidationError(f"Pose {role} export dataset checksum does not match frozen truth")
     if bundle.source_schema_content_hash != dataset.pose_schema_content_hash:
         raise ValidationError(f"Pose {role} export landmark schema does not match frozen truth")
+
+
+def _is_transferred_seed_anatomy(
+    session: Session,
+    model: ModelRegistration,
+    original: AnatomySchema,
+    destination: AnatomySchema,
+) -> bool:
+    """Validate the only identity change permitted for fresh training from an imported seed."""
+    if replace(original, schema_id=destination.schema_id) != destination:
+        return False
+    binding = session.get(PoseModelSchemaBinding, model.id)
+    if binding is None or (binding.schema_id, binding.schema_revision) != (
+        destination.schema_id,
+        destination.revision,
+    ):
+        return False
+
+    metadata = model.metadata_json or {}
+    source_id = metadata.get("source_training_run_id")
+    if metadata.get("registered_from") != "training_run" or not isinstance(source_id, str):
+        return False
+    source = session.get(TrainingRun, source_id)
+    if (
+        source is None
+        or source.project_id != model.project_id
+        or source.task != "pose"
+        or source.provider_id != "reefpose"
+        or source.status != "completed"
+        or source.registered_model_id != model.id
+        or not source.result_checkpoint_path
+    ):
+        return False
+    worker = source.artifact_manifest_json or {}
+    legacy_digest = (
+        "last_checkpoint_sha256"
+        if Path(source.result_checkpoint_path).name == "last.pt"
+        else "best_checkpoint_sha256"
+    )
+    if (
+        worker.get("result_checkpoint_sha256", worker.get(legacy_digest)) != model.sha256
+        or worker.get("pose_schema_id") != destination.schema_id
+        or worker.get("pose_schema_revision") != destination.revision
+    ):
+        return False
+
+    return checkpoint_schema_matches(session, source, original.schema_id, destination.schema_id)
 
 
 def _metrics_history(rows: list[dict[str, float]]) -> dict[str, list[float | int]]:
@@ -280,6 +337,7 @@ def process_reefpose_training_job(
                 else None
             )
             registered_seed: Path | None = None
+            seed_model: ModelRegistration | None = None
             if resume_from is None and run.initial_checkpoint_model_id:
                 from reefvision.services.workflow_pose_training import _seed_pose_model
 
@@ -307,11 +365,24 @@ def process_reefpose_training_job(
                     and source_best != checkpoint_source
                 ):
                     shutil.copy2(source_best, output_dir / "best.pt")
-                state = load_checkpoint(
-                    short_resume,
-                    device="cpu",
-                    expected_schema_hash=training_bundle.schema.integrity_hash,
-                )
+                if seed_model is None:
+                    state = load_checkpoint(
+                        short_resume,
+                        device="cpu",
+                        expected_schema_hash=training_bundle.schema.integrity_hash,
+                    )
+                else:
+                    seed_digest, _ = hash_model_file(short_resume)
+                    if seed_digest != seed_model.sha256 or run.resolved_model_checksum not in (
+                        None,
+                        seed_digest,
+                    ):
+                        raise ValidationError("Pose retraining seed checkpoint checksum changed")
+                    state = load_checkpoint(short_resume, device="cpu")
+                    if state.schema != training_bundle.schema and not _is_transferred_seed_anatomy(
+                        session, seed_model, state.schema, training_bundle.schema
+                    ):
+                        raise ValidationError("Checkpoint anatomy differs from the expected schema")
                 model = state.model
                 if resume_from is not None:
                     resume_from = short_resume

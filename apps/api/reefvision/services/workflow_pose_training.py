@@ -33,6 +33,7 @@ from reefvision.ml.ultralytics_registry import (
 from reefvision.services import (
     workflow_runtime_adapters as runtime_adapters,
 )
+from reefvision.services.project_exchange_pose_training import recover_imported_pose_training
 from reefvision.services.workflow_pose_sources import (
     resolve_frozen_pose_dataset,
     verify_pose_dataset_separation,
@@ -294,6 +295,7 @@ def _completed_workflow_pose_training_run(
         ):
             raise ValidationError("Recovered pose-training node dataset identity changed")
 
+        recover_imported_pose_training(session, candidate)
         if candidate.split_manifest_sha256 != split_manifest_sha256:
             raise ValidationError("Recovered pose-training node split manifest changed")
 

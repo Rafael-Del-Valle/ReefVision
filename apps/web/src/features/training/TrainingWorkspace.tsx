@@ -1030,6 +1030,13 @@ export function TrainingWorkspace({
         </aside>
 
         <div className="training-content">
+          {registerRunModelMutation.error &&
+            (activeSection === "runs" || activeSection === "models") && (
+              <p className="form-error" role="alert">
+                Model registration failed.{" "}
+                {registerRunModelMutation.error.message}
+              </p>
+            )}
           {requiresDraft &&
             selectedDraftId &&
             !selectedDraft &&
