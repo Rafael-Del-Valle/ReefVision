@@ -183,6 +183,34 @@
         "file": "1.8/checkpoints/542254b8a/official/offline/attempt-44845170720/offline-index.json",
         "sha256": "cddbaa86c267eaa144deaee2f673617ac5c103f33c1396a89d0bcd8e07148099"
       }
+    },
+    "registered_clean": {
+      "proof_run": 44850003894,
+      "proof_source": "82ee96e1a36ed234c70e964584fc9c7ac9323c6a",
+      "job": 136678849293,
+      "journeys": {
+        "first-use_journeys": 1,
+        "workspace_journeys": 6,
+        "research_journeys": 6,
+        "spatial_journeys": 10,
+        "monitoring_journeys": 2,
+        "research-tools_journeys": 5
+      },
+      "stages": {
+        "PASS": 21,
+        "SKIPPED": 11
+      },
+      "skipped_stage_scope": "This clean-only role excludes separate upgrade scenarios.",
+      "scheduler_restarts": 2,
+      "original_transport": {
+        "id": 14685658019,
+        "sha256": "8cf1724cb6d75c3beddee3531c231454a9abc3e604230833c2f15f2694aa71a6",
+        "retained_files": 77
+      },
+      "receipt": {
+        "file": "1.8/checkpoints/542254b8a/official/registered-retest/attempt-44850003894/registered-retest-index.json",
+        "sha256": "82fb56b57fa25f3cb0841e747e3fb47a1ada6d8b033553717e3dd37cdf54fbdc"
+      }
     }
   },
   "separately_built_msis": {
@@ -474,6 +502,13 @@
     "independent_native_file_verification": {
       "file": "1.8/checkpoints/9cde9e6e7/official/evidence/9cde-official-independent-native-validation.json",
       "sha256": "f137998a2aa97aad1b752515ebdebc9830e99218f3da0b1acc616048c8f90232"
+    },
+    "closed_predecessor_for_replacement": {
+      "description": "Original 1.8 opened an independent restored copy of six generated projects, 37 source stills and ten saved research outputs. Its verified managed backup contains 229 members and 60,624,990 bytes. This prepares a genuine existing profile for a repaired 1.8 build.",
+      "receipt": {
+        "file": "1.8/checkpoints/9cde9e6e7/official/evidence/same-version-predecessor/evidence-index.json",
+        "sha256": "79849e64279837c75e7fbe60bf75d47baeed9a5598421ccefb1b05f630edc4f3"
+      }
     }
   },
   "predecessor_recheck": {
