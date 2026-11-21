@@ -1,0 +1,18 @@
+{
+  "manifest": {
+    "manifest_version": 2,
+    "abi": "reefvision.rgb-summary/1",
+    "plugin_id": "green_fraction",
+    "version": "1.0.0",
+    "display_name": "Green intensity fraction",
+    "description": "Mean green intensity divided by the 8-bit channel maximum.",
+    "license": "AGPL-3.0-only",
+    "permissions": [
+      "read_image_rgb_summary"
+    ],
+    "quantity": "green_fraction",
+    "unit": "1",
+    "module_sha256": "3e59bd90a00dcd834471464df06675de7be338c06a44343460a9e44cb020066d"
+  },
+  "module_base64": "AGFzbQEAAAABCQFgBHx8fH4BfAMCAQAHCwEHbWVhc3VyZQAAChABDgAgAUQAAAAAAOBvQKMLACQEbmFtZQIdAQAEAANyZWQBBWdyZWVuAgRibHVlAwZwaXhlbHM="
+}

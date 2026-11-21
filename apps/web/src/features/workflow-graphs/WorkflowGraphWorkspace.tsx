@@ -41,6 +41,10 @@ import { MeshArtifactViewer } from "./MeshArtifactViewer";
 import { PointCloudArtifactViewer } from "./PointCloudArtifactViewer";
 import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
 import {
+  MeasurementReviewSummary,
+  measurementReviewInput,
+} from "./MeasurementReviewSummary";
+import {
   WorkflowPoseSourceFields,
   type WorkflowSourceEdge,
   type WorkflowSourceNode,
@@ -1059,37 +1063,57 @@ export function WorkflowGraphWorkspace({
               )}
               <h5>Nodes</h5>
               <ol>
-                {runDetailQuery.data?.nodes.map((node) => (
-                  <li key={node.id}>
-                    <strong>{node.node_id}</strong> · {node.node_type} ·{" "}
-                    {node.status}
-                    {node.error_message ? ` — ${node.error_message}` : ""}
-                    {node.status === "waiting_for_review" && (
-                      <div className="button-row">
-                        <PoseReviewActions
-                          node={node}
-                          runId={selectedRun.id}
-                          projectId={project.id}
-                          artifacts={runDetailQuery.data?.artifacts ?? []}
-                          onOpen={onOpenPoseReview}
-                        />
-                        <button
-                          type="button"
-                          disabled={resumeReviewMutation.isPending}
-                          onClick={() => resumeReviewMutation.mutate(node.id)}
-                        >
-                          Resume after review
-                        </button>
-                      </div>
-                    )}
-                    {Object.keys(node.result_json).length > 0 && (
-                      <details>
-                        <summary>Node result</summary>
-                        <pre>{JSON.stringify(node.result_json, null, 2)}</pre>
-                      </details>
-                    )}
-                  </li>
-                ))}
+                {runDetailQuery.data?.nodes.map((node) => {
+                  const reviewMeasurement =
+                    node.node_type === "measurement_review_gate";
+                  const input = reviewMeasurement
+                    ? measurementReviewInput(
+                        node,
+                        runDetailQuery.data?.artifacts ?? [],
+                      )
+                    : undefined;
+                  return (
+                    <li key={node.id}>
+                      <strong>{node.node_id}</strong> · {node.node_type} ·{" "}
+                      {node.status}
+                      {node.error_message ? ` — ${node.error_message}` : ""}
+                      {node.status === "waiting_for_review" && (
+                        <>
+                          {reviewMeasurement && (
+                            <MeasurementReviewSummary artifact={input} />
+                          )}
+                          <div className="button-row">
+                            <PoseReviewActions
+                              node={node}
+                              runId={selectedRun.id}
+                              projectId={project.id}
+                              artifacts={runDetailQuery.data?.artifacts ?? []}
+                              onOpen={onOpenPoseReview}
+                            />
+                            <button
+                              type="button"
+                              disabled={
+                                resumeReviewMutation.isPending ||
+                                (reviewMeasurement && !input)
+                              }
+                              onClick={() =>
+                                resumeReviewMutation.mutate(node.id)
+                              }
+                            >
+                              Resume after review
+                            </button>
+                          </div>
+                        </>
+                      )}
+                      {Object.keys(node.result_json).length > 0 && (
+                        <details>
+                          <summary>Node result</summary>
+                          <pre>{JSON.stringify(node.result_json, null, 2)}</pre>
+                        </details>
+                      )}
+                    </li>
+                  );
+                })}
               </ol>
               <h5>Artifacts</h5>
               <ul>
