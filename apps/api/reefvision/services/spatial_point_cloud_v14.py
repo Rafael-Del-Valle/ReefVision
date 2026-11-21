@@ -536,6 +536,51 @@ def measure_point_cloud_preview(
         else:
             centroid_separation_scale_interval = [lower, upper]
     source_affine_dimension = _source_affine_dimension(vertices)
+    # Largest *axis-projected* gap between consecutive distinct observed
+    # coordinate levels. This is a scan-sampling diagnostic, not an empty
+    # three-dimensional region, missing coral tissue or biological branch gap.
+    # Duplicated acquisition rows must not masquerade as extra coverage.
+    axis_sampling_gaps: dict[str, dict[str, Any]] = {}
+    sampling_gap_nominal_underflow = False
+    sampling_gap_interval_unresolved = False
+    for axis, label in enumerate(("x", "y", "z")):
+        levels = sorted({vertex[axis] for vertex in vertices})
+        gap_details: dict[str, Any] = {
+            "distinct_source_coordinate_levels": len(levels),
+            "source_endpoint_values": None,
+            "largest_adjacent_source_gap_units": None,
+            "fraction_of_source_axis_span": None,
+            "calibrated_gap_m": None,
+            "calibrated_gap_scale_interval_m": None,
+        }
+        if len(levels) > 1:
+            # max() keeps the lower-coordinate interval when two gaps tie.
+            largest_index = max(
+                range(len(levels) - 1),
+                key=lambda index: levels[index + 1] - levels[index],
+            )
+            left = levels[largest_index]
+            right = levels[largest_index + 1]
+            gap = right - left
+            gap_details["source_endpoint_values"] = [left, right]
+            gap_details["largest_adjacent_source_gap_units"] = gap
+            gap_details["fraction_of_source_axis_span"] = gap / (levels[-1] - levels[0])
+            gap_m = gap * scale
+            if gap_m == 0.0:
+                # Do not describe a positive gap as a measured zero.
+                sampling_gap_nominal_underflow = True
+            else:
+                gap_details["calibrated_gap_m"] = gap_m
+                if relative_scale_uncertainty is not None:
+                    lower = gap_m * (1 - relative_scale_uncertainty)
+                    upper = gap_m * (1 + relative_scale_uncertainty)
+                    if _scale_interval_unresolved(
+                        gap_m, relative_scale_uncertainty, lower, upper
+                    ):
+                        sampling_gap_interval_unresolved = True
+                    else:
+                        gap_details["calibrated_gap_scale_interval_m"] = [lower, upper]
+        axis_sampling_gaps[label] = gap_details
     # Even a tilted line or plane can span a positive axis-aligned 3D box.
     # Keep the mathematically valid envelope but explicitly prohibit readers
     # from confusing its positive volume with occupied three-dimensional space.
@@ -667,6 +712,7 @@ def measure_point_cloud_preview(
         },
         "axis_aligned_dimensions_m": dimensions,
         "axis_extrema_support": axis_extrema_support,
+        "axis_largest_adjacent_coordinate_gaps": axis_sampling_gaps,
         "axis_aligned_dimension_scale_interval_m": dimension_scale_intervals,
         "axis_aligned_min_in_source_frame_m": bounds_min,
         "axis_aligned_max_in_source_frame_m": bounds_max,
@@ -745,6 +791,16 @@ def measure_point_cloud_preview(
                 else []
             )
             + (["preview_omits_axis_extrema"] if preview_omitted_axis_extrema else [])
+            + (
+                ["axis_sampling_gap_below_numeric_resolution"]
+                if sampling_gap_nominal_underflow
+                else []
+            )
+            + (
+                ["axis_sampling_gap_uncertainty_interval_below_numeric_resolution"]
+                if sampling_gap_interval_unresolved
+                else []
+            )
             + (["preview_omits_selected_chord_endpoints"] if omitted_chord_endpoints else [])
             + (
                 ["selected_chord_uncertainty_interval_below_numeric_resolution"]
