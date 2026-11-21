@@ -147,6 +147,41 @@ describe("PoseActiveLearningPanel", () => {
     });
   });
 
+  it("opens a workflow-linked round after an earlier review cached the empty recording list", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
+    });
+    client.setQueryData(
+      ["pose-active-learning-rounds", "project-1", "video-1"],
+      [],
+    );
+
+    render(
+      <QueryClientProvider client={client}>
+        <PoseActiveLearningPanel
+          projectId="project-1"
+          videoId="video-1"
+          initialRoundId={round.id}
+          onOpenCandidate={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      await screen.findByRole("combobox", {
+        name: "Pose Active Learning round",
+      }),
+    ).toHaveValue(round.id);
+    expect(
+      await screen.findByTestId("pose-al-candidate-candidate-1"),
+    ).toBeVisible();
+    expect(api.getPoseActiveLearningRounds).toHaveBeenCalledWith(
+      "project-1",
+      "video-1",
+      expect.any(AbortSignal),
+    );
+  });
+
   it("shows explainable pose uncertainty and opens the Pose Annotation Editor handoff", async () => {
     const onOpenCandidate = renderPanel();
 

@@ -67,6 +67,8 @@ export function PoseActiveLearningPanel({
     queryFn: ({ signal }) =>
       getPoseActiveLearningRounds(projectId, videoId, signal),
     enabled: Boolean(projectId && videoId),
+    // A workflow can create the linked round after the prior review cached this list.
+    refetchOnMount: initialRoundId ? "always" : undefined,
   });
 
   useEffect(() => {
