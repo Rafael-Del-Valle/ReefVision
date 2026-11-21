@@ -23,6 +23,39 @@ def test_real_windows_installer_workflow_passes_preflight() -> None:
     assert CHECK_CABS(WORKFLOW) == []
 
 
+
+@pytest.mark.parametrize(
+    ("job_marker", "disabling_key"),
+    [
+        ("  build-windows-installer:", "    if: false"),
+        ("  build-windows-installer:", "    continue-on-error: true"),
+        ("  windows-clean-install-acceptance:", "    if: false"),
+        ("  windows-clean-install-acceptance:", "    continue-on-error: true"),
+    ],
+)
+def test_release_preflight_rejects_skipped_or_soft_failed_installer_jobs(
+    job_marker: str, disabling_key: str
+) -> None:
+    """A skipped Windows release gate must never be treated as validation."""
+    assert job_marker in WORKFLOW
+    altered = WORKFLOW.replace(job_marker, job_marker + "\n" + disabling_key, 1)
+    assert any(
+        "must not be conditionally skipped or soft-failed" in error
+        for error in CHECK_WORKFLOW(altered, VERSION)
+    )
+
+
+def test_release_preflight_requires_installer_build_dependency() -> None:
+    """Clean install must consume the same run's MSI/CAB build output."""
+    original = "    needs: build-windows-installer\n"
+    assert original in WORKFLOW
+    altered = WORKFLOW.replace(original, "    needs: []\n", 1)
+    assert any(
+        "Windows clean-install acceptance must depend on MSI/CAB build" in error
+        for error in CHECK_WORKFLOW(altered, VERSION)
+    )
+
+
 @pytest.mark.parametrize(
     ("original", "replacement", "expected"),
     [
