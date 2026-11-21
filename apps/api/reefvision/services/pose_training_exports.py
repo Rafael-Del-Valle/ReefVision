@@ -9,6 +9,7 @@ import json
 import math
 import zipfile
 from collections import Counter, defaultdict
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -46,6 +47,46 @@ EXPORT_MANIFEST_FILENAME = "reefvision-pose-training-export-manifest.json"
 EXPORT_SCHEMA_VERSION = "pose-training-external-export-0001"
 
 
+def _exported_frame_hashes(archive: zipfile.ZipFile) -> Iterator[tuple[bytes, str]]:
+    for member in archive.infolist():
+        path = member.filename.replace("\\", "/")
+        if path.startswith("images/train/") and path.endswith(".png"):
+            digest = hashlib.sha256()
+            with archive.open(member) as frame:
+                while chunk := frame.read(1024 * 1024):
+                    digest.update(chunk)
+            yield digest.digest(), path
+
+
+def _frame_separation_receipt(training_sha256: str, validation_sha256: str) -> dict[str, str]:
+    return {
+        "method": "exact-lossless-png-sha256-v1",
+        "training_export_sha256": training_sha256,
+        "validation_export_sha256": validation_sha256,
+    }
+
+
+def verify_pose_export_frame_separation(training: bytes, validation: bytes) -> dict[str, str]:
+    """Compare the lossless frames the trainers receive, independently of clip and frame IDs."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(training)) as archive:
+            training_frames = dict(_exported_frame_hashes(archive))
+        with zipfile.ZipFile(io.BytesIO(validation)) as archive:
+            for digest, validation_path in _exported_frame_hashes(archive):
+                if training_path := training_frames.get(digest):
+                    raise ValidationError(
+                        f"Validation image {validation_path} is identical to frozen frame "
+                        f"{training_path} in training. Select a holdout without repeated frames."
+                    )
+    except zipfile.BadZipFile as exc:
+        raise ValidationError(
+            "The frozen pose export could not be read for split validation"
+        ) from exc
+    return _frame_separation_receipt(
+        hashlib.sha256(training).hexdigest(), hashlib.sha256(validation).hexdigest()
+    )
+
+
 @dataclass(frozen=True)
 class PoseTrainingExportArtifact:
     filename: str
@@ -74,6 +115,25 @@ class PoseTrainingExportService:
     ) -> None:
         self.session = session
         self.settings = settings
+
+    def verify_completed_frame_separation(
+        self, training_id: str, validation_id: str, manifest: dict[str, Any]
+    ) -> None:
+        """Older completed jobs have no worker receipt. Recheck their frozen sources on reuse."""
+        training_sha = manifest.get("training_export_bundle_sha256")
+        validation_sha = manifest.get("validation_export_bundle_sha256")
+        if (
+            isinstance(training_sha, str)
+            and len(training_sha) == 64
+            and isinstance(validation_sha, str)
+            and len(validation_sha) == 64
+            and manifest.get("frame_content_separation")
+            == _frame_separation_receipt(training_sha, validation_sha)
+        ):
+            return
+        training = self.export(training_id, "ultralytics_pose")
+        validation = self.export(validation_id, "ultralytics_pose")
+        verify_pose_export_frame_separation(training.content, validation.content)
 
     def _dataset(
         self,

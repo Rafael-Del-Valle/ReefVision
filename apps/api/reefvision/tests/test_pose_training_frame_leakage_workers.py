@@ -501,10 +501,16 @@ def test_saved_pose_retry_revalidates_frozen_frames_from_completed_child(
     results = [
         row["payload_json"] for row in after["artifacts"] if row["data_type"] == "training_result"
     ]
+    registration = client.post(
+        f"{url}/models/register-from-run", json={"training_run_id": child_id}
+    )
     if overlapping:
         assert not processed and after["run"]["status"] == "failed", after["run"]
         assert "frozen frame" in after["run"]["error_message"].casefold()
         assert results == []
+        assert registration.status_code == 400
+        assert "frozen frame" in registration.json()["detail"].casefold()
+        assert _checked(client.get(f"{url}/models"), 200) == []
     else:
         assert processed and after["run"]["status"] == "succeeded", after["run"]
         assert len(results) == 1
@@ -512,3 +518,4 @@ def test_saved_pose_retry_revalidates_frozen_frames_from_completed_child(
         assert results[0]["training_job_id"] == child_job_id
         assert results[0]["experiment_id"] == experiment_id
         assert results[0]["result_checkpoint_sha256"] == sha256
+        assert _checked(registration, 200)["sha256"] == sha256
