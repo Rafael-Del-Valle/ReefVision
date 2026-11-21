@@ -47,6 +47,9 @@ class PointCloudPreviewRequest(BaseModel):
     point_index_pairs: list[list[StrictInt]] | None = Field(default=None, max_length=32)
     preserve_axis_extrema_in_preview: StrictBool = False
     preserve_measured_chord_endpoints_in_preview: StrictBool = False
+    # Pin one source row per distinct coordinate level bordering every
+    # equally largest axis-projected gap; reject oversubscribed displays.
+    preserve_largest_axis_gap_boundaries_in_preview: StrictBool = False
 
     @field_validator("meters_per_unit", "relative_scale_uncertainty", mode="before")
     @classmethod
