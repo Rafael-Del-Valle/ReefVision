@@ -549,7 +549,19 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
             validation_content=mismatched.getvalue(),
             destination=mismatched_destination,
         )
-    assert not (mismatched_destination / "images" / "val").exists()
+    # Rejected validation metadata must not strand a training dataset.
+    # Retry the same saved-run destination using the reviewed frozen exports.
+    assert not mismatched_destination.exists()
+    corrected = materialize_pose_training_exports(
+        training_content=training,
+        validation_content=validation,
+        destination=mismatched_destination,
+    )
+    assert corrected["validation_mode"] == "separate_frozen_pose_dataset"
+    train_frame = mismatched_destination / "images/train/frame_00000001.png"
+    holdout_frame = mismatched_destination / "images/val/frame_00000001.png"
+    assert train_frame.read_bytes() == b"train"
+    assert holdout_frame.read_bytes() == b"validation"
 
 
 def test_pose_materialized_fingerprint_uses_portable_path_order(tmp_path: Path) -> None:

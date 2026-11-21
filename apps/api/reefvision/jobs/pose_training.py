@@ -593,6 +593,24 @@ def materialize_pose_training_exports(
             "refusing to overwrite prior scientific data"
         )
 
+    # A mismatched holdout header is invalid frozen training provenance.
+    # Check it before claiming the immutable dataset, so the saved Workflow
+    # Builder execution can retry with a corrected validation export.
+    if validation_content is not None:
+        try:
+            with (
+                zipfile.ZipFile(io.BytesIO(training_content)) as training_archive,
+                zipfile.ZipFile(io.BytesIO(validation_content)) as validation_archive,
+            ):
+                if training_archive.read("data.yaml") != validation_archive.read("data.yaml"):
+                    raise ValidationError(
+                        "Ultralytics pose validation export has incompatible data.yaml"
+                    )
+        except KeyError as exc:
+            raise ValidationError("Ultralytics pose export is missing data.yaml") from exc
+        except (zipfile.BadZipFile, EOFError, zlib.error) as exc:
+            raise ValidationError("Pose training export contains a corrupt archive member") from exc
+
     _safe_extract_zip(
         training_content,
         destination,
