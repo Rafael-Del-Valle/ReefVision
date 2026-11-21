@@ -696,8 +696,7 @@ def _replace_rendition(temporary: Path, destination: Path) -> None:
             # Only fall back to errno/classification when no WinError exists.
             winerror = getattr(exc, "winerror", None)
             transient_lock = winerror in {32, 33, 170} or (
-                winerror is None
-                and (isinstance(exc, PermissionError) or exc.errno == errno.EBUSY)
+                winerror is None and (isinstance(exc, PermissionError) or exc.errno == errno.EBUSY)
             )
             if not transient_lock or attempt == 4:
                 raise
