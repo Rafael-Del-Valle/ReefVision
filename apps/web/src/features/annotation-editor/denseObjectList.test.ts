@@ -278,7 +278,7 @@ describe("dense object-browser window", () => {
     let indexedReads = 0;
     const annotations = new Proxy(source, {
       get(target, property, receiver) {
-        if (typeof property === "string" && /^\\d+$/.test(property)) {
+        if (typeof property === "string" && /^[0-9]+$/.test(property)) {
           indexedReads += 1;
         }
         return Reflect.get(target, property, receiver);
