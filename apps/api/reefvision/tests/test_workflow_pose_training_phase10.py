@@ -31,7 +31,10 @@ from reefvision.db.models import (
     WorkflowArtifact,
     WorkflowRun,
 )
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs.pose_training import (
+    _claim_pose_training_output,
+    _safe_extract_zip,
     materialize_pose_training_exports,
     process_pose_training_job,
 )
@@ -400,6 +403,8 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
 
     yaml_text = (destination / "data.yaml").read_text(encoding="utf-8")
 
+    # Ultralytics must resolve relative split names from the managed YAML's directory.
+    assert not any(line.startswith("path:") for line in yaml_text.splitlines())
     assert "train: images/train" in yaml_text
     assert "val: images/val" in yaml_text
 
@@ -418,6 +423,107 @@ def test_pose_materialization_never_silently_reuses_training_for_validation(
     assert exploratory["validation_mode"] == "none"
 
     assert exploratory["validation_image_count"] == 0
+
+
+def test_pose_materialization_preserves_validation_stage_raced_after_precheck(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "pose-dataset"
+    staging = tmp_path / ".pose-dataset-validation"
+    other_review = staging / "prior-science.txt"
+
+    def competing_claim(content: bytes, target: Path) -> None:
+        if target == staging:
+            staging.mkdir()
+            other_review.write_bytes(b"other-reviewed-run")
+        _safe_extract_zip(content, target)
+
+    monkeypatch.setattr("reefvision.jobs.pose_training._safe_extract_zip", competing_claim)
+    try:
+        with pytest.raises(ValidationError, match="refusing to overwrite prior scientific data"):
+            materialize_pose_training_exports(
+                training_content=_pose_export_zip(b"reviewed-training"),
+                validation_content=_pose_export_zip(b"new-holdout"),
+                destination=destination,
+            )
+    finally:
+        assert other_review.is_file(), "The losing worker removed the competing validation stage"
+        assert other_review.read_bytes() == b"other-reviewed-run"
+
+    assert not (staging / "data.yaml").exists()
+    assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed-training"
+
+
+@pytest.mark.parametrize("existing", ["pose-dataset", ".pose-dataset-validation"])
+def test_pose_materialization_refuses_unowned_stage_without_writes(
+    tmp_path: Path, existing: str
+) -> None:
+    destination = tmp_path / "pose-dataset"
+    retained = tmp_path / existing
+    retained.mkdir()
+    original = retained / "prior-science.txt"
+    original.write_bytes(b"previous-results")
+
+    try:
+        with pytest.raises(ValidationError, match="refusing to overwrite prior scientific data"):
+            materialize_pose_training_exports(
+                training_content=_pose_export_zip(b"reviewed-training"),
+                validation_content=_pose_export_zip(b"reviewed-validation"),
+                destination=destination,
+            )
+    finally:
+        assert original.is_file(), "An existing stage was removed"
+        assert original.read_bytes() == b"previous-results"
+    assert not (destination / "data.yaml").exists()
+
+
+def test_pose_materialization_cleans_own_partial_extraction_and_retries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "pose-dataset"
+    training_content = _pose_export_zip(b"reviewed-training")
+    validation_content = _pose_export_zip(b"reviewed-validation")
+
+    with monkeypatch.context() as faults:
+
+        def interrupted_copy(*_args: object, **_kwargs: object) -> None:
+            raise OSError("fixture drive interrupted after destination was claimed")
+
+        faults.setattr("reefvision.jobs.pose_training.shutil.copyfileobj", interrupted_copy)
+        with pytest.raises(OSError, match="fixture drive interrupted"):
+            materialize_pose_training_exports(
+                training_content=training_content,
+                validation_content=validation_content,
+                destination=destination,
+            )
+    assert not destination.exists()
+
+    retried = materialize_pose_training_exports(
+        training_content=training_content,
+        validation_content=validation_content,
+        destination=destination,
+    )
+    assert retried["training_image_count"] == retried["validation_image_count"] == 1
+    assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed-training"
+    assert (destination / "images/val/frame_00000001.png").read_bytes() == b"reviewed-validation"
+
+
+@pytest.mark.parametrize("relative", ["ultralytics", "runs/pose"])
+def test_pose_output_claim_preserves_interrupted_run(tmp_path: Path, relative: str) -> None:
+    previous = tmp_path / "interrupted-run" / relative
+    previous.mkdir(parents=True)
+    marker = previous / "existing-result.txt"
+    marker.write_bytes(b"prior scientific artifact")
+
+    with pytest.raises(ValidationError, match="refusing to overwrite prior artifacts"):
+        _claim_pose_training_output(previous)
+    assert marker.read_bytes() == b"prior scientific artifact"
+
+    new_output = tmp_path / "new-run" / relative
+    _claim_pose_training_output(new_output)
+    assert list(new_output.iterdir()) == []
+    with pytest.raises(ValidationError, match="refusing to overwrite prior artifacts"):
+        _claim_pose_training_output(new_output)
 
 
 def test_pose_training_workflow_node_is_registered_and_executable(
