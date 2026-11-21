@@ -12,6 +12,7 @@ import shutil
 import stat
 import sys
 import zipfile
+import zlib
 from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
@@ -224,6 +225,16 @@ def _safe_extract_zip(
                 raise ValidationError(
                     "Pose training export contains a file-directory archive collision"
                 )
+
+        # ZIP metadata can be valid even if a reviewed frame has a broken
+        # checksum. Verify every member before creating an immutable output
+        # directory, so a corrupt export cannot strand a partial dataset.
+        try:
+            corrupt_member = archive.testzip()
+        except (zipfile.BadZipFile, EOFError, zlib.error) as exc:
+            raise ValidationError("Pose training export contains a corrupt archive member") from exc
+        if corrupt_member is not None:
+            raise ValidationError("Pose training export contains a corrupt archive member")
 
         # Invalid or ambiguous archives must not leave even an empty run
         # directory behind: that would block a corrected frozen export retry.

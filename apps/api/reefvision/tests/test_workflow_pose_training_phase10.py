@@ -1097,6 +1097,43 @@ def test_pose_materialization_rejects_aliased_archive_entries(
     assert (destination / "images" / "train" / "frame_00000001.png").read_bytes() == b"reviewed"
 
 
+def test_pose_materialization_rejects_corrupt_frame_before_creating_dataset(
+    tmp_path: Path,
+) -> None:
+    # Repack an actual frozen export with stored frame bytes, then mutate the
+    # frame without updating the ZIP CRC. Archive paths and metadata stay valid.
+    pristine = io.BytesIO()
+    with (
+        zipfile.ZipFile(io.BytesIO(_pose_export_zip(b"reviewed-frame"))) as original,
+        zipfile.ZipFile(pristine, "w", compression=zipfile.ZIP_STORED) as repacked,
+    ):
+        for name in original.namelist():
+            repacked.writestr(name, original.read(name))
+
+    valid_export = pristine.getvalue()
+    assert valid_export.count(b"reviewed-frame") == 1
+    corrupt_export = valid_export.replace(b"reviewed-frame", b"tampered-frame", 1)
+    destination = tmp_path / "pose-corrupt-frame"
+    with pytest.raises(ValidationError, match="corrupt archive member"):
+        materialize_pose_training_exports(
+            training_content=corrupt_export,
+            validation_content=None,
+            destination=destination,
+        )
+
+    # An invalid ZIP must not strand an occupied immutable run destination.
+    assert not destination.exists()
+    corrected = materialize_pose_training_exports(
+        training_content=valid_export,
+        validation_content=None,
+        destination=destination,
+    )
+    assert corrected["training_image_count"] == 1
+    assert (destination / "images" / "train" / "frame_00000001.png").read_bytes() == (
+        b"reviewed-frame"
+    )
+
+
 @pytest.mark.parametrize("alias", ("images", "labels/train"))
 def test_pose_materialization_rejects_file_directory_archive_collisions(
     tmp_path: Path,
