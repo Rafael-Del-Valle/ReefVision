@@ -89,11 +89,19 @@ class AcceptanceEvidenceTests(unittest.TestCase):
         report["evidence_run_token"] = "a1b2c3d4e5f6"
         MODULE.validate_report(report, expected_version="1.0.2")
         MODULE.validate_report(
-            report, expected_version="1.0.2",
+            report,
+            expected_version="1.0.2",
             expected_evidence_token="a1b2c3d4e5f6",
         )
 
-        for bad in (None, "", "A1B2C3D4E5F6", "a1b2c3d4e5f", "b1b2c3d4e5f6", ["a1b2c3d4e5f6"]):
+        for bad in (
+            None,
+            "",
+            "A1B2C3D4E5F6",
+            "a1b2c3d4e5f",
+            "b1b2c3d4e5f6",
+            ["a1b2c3d4e5f6"],
+        ):
             with self.subTest(reported_token=bad):
                 altered = copy.deepcopy(report)
                 if bad is None:
@@ -104,7 +112,8 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                     MODULE.AcceptanceEvidenceError, "token|evidence_run_token",
                 ):
                     MODULE.validate_report(
-                        altered, expected_version="1.0.2",
+                        altered,
+                        expected_version="1.0.2",
                         expected_evidence_token="a1b2c3d4e5f6",
                     )
 
@@ -125,7 +134,8 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                     MODULE.AcceptanceEvidenceError, "Invalid expected evidence token",
                 ):
                     MODULE.validate_report(
-                        report, expected_version="1.0.2",
+                        report,
+                        expected_version="1.0.2",
                         expected_evidence_token=expected,
                     )
 
