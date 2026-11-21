@@ -691,7 +691,11 @@ def test_locked_camera_rendition_cleanup_preserves_original_publish_failure(
     original_unlink = Path.unlink
 
     def locked_temporary_unlink(path: Path, *args: object, **kwargs: object) -> None:
-        if path.parent == tmp_path and path.name.startswith(f".{destination.name}.") and path.suffix == ".part":
+        if (
+            path.parent == tmp_path
+            and path.name.startswith(f".{destination.name}.")
+            and path.suffix == ".part"
+        ):
             raise PermissionError("Windows scanner holds generated image temporary")
         original_unlink(path, *args, **kwargs)
 
