@@ -230,6 +230,83 @@ def test_failed_refresh_keeps_previous_cache_and_corruption_is_rejected(client):
 @pytest.mark.parametrize(
     ("alteration", "error_fragment"),
     [
+        ("missing_count_absent", "missing-observation count"),
+        ("missing_count_boolean", "missing-observation count"),
+        ("missing_count_negative", "missing-observation count"),
+        ("missing_count_string", "missing-observation count"),
+        ("missing_count_fractional", "missing-observation count"),
+        ("provider_response_absent", "malformed provider evidence"),
+        ("provider_response_list", "malformed provider evidence"),
+        ("entire_payload_list", "malformed provider evidence"),
+    ],
+)
+def test_rehashed_environmental_cache_rejects_malformed_missingness_and_source_evidence(
+    client, alteration, error_fragment
+):
+    """Rehashing corrupt cache metadata must not forge scientific missingness or cause 500s."""
+    from sqlalchemy import select
+
+    from reefvision.db.models.scientific_record import EnvironmentalCacheEntry, ScientificRecord
+    from reefvision.domain.errors import ConflictError
+    from reefvision.schemas.environmental_context import NOAAImportRequest
+    from reefvision.services.environmental_context import EnvironmentalContextService
+    from reefvision.services.scientific_data import content_hash
+
+    project = create_project(client, "Malformed environmental cache evidence")
+    request = NOAAImportRequest(station_id="8665530", day="2026-04-03")
+    with (
+        client.app.state.session_factory() as session,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=noaa_fixture()))
+        ) as http,
+    ):
+        service = EnvironmentalContextService(
+            session, http=http, now=datetime(2026, 4, 4, tzinfo=UTC)
+        )
+        imported = service.import_noaa(project["id"], request)
+        assert imported.skipped_missing == 1
+        original_ids = {str(item.id) for item in imported.items}
+        entry = session.scalar(select(EnvironmentalCacheEntry))
+        assert entry is not None
+        cache_key = entry.cache_key
+        tampered = deepcopy(entry.payload_json)
+        if alteration == "missing_count_absent":
+            del tampered["skipped_missing"]
+        elif alteration == "missing_count_boolean":
+            tampered["skipped_missing"] = True
+        elif alteration == "missing_count_negative":
+            tampered["skipped_missing"] = -1
+        elif alteration == "missing_count_string":
+            tampered["skipped_missing"] = "1"
+        elif alteration == "missing_count_fractional":
+            tampered["skipped_missing"] = 0.5
+        elif alteration == "provider_response_absent":
+            del tampered["provider_response"]
+        elif alteration == "provider_response_list":
+            tampered["provider_response"] = []
+        else:
+            tampered = ["not", "a", "scientific", "cache"]
+        entry.payload_json = tampered
+        entry.content_sha256 = content_hash(tampered)
+        session.commit()
+
+        with pytest.raises(ConflictError, match=error_fragment):
+            service.cached_dataset(project["id"], cache_key)
+        with pytest.raises(ConflictError, match=error_fragment):
+            service.datasets(project["id"])
+        with pytest.raises(ConflictError, match=error_fragment):
+            service.import_noaa(project["id"], request.model_copy(update={"offline": True}))
+
+        records = session.scalars(
+            select(ScientificRecord).where(ScientificRecord.project_id == project["id"])
+        ).all()
+        assert {row.id for row in records} == original_ids
+        assert all(content_hash(row.payload_json) == row.content_sha256 for row in records)
+
+
+@pytest.mark.parametrize(
+    ("alteration", "error_fragment"),
+    [
         ("cache_identity", "identity mismatch"),
         ("source_url", "source identity mismatch"),
     ],
