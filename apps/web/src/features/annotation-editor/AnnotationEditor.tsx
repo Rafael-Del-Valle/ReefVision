@@ -16,6 +16,7 @@ import {
 import {
   acceptAssistSession,
   acceptPrediction,
+  ApiRequestError,
   cancelJob,
   boxAssistSession,
   bulkReviewPredictions,
@@ -223,6 +224,8 @@ function saveStateLabel(
       return "Revision conflict";
     case "error":
       return "Save failed";
+    case "storage_full":
+      return "Storage full";
     default:
       return "Ready";
   }
@@ -1951,6 +1954,8 @@ export function AnnotationEditor({
           type: "saveFailed",
           message,
           conflict: message.toLowerCase().includes("conflict"),
+          storageFull:
+            error instanceof ApiRequestError && error.code === "storage_full",
         });
         return false;
       })
@@ -1980,7 +1985,11 @@ export function AnnotationEditor({
     if (!sessionQuery.data || interaction || thumbnailOnlyPreview) {
       return;
     }
-    if (!dirty || state.saveState === "saving") {
+    if (
+      !dirty ||
+      state.saveState === "saving" ||
+      state.saveState === "storage_full"
+    ) {
       return;
     }
     const timeoutId = window.setTimeout(() => {
@@ -2973,7 +2982,7 @@ export function AnnotationEditor({
                 <h3>Image state</h3>
               </div>
               <span
-                className={`save-chip save-${state.saveState}`}
+                className={`save-chip save-${state.saveState === "storage_full" ? "error" : state.saveState}`}
                 data-testid="annotation-save-state"
               >
                 {saveStatusText}
@@ -3000,6 +3009,7 @@ export function AnnotationEditor({
               </select>
             </label>
             {(state.saveState === "error" ||
+              state.saveState === "storage_full" ||
               state.saveState === "conflict") && (
               <div className="editor-message error">
                 <p>{state.saveMessage}</p>

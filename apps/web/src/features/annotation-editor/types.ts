@@ -75,7 +75,14 @@ export interface AnnotationEditorState {
   activeClassId: string | null;
   hiddenClassIds: string[];
   tool: EditorTool;
-  saveState: "idle" | "dirty" | "saving" | "saved" | "error" | "conflict";
+  saveState:
+    | "idle"
+    | "dirty"
+    | "saving"
+    | "saved"
+    | "error"
+    | "conflict"
+    | "storage_full";
   saveMessage: string | null;
 }
 
