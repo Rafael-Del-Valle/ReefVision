@@ -11,6 +11,10 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  group: registered-guided-pose-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   guided-pose-original-install:
     if: github.repository == 'Rafael-Del-Valle/ReefVision' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'codex/reefvision-1.9-guided-registered-evidence'

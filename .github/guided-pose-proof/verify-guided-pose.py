@@ -142,6 +142,16 @@ def verify_phase(
         points == expected == review["declared_source_pixels"],
         "Reviewed pose pixels changed from the frozen generated oracle",
     )
+    view = phase["landmark_view"]
+    require(
+        [row["landmark_id"] for row in view] == [point["landmark_id"] for point in expected]
+        and all(
+            row["target_hits_canvas"]
+            and row["inspector_collapsed_for_pointer"] != row["target_hit_canvas_before"]
+            for row in view
+        ),
+        "Landmark edits require visible targets and an explicit inspector recovery",
+    )
     for key, suffix in (("pose_csv", "pose.csv"), ("pose_audit", "pose-audit.json")):
         verify_download(browser / f"{run}-{suffix}", phase[key])
 
@@ -157,6 +167,7 @@ def verify_phase(
         "temporal_before": phase["temporal_before"],
         "temporal_reviewed_breaks": phase["temporal_after"]["verified_breaks"],
         "reviewed_frame": review["frame"],
+        "landmark_view": view,
         "verified_candidates": 1,
         "skipped_candidates": 3,
         "pose_package": native,

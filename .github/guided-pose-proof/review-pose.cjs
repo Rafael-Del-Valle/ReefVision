@@ -578,6 +578,7 @@ const path = require("node:path");
           (f) => f.frame_index === reviewed.focus_frame,
         );
         expect(truth.target_points).toHaveLength(2);
+        part.landmark_view = [];
         for (const point of truth.target_points) {
           const label = point.landmark_id === "jaw-a" ? "Jaw A 1" : "Jaw B 1";
 
@@ -587,38 +588,70 @@ const path = require("node:path");
             page.getByTestId("selected-landmark-occurrence"),
           ).toBeVisible();
           await circle.scrollIntoViewIfNeeded();
-          const coords = await circle.evaluate((node, point) => {
-            const matrix = node.getScreenCTM();
-            const a = new DOMPoint(
-              node.cx.baseVal.value,
-              node.cy.baseVal.value,
-            ).matrixTransform(matrix);
-            const b = new DOMPoint(point.x, point.y).matrixTransform(matrix);
-            const { x, y, width, height } =
-              node.ownerSVGElement.getBoundingClientRect();
-            return [
-              a.x,
-              a.y,
-              b.x,
-              b.y,
-              {
-                x,
-                y,
-                width,
-                height,
-                scale: matrix.a,
-                actualBefore: [node.cx.baseVal.value, node.cy.baseVal.value],
-              },
-            ];
-          }, point);
+          const locate = () =>
+            circle.evaluate((node, point) => {
+              const matrix = node.getScreenCTM();
+              const a = new DOMPoint(
+                node.cx.baseVal.value,
+                node.cy.baseVal.value,
+              ).matrixTransform(matrix);
+              const b = new DOMPoint(point.x, point.y).matrixTransform(matrix);
+              const { x, y, width, height } =
+                node.ownerSVGElement.getBoundingClientRect();
+              const target = document.elementFromPoint(b.x, b.y);
+              return [
+                a.x,
+                a.y,
+                b.x,
+                b.y,
+                {
+                  x,
+                  y,
+                  width,
+                  height,
+                  scale: matrix.a,
+                  actualBefore: [node.cx.baseVal.value, node.cy.baseVal.value],
+                  targetHitsCanvas: node.ownerSVGElement.contains(target),
+                  targetHitsInspector: Boolean(
+                    target?.closest(".rv-workbench-inspector"),
+                  ),
+                  viewport: [
+                    window.innerWidth,
+                    window.innerHeight,
+                    window.devicePixelRatio,
+                  ],
+                },
+              ];
+            }, point);
+          const initial = await locate();
+          const inspectorCollapsed = initial[4].targetHitsInspector;
+          if (inspectorCollapsed) {
+            await page
+              .getByRole("button", { name: "Hide inspector", exact: true })
+              .click();
+            await circle.scrollIntoViewIfNeeded();
+          }
+          const coords = inspectorCollapsed ? await locate() : initial;
+          expect(coords[4].targetHitsCanvas).toBe(true);
+          part.landmark_view.push({
+            landmark_id: point.landmark_id,
+            inspector_collapsed_for_pointer: inspectorCollapsed,
+            target_hit_canvas_before: initial[4].targetHitsCanvas,
+            target_hits_canvas: coords[4].targetHitsCanvas,
+            viewport: coords[4].viewport,
+          });
           await page.mouse.move(coords[0], coords[1]);
           await page.mouse.down();
           await page.mouse.move(coords[2], coords[3], { steps: 5 });
           await page.mouse.up();
           await jsonFile(
-            "pose-pointer-" + label.replaceAll(" ", "-") + ".json",
+            part.run_id +
+              "-pose-pointer-" +
+              label.replaceAll(" ", "-") +
+              ".json",
             {
               desired: point,
+              initial,
               coords,
               after: [
                 Number(await circle.getAttribute("cx")),
