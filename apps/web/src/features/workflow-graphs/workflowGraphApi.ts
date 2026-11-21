@@ -477,6 +477,8 @@ export interface MeshPreviewCalibration {
   calibration_evidence: string;
   relative_scale_uncertainty?: number | null;
   coordinate_frame_id?: string;
+  preserve_axis_extrema_in_preview?: boolean;
+  preserve_edge_connected_patches_in_preview?: boolean;
 }
 
 export async function previewLocalMeshFile(
