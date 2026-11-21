@@ -39,6 +39,7 @@ RUNNING_CANCELLABLE_JOB_TYPES = frozenset(
         "reefpose_validation",
         "static_comparison",
         "paired_model_comparison",
+        "pose_appearance",
         "pose_identity_tracking",
         "pose_biological_measurement",
         "pose_biological_event_detection",

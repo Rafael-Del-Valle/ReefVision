@@ -12,7 +12,6 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
-import cv2
 from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -54,6 +53,7 @@ from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.results_packages import sha256_file
+from reefvision.storage.video_media import load_exact_video_frames
 
 
 def create_reefpose_predictor(path: Path, *, device: str) -> Any:
@@ -76,41 +76,6 @@ def create_provider_evaluation_runtime(
     """Indirection kept explicit so tests never need optional provider runtimes."""
 
     return create_pose_evaluation_runtime(model, checkpoint_path, schema, device)
-
-
-def load_exact_video_frames(
-    video_path: Path,
-    video: VideoAsset,
-    frame_indices: list[int],
-    *,
-    cancellation_check: Callable[[], None] | None = None,
-) -> dict[int, Image.Image]:
-    targets = sorted(set(frame_indices))
-    if not targets or targets[0] < 0 or targets[-1] >= video.frame_count:
-        raise ValidationError("Evaluation contains an invalid source video frame")
-    capture = cv2.VideoCapture(str(video_path))
-    if not capture.isOpened():
-        capture.release()
-        raise ValidationError("Could not open the managed evaluation source video")
-    frames: dict[int, Image.Image] = {}
-    target_set = set(targets)
-    try:
-        for frame_index in range(targets[-1] + 1):
-            if cancellation_check is not None:
-                cancellation_check()
-            ok, frame = capture.read()
-            if not ok or frame is None:
-                raise ValidationError(f"Evaluation video ended before frozen frame {targets[-1]}")
-            if frame_index in target_set:
-                height, width = frame.shape[:2]
-                if (width, height) != (video.width_px, video.height_px):
-                    raise ValidationError(
-                        "Decoded evaluation frame dimensions differ from frozen video metadata"
-                    )
-                frames[frame_index] = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-    finally:
-        capture.release()
-    return frames
 
 
 def _synchronize_cuda(device: str) -> None:

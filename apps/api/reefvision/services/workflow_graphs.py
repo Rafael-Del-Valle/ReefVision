@@ -65,6 +65,7 @@ _MODEL_PURPOSES_BY_NODE: dict[str, set[str]] = {
 }
 
 _ACTIONS: dict[str, str] = {
+    "reefpose_appearance_replay": "Recompute a frozen appearance study and its held-out scores.",
     "reefpose_reference_source": "Freeze or resolve an independent scientific reference revision.",
     "reefpose_scientific_validation": "Score original pose outputs and persist a report.",
     "project_source": "Resolve the project selected in the API route.",

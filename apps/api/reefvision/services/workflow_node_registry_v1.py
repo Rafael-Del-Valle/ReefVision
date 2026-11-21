@@ -32,6 +32,7 @@ from reefvision.services.workflow_node_registry import (
 from reefvision.services.workflow_paired_growth_contrast import paired_growth_contrast_node
 from reefvision.services.workflow_paired_models_v15 import paired_models_node
 from reefvision.services.workflow_pose import register_pose_workflow_adapters
+from reefvision.services.workflow_pose_appearance import register_appearance_node
 from reefvision.services.workflow_pose_evaluation import (
     register_pose_evaluation_workflow_adapter,
 )
@@ -969,6 +970,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
     add_underwater_adjustment(registry)
     registry.update(register_scientific_comparison_nodes())
     registry.update(register_temporal_reefpose_nodes())
+    registry["reefpose_appearance_replay"] = register_appearance_node()
 
     registry["ecology_connected_branch_preview"] = WorkflowNodeDefinitionResponse(
         node_type="ecology_connected_branch_preview",
