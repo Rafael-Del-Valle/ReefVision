@@ -577,6 +577,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         preload_windows_scipy_native()
         configure_windows_event_loop_policy()
         LOGGER.info("Loading FastAPI application factory")
+        if sys.platform == "win32" and not is_frozen_bundle():
+            # A peer reset can leave Proactor transports attached (CPython issue 160429).
+            # Use the desktop selector loop for this server while preserving the process policy.
+            with asyncio.Runner(loop_factory=asyncio.SelectorEventLoop) as runner:
+                return runner.run(run_api_server(settings, options))
         return asyncio.run(run_api_server(settings, options))
     except Exception:
         LOGGER.exception("ReefVision desktop API failed to start")
