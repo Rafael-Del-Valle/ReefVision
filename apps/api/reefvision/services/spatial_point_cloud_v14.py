@@ -709,10 +709,40 @@ def measure_point_cloud_preview(
             if endpoints is not None
             else None
         )
+    # When multiple source-coordinate intervals tie for the largest gap,
+    # checking only the representative lowest-coordinate pair can hide an
+    # omitted boundary elsewhere in the display. Count every maximal interval
+    # using distinct source levels (not duplicated acquisition rows).
+    preview_largest_axis_gap_interval_coverage: dict[str, dict[str, int] | None] = {}
+    for axis, label in enumerate(("x", "y", "z")):
+        maximum_gap = axis_sampling_gaps[label]["largest_adjacent_source_gap_units"]
+        if maximum_gap is None:
+            preview_largest_axis_gap_interval_coverage[label] = None
+            continue
+        source_levels = sorted({vertex[axis] for vertex in vertices})
+        sampled_levels = {vertices[index][axis] for index in preview_indices}
+        full = partial = hidden = 0
+        for lower, upper in zip(source_levels, source_levels[1:], strict=False):
+            if upper - lower != maximum_gap:
+                continue
+            visible_count = int(lower in sampled_levels) + int(upper in sampled_levels)
+            if visible_count == 2:
+                full += 1
+            elif visible_count == 1:
+                partial += 1
+            else:
+                hidden += 1
+        preview_largest_axis_gap_interval_coverage[label] = {
+            "total_intervals": full + partial + hidden,
+            "fully_displayed_intervals": full,
+            "partially_displayed_intervals": partial,
+            "hidden_intervals": hidden,
+        }
     preview_omitted_largest_gap_boundary_axes = [
         label
-        for label, support in preview_largest_axis_gap_endpoint_support.items()
-        if support is not None and not all(support.values())
+        for label, coverage in preview_largest_axis_gap_interval_coverage.items()
+        if coverage is not None
+        and coverage["fully_displayed_intervals"] != coverage["total_intervals"]
     ]
     preview_points = []
     for index in preview_indices:
@@ -746,7 +776,10 @@ def measure_point_cloud_preview(
         "preview_selected_chord_endpoints_covered": not omitted_chord_endpoints,
         "preview_omitted_axis_extrema": preview_omitted_axis_extrema,
         "preview_axis_extrema_covered": not preview_omitted_axis_extrema,
+        # Representative boundary visibility remains available for legacy
+        # consumers; the interval coverage and warning consider *all* ties.
         "preview_largest_axis_gap_endpoint_support": preview_largest_axis_gap_endpoint_support,
+        "preview_largest_axis_gap_interval_coverage": preview_largest_axis_gap_interval_coverage,
         "preview_omitted_largest_gap_boundary_axes": preview_omitted_largest_gap_boundary_axes,
         "preview_points_in_source_frame_m": preview_points,
         "preview_point_scale_intervals_m": (
