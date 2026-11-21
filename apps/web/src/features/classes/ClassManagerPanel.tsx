@@ -44,18 +44,35 @@ type MergeClassApproval = {
   expectedSourceIdentity: MergeTargetIdentity;
 };
 
-// A preview is not permission to execute while any safety evidence is blocked
-// or absent. The backend also validates the immutable preview checksum.
+// A partially decoded API response is not a scientific review report.
+// Validate the collections before rendering: missing arrays must not crash the
+// class manager or conceal the reviewer's blocking evidence.
+function operationHasDisplayEvidence(operation: ClassOperationRecord): boolean {
+  const plan = operation.plan;
+  return (
+    Array.isArray(plan?.mutable_records) &&
+    Array.isArray(plan.protected_records) &&
+    Array.isArray(plan.compatibility_impacts) &&
+    Array.isArray(plan.blocking_records) &&
+    Array.isArray(plan.blockers) &&
+    Array.isArray(operation.failures)
+  );
+}
+
+// A preview is not permission to execute without an opaque, nonempty operation
+// identity, its full SHA-256 review checksum and complete unblocked evidence.
+// Backend checksum, scope and concurrency validation remain authoritative.
 function previewHasNoBlockingEvidence(
   operation: ClassOperationRecord,
 ): boolean {
-  const plan = operation.plan;
   return (
-    Array.isArray(plan?.blockers) &&
-    plan.blockers.length === 0 &&
-    Array.isArray(plan.blocking_records) &&
-    plan.blocking_records.length === 0 &&
-    Array.isArray(operation.failures) &&
+    operationHasDisplayEvidence(operation) &&
+    typeof operation.id === "string" &&
+    operation.id.trim().length > 0 &&
+    typeof operation.preview_checksum === "string" &&
+    /^[0-9a-fA-F]{64}$/.test(operation.preview_checksum) &&
+    operation.plan.blockers.length === 0 &&
+    operation.plan.blocking_records.length === 0 &&
     operation.failures.length === 0
   );
 }
@@ -198,6 +215,18 @@ function OperationSummary({
   operation: ClassOperationRecord;
   title: string;
 }) {
+  if (!operationHasDisplayEvidence(operation)) {
+    return (
+      <div className="class-usage-card">
+        <strong>{title}</strong>
+        <p className="form-error" role="alert">
+          Operation evidence is incomplete. Execution is disabled; preview
+          again before reviewing or proceeding.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="class-usage-card">
       <strong>{title}</strong>
