@@ -111,10 +111,13 @@ def test_non_ascii_point_cloud_ply_fails_cleanly_at_parser_and_api(
 @pytest.mark.parametrize(
     ("invalid", "diagnostic"),
     [
-        (PLY.replace("end_header", "comment survey \\ud800\\nend_header"), "ASCII text only"),
-        (PLY.replace("1 2 3", "1 2 3\\udfff"), "ASCII text only"),
-        (PLY.replace("end_header", "comment caf\\u00e9\\nend_header"), "ASCII text only"),
-        (PLY.replace("1 2 3", "1\\x0b2 3"), "unsupported control"),
+        (
+            PLY.replace("end_header", "comment survey \ud800\nend_header"),
+            "ASCII text only",
+        ),
+        (PLY.replace("1 2 3", "1 2 3\udfff"), "ASCII text only"),
+        (PLY.replace("end_header", "comment caf\u00e9\nend_header"), "ASCII text only"),
+        (PLY.replace("1 2 3", "1\x0b2 3"), "unsupported control"),
     ],
 )
 def test_untrusted_point_cloud_ply_is_validated_before_provenance_encoding(
