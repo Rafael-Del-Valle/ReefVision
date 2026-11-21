@@ -413,7 +413,7 @@ describe("PoseAnnotationEditor", () => {
     );
   });
 
-  it("marks dragged model landmarks as corrected and saves source-image coordinates", async () => {
+  it("keeps the canvas ahead of landmark details during a first drag and saves the correction", async () => {
     const modelPose: PoseInstance = {
       ...poseA,
       id: "pose-model",
@@ -440,12 +440,23 @@ describe("PoseAnnotationEditor", () => {
       />,
     );
     const stage = installStageBounds();
+    expect(
+      screen.queryByRole("complementary", {
+        name: "Selected landmark details",
+      }),
+    ).not.toBeInTheDocument();
 
     fireEvent.pointerDown(screen.getByTestId("pose-landmark-model-bell"), {
       button: 0,
       clientX: 450,
       clientY: 300,
     });
+    const details = screen.getByRole("complementary", {
+      name: "Selected landmark details",
+    });
+    expect(
+      stage.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     fireEvent.pointerMove(stage, {
       buttons: 1,
       clientX: 540,
