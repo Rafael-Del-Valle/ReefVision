@@ -599,5 +599,4 @@ describe("PolygonMaskLayer", () => {
     ).toHaveAttribute("cx", "10");
     expect(polygonMask.points?.[0]).toEqual({ x: 10, y: 10 });
   });
-
 });
