@@ -36,7 +36,9 @@ function renderLayer(
       onSelectionChange={vi.fn()}
     />,
   );
-  const canvas = screen.getByTestId("rotated-box-layer") as unknown as SVGSVGElement;
+  const canvas = screen.getByTestId(
+    "rotated-box-layer",
+  ) as unknown as SVGSVGElement;
   vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
     x: 0,
     y: 0,
@@ -158,12 +160,15 @@ describe("RotatedBoxLayer pointer integrity", () => {
       originalPoints,
     );
 
-    fireEvent.pointerDown(canvas.querySelector("polygon") as SVGPolygonElement, {
-      button: 0,
-      pointerId: 21,
-      clientX: 150,
-      clientY: 100,
-    });
+    fireEvent.pointerDown(
+      canvas.querySelector("polygon") as SVGPolygonElement,
+      {
+        button: 0,
+        pointerId: 21,
+        clientX: 150,
+        clientY: 100,
+      },
+    );
     fireEvent.pointerMove(canvas, {
       pointerId: 21,
       clientX: 200,
@@ -183,12 +188,15 @@ describe("RotatedBoxLayer pointer integrity", () => {
     );
     const onUpdate = vi.fn();
     const canvas = renderLayer([original], vi.fn(), onUpdate);
-    fireEvent.pointerDown(canvas.querySelector("polygon") as SVGPolygonElement, {
-      button: 0,
-      pointerId: 30,
-      clientX: 150,
-      clientY: 100,
-    });
+    fireEvent.pointerDown(
+      canvas.querySelector("polygon") as SVGPolygonElement,
+      {
+        button: 0,
+        pointerId: 30,
+        clientX: 150,
+        clientY: 100,
+      },
+    );
     fireEvent.pointerMove(canvas, {
       pointerId: 30,
       clientX: 200,

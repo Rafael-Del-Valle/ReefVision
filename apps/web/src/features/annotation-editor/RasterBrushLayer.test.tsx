@@ -212,5 +212,4 @@ describe("RasterBrushLayer", () => {
     fireEvent.pointerUp(canvas, { pointerId: 32 });
     expect(onStroke).toHaveBeenCalledTimes(1);
   });
-
 });
