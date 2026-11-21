@@ -84,7 +84,10 @@ def test_cross_branch_audit_flags_distinct_branch_only_revisions(tmp_path: Path)
     assert invalid.returncode == 2, invalid.stderr
     invalid_report = json.loads(invalid.stdout)
     assert invalid_report["invalid_branch_graph_count"] == 1
+    # An orphaned migration also creates a second disconnected head; the
+    # read-only audit must report both errors rather than silently hiding one.
     assert invalid_report["invalid_branch_graphs"]["review"] == [
-        "missing parent deleted_parent for 0002_review"
+        "expected one revision head, got ['0001', '0002_review']",
+        "missing parent deleted_parent for 0002_review",
     ]
     assert invalid_report["refs"]["review"]["commit"] != report["refs"]["review"]["commit"]
