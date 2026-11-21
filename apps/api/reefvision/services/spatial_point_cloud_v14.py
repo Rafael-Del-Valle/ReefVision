@@ -715,9 +715,7 @@ def measure_point_cloud_preview(
     # omitted boundary elsewhere in the display. Count every maximal interval
     # using distinct source levels (not duplicated acquisition rows).
     preview_largest_axis_gap_interval_coverage: dict[str, dict[str, int] | None] = {}
-    preview_largest_axis_gap_boundary_locus_support: dict[
-        str, dict[str, int | float] | None
-    ] = {}
+    preview_largest_axis_gap_boundary_locus_support: dict[str, dict[str, int | float] | None] = {}
     for axis, label in enumerate(("x", "y", "z")):
         maximum_gap = axis_sampling_gaps[label]["largest_adjacent_source_gap_units"]
         if maximum_gap is None:
