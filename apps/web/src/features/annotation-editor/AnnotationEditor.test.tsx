@@ -920,6 +920,96 @@ describe("AnnotationEditor", () => {
     expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
   });
 
+  it("keeps zero-displacement and edge-clamped gestures out of scientific revision history", async () => {
+    const edgeSession: AnnotationSession = {
+      ...session,
+      annotations: [{ ...session.annotations[0], x_min: 0, y_min: 0 }],
+    };
+    const writes: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(edgeSession);
+      }
+      if (init?.method === "PUT") {
+        writes.push(url);
+        return jsonResponse(edgeSession);
+      }
+      const shared = handleDefaultEditorRequests(url, init);
+      if (shared) return shared;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    stubCanvasRect();
+    const annotation = screen.getByTestId("annotation-annotation-1");
+
+    // Simply selecting a coral must not manufacture an edit.
+    fireEvent.pointerDown(annotation, {
+      button: 0,
+      pointerId: 71,
+      clientX: 120,
+      clientY: 130,
+    });
+    fireEvent.pointerUp(window, {
+      pointerId: 71,
+      clientX: 120,
+      clientY: 130,
+    });
+    expect(screen.getByText("All changes synced")).toBeInTheDocument();
+
+    // Drag left/up from a box already touching the image edge.
+    fireEvent.pointerDown(annotation, {
+      button: 0,
+      pointerId: 72,
+      clientX: 120,
+      clientY: 130,
+    });
+    fireEvent.pointerUp(window, {
+      pointerId: 72,
+      clientX: -10000,
+      clientY: -10000,
+    });
+    expect(screen.getByText("All changes synced")).toBeInTheDocument();
+
+    // Northwest resize handle is also clamped to the same source pixels.
+    const northwestHandle = annotation.parentElement?.querySelector("circle");
+    expect(northwestHandle).not.toBeNull();
+    fireEvent.pointerDown(northwestHandle!, {
+      button: 0,
+      pointerId: 73,
+      clientX: 120,
+      clientY: 130,
+    });
+    fireEvent.pointerUp(window, {
+      pointerId: 73,
+      clientX: -10000,
+      clientY: -10000,
+    });
+    expect(screen.getByText("All changes synced")).toBeInTheDocument();
+    expect(screen.queryByTestId("editor-gesture-status")).not.toBeInTheDocument();
+    expect(screen.getByTestId("annotation-annotation-1")).toHaveAttribute(
+      "x",
+      "0",
+    );
+    expect(screen.getByTestId("annotation-annotation-1")).toHaveAttribute(
+      "y",
+      "0",
+    );
+
+    // Guard the delayed autosave, not just the immediate dirty indicator.
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(writes).toHaveLength(0);
+    expect(edgeSession.annotations[0].x_max).toBe(260);
+    expect(edgeSession.annotations[0].y_max).toBe(300);
+  });
+
   it.each([
     {
       description: "off-image",

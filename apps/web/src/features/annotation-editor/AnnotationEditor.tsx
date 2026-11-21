@@ -2414,10 +2414,22 @@ export function AnnotationEditor({
           );
         } else {
           setEditorGestureStatus(null);
-          commitDocument(
-            replaceAnnotations(currentState.document, moved),
-            currentInteraction.selection,
-          );
+          // A click or a move clamped to an image edge is not an edit.
+          // Preserve the saved revision, undo stack, and original coordinates.
+          if (
+            moved.some(
+              (item, index) =>
+                item.x_min !== originalSelection[index].x_min ||
+                item.y_min !== originalSelection[index].y_min ||
+                item.x_max !== originalSelection[index].x_max ||
+                item.y_max !== originalSelection[index].y_max,
+            )
+          ) {
+            commitDocument(
+              replaceAnnotations(currentState.document, moved),
+              currentInteraction.selection,
+            );
+          }
         }
       }
 
@@ -2434,9 +2446,18 @@ export function AnnotationEditor({
           );
         } else {
           setEditorGestureStatus(null);
-          commitDocument(replaceAnnotations(currentState.document, [resized]), [
-            currentInteraction.annotationId,
-          ]);
+          // Boundary-clamped handle releases need not dirty the document.
+          if (
+            resized.x_min !== currentInteraction.snapshot.x_min ||
+            resized.y_min !== currentInteraction.snapshot.y_min ||
+            resized.x_max !== currentInteraction.snapshot.x_max ||
+            resized.y_max !== currentInteraction.snapshot.y_max
+          ) {
+            commitDocument(
+              replaceAnnotations(currentState.document, [resized]),
+              [currentInteraction.annotationId],
+            );
+          }
         }
       }
 
