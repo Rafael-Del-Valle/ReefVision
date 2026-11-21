@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T12:06:50.716450+00:00",
+  "updated_utc": "2026-11-21T12:28:26.061961+00:00",
   "candidate_pr": 152,
   "integrated_source": "272ee64e929bdfd2ebbf5e1f912221862ec5f9d2",
   "selected_qualification": "workflow_cancellation",
@@ -1285,6 +1285,17 @@
           "mounted_volume_detached": true,
           "uninstalled": true
         }
+      },
+      {
+        "attempt": "attempt-3",
+        "result": "passed",
+        "job_id": 136812458336,
+        "artifact_id": 14706121696,
+        "receipt": {
+          "file": "1.9/checkpoints/96476bc46/official/evidence/bounded-volume-recovery/attempt-3/index.json",
+          "sha256": "a03fe00207e49b2311a1e0f8935f25add7fa227346d1b89abc80ebaaf2c4c8d1"
+        },
+        "actual_editor_recovery_verified": true
       }
     ],
     "combined_installation_and_recovery": {
@@ -1853,6 +1864,17 @@
         "test_commit": "9812e67e6804f93ffaf6e2ca4ff5d4c5180958e0",
         "scope": "Honor a cancelled pose child and record the terminal state of unfinished workflow nodes."
       }
+    },
+    "full_windows_backend": {
+      "source": "91027e893172d500897058dbb2c1cc5b9de5d50a",
+      "distinct_tests": 6099,
+      "passed": 6087,
+      "skipped": 12,
+      "failures": 0,
+      "receipt": {
+        "file": "1.9/checkpoints/91027e893/full-windows-backend/verified-summary.json",
+        "sha256": "3cc9035895e4ef5354f3c9825a6fd1529e0234852f36a88dfe987e7925732257"
+      }
     }
   },
   "workflow_cancellation": {
@@ -1929,6 +1951,21 @@
         "sha256": "d1c2f75c8507d479eb3abfc26b9328963cccb02e063d490cc406afe524c7f57c"
       },
       "outcome": "Workflow Builder and Training each cancelled during dataset preparation. Each stopped at epoch zero and retained 240 training frames, 72 disjoint validation frames and the original files. Re-running the same saved revision registered one checkpoint in each study."
+    },
+    "selected_windows_qualification": {
+      "file": "1.9/checkpoints/272ee64e9/local-production/verified-workflows.json",
+      "sha256": "e83181ba7cab41e3efec57d202c84097921621206f27553ac7cb8a39825ddfe8"
+    },
+    "source_and_windows_results": {
+      "source": "272ee64e929bdfd2ebbf5e1f912221862ec5f9d2",
+      "source_browser_cases": 2,
+      "native_cases": 2,
+      "physical_cuda_source_cases": 5,
+      "gpu_reviewed_replays": 2,
+      "exports_per_run": 4,
+      "msi": "5d1ee924f3aeb09dd0b6e02d438ede8cc8dcec23f63f71092cb355cc895440ce",
+      "cabinets": 6,
+      "backup_files": 112
     }
   }
 }
