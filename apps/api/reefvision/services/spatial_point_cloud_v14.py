@@ -225,6 +225,7 @@ def measure_point_cloud_preview(
     preserve_axis_extrema_in_preview: bool = False,
     preserve_measured_chord_endpoints_in_preview: bool = False,
     preserve_largest_axis_gap_boundaries_in_preview: bool = False,
+    preserve_largest_axis_gap_boundary_loci_in_preview: bool = False,
 ) -> dict[str, Any]:
     """Report point extents, not surface area, organism size, or branch length."""
     if not 1 <= len(points) <= MAX_VERTICES:
@@ -235,6 +236,8 @@ def measure_point_cloud_preview(
         raise ValueError("preserve_measured_chord_endpoints_in_preview must be a boolean")
     if not isinstance(preserve_largest_axis_gap_boundaries_in_preview, bool):
         raise ValueError("preserve_largest_axis_gap_boundaries_in_preview must be a boolean")
+    if not isinstance(preserve_largest_axis_gap_boundary_loci_in_preview, bool):
+        raise ValueError("preserve_largest_axis_gap_boundary_loci_in_preview must be a boolean")
     if type(meters_per_unit) not in (int, float) or not 0 < meters_per_unit <= 1_000_000:
         raise ValueError("meters_per_unit must be a finite numeric value within bounds")
     scale = float(meters_per_unit)
@@ -653,7 +656,10 @@ def measure_point_cloud_preview(
     # boundary coordinate level of every equally largest projected gap.
     # This does not retain every 3D locus or raw acquisition row there.
     gap_boundary_indices: set[int] = set()
-    if preserve_largest_axis_gap_boundaries_in_preview:
+    if (
+        preserve_largest_axis_gap_boundaries_in_preview
+        or preserve_largest_axis_gap_boundary_loci_in_preview
+    ):
         for axis, label in enumerate(("x", "y", "z")):
             maximum_gap = axis_sampling_gaps[label]["largest_adjacent_source_gap_units"]
             if maximum_gap is None:
@@ -666,15 +672,22 @@ def measure_point_cloud_preview(
                 for level in (lower, upper)
             }
             first_index_per_level: dict[float, int] = {}
+            first_index_per_locus: dict[tuple[float, float, float], int] = {}
             for index, vertex in enumerate(vertices):
                 coordinate = vertex[axis]
-                if coordinate in boundary_levels and coordinate not in first_index_per_level:
-                    first_index_per_level[coordinate] = index
+                if coordinate not in boundary_levels:
+                    continue
+                if preserve_largest_axis_gap_boundaries_in_preview:
+                    first_index_per_level.setdefault(coordinate, index)
+                if preserve_largest_axis_gap_boundary_loci_in_preview:
+                    first_index_per_locus.setdefault(vertex, index)
             gap_boundary_indices.update(first_index_per_level.values())
+            gap_boundary_indices.update(first_index_per_locus.values())
     if (
         preserve_axis_extrema_in_preview
         or pin_chords
         or preserve_largest_axis_gap_boundaries_in_preview
+        or preserve_largest_axis_gap_boundary_loci_in_preview
     ) and len(vertices) > preview_count:
         protected = {0, len(vertices) - 1}
         if preserve_axis_extrema_in_preview:
@@ -854,6 +867,14 @@ def measure_point_cloud_preview(
                 if preserve_largest_axis_gap_boundaries_in_preview
                 else ""
             )
+            + (
+                "_largest_gap_boundary_loci_preserving"
+                if preserve_largest_axis_gap_boundary_loci_in_preview
+                else ""
+            )
+        ),
+        "preview_largest_axis_gap_boundary_loci_preservation_requested": (
+            preserve_largest_axis_gap_boundary_loci_in_preview
         ),
         "preview_largest_axis_gap_boundaries_preservation_requested": (
             preserve_largest_axis_gap_boundaries_in_preview
@@ -1077,6 +1098,9 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         ),
         preserve_largest_axis_gap_boundaries_in_preview=(
             payload.preserve_largest_axis_gap_boundaries_in_preview
+        ),
+        preserve_largest_axis_gap_boundary_loci_in_preview=(
+            payload.preserve_largest_axis_gap_boundary_loci_in_preview
         ),
     )
     result["preview_point_colors_rgb_uint8"] = (
