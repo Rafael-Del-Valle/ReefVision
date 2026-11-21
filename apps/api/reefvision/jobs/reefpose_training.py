@@ -35,7 +35,10 @@ from reefvision.ml.reefpose.training import (
     ReefPoseTrainingConfig,
     ReefPoseTrainingResult,
 )
-from reefvision.services.pose_training_exports import PoseTrainingExportService
+from reefvision.services.pose_training_exports import (
+    PoseTrainingExportService,
+    verify_pose_export_frame_separation,
+)
 from reefvision.services.project_exchange_pose_training import checkpoint_schema_matches
 from reefvision.services.workflow_pose_sources import verify_pose_dataset_separation
 from reefvision.storage.datasets import canonical_json_sha256
@@ -245,6 +248,24 @@ def process_reefpose_training_job(
             if validation_dataset is not None:
                 verify_pose_dataset_separation(session, training_dataset, validation_dataset)
 
+            run.status = run.stage = "preparing_dataset"
+            job.result_json = {
+                "stage": "preparing_dataset",
+                "task": "pose",
+                "provider_id": "reefpose",
+            }
+            session.commit()
+
+            exporter = PoseTrainingExportService(session, settings)
+            training_export = exporter.export(training_dataset.id, "ultralytics_pose")
+            validation_export = None
+            frame_separation = None
+            if validation_dataset is not None:
+                validation_export = exporter.export(validation_dataset.id, "ultralytics_pose")
+                frame_separation = verify_pose_export_frame_separation(
+                    training_export.content, validation_export.content
+                )
+
             base_relative = f"{project.storage_root}/training/{run.id}/reefpose"
             native_root = resolve_managed_project_path(settings, base_relative)
             manifest = dict(run.artifact_manifest_json or {})
@@ -262,16 +283,6 @@ def process_reefpose_training_job(
             export_root.mkdir(parents=True, exist_ok=True)
             extraction_root = Path(tempfile.mkdtemp(prefix="reefpose-dataset-"))
 
-            run.status = run.stage = "preparing_dataset"
-            job.result_json = {
-                "stage": "preparing_dataset",
-                "task": "pose",
-                "provider_id": "reefpose",
-            }
-            session.commit()
-
-            exporter = PoseTrainingExportService(session, settings)
-            training_export = exporter.export(training_dataset.id, "ultralytics_pose")
             training_archive = export_root / "training.zip"
             training_archive.write_bytes(training_export.content)
             training_bundle = load_reefvision_pose_export(
@@ -279,10 +290,8 @@ def process_reefpose_training_job(
             )
             _validate_bundle(training_bundle, training_dataset, role="training")
 
-            validation_export = None
             validation_bundle = None
-            if validation_dataset is not None:
-                validation_export = exporter.export(validation_dataset.id, "ultralytics_pose")
+            if validation_export is not None and validation_dataset is not None:
                 validation_archive = export_root / "validation.zip"
                 validation_archive.write_bytes(validation_export.content)
                 validation_bundle = load_reefvision_pose_export(
@@ -443,6 +452,7 @@ def process_reefpose_training_job(
                     validation_dataset.manifest_sha256 if validation_dataset is not None else None
                 ),
                 "training_export_bundle_sha256": training_export.bundle_sha256,
+                "frame_content_separation": frame_separation,
                 "validation_export_bundle_sha256": (
                     validation_export.bundle_sha256 if validation_export is not None else None
                 ),
