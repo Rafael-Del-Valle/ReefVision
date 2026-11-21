@@ -5,18 +5,21 @@ This is a **test plan**, not evidence that ReefVision 1.4 or 1.5 is validated or
 ## 1.4: 3D geometry and longitudinal studies
 
 **Near-parallel face area under 3D coordinate-frame changes (synthetic; CI pending):**
-Five integer-coordinate reference triangles in XY, XZ, and YZ planes, including
-large translation, reflection, and reversed face winding, have independently
-calculated cross-product magnitudes of 1 or 3 source units squared. Their
-areas must remain 0.5 or 1.5 square source units despite near-parallel edges
-and cancellation in binary64 cross products. The parameterized
-`test_spatial_mesh_area_cancellation_v14.py` regression checks an independent
-integer-coordinate oracle, the source kernel, direct service, project-scoped
-standalone API, and twice-replayed persisted typed `mesh_surface_preview`
-workflows, including deterministic artifact hashes and explicitly unverified
-calibration/specimen identity. This is a numerical coordinate-frame test,
-not independent physical calibration, registered survey geometry, field
-validation, anatomical branch area, or verified coral surface condition.
+Seven integer-coordinate reference triangles include XY, XZ and YZ planes
+and two genuinely oblique XYZ surfaces, with large translation, reflection
+and reversed face winding. An independent arbitrary-precision integer
+cross-product oracle checks squared magnitudes of 1, 9 and 6 source units
+to the fourth power, corresponding to areas 0.5, 1.5 and sqrt(6)/2 source
+units squared. In the oblique cases, all three nonzero cross-product
+components suffer binary64 cancellation, so a plausible apparent area
+cannot be trusted. The parameterized
+`test_spatial_mesh_area_cancellation_v14.py` regression checks the source
+kernel, direct service, project-scoped standalone API, and twice-replayed
+persisted typed `mesh_surface_preview` workflows, including deterministic
+artifact hashes and explicitly unverified calibration/specimen identity.
+This is a numerical coordinate-frame test, not independent physical
+calibration, registered survey geometry, field validation, anatomical
+branch area, or verified coral surface condition.
 
 **Signed-volume magnitude overflow guard (synthetic source-kernel check; CI pending):**
 A collection of repeated, oppositely oriented tetrahedron faces can have individually
