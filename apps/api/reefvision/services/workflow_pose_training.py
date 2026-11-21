@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from math import isfinite
 from typing import Any
 
 from sqlalchemy import select
@@ -43,6 +44,7 @@ from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import (
     resolve_managed_project_path,
 )
+from reefvision.storage.training import free_training_space_gib
 
 PoseTrainingProcessor = Callable[
     [
@@ -643,6 +645,32 @@ def create_pose_workflow_training_result(
             workflow_node_run_id=(workflow_node_run_id),
         )
 
+    resource_limits = parameters.get("resource_limits")
+    if resource_limits is None:
+        resource_limits = {}
+    if not isinstance(resource_limits, dict):
+        raise ValidationError("Pose training resource_limits must be an object")
+    disk_budget = resource_limits.get("max_disk_usage_gb", 0)
+    try:
+        required_gib = float(disk_budget)
+    except (OverflowError, TypeError, ValueError) as error:
+        raise ValidationError(
+            "Pose training disk budget must be a finite nonnegative number"
+        ) from error
+    if isinstance(disk_budget, bool) or not isfinite(required_gib) or required_gib < 0:
+        raise ValidationError("Pose training disk budget must be a finite nonnegative number")
+    try:
+        free_gib = free_training_space_gib(settings.resolved_data_dir)
+    except OSError as error:
+        raise ValidationError(
+            "Could not verify the available disk space for pose training"
+        ) from error
+    if free_gib <= 0 or free_gib < required_gib:
+        raise ValidationError(
+            "Requested pose training disk budget exceeds the available disk space "
+            "in the ReefVision data directory"
+        )
+
     run = TrainingRun(
         project_id=project_id,
         draft_id=None,
@@ -677,7 +705,7 @@ def create_pose_workflow_training_result(
         training_config_json=(training_config),
         tuning_config_json={"mode": "disabled"},
         evaluation_config_json={"validation_mode": (split_manifest["validation_mode"])},
-        resource_limits_json=dict(parameters.get("resource_limits") or {}),
+        resource_limits_json=resource_limits,
         preflight_report_json={
             "status": "ready_with_warnings" if warning_list else "ready",
             "warnings": warning_list,
