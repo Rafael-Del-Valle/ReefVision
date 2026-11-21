@@ -356,6 +356,9 @@ export function AnnotationEditor({
   );
   const [isolateSamReview, setIsolateSamReview] = useState(true);
   const [shortcutMessage, setShortcutMessage] = useState<string | null>(null);
+  const [editorGestureStatus, setEditorGestureStatus] = useState<string | null>(
+    null,
+  );
   const [deployDevice, setDeployDevice] = useState("auto");
   const [deployJobId, setDeployJobId] = useState<string | null>(null);
   const completedDeployJobRef = useRef<string | null>(null);
@@ -418,6 +421,10 @@ export function AnnotationEditor({
     setObjectListStart(0);
     setObjectJumpPosition("");
   }, [currentImageId, objectFilter, project.id]);
+
+  useEffect(() => {
+    setEditorGestureStatus(null);
+  }, [currentImageId, project.id]);
 
   const sessionQuery = useQuery({
     queryKey: ["annotation-session", currentImageId],
@@ -2390,18 +2397,28 @@ export function AnnotationEditor({
       }
 
       if (currentInteraction.type === "moving" && releasePoint) {
+        const originalSelection = Object.values(currentInteraction.snapshot);
         const moved = translateAnnotations(
-          Object.values(currentInteraction.snapshot),
+          originalSelection,
           {
             x: releasePoint.x - currentInteraction.origin.x,
             y: releasePoint.y - currentInteraction.origin.y,
           },
           imageSize,
         );
-        commitDocument(
-          replaceAnnotations(currentState.document, moved),
-          currentInteraction.selection,
-        );
+        if (moved === originalSelection) {
+          // The scientific geometry guard returned the original selection:
+          // do not create a dirty revision or autosave a rejected gesture.
+          setEditorGestureStatus(
+            "Move canceled: selected annotations have invalid imported geometry or image bounds. Original observations were preserved.",
+          );
+        } else {
+          setEditorGestureStatus(null);
+          commitDocument(
+            replaceAnnotations(currentState.document, moved),
+            currentInteraction.selection,
+          );
+        }
       }
 
       if (currentInteraction.type === "resizing" && releasePoint) {
@@ -2411,9 +2428,17 @@ export function AnnotationEditor({
           releasePoint,
           imageSize,
         );
-        commitDocument(replaceAnnotations(currentState.document, [resized]), [
-          currentInteraction.annotationId,
-        ]);
+        if (resized === currentInteraction.snapshot) {
+          setEditorGestureStatus(
+            "Resize canceled: this annotation has invalid imported geometry or image bounds. Original observations were preserved.",
+          );
+        } else {
+          setEditorGestureStatus(null);
+          commitDocument(
+            replaceAnnotations(currentState.document, [resized]),
+            [currentInteraction.annotationId],
+          );
+        }
       }
 
       panPreviousPointRef.current = null;
@@ -4182,6 +4207,11 @@ export function AnnotationEditor({
             </button>
             <span>{dirty ? "Autosave pending" : "All changes synced"}</span>
             {shortcutMessage && <span role="status">{shortcutMessage}</span>}
+            {editorGestureStatus && (
+              <span role="alert" data-testid="editor-gesture-status">
+                {editorGestureStatus}
+              </span>
+            )}
             {samAssistMutation.error && (
               <span role="alert">{samAssistMutation.error.message}</span>
             )}
