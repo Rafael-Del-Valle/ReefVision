@@ -801,6 +801,10 @@ def materialize_pose_training_exports(
             validation_content,
             validation_stage,
         )
+        # A competing worker can replace this temporary directory after our
+        # exclusive claim. Record its filesystem identity before copying
+        # independently reviewed validation frames.
+        stage_identity = validation_stage.lstat()
         try:
             # A separate frozen split must use exactly the training export's
             # landmark ordering and class map. Otherwise Ultralytics silently
@@ -829,8 +833,31 @@ def materialize_pose_training_exports(
             # A failed holdout-stage cleanup must fail the materialization,
             # rather than reporting an immutable dataset while leaving raw
             # independently reviewed frames in a reusable staging directory.
-            if validation_stage.exists() or validation_stage.is_symlink():
-                shutil.rmtree(validation_stage)
+            try:
+                current_stage = validation_stage.lstat()
+            except FileNotFoundError as exc:
+                raise ValidationError(
+                    "Pose training validation staging directory changed during materialization"
+                ) from exc
+            if (
+                not stat.S_ISDIR(current_stage.st_mode)
+                or getattr(current_stage, "st_file_attributes", 0) & 0x400
+                or (
+                    current_stage.st_dev,
+                    current_stage.st_ino,
+                    current_stage.st_ctime_ns,
+                )
+                != (
+                    stage_identity.st_dev,
+                    stage_identity.st_ino,
+                    stage_identity.st_ctime_ns,
+                )
+            ):
+                raise ValidationError(
+                    "Pose training validation staging directory changed; "
+                    "refusing to delete unrelated scientific data"
+                )
+            shutil.rmtree(validation_stage)
 
         if "val: images/train" in yaml_text:
             yaml_text = yaml_text.replace(
