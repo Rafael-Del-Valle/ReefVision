@@ -1282,6 +1282,47 @@ def test_pose_materialization_rejects_corrupt_frame_before_creating_dataset(
     )
 
 
+def test_pose_materialization_rejects_corrupt_unread_holdout_member(
+    tmp_path: Path,
+) -> None:
+    # Training and held-out frame pairs are valid, but an additional saved
+    # review artifact has a broken CRC. Frame-only preflight would miss it,
+    # then strand the immutable training directory during holdout extraction.
+    training = _pose_export_zip(b"reviewed-training")
+    holdout_stream = io.BytesIO(_pose_export_zip(b"reviewed-validation"))
+    with zipfile.ZipFile(holdout_stream, "a", compression=zipfile.ZIP_STORED) as archive:
+        archive.writestr("review-notes.txt", b"reviewed-notes")
+
+    valid_holdout = holdout_stream.getvalue()
+    assert valid_holdout.count(b"reviewed-notes") == 1
+    corrupt_holdout = valid_holdout.replace(b"reviewed-notes", b"tampered-notes", 1)
+    with zipfile.ZipFile(io.BytesIO(corrupt_holdout)) as archive:
+        assert archive.testzip() == "review-notes.txt"
+
+    destination = tmp_path / "pose-corrupt-holdout"
+    with pytest.raises(ValidationError, match="corrupt archive member"):
+        materialize_pose_training_exports(
+            training_content=training,
+            validation_content=corrupt_holdout,
+            destination=destination,
+        )
+    assert not destination.exists()
+    assert not (tmp_path / ".pose-corrupt-holdout-validation").exists()
+
+    # A corrected held-out bundle must be retryable at the original run path.
+    corrected = materialize_pose_training_exports(
+        training_content=training,
+        validation_content=valid_holdout,
+        destination=destination,
+    )
+    assert corrected["validation_mode"] == "separate_frozen_pose_dataset"
+    assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed-training"
+    assert (
+        (destination / "images/val/frame_00000001.png").read_bytes()
+        == b"reviewed-validation"
+    )
+
+
 @pytest.mark.parametrize("alias", ("images", "labels/train"))
 def test_pose_materialization_rejects_file_directory_archive_collisions(
     tmp_path: Path,
