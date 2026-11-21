@@ -711,9 +711,7 @@ def test_log_tail_quarantines_invisible_byte_splices_inside_real_losses(
     """A stripped terminal byte must not turn two loss fragments into a fake value."""
     log = tmp_path / "training.log"
     original = (
-        b"train/box_loss=0.2"
-        + invisible_control
-        + b"5\ntrain/cls_loss=0.30\ntrain/dfl_loss=0.10\n"
+        b"train/box_loss=0.2" + invisible_control + b"5\ntrain/cls_loss=0.30\ntrain/dfl_loss=0.10\n"
     )
     log.write_bytes(original)
 
