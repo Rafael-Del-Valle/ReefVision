@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T12:28:26Z`
+Updated: `2026-11-21T14:11:59Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1786,8 +1786,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: The source API installed, disabled, reinstalled and executed checksum-pinned local packages. A trapped plugin left no output and the next one ran. A replay that produced a different value preserved the previous result. — `docs/validation/2.0-research-candidate.json` (`rv20-plugin-sdk-scalar-library-6f9b9313a`)
+- `browser`: The researcher installed the bundled example on a fresh desktop backend, enabled it, measured an original image at 0.5, and disabled it. Its saved, unassessed result remained readable. — `docs/validation/2.0-research-candidate.json` (`rv20-plugin-sdk-guided-image-d4feb080f`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1807,10 +1807,10 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: The native encoder used the registered model on reviewed crops. Two successive transferred projects re-executed the saved graph, including its original study checksum and adjudicated result. — `docs/validation/2.0-research-candidate.json` (`rv20-reefpose-long-gap-reidentification-exchange-72af8d740`)
+- `browser`: Identity review exposed the two source crops, candidate scores, separate reviewer decisions and adjudication. The researcher reopened the saved study and ran it in Workflow Builder. — `docs/validation/2.0-research-candidate.json` (`rv20-reefpose-long-gap-reidentification-review-72af8d740`)
 - `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `physical_hardware`: The physical RTX 3090 ran the native appearance model. The generated held-out fixture comprised two animals and two recording groups, with zero false links in eight impostor pairs and zero missed links in eight genuine pairs. — `docs/validation/2.0-research-candidate.json` (`rv20-reefpose-long-gap-reidentification-rtx3090-72af8d740`)
 - `representative_data`: none recorded
 
 ### rv20-release-journeys: 2.0 security, update/offline release, and complete user journeys
@@ -1848,8 +1848,8 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
-- `browser`: none recorded
+- `source`: The typed graph rejected a mismatched edge and an unavailable pin, paused for a recorded decision, and preserved source and plugin bindings through project exchange. — `docs/validation/2.0-research-candidate.json` (`rv20-workflow-builder-pin-exchange-6f9b9313a`)
+- `browser`: Two separate runs of the guided graph presented value, unit, original and package digests. Both returned the same measurement digest and retained distinct human approval receipts. — `docs/validation/2.0-research-candidate.json` (`rv20-workflow-builder-review-d4feb080f`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded

@@ -1,0 +1,125 @@
+{
+  "milestone": "2.0",
+  "draft_pr": 155,
+  "integrated_source": "2adee8d3344807a4934a3d8548b39fd1c38f2722",
+  "predecessor": {
+    "source": "272ee64e929bdfd2ebbf5e1f912221862ec5f9d2",
+    "qualification": "docs/validation/1.9-frozen-research.json",
+    "draft": 152
+  },
+  "plugin_and_guided_builder": {
+    "entry": [
+      "Models & AI → Plugins and providers",
+      "Video & automation → Workflow builder"
+    ],
+    "source": "6f9b9313a6fbc5c09b01fa0c67cccb3840836dda",
+    "source_checks": [
+      {
+        "review_file": "2.0/checkpoints/2adee8d33/source/plugin-core-tests.xml",
+        "sha256": "07c4bb10b7167e7846148c3f4c8f09a4b248a4ca19f63db6cdd694475afbd417",
+        "tests": 41,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 1
+      },
+      {
+        "review_file": "2.0/checkpoints/2adee8d33/source/plugin-typed-head.xml",
+        "sha256": "207ed74dc20c08fbcbb57226282b851a40e05e062f30f100e7dc80c4cbf41667",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "review_file": "2.0/checkpoints/2adee8d33/source/plugin-review-tests.xml",
+        "sha256": "51f194b9eb62817b19bbe816e8f9f3dfdd10722708281345884de1d540ac5b2c",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ],
+    "desktop_startup": {
+      "failed_source": "7edfe75609cc6e6f5747d7d71c1a2e4ecca06b38",
+      "fixed_source": "575f1dda86a28760b3ee685a4abde8ed75a10cc6",
+      "observation": "The first Windows desktop plugin install exceeded its deadline before Python initialization. The explicit windowed desktop worker ran the same sample inside the original limits."
+    },
+    "browser_source": "d4feb080f33c9573b51e8dc307f4bb16e6a3a6ad",
+    "browser_passed": 1,
+    "profile": {
+      "review_file": "2.0/checkpoints/2adee8d33/source/source-identity.json",
+      "sha256": "3f20758373bee78f89e833bc5f727df642a69338ad46d35e77c60755a7a73447"
+    },
+    "journey_receipt": {
+      "review_file": "2.0/checkpoints/2adee8d33/source/local-plugin-measurement-evidence.json",
+      "sha256": "b168b3671b51115979749b1c58bf2d3c0b29626ac8e2745ec88135573bd9d120"
+    },
+    "fixture": {
+      "image_sha256": "1f5a78f96eab21377ff77e71ac971e3c73e9fa843223bebb62c67c15d64546c5",
+      "package_sha256": "7ea16dbe51822a1ba359d491a70b48c378644dc31b8410b9e293bf67f31d4535",
+      "module_sha256": "3e59bd90a00dcd834471464df06675de7be338c06a44343460a9e44cb020066d",
+      "record_sha256": "27a5d8b4b89b643398f31da84ea3d2de43e8f22491257039b34fc00e9ed7a625",
+      "value": 0.5,
+      "unit": "1",
+      "qc": "unassessed",
+      "graph_sha256": "1a5d8858b4f1aeee7113c95f4f6055f8d606b496a086abe0bf832d880470093e",
+      "disabled_refusal": "Workflow graph is no longer valid. Local plugin image measurement (measure-image) — Enable the pinned plugin version in Plugins and providers before running.",
+      "replays": [
+        {
+          "run_id": "449a9ed1-ee12-411f-b1e2-47bff6183a93",
+          "graph_sha256": "1a5d8858b4f1aeee7113c95f4f6055f8d606b496a086abe0bf832d880470093e",
+          "payload_sha256": "ff3ba2be5c4044280052aefb6c4ddf9f22aaf3a6dff1fa0e25b80c2cd88d2837",
+          "reviewed_payload_sha256": "4cdd475ffdb14dc80c384f3c7499cbf962fc1cd52510866ebd1599b285ca9725",
+          "record_id": "b0a19d00-ffda-58fa-b9b1-8b6c37565b67"
+        },
+        {
+          "run_id": "9d8f39b9-df4b-4fbe-9e77-6b12a6a2e25f",
+          "graph_sha256": "1a5d8858b4f1aeee7113c95f4f6055f8d606b496a086abe0bf832d880470093e",
+          "payload_sha256": "ff3ba2be5c4044280052aefb6c4ddf9f22aaf3a6dff1fa0e25b80c2cd88d2837",
+          "reviewed_payload_sha256": "b459e6fe09437d3fcca87e0eb6c518ddce748910f055f0f42a36d32026ba1ce1",
+          "record_id": "b0a19d00-ffda-58fa-b9b1-8b6c37565b67"
+        }
+      ]
+    }
+  },
+  "appearance": {
+    "entry": "Video & automation → Video & tracking → Identity review",
+    "source": "72af8d74029bfe35f77ee6568cb4ffd643836d0d",
+    "surface": "source-browser",
+    "source_branch_runtime_version": "1.9.0",
+    "reference_kind": "generated",
+    "device": "NVIDIA GeForce RTX 3090, CUDA",
+    "actual_device": "cuda:0",
+    "study_sha256": "e685f3ae36f34eea60a7cf9bf8078d23d8da7ccdfddc79e0686a1b79fba301b8",
+    "model_sha256": "b8753292e59f2821b1597752762f7bc7f8bf8b1c1315323b33501f9fe00132f3",
+    "role_slots": [
+      "first",
+      "second",
+      "adjudication"
+    ],
+    "counts": {
+      "probes": 8,
+      "proposed": 8,
+      "genuine_pairs": 8,
+      "impostor_pairs": 8,
+      "false_links": 0,
+      "missed_links": 0,
+      "false_match_rate": 0,
+      "missed_match_rate": 0,
+      "incorrect_proposal_fraction": 0
+    },
+    "independent_units": {
+      "fixture_animals": 2,
+      "fixture_recording_groups": 2
+    },
+    "replay_artifact_sha256": "710ccfa56e35041e65dcd1fcd62997f2f63b5dd8f64fb4e82a0b0af1919e563a",
+    "receipt": {
+      "review_file": "2.0/checkpoints/2adee8d33/source/appearance-reidentification.json",
+      "sha256": "b0861bd2d82a975d036e6a296bb949ef3b132011830bf8e815b1c6033c5bfdc0"
+    },
+    "technical_exchange": "Two consecutive project exchanges retained the source study digest, decisions and runnable saved graph.",
+    "open_field_check": "An approved appearance protocol, independently adjudicated held-out recordings across animals and cameras, ambiguity rules, and prespecified false-match and missed-match margins with uncertainty."
+  },
+  "intermediate_windows_source": "78496d0007027d9a736ad044723c1fd768f93f94",
+  "final_windows_installer": "Open. The final engineering revisions and their exact-source installation and rollback journeys are pending."
+}
