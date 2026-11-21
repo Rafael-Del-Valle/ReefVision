@@ -330,8 +330,8 @@ export function TrainingWorkspace({
     enabled: selectedDraftId.length > 0,
   });
   const models = useQuery({
-    queryKey: ["models", project.id, "detector"],
-    queryFn: ({ signal }) => getModels(project.id, "detector", signal),
+    queryKey: ["models", project.id],
+    queryFn: ({ signal }) => getModels(project.id, undefined, signal),
     enabled: activeSection === "models" || activeSection === "runs",
   });
   const runs = useQuery({
@@ -710,7 +710,10 @@ export function TrainingWorkspace({
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: ["models", project.id, "detector"],
+        queryKey: ["models", project.id],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["training_runs", project.id],
       });
       await queryClient.invalidateQueries({
         queryKey: ["training_workspace_bootstrap", project.id],
@@ -911,17 +914,26 @@ export function TrainingWorkspace({
     activeSection === "runs" || activeSection === "experiments";
 
   const registeredRunModels = useMemo(() => {
-    const mapped = new Map<string, ModelRegistration>();
+    const legacy = new Map<string, ModelRegistration>();
+    const byId = new Map(models.data?.map((model) => [model.id, model]));
     models.data?.forEach((model) => {
       const runId = stringValue(
         asRecord(model.metadata_json).source_training_run_id,
       );
       if (runId) {
-        mapped.set(runId, model);
+        legacy.set(runId, model);
       }
     });
+    const mapped = new Map<string, ModelRegistration>();
+    for (const run of runs.data ?? []) {
+      const registered =
+        run.registered_model_id === undefined
+          ? legacy.get(run.id)
+          : byId.get(run.registered_model_id ?? "");
+      if (registered) mapped.set(run.id, registered);
+    }
     return mapped;
-  }, [models.data]);
+  }, [models.data, runs.data]);
 
   useEffect(
     () => () => {
@@ -2285,7 +2297,7 @@ export function TrainingWorkspace({
                   </article>
 
                   <article className="system-card">
-                    <h4>Registered detector models</h4>
+                    <h4>Registered project models</h4>
                     <div className="training-run-list">
                       {models.data?.map((model) => (
                         <div key={model.id} className="system-record-card">

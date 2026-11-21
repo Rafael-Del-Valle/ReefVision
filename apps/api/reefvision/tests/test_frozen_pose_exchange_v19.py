@@ -15,9 +15,12 @@ from reefvision.tests.test_workflow_pose_training_phase10 import _frozen_dataset
 def test_exchange_preserves_a_pin_from_a_different_pose_dataset() -> None:
     source, restored = "a" * 64, "b" * 64
     stale = {"dataset_id": "other", "manifest_sha256": source}
-    assert _restore_parameters(
-        "pose_training_dataset", stale, {source: restored}, {("expected", source): restored}
-    ) == stale
+    assert (
+        _restore_parameters(
+            "pose_training_dataset", stale, {source: restored}, {("expected", source): restored}
+        )
+        == stale
+    )
 
 
 def test_frozen_pose_graph_rebinds_the_pinned_dataset_at_each_exchange(

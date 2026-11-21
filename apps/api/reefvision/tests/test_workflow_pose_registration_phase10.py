@@ -348,6 +348,9 @@ def test_identical_checkpoint_preserves_first_model_history_and_both_run_receipt
             assert receipt["source_training_run_id"] == training["training_run_id"]
             assert receipt["source_experiment_id"] == training["experiment_id"]
             assert receipt["model_source_training_run_id"] == first["training_run_id"]
+            reopened = client.get(f"/api/v1/training-runs/{training['training_run_id']}")
+            assert reopened.status_code == 200, reopened.text
+            assert reopened.json()["registered_model_id"] == receipt["model_id"]
 
 
 def test_pose_registration_fails_closed_if_training_schema_provenance_changes(

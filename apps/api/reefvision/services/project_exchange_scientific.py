@@ -69,6 +69,20 @@ def _validate_exchange_records(
                 raise ValidationError(f"Foreign project reference in {name}")
     scientific = by_section.get("scientific_records", {})
     caches = by_section.get("environmental_cache_entries", {})
+    for run in by_section.get("training_runs", {}).values():
+        registered = run.get("registered_model_id")
+        if registered is None:
+            continue
+        model = by_section.get("models", {}).get(registered)
+        checksum = (run.get("artifact_manifest_json") or {}).get("best_checkpoint_sha256")
+        if (
+            model is None
+            or run["status"] != "completed"
+            or run["task"] != model["task"]
+            or run["provider_id"] != model["provider_name"]
+            or (checksum is not None and checksum != model["sha256"])
+        ):
+            raise ValidationError("Registered model does not match its completed training run")
     # Every declared FK in an enriched archive must resolve to a record in this archive.
     tables = {model.__table__.name: by_section.get(name, {}) for name, model in models.items()}
     tables["projects"] = {project_id: {"id": project_id}}

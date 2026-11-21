@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
@@ -16,7 +17,7 @@ from reefvision.db.models import (
     ModelRegistration,
     TrainingRun,
 )
-from reefvision.domain.errors import ValidationError
+from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.jobs.training_dispatch import process_task_aware_training_job
 from reefvision.ml.semantic_segmentation import (
     NNUNET_CONFIGURATION,
@@ -288,14 +289,27 @@ def register_workflow_trained_model(
         raise ValidationError("Training checkpoint checksum changed before model registration")
 
     service = model_service_factory(session, settings)
-    registered = service.register_model_from_run(
-        project_id,
-        RegisterModelFromRunRequest(
-            training_run_id=run.id,
-            display_name=str(parameters.get("display_name") or "").strip() or None,
-            notes=str(parameters.get("notes") or "").strip() or None,
-        ),
+    request = RegisterModelFromRunRequest(
+        training_run_id=run.id,
+        display_name=str(parameters.get("display_name") or "").strip() or None,
+        notes=str(parameters.get("notes") or "").strip() or None,
     )
+    try:
+        registered = service.register_model_from_run(project_id, request)
+    except (ConflictError, IntegrityError):
+        # A saved graph reuses its human-readable model name on every run.
+        # Preserve the first registration and distinguish subsequent checkpoint bytes.
+        session.rollback()
+        if not request.display_name:
+            raise
+        named = service.models.find_by_display_name(project_id, request.display_name)
+        if named is None:
+            if service.models.find_by_checksum(project_id, actual_sha) is None:
+                raise
+        elif named.sha256 != actual_sha:
+            suffix = f" ({run.id})"
+            request.display_name = request.display_name[: 200 - len(suffix)] + suffix
+        registered = service.register_model_from_run(project_id, request)
     metadata = dict(registered.metadata_json or {})
     experiment_id = session.scalar(
         select(ExperimentRecord.id).where(ExperimentRecord.training_run_id == run.id)

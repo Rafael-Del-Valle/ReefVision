@@ -718,6 +718,7 @@ export interface TrainingRun {
   id: string;
   project_id: string;
   draft_id: string | null;
+  registered_model_id?: string | null;
   dataset_version_id: string | null;
   dataset_manifest_sha256: string;
   split_manifest_sha256: string;

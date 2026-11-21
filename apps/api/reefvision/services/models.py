@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import BinaryIO
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from reefvision.config import Settings
@@ -370,6 +370,11 @@ class ModelService:
             raise ConflictError("Models with predictions or accepted annotations cannot be removed")
         path = resolve_managed_project_path(self.settings, model.managed_path)
         extracted_bundle = path.parent / f".{path.stem}.bundle"
+        self.session.execute(
+            update(TrainingRun)
+            .where(TrainingRun.registered_model_id == model.id)
+            .values(registered_model_id=None)
+        )
         self.session.delete(model)
         self.session.commit()
         path.unlink(missing_ok=True)

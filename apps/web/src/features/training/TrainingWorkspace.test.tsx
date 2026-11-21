@@ -306,6 +306,7 @@ describe("TrainingWorkspace progress freshness", () => {
     const completedRun = {
       ...run,
       draft_id: null,
+      registered_model_id: "model-1",
       provider_id: "reefpose",
       task: "pose",
       run_name: "Frozen workflow training",
@@ -336,7 +337,9 @@ describe("TrainingWorkspace progress freshness", () => {
         provider_version: "1",
         class_map_json: {},
         input_size_json: null,
-        metadata_json: { source_training_run_id: completedRun.id },
+        metadata_json: {
+          source_training_run_id: "original-run-with-the-same-checkpoint",
+        },
         notes: null,
         created_at: completedRun.created_at,
         updated_at: completedRun.created_at,
@@ -370,7 +373,7 @@ describe("TrainingWorkspace progress freshness", () => {
     expect(screen.queryByText("No training draft selected")).toBeNull();
     expect(api.getModels).toHaveBeenCalledWith(
       project.id,
-      "detector",
+      undefined,
       expect.anything(),
     );
     expect(api.getTrainingDraft).not.toHaveBeenCalled();

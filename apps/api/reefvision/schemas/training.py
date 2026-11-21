@@ -228,6 +228,7 @@ class TrainingRunResponse(TrainingInitializationResponse):
     id: str
     project_id: str
     draft_id: str | None
+    registered_model_id: str | None = None
     dataset_version_id: str | None
     dataset_manifest_sha256: str
     split_manifest_sha256: str

@@ -46,6 +46,9 @@ class TrainingRun(Base):
     initial_checkpoint_model_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("model_registrations.id", ondelete="SET NULL"), nullable=True
     )
+    registered_model_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("model_registrations.id", ondelete="SET NULL"), nullable=True
+    )
     resolved_model_asset_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     resolved_model_checksum: Mapped[str | None] = mapped_column(String(64), nullable=True)
     parameter_registry_version: Mapped[str | None] = mapped_column(String(100), nullable=True)

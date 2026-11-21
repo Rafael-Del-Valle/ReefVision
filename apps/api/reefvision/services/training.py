@@ -712,6 +712,7 @@ class TrainingService:
             id=run.id,
             project_id=run.project_id,
             draft_id=run.draft_id,
+            registered_model_id=run.registered_model_id,
             dataset_version_id=run.dataset_version_id,
             dataset_manifest_sha256=run.dataset_manifest_sha256,
             split_manifest_sha256=run.split_manifest_sha256,
