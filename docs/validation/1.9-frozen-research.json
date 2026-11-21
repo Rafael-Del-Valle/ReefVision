@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T05:46:43.637060+00:00",
+  "updated_utc": "2026-11-21T05:54:56.959035+00:00",
   "candidate_pr": 131,
   "scope": "Generated research projects. Registered installer trials identify their own package.",
   "reviewed_predecessors": {
@@ -493,6 +493,43 @@
         "The local MSI WebView2 Class Manager refused both malformed receipts and kept annotation revision 2. A fresh confirmed reassignment saved revision 3. Its frozen dataset retained the original class map during YOLO export.",
         "Ordinary Retry produced a new Ultralytics CPU pose checkpoint on 96 training and 48 validation images. A checkpoint-inclusive Training Results ZIP verified 57 members. Register Trained Model and direct registration both rejected the retained checkpoint. The base inspector read its two landmarks. The active expanded catalog rejected the pose task."
       ]
+    },
+    "pose_catalog_registration": {
+      "source": "6902e798ec09822872e38596f6b794110ac23ae9",
+      "pr": 141,
+      "from_source": "caa6931c2f4a8aefbf4e248d2c46c61ca9c8688b",
+      "from_msi": "48e4553adece0984e99263d812b6c60fa26170a89ded1ac75fdf0797c68c1e37",
+      "reused_trained_checkpoint": "6629d6c5e738a976986ba699147cc122890a1b3f882ecf0cf0791ab005a08633",
+      "schema": {
+        "id": "905cc36e-6110-4862-b65d-67eec6a177f1",
+        "revision": 1,
+        "sha256": "e3fe3061d51bf87c819db998e67d56287be0b42c05a8a930d801366f78bce6a5"
+      },
+      "ordinary_saved_retry": {
+        "file": "1.9/checkpoints/6902e798e/source-ultralytics-registered-pose/ordinary-retry-inference-review.json",
+        "sha256": "0587fbf539a227254360ce87abc3ce2ca88f22ae6b99e3afd8d5921bc0687c1f"
+      },
+      "different_anatomy_rejected": {
+        "file": "1.9/checkpoints/6902e798e/source-ultralytics-registered-pose/wrong-shape-refusal.json",
+        "sha256": "2dbf9bf88294219b629c7ac2de4107e1e7f19b6be3475f1bd78b4b1e30b5e903"
+      },
+      "registered_tasks": {
+        "file": "1.9/checkpoints/6902e798e/source-ultralytics-registered-pose/three-local-checkpoints.json",
+        "sha256": "8b4aa977d6471ee2c9fce9e7c1390ba71fd4e6d77a109892810ced805433a16b"
+      },
+      "focused_tests": {
+        "file": "1.9/checkpoints/6902e798e/source-ultralytics-registered-pose/31-focused-tests.xml",
+        "sha256": "40ae5629751d711b646da71a3d03b687e63fce7905e893f87a2deaa26fc10653"
+      },
+      "before_fix": {
+        "file": "1.9/checkpoints/6902e798e/source-ultralytics-registered-pose/catalog-before-fix.log",
+        "sha256": "9f96cc6863e18a1b9932237ae4c0b9ebb17baf89ed330a440cc3adfb84d053c3"
+      },
+      "type_checks": {
+        "file": "1.9/checkpoints/6902e798e/source-ultralytics-registered-pose/mypy.log",
+        "sha256": "615b502f7347809330754d6bf605998bc6289a8865aba36c6dec5ab4ab92c53f"
+      },
+      "result": "Recovered the failed saved parent at its Register action, reused the original trained checkpoint, and ran held-out CPU inference. A human-reviewed two-landmark frame reopened in the native pose ZIP. Separate public upload registrations preserved detector boxes, segmentation masks and two-landmark pose geometry. A different 17-landmark checkpoint failed without mutating the project."
     }
   }
 }

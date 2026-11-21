@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T05:46:43Z`
+Updated: `2026-11-21T05:54:57Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1549,7 +1549,7 @@ Acceptance checks:
 
 Evidence:
 
-- `source`: none recorded
+- `source`: Public registration and reopen preserved source checkpoint digests and the correct geometry for a scratch-trained detector, instance segmenter and pose model. A held-out video yielded reviewable pose proposals. The different-landmark-count control returned HTTP 400 with registry, file and run identities intact. — `docs/validation/1.9-frozen-research.json` (`rv19-compatibility-matrix-checkpoint-geometry-6902e798e`)
 - `browser`: An ordinary imported historical model reports Unavailable in Model Hub with its retained bytes and hash. The native frame and temporal models report Ready, and removing then restoring a copied native checkpoint shows Model required then Ready. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-compatibility-matrix-historic-model-127`)
 - `windows_installed`: none recorded
 - `physical_hardware`: Help and System status showed Windows 11 build 26300, source runtime and local formats. Separate keyboard-driven browser launches detected this physical RTX 3090 and a CPU-only masked runtime. The prior package is identified individually. — `docs/validation/1.9-frozen-research.json` (`rv19-compatibility-matrix-live-host-621e20b34`)
@@ -1573,6 +1573,7 @@ Evidence:
 
 - `source`: Two completed records explicitly sharing a real native checkpoint reopened with their own result links across two Project Exchanges. The trained model retained its original experiment. The unregistered historical duplicate required an explicit registration. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-per-run-links-701f3b931`)
 - `source`: The saved workflow's ordinary Retry trained a new Ultralytics child from the correct 96 training and 48 validation files. Both frozen pose archives retained their original hashes and the produced checkpoint has its own training and job identity. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-ultralytics-frozen-path-caa6931c2`)
+- `source`: Recovered the failed saved parent at its Register action, reused the original trained checkpoint, and ran held-out CPU inference. A human-reviewed two-landmark frame reopened in the native pose ZIP. Separate public upload registrations preserved detector boxes, segmentation masks and two-landmark pose geometry. A different 17-landmark checkpoint failed without mutating the project. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-saved-ultralytics-retry-6902e798e`)
 - `browser`: A researcher used the existing advanced graph editor with declared input IDs, then ran one 14-node revision twice. Both scratch CPU checkpoints, reviewed held-out poses and downloaded ZIPs have distinct receipts. The result uses run-derived registration names and provides the source baseline for the 1.9 guided and installed workflow. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-end-to-end-workflows-inherited-57f16152b`)
 - `browser`: Opening Training in a project created by saved workflows shows completed runs and experiments before creating a training draft. Three real source-browser profiles exercised the historical and corrected cases. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-historical-training-0b5e0f1d7`)
 - `browser`: Two ordinary CPU runs of the same saved 14-node revision trained and registered distinct models, ran held-out inference and completed all four human review gates. Both downloaded native ZIPs contained frame 14 with the human-reviewed source-pixel landmarks and three skipped items. — `docs/validation/1.9-frozen-research.json` (`rv19-end-to-end-workflows-guided-96476bc46`)
