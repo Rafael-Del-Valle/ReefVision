@@ -77,7 +77,7 @@ Write-Host "[ ] Confirm repeated landmark names remain recoverable through node_
 Write-Host "[ ] Confirm COCO export opens with its bundled frame paths."
 Write-Host "[ ] Confirm Ultralytics Pose export has images/train, labels/train, and data.yaml."
 Write-Host "[ ] Confirm DeepLabCut export does not silently flatten multi-instance frames."
-Write-Host "[ ] Confirm SLEAP and NWB exports fail clearly when the optional runtime is missing."
+Write-Host "[ ] Confirm SLP is absent and neutral NWB fails clearly when its optional codec is missing."
 Write-Host "[ ] Confirm native-format losses are explicitly documented in the bundle manifest."
 
 

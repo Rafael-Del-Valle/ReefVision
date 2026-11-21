@@ -14,7 +14,9 @@ import {
   exportSkeletonAnalysis,
   getSkeletonReadiness,
   listSkeletonAnalyses,
+  previewConnectedBranch,
   reviewSkeletonAnalysis,
+  type ConnectedBranchPreview,
   type SkeletonAnalysisRevision,
 } from "./skeletonAnalysisApi";
 import { SkeletonAnalysisPanel } from "./SkeletonAnalysisPanel";
@@ -27,6 +29,7 @@ vi.mock("./skeletonAnalysisApi", () => ({
   exportSkeletonAnalysis: vi.fn(),
   getSkeletonReadiness: vi.fn(),
   listSkeletonAnalyses: vi.fn(),
+  previewConnectedBranch: vi.fn(),
   reviewSkeletonAnalysis: vi.fn(),
   skeletonExportDownloadUrl: vi.fn(
     (analysisId: string) => "/skeleton/" + analysisId + "/download",
@@ -152,6 +155,51 @@ const analysis = {
     final_branch_angles: [],
   },
 } as SkeletonAnalysisRevision;
+
+const branchPreview = {
+  schema_version: "connected-branch-preview-0001",
+  base_analysis_id: analysis.id,
+  base_result_sha256: analysis.result_sha256,
+  image_id: analysis.image_id,
+  mask_annotation_id: analysis.mask_annotation_id,
+  attached_node_id: "junction-1",
+  added_edge_id: "branch-1",
+  superseded_edge_ids: ["edge-1"],
+  replacement_edge_ids: ["split-1", "split-2"],
+  original_total_length_pixels: 2,
+  proposed_total_length_pixels: 4,
+  added_length_pixels: 2,
+  nodes: [
+    {
+      id: "junction-1",
+      kind: "junction",
+      x: 2,
+      y: 1,
+      source_pixels: [{ x: 2, y: 1 }],
+      external_connection_count: 3,
+    },
+  ],
+  edges: [
+    {
+      id: "branch-1",
+      source_node_id: "junction-1",
+      target_node_id: "end-1",
+      pixels: [
+        { x: 2, y: 1 },
+        { x: 2, y: 2 },
+        { x: 2, y: 3 },
+      ],
+      boundary_to_boundary_length_pixels: 2,
+      node_to_node_length_pixels: 2,
+      is_cycle: false,
+    },
+  ],
+  evidence_level: "proposal_unverified",
+  review_gate: "scientist_review_required",
+  persistent_change_applied: false,
+  physical_length_computed: false,
+  geometry_space: "source_image_pixels_2d",
+} satisfies ConnectedBranchPreview;
 
 function renderPanel(onOverlayChange = vi.fn()) {
   const client = new QueryClient({
@@ -341,4 +389,188 @@ it("requires approval before building and exposing the verified export", async (
   expect(
     screen.getByRole("link", { name: "Download skeleton package" }),
   ).toHaveAttribute("href", "/skeleton/analysis-1/download");
+});
+
+it("previews a source-pixel branch with waypoint undo and redo", async () => {
+  vi.mocked(previewConnectedBranch).mockResolvedValue(branchPreview);
+  vi.mocked(listSkeletonAnalyses).mockResolvedValue([
+    { ...analysis, review_status: "approved" },
+  ]);
+  const { onOverlayChange } = renderPanel();
+
+  const draw = await screen.findByRole("button", { name: "Draw branch" });
+  fireEvent.click(draw);
+  const preview = screen.getByRole("button", { name: "Preview branch" });
+  const undo = screen.getByRole("button", { name: "Undo waypoint" });
+  const redo = screen.getByRole("button", { name: "Redo waypoint" });
+  expect(preview).toBeDisabled();
+  expect(redo).toBeDisabled();
+  expect(latestOverlay(onOverlayChange.mock.calls).editMode).toBe("branch");
+
+  act(() => {
+    const { onPixelClick } = latestOverlay(onOverlayChange.mock.calls);
+    onPixelClick({ x: 2, y: 1 });
+    onPixelClick({ x: 2, y: 3 });
+  });
+  expect(latestOverlay(onOverlayChange.mock.calls).branchPixels).toEqual(
+    branchPreview.edges[0].pixels,
+  );
+  expect(preview).toBeEnabled();
+  fireEvent.click(undo);
+  expect(preview).toBeDisabled();
+  fireEvent.click(redo);
+  fireEvent.click(preview);
+
+  await waitFor(() =>
+    expect(previewConnectedBranch).toHaveBeenCalledWith(
+      analysis.id,
+      expect.any(String),
+      branchPreview.edges[0].pixels,
+    ),
+  );
+  expect(
+    await screen.findByText("Scientist review required"),
+  ).toBeInTheDocument();
+  expect(screen.getByText("4.00 px")).toBeInTheDocument();
+  expect(
+    screen.getByText(/1 existing segment splits into 2/),
+  ).toBeInTheDocument();
+  expect(latestOverlay(onOverlayChange.mock.calls).nodes).toEqual(
+    branchPreview.nodes,
+  );
+  fireEvent.click(screen.getByText("Scientific review"));
+  expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "Build verified export" }),
+  ).toBeDisabled();
+  expect(correctSkeletonAnalysis).not.toHaveBeenCalled();
+  expect(reviewSkeletonAnalysis).not.toHaveBeenCalled();
+  expect(exportSkeletonAnalysis).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Discard branch draft" }));
+  expect(
+    screen.queryByText("Scientist review required"),
+  ).not.toBeInTheDocument();
+  expect(latestOverlay(onOverlayChange.mock.calls).branchPixels).toEqual([]);
+  expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
+  expect(
+    screen.getByRole("button", { name: "Build verified export" }),
+  ).toBeEnabled();
+});
+
+it("displays a rejected path for revision and never treats it as a preview", async () => {
+  vi.mocked(previewConnectedBranch).mockRejectedValue(
+    new Error(
+      "Proposed branch overlaps existing segments beyond its attachment",
+    ),
+  );
+  const { onOverlayChange } = renderPanel();
+  fireEvent.click(await screen.findByRole("button", { name: "Draw branch" }));
+  act(() => {
+    const { onPixelClick } = latestOverlay(onOverlayChange.mock.calls);
+    onPixelClick({ x: 1, y: 1 });
+    onPixelClick({ x: 3, y: 1 });
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Preview branch" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Proposed branch overlaps existing segments beyond its attachment",
+  );
+  expect(
+    screen.queryByText("Scientist review required"),
+  ).not.toBeInTheDocument();
+  expect(latestOverlay(onOverlayChange.mock.calls).branchPixels).toHaveLength(
+    3,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Undo waypoint" }));
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it("ignores the result of a branch request superseded by a draft edit", async () => {
+  let completePreview: (preview: ConnectedBranchPreview) => void = () => {};
+  vi.mocked(previewConnectedBranch).mockReturnValue(
+    new Promise((resolve) => {
+      completePreview = resolve;
+    }),
+  );
+  const { onOverlayChange } = renderPanel();
+  fireEvent.click(await screen.findByRole("button", { name: "Draw branch" }));
+  act(() => {
+    const { onPixelClick } = latestOverlay(onOverlayChange.mock.calls);
+    onPixelClick({ x: 2, y: 1 });
+    onPixelClick({ x: 2, y: 3 });
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Preview branch" }));
+  await waitFor(() => expect(previewConnectedBranch).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("button", { name: "Undo waypoint" }));
+  await act(async () => completePreview(branchPreview));
+
+  expect(
+    screen.queryByText("Scientist review required"),
+  ).not.toBeInTheDocument();
+  expect(latestOverlay(onOverlayChange.mock.calls).branchPixels).toEqual([
+    { x: 2, y: 1 },
+  ]);
+});
+
+it("shows calibrated edge and total lengths as reference-plane measurements", async () => {
+  vi.mocked(previewConnectedBranch).mockResolvedValue({
+    ...branchPreview,
+    physical_length_computed: true,
+    calibration: {
+      calibration_sha256: "0".repeat(64),
+      source: "aruco",
+      method: "reference_plane_homography",
+      unit: "mm",
+      original_total_length: 0.5,
+      proposed_total_length: 1.25,
+      added_length: 0.75,
+    },
+    edges: [{ ...branchPreview.edges[0], length_physical: 0.75 }],
+  });
+  const { onOverlayChange } = renderPanel();
+  fireEvent.click(await screen.findByRole("button", { name: "Draw branch" }));
+  act(() => {
+    const { onPixelClick } = latestOverlay(onOverlayChange.mock.calls);
+    onPixelClick({ x: 2, y: 1 });
+    onPixelClick({ x: 2, y: 3 });
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Preview branch" }));
+  expect(await screen.findByText("4.00 px | 1.2500 mm")).toBeInTheDocument();
+  expect(screen.getAllByText("2.00 px | 0.7500 mm")).toHaveLength(2);
+  expect(screen.getByText(/Reference-plane calibration/)).toHaveTextContent(
+    "aruco",
+  );
+  expect(screen.getByText("Scientist review required")).toBeInTheDocument();
+});
+
+it("does not draw a branch from a superseded or stale skeleton", async () => {
+  vi.mocked(listSkeletonAnalyses).mockResolvedValue([
+    { ...analysis, is_latest_revision: false },
+  ]);
+  renderPanel();
+  await screen.findByText("12.00 px");
+  expect(
+    screen.queryByRole("button", { name: "Draw branch" }),
+  ).not.toBeInTheDocument();
+});
+
+it("rejects a preview returned for another skeleton revision", async () => {
+  vi.mocked(previewConnectedBranch).mockResolvedValue({
+    ...branchPreview,
+    base_result_sha256: "0".repeat(64),
+  });
+  const { onOverlayChange } = renderPanel();
+  fireEvent.click(await screen.findByRole("button", { name: "Draw branch" }));
+  act(() => {
+    const { onPixelClick } = latestOverlay(onOverlayChange.mock.calls);
+    onPixelClick({ x: 2, y: 1 });
+    onPixelClick({ x: 2, y: 3 });
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Preview branch" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "The branch preview does not match this skeleton revision.",
+  );
+  expect(
+    screen.queryByText("Scientist review required"),
+  ).not.toBeInTheDocument();
 });

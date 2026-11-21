@@ -39,7 +39,6 @@ from reefvision.schemas.pose_interoperability import (
 )
 from reefvision.schemas.videos import VideoPoseObservation, VideoTrackKeyframe
 from reefvision.services.pose_temporal_tracking import PoseTemporalTrackingService
-from reefvision.storage.pose_exchange import save_exchange
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.results_packages import sha256_file
 
@@ -821,7 +820,6 @@ class PoseInteroperabilityService:
         exchange_format: PoseInteroperabilityFormat,
     ) -> Path:
         suffixes: dict[PoseInteroperabilityFormat, tuple[str, ...]] = {
-            "slp": (".slp",),
             "nwb": (".nwb",),
             "coco": (".json",),
             "dlc_csv": (".csv",),
@@ -849,7 +847,6 @@ class PoseInteroperabilityService:
         source_filename: str | None,
     ) -> Any:
         extensions: dict[str, tuple[str, ...]] = {
-            "slp": (".slp",),
             "nwb": (".nwb", ".zip"),
             "coco": (".json", ".zip"),
             "dlc_csv": (".csv", ".zip"),
@@ -887,7 +884,6 @@ class PoseInteroperabilityService:
                     return self._inject_bundle_manifest(labels, ultralytics_manifest)
 
                 suffixes: dict[PoseInteroperabilityFormat, str] = {
-                    "slp": ".slp",
                     "nwb": ".nwb",
                     "coco": ".json",
                     "dlc_csv": ".csv",
@@ -895,7 +891,7 @@ class PoseInteroperabilityService:
                 }
                 manifest: dict[str, object] | None = None
 
-                if exchange_format != "slp" and zipfile.is_zipfile(io.BytesIO(content)):
+                if zipfile.is_zipfile(io.BytesIO(content)):
                     bundle_root = root / "bundle"
                     bundle_root.mkdir(parents=True, exist_ok=True)
                     self._extract_safe_zip(
@@ -918,9 +914,7 @@ class PoseInteroperabilityService:
                     source = root / filename
                     source.write_bytes(content)
 
-                if exchange_format == "slp":
-                    labels = sio.load_slp(str(source), open_videos=False)
-                elif exchange_format == "nwb":
+                if exchange_format == "nwb":
                     labels = sio.load_nwb(str(source))
                 elif exchange_format == "coco":
                     self._validate_coco_paths(source.read_bytes())
@@ -1676,7 +1670,6 @@ class PoseInteroperabilityService:
     ) -> PoseInteroperabilityArtifact:
         try:
             if exchange_format not in {
-                "slp",
                 "nwb",
                 "coco",
                 "dlc_csv",
@@ -1692,20 +1685,6 @@ class PoseInteroperabilityService:
             labels = self._labels(video, tracks, schema)
             sio = self._sleap_io()
             stem = Path(video.original_filename).stem or "video"
-
-            if exchange_format == "slp":
-                filename, media_type, content = save_exchange(
-                    sio,
-                    labels,
-                    stem,
-                    exchange_format,
-                )
-                return PoseInteroperabilityArtifact(
-                    filename=filename,
-                    media_type=media_type,
-                    content=content,
-                    exchange_format=exchange_format,
-                )
 
             manifest = self._bundle_manifest(labels, exchange_format)
             with TemporaryDirectory(prefix="reefvision-pose-export-") as temp:

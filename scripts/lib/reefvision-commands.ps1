@@ -1,6 +1,6 @@
 Set-StrictMode -Version Latest
 
-$script:ReefVisionCommandVersion = "1.0.3"
+$script:ReefVisionCommandVersion = "1.4.0"
 $script:ReefVisionManagedWrapperMarker = "ReefVision managed command wrapper"
 
 function Write-ReefVisionCommandStep {

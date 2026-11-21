@@ -55,6 +55,7 @@ QualityControlRuleCategory = Literal[
     "predictions",
     "statistics",
     "dataset_versions",
+    "acquisition",
 ]
 ReviewQueueItemState = Literal["pending", "in_progress", "completed", "skipped"]
 

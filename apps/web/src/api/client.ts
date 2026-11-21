@@ -388,6 +388,52 @@ export interface ModelRegistration {
   updated_at: string;
 }
 
+export interface PoseEvaluationRun {
+  id: string;
+  project_id: string;
+  model_id: string;
+  evaluation_dataset_id: string;
+  schema_version: string;
+  status: string;
+  configuration_json: Record<string, unknown>;
+  metrics_json: Record<string, unknown>;
+  predictions_json: Array<Record<string, unknown>>;
+  provenance_json: Record<string, unknown>;
+  warnings_json: string[];
+  result_sha256: string;
+  inference_latency_ms: number;
+  images_per_second: number;
+  created_at: string;
+}
+
+export interface PoseEvaluationCreatePayload {
+  model_id: string;
+  evaluation_dataset_id: string;
+  device?: string;
+  pck_thresholds?: number[];
+  calibration_threshold?: number;
+  calibration_bins?: number;
+  confidence_thresholds?: number[];
+}
+
+export interface PoseEvaluationComparisonCreatePayload {
+  model_ids: string[];
+  evaluation_dataset_id: string;
+  device?: string;
+  pck_thresholds?: number[];
+  calibration_threshold?: number;
+  calibration_bins?: number;
+  confidence_thresholds?: number[];
+  oks_sigmas?: Record<string, number> | null;
+}
+
+export interface PoseEvaluationComparisonPage {
+  items: JobRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export type ModelCatalogCategory =
   | "architecture"
   | "provider_requirement"
@@ -927,6 +973,8 @@ export interface RuntimeProviderStatus {
   status: string;
   supports_cpu: boolean;
   supports_cuda: boolean;
+  cuda_available: boolean | null;
+  cuda_device_name: string | null;
   notes: string[];
 }
 
@@ -1113,7 +1161,46 @@ export type QualityControlRuleCategory =
   | "image_integrity"
   | "predictions"
   | "statistics"
-  | "dataset_versions";
+  | "dataset_versions"
+  | "acquisition";
+
+export interface AcquisitionQualityThresholds {
+  min_width_px: number;
+  min_height_px: number;
+  min_sharpness: number;
+  dark_luma_max: number;
+  bright_luma_min: number;
+  max_clipped_fraction: number;
+  require_capture_time: boolean;
+  require_camera_metadata: boolean;
+  require_calibration: boolean;
+}
+
+export interface AcquisitionQualityReport {
+  method: string;
+  review_status: "review_required";
+  evaluated_image_count: number;
+  unavailable_image_count: number;
+  finding_counts: Record<string, number>;
+  thresholds: AcquisitionQualityThresholds;
+  evidence_sha256: string;
+  images: {
+    filename: string;
+    source_sha256: string;
+    width_px: number;
+    height_px: number;
+    capture_time_utc: string | null;
+    camera_metadata: Record<string, string>;
+    calibration_sha256: string | null;
+    measurements: {
+      status: string;
+      dark_fraction: number | null;
+      bright_fraction: number | null;
+      sharpness: number | null;
+      opaque_sample_count: number;
+    };
+  }[];
+}
 
 export interface QualityControlThresholdConfig {
   small_box_min_width_px: number;
@@ -1127,6 +1214,7 @@ export interface QualityControlThresholdConfig {
   suspicious_bulk_acceptance_min_count: number;
   suspicious_bulk_acceptance_window_minutes: number;
   overlap_spatial_cell_px: number;
+  acquisition?: AcquisitionQualityThresholds;
 }
 
 export interface QualityControlRunRecord {
@@ -1141,7 +1229,10 @@ export interface QualityControlRunRecord {
   thresholds_json: Record<string, unknown>;
   configuration_json: Record<string, unknown>;
   input_checksums_json: Record<string, unknown>;
-  summary_json: Record<string, unknown>;
+  summary_json: Record<string, unknown> & {
+    acquisition?: AcquisitionQualityReport;
+  };
+  acquisition_stale_reasons?: string[];
   issue_count: number;
   created_by: string;
   created_at: string;
@@ -1530,7 +1621,7 @@ export class ApiRequestError extends Error {
   }
 }
 
-async function request<T>(
+export async function request<T>(
   path: string,
   init?: RequestInit,
   timeoutMs = 30_000,
@@ -2127,6 +2218,60 @@ export async function getModels(
       signal,
     },
   );
+}
+
+export function getPoseEvaluations(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<PoseEvaluationRun[]> {
+  return request<PoseEvaluationRun[]>(
+    `/projects/${encodeURIComponent(projectId)}/pose-evaluations`,
+    { signal },
+  );
+}
+
+export function createPoseEvaluation(
+  projectId: string,
+  payload: PoseEvaluationCreatePayload,
+): Promise<PoseEvaluationRun> {
+  return request<PoseEvaluationRun>(
+    `/projects/${encodeURIComponent(projectId)}/pose-evaluations`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function poseEvaluationExportUrl(
+  runId: string,
+  format: "json" | "csv",
+): string {
+  return `${getApiBaseUrl()}/pose-evaluations/${encodeURIComponent(runId)}/export?format=${format}`;
+}
+
+export function getPoseEvaluationComparisons(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<PoseEvaluationComparisonPage> {
+  return request<PoseEvaluationComparisonPage>(
+    `/projects/${encodeURIComponent(projectId)}/pose-evaluation-comparisons?limit=50&offset=0`,
+    { signal },
+  );
+}
+
+export function createPoseEvaluationComparison(
+  projectId: string,
+  payload: PoseEvaluationComparisonCreatePayload,
+): Promise<JobRecord> {
+  return request<JobRecord>(
+    `/projects/${encodeURIComponent(projectId)}/pose-evaluation-comparisons`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function poseEvaluationComparisonExportUrl(
+  jobId: string,
+  format: "json" | "csv",
+): string {
+  return `${getApiBaseUrl()}/pose-evaluation-comparisons/${encodeURIComponent(jobId)}/export?format=${format}`;
 }
 
 export async function getProjectModelCatalog(

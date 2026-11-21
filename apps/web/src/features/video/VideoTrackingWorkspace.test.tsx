@@ -22,8 +22,28 @@ vi.mock("./BehaviorDynamicsPanel", () => ({
     frameIndex: number;
   }) => (
     <section data-testid="mock-behavior-dynamics-panel">
-      {trackId} · frame {frameIndex}
+      {trackId} Â· frame {frameIndex}
     </section>
+  ),
+}));
+
+vi.mock("./PoseIdentityReviewPanel", () => ({
+  PoseIdentityReviewPanel: ({
+    videoId,
+    frameIndex,
+  }: {
+    videoId: string;
+    frameIndex: number;
+  }) => (
+    <section data-testid="mock-pose-identity-review-panel">
+      {videoId} Â· frame {frameIndex}
+    </section>
+  ),
+}));
+
+vi.mock("./BiologicalMovementPanel", () => ({
+  BiologicalMovementPanel: ({ videoId }: { videoId: string }) => (
+    <section data-testid="mock-biological-movement-panel">{videoId}</section>
   ),
 }));
 
@@ -342,6 +362,15 @@ describe("VideoTrackingWorkspace", () => {
       target: { files: [srt] },
     });
     fireEvent.change(
+      await screen.findByLabelText(
+        "SRT wall-clock UTC offset (minutes, optional)",
+      ),
+      { target: { value: "-300" } },
+    );
+    fireEvent.change(screen.getByLabelText("SRT timezone evidence"), {
+      target: { value: "field log confirms EST" },
+    });
+    fireEvent.change(
       screen.getByLabelText("AirData CSV telemetry (optional)"),
       {
         target: { files: [airdata] },
@@ -362,6 +391,8 @@ describe("VideoTrackingWorkspace", () => {
     await waitFor(() =>
       expect(api.importVideo).toHaveBeenCalledWith(project.id, video, {
         telemetryFile: srt,
+        telemetryUtcOffsetMinutes: -300,
+        telemetryUtcOffsetEvidence: "field log confirms EST",
         airdataFile: airdata,
         airdataTimeOffsetSeconds: 6.19,
         airdataTimeOffsetEvidence: "source-only SRT/AirData alignment",
@@ -575,6 +606,12 @@ describe("VideoTrackingWorkspace", () => {
     renderWorkspace();
 
     await screen.findByRole("option", { name: /Track 7/ });
+    expect(
+      screen.getByTestId("mock-pose-identity-review-panel"),
+    ).toHaveTextContent("video-1 Â· frame 0");
+    expect(
+      screen.getByTestId("mock-biological-movement-panel"),
+    ).toHaveTextContent("video-1");
     fireEvent.change(screen.getByLabelText("Existing track"), {
       target: { value: machineTrack.id },
     });
@@ -592,19 +629,15 @@ describe("VideoTrackingWorkspace", () => {
     expect(
       screen.getByRole("heading", { name: "Scientific pose visualization" }),
     ).toBeInTheDocument();
-    const slpExport = screen.getByRole("link", { name: "SLEAP SLP" });
+    expect(
+      screen.queryByRole("link", { name: "SLEAP SLP" }),
+    ).not.toBeInTheDocument();
     const nwbExport = screen.getByRole("link", { name: "NWB" });
     const cocoExport = screen.getByRole("link", { name: "COCO pose" });
     const dlcExport = screen.getByRole("link", { name: "DeepLabCut CSV" });
     const yoloExport = screen.getByRole("link", {
       name: "Ultralytics pose ZIP",
     });
-    expect(slpExport).toHaveAttribute(
-      "href",
-      expect.stringContaining(
-        "/videos/video-1/pose-interoperability/export?format=slp",
-      ),
-    );
     expect(nwbExport).toHaveAttribute(
       "href",
       expect.stringContaining("format=nwb"),
@@ -793,7 +826,7 @@ describe("VideoTrackingWorkspace", () => {
     vi.mocked(poseInteropApi.importPoseInteroperability).mockResolvedValue({
       schema_version: "pose-interoperability-import-0001",
       video_id: "video-1",
-      format: "slp",
+      format: "nwb",
       created_track_ids: ["imported-track-1"],
       track_count: 1,
       keyframe_count: 2,
@@ -809,7 +842,7 @@ describe("VideoTrackingWorkspace", () => {
       await screen.findByRole("heading", { name: "Pose interoperability" }),
     ).toBeInTheDocument();
 
-    const poseFile = new File(["pose"], "external.slp", {
+    const poseFile = new File(["pose"], "external.nwb", {
       type: "application/octet-stream",
     });
     fireEvent.change(
@@ -835,7 +868,7 @@ describe("VideoTrackingWorkspace", () => {
     await waitFor(() =>
       expect(poseInteropApi.importPoseInteroperability).toHaveBeenCalledWith(
         "video-1",
-        "slp",
+        "nwb",
         poseFile,
         "class-1",
         true,
@@ -959,6 +992,7 @@ describe("VideoTrackingWorkspace", () => {
           end_location: location,
           distance_m: 5,
           speed_m_s: 5,
+          initial_bearing_deg: null,
           cumulative_distance_m: 5,
           speed_valid: true,
           invalid_reason: null,
@@ -1099,7 +1133,7 @@ it("blocks pose inference until the ReefVision landmark schema is saved", async 
   expect(screen.getByText("Pose landmark schema")).toBeInTheDocument();
 });
 
-it("shows SLEAP-NN instance tracking controls without Ultralytics tracker knobs", async () => {
+it("preserves historical SLEAP-NN metadata but blocks active execution", async () => {
   vi.mocked(api.getTrackingModels).mockResolvedValue([
     {
       id: "sleap-pose-model",
@@ -1141,18 +1175,18 @@ it("shows SLEAP-NN instance tracking controls without Ultralytics tracker knobs"
   renderWorkspace();
 
   expect(
-    await screen.findByText("SLEAP-NN animal-instance tracking"),
+    await screen.findByText("Historical SLEAP-NN model unavailable"),
   ).toBeInTheDocument();
   expect(
-    screen.getByText(/fixed-window OKS\/Hungarian tracking/),
+    screen.getByText(/retired pending an authoritative license resolution/),
   ).toBeInTheDocument();
   expect(screen.queryByLabelText("Tracker")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Detector IoU")).not.toBeInTheDocument();
   expect(
     screen.getByRole("button", {
-      name: "Run SLEAP-NN pose + instance tracking",
+      name: "SLEAP-NN execution unavailable",
     }),
-  ).toBeEnabled();
+  ).toBeDisabled();
 });
 
 it("publishes timeline context and handles inspector seek commands without moving scientific ownership", async () => {
@@ -1202,5 +1236,90 @@ it("publishes timeline context and handles inspector seek commands without movin
 
   expect(await screen.findByTestId("mock-active-map-frame")).toHaveTextContent(
     "42",
+  );
+});
+
+it("selects a registered pose model from a Model Hub workspace command", async () => {
+  const model = {
+    id: "reefpose-model-1",
+    project_id: project.id,
+    purpose: "detector",
+    display_name: "Fish ReefPose-S",
+    source_filename: "best.pt",
+    managed_path: "projects/project-1/models/best.pt",
+    sha256: "f".repeat(64),
+    file_size_bytes: 4096,
+    framework: "pytorch",
+    task: "pose",
+    provider_name: "reefpose",
+    provider_version: "1",
+    class_map_json: {},
+    input_size_json: { width: 256, height: 256 },
+    metadata_json: {
+      pose_landmark_schema: {
+        schema_id: "schema-1",
+        schema_revision: 1,
+        content_hash: "a".repeat(64),
+        groups: [{ name: "head", count: 1 }],
+        expanded_labels: ["head"],
+        keypoint_count: 1,
+        allows_repeated_labels: false,
+      },
+    },
+    notes: null,
+    created_at: "2026-11-07T00:00:00Z",
+    updated_at: "2026-11-07T00:00:00Z",
+  };
+  let resolveModels!: (
+    models: Awaited<ReturnType<typeof api.getTrackingModels>>,
+  ) => void;
+  vi.mocked(api.getTrackingModels).mockReturnValue(
+    new Promise((resolve) => {
+      resolveModels = resolve;
+    }),
+  );
+  const handled = vi.fn();
+  renderWorkspace({
+    workspaceCommand: {
+      id: 9,
+      type: "select_model",
+      modelId: "reefpose-model-1",
+    },
+    onWorkspaceCommandHandled: handled,
+  });
+
+  expect(handled).not.toHaveBeenCalled();
+  resolveModels([model]);
+  await waitFor(() => expect(handled).toHaveBeenCalledWith(9));
+  expect(await screen.findByLabelText("Tracking model")).toHaveValue(
+    "reefpose-model-1",
+  );
+});
+
+it("opens a non-first source video when its managed list arrives after navigation", async () => {
+  const videos = await api.getVideos(project.id);
+  let resolveVideos!: (
+    videos: Awaited<ReturnType<typeof api.getVideos>>,
+  ) => void;
+  vi.mocked(api.getVideos).mockReturnValue(
+    new Promise((resolve) => {
+      resolveVideos = resolve;
+    }),
+  );
+  vi.mocked(api.getTrackingModels).mockResolvedValue([]);
+  const handled = vi.fn();
+  renderWorkspace({
+    workspaceCommand: { id: 10, type: "select_video", videoId: "video-2" },
+    onWorkspaceCommandHandled: handled,
+  });
+
+  expect(handled).not.toHaveBeenCalled();
+  resolveVideos([
+    ...videos,
+    { ...videos[0], id: "video-2", original_filename: "second-video.mp4" },
+  ]);
+  await waitFor(() => expect(handled).toHaveBeenCalledWith(10));
+  expect(screen.getByRole("combobox", { name: "Video" })).toHaveValue(
+    "video-2",
   );
 });

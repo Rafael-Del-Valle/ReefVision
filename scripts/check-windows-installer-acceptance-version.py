@@ -1,4 +1,4 @@
-"""Verify that the Windows clean-install job targets the packaged Tauri version.
+"""Check the Windows installer workflow against the packaged Tauri version.
 
 Run before MSI packaging to catch expensive version-mismatch failures.
 This check does not execute an installer or initiate model downloads.
@@ -11,11 +11,165 @@ import re
 import sys
 from pathlib import Path
 
+_BUILD_JOB = "build-windows-installer"
+_CLEAN_JOB = "windows-clean-install-acceptance"
+_UPGRADE_JOB = "windows-upgrade-acceptance"
+_BASELINE_VERSION = "1.0.3"
+_BASELINE_REPOSITORY = "Rafael-Del-Valle/ReefVision"
+_BASELINE_COMMIT = "e94dad6a3bece7b776bf45776bc5d06cfbc2c0dc"
+_BASELINE_MANIFEST_SHA256 = "fc5dfd8ce3fd8e4d1ea9d3040d139aff1304c472b42d671262ef0077c119505d"
+_PREFLIGHT = "run: python scripts/check-windows-installer-acceptance-version.py"
+_VERIFIER = "./scripts/verify-windows-installer-payload.ps1"
+_SOURCE_COMMIT = "${{ github.event.pull_request.head.sha || github.sha }}"
+_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _job(workflow: str, name: str) -> str:
+    jobs = re.findall(rf"(?ms)^  {re.escape(name)}:\s*\n(.*?)(?=^  [\w-]+:|\Z)", workflow)
+    return jobs[0] if len(jobs) == 1 else ""
+
+
+def _split_workflow(workflow: str) -> bool:
+    return f"  {_UPGRADE_JOB}:" in workflow or _VERIFIER in workflow
+
+
+def _missing(text: str, fragments: tuple[str, ...], message: str) -> list[str]:
+    # Comments cannot stand in for executable guards or workflow settings.
+    active = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+    return [f"{message}: {fragment}" for fragment in fragments if fragment not in active]
+
+
+def _check_preflight_order(build_job: str, packaging: str) -> list[str]:
+    if build_job.count(_PREFLIGHT) != 1:
+        return ["Version preflight must run exactly once in Windows build job"]
+    if packaging not in build_job or build_job.index(_PREFLIGHT) > build_job.index(packaging):
+        return ["Version preflight must run before MSI packaging"]
+    if "actions/setup-python@v5" not in build_job[: build_job.index(_PREFLIGHT)]:
+        return ["Version preflight must run after Python setup"]
+    return []
+
+
+def _check_split_workflow(workflow: str, version: str) -> list[str]:
+    build = _job(workflow, _BUILD_JOB)
+    clean = _job(workflow, _CLEAN_JOB)
+    upgrade = _job(workflow, _UPGRADE_JOB)
+    if not (build and clean and upgrade):
+        return ["Expected exactly one Windows build, clean-install, and upgrade job each"]
+
+    msi = f"ReefVision_{version}_x64_en-US.msi"
+    slug = version.replace(".", "-")
+    verified_candidate = (
+        f"{_VERIFIER} -InstallerDirectory $folder -Version '{version}' "
+        f"-ExpectedFilename '{msi}' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance"
+    )
+    errors = _check_preflight_order(build, f"- name: Build weight-free {version} desktop installer")
+    for name, job in ((_BUILD_JOB, build), (_CLEAN_JOB, clean), (_UPGRADE_JOB, upgrade)):
+        errors.extend(
+            _missing(
+                job,
+                (
+                    f"ref: {_SOURCE_COMMIT}",
+                    f"SOURCE_COMMIT: {_SOURCE_COMMIT}",
+                    verified_candidate,
+                ),
+                f"{name} candidate provenance guard is missing",
+            )
+        )
+        if "-LiveSam2Acceptance" in job:
+            errors.append(f"{name} must not opt into network model downloads")
+
+    for name, job, label, msi_assignment, root, evidence in (
+        (
+            _CLEAN_JOB,
+            clean,
+            f"Fresh install, launch, persist and uninstall {version} on disposable Windows",
+            f"$msi = Join-Path $folder '{msi}'",
+            "disposable-acceptance",
+            "Clean-Install",
+        ),
+        (
+            _UPGRADE_JOB,
+            upgrade,
+            f"Upgrade {_BASELINE_VERSION} to {version} "
+            "and preserve the project on disposable Windows",
+            rf"$msi = Join-Path $env:RUNNER_TEMP 'reefvision-{slug}-installer\{msi}'",
+            "upgrade-acceptance",
+            "Upgrade",
+        ),
+    ):
+        errors.extend(
+            _missing(
+                job,
+                (
+                    f"name: {label}",
+                    f"needs: {_BUILD_JOB}",
+                    f"$folder = Join-Path $env:RUNNER_TEMP 'reefvision-{slug}-installer'",
+                    msi_assignment,
+                    "-InstallerPath $msi",
+                    f"-ExpectedVersion '{version}'",
+                    rf"-AcceptanceRoot 'C:\reefvision-{slug}-{root}'",
+                    "-DisposableTest",
+                    f"name: ReefVision-{version}-RC-Windows-{evidence}-Evidence",
+                ),
+                f"{name} candidate installer wiring is missing",
+            )
+        )
+        if job.count("-InstallerPath $msi") != 1:
+            errors.append(f"{name} must exercise the candidate installer exactly once")
+        if (
+            verified_candidate in job
+            and "-InstallerPath $msi" in job
+            and job.index(verified_candidate) > job.index("-InstallerPath $msi")
+        ):
+            errors.append(f"{name} must verify candidate provenance before installation")
+
+    if clean.count("-SkipUpgrade") != 1 or "-SkipUpgrade" in upgrade:
+        errors.append("Candidate-only fresh install must skip the upgrade phase exactly once")
+    baseline_msi = f"ReefVision_{_BASELINE_VERSION}_x64_en-US.msi"
+    download = f"gh release download v{_BASELINE_VERSION} --repo {_BASELINE_REPOSITORY}"
+    baseline_folder = rf"reefvision-{_BASELINE_VERSION.replace('.', '-')}-installer"
+    baseline_checks = "if (Compare-Object $expected $actual) { throw "
+    errors.extend(
+        _missing(
+            upgrade,
+            (
+                f"{download} --pattern build-provenance.json --dir $previous",
+                f"{download} --pattern '{baseline_msi}' --pattern 'rv*.cab' --dir $previous",
+                "$digest = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash",
+                f"$digest -ine '{_BASELINE_MANIFEST_SHA256}'",
+                f"$manifest.version -ne '{_BASELINE_VERSION}'",
+                f"$manifest.source_commit -ne '{_BASELINE_COMMIT}'",
+                "$manifest.source_tree_clean -ne $true",
+                "$manifest.msi_verified -ne $true",
+                f"{_VERIFIER} -InstallerDirectory $previous -Version '{_BASELINE_VERSION}' "
+                f"-ExpectedFilename '{baseline_msi}'",
+                '$expected = @($manifest.files | ForEach-Object { "$($_.name) $($_.sha256)" }',
+                '$actual = @($payload.files | ForEach-Object { "$($_.name) $($_.sha256)" }',
+                baseline_checks,
+                f"$previous = Join-Path $env:RUNNER_TEMP '{baseline_folder}'",
+                rf"$previousMsi = Join-Path $env:RUNNER_TEMP '{baseline_folder}\{baseline_msi}'",
+                "-PreviousInstallerPath $previousMsi",
+                "-PreviousInstallerSupportsIsolatedAcceptance",
+            ),
+            "Previous-release upgrade baseline guard is missing",
+        )
+    )
+    if (
+        baseline_checks in upgrade
+        and "-PreviousInstallerPath $previousMsi" in upgrade
+        and upgrade.index(baseline_checks) > upgrade.index("-PreviousInstallerPath $previousMsi")
+    ):
+        errors.append("The upgrade baseline must be verified before installation")
+    return errors
+
 
 def check_workflow(workflow: str, version: str) -> list[str]:
     errors: list[str] = []
     if re.fullmatch(r"\d+\.\d+\.\d+", version) is None:
         return [f"Invalid Tauri version: {version!r}"]
+
+    if _split_workflow(workflow):
+        return _check_split_workflow(workflow, version)
 
     marker = "  windows-clean-install-acceptance:"
     if workflow.count(marker) != 1:
@@ -113,24 +267,121 @@ def check_workflow(workflow: str, version: str) -> list[str]:
     if "-LiveSam2Acceptance" in job:
         errors.append("Default clean-install job must not opt into network model downloads")
     if build_job:
-        invocation = "run: python scripts/check-windows-installer-acceptance-version.py"
-        packaging = "- name: Build MSI desktop installer with bundled checkpoints"
-        if build_job.count(invocation) != 1:
-            errors.append("Version preflight must run exactly once in Windows build job")
-        elif packaging not in build_job or build_job.index(invocation) > build_job.index(packaging):
-            errors.append("Version preflight must run before MSI packaging")
-        elif "actions/setup-python@v5" not in build_job[: build_job.index(invocation)]:
-            errors.append("Version preflight must run after Python setup")
+        errors.extend(
+            _check_preflight_order(
+                build_job, "- name: Build MSI desktop installer with bundled checkpoints"
+            )
+        )
     return errors
 
 
-def check_cab_artifact_partition(workflow: str) -> list[str]:
+def _check_split_cab_partition(workflow: str, version: str, verifier: str) -> list[str]:
+    build = _job(workflow, _BUILD_JOB)
+    errors = _missing(
+        build,
+        (
+            f"$payload = {_VERIFIER} ",
+            "$parts[0].Add((Join-Path $folder 'build-provenance.json'))",
+            "foreach ($entry in $payload.files) {",
+            "if ($entry.size_bytes -ge 2GB) { throw ",
+            "if ($partBytes + $entry.size_bytes -ge 2GB) {",
+            "$parts[$parts.Count - 1].Add((Join-Path $folder $entry.name))",
+            "$partBytes += $entry.size_bytes",
+            "if ($parts.Count -gt 4) { throw ",
+            "for ($i = 0; $i -lt $parts.Count; $i++)",
+            '"part$($i + 1)<<EOF" >> $env:GITHUB_OUTPUT',
+            "$parts[$i] | ForEach-Object { $_ >> $env:GITHUB_OUTPUT }",
+        ),
+        "Windows build must partition the verified MSI Media payload into bounded artifacts",
+    )
+    artifact_prefix = f"ReefVision-{version}-RC-Installer-Part-"
+    upload_steps = [
+        step
+        for step in re.split(r"(?m)^      - ", build)
+        if step.startswith("uses: actions/upload-artifact@")
+        and re.search(r"(?m)^          name: .*Installer-Part-", step)
+    ]
+    if len(upload_steps) != 4:
+        errors.append(
+            f"Expected four possible installer artifact uploads; found {len(upload_steps)}"
+        )
+    for part, step in enumerate(upload_steps, 1):
+        path = f"path: ${{{{ steps.payload.outputs.part{part} }}}}"
+        required = (f"name: {artifact_prefix}{part}", path, "if-no-files-found: error")
+        if part > 1:
+            required += (f"if: steps.payload.outputs.part{part} != ''",)
+        if not set(required) <= {line.strip() for line in step.splitlines()}:
+            errors.append(f"Installer artifact part {part} is misconfigured: expected {required!r}")
+
+    download_path = (
+        "path: ${{ runner.temp }}" + f"/reefvision-{version.replace('.', '-')}-installer"
+    )
+    for name in (_CLEAN_JOB, _UPGRADE_JOB):
+        job = _job(workflow, name)
+        downloads = [
+            step
+            for step in re.split(r"(?m)^      - ", job)
+            if "uses: actions/download-artifact@" in step
+        ]
+        if len(downloads) != 1:
+            errors.append(f"{name} must have exactly one installer artifact download step")
+        elif not {
+            f"pattern: {artifact_prefix}*",
+            "merge-multiple: true",
+            download_path,
+        } <= {line.strip() for line in downloads[0].splitlines()}:
+            errors.append(f"{name} must download and merge all installer parts")
+
+    errors.extend(
+        _missing(
+            verifier,
+            (
+                "$msi.Count -ne 1",
+                "$msi[0].Name -cne $ExpectedFilename",
+                "$identity.ProductVersion -ne $ProductVersion",
+                "$database.OpenView('SELECT `DiskId`, `Cabinet` FROM `Media` ORDER BY `DiskId`')",
+                "$external.Count -ne $cabs.Count",
+                "@($external | Sort-Object -Unique).Count -ne $external.Count",
+                "$name -notin $cabs.Name",
+                "sha256 = Get-ReefVisionArtifactSha256 -Path $item.FullName",
+                "if ($RequireProvenance) {",
+                "build-provenance.json",
+                "$manifest.version -ne $Version",
+                "$manifest.source_commit -ne $SourceCommit",
+                "$manifest.source_tree_clean -ne $true",
+                "$manifest.msi_verified -ne $true",
+                "identity = $manifest.msi.identity",
+                "media = $manifest.msi.media",
+                "files = $manifest.files",
+                "-cne ($expected | ConvertTo-Json -Depth 8 -Compress)",
+            ),
+            "The shared installer verifier is missing a Media or provenance guard",
+        )
+    )
+    return errors
+
+
+def check_cab_artifact_partition(
+    workflow: str, version: str | None = None, verifier: str | None = None
+) -> list[str]:
     """Fail before MSI packaging if an external CAB cannot reach the install runner.
 
-    WiX currently emits five or six external cabinets as dependency sizes vary.
-    Verify the three artifact manifests explicitly, require the build-time size
-    check to use the actual final CAB set, and reject missing/duplicated parts.
+    Current jobs partition the shared verifier's complete MSI Media payload
+    by file size. The historical workflow declares fixed CAB ranges.
     """
+    if _split_workflow(workflow):
+        if version is None:
+            version = str(
+                json.loads(
+                    (_ROOT / "apps/web/src-tauri/tauri.conf.json").read_text(encoding="utf-8")
+                )["version"]
+            )
+        if verifier is None:
+            verifier = (_ROOT / "scripts/verify-windows-installer-payload.ps1").read_text(
+                encoding="utf-8"
+            )
+        return _check_split_cab_partition(workflow, version, verifier)
+
     errors: list[str] = []
     build_marker = "  build-windows-installer:"
     acceptance_marker = "  windows-clean-install-acceptance:"
@@ -214,11 +465,11 @@ def check_cab_artifact_partition(workflow: str) -> list[str]:
 
 
 def main() -> int:
-    root = Path(__file__).resolve().parents[1]
+    root = _ROOT
     config = json.loads((root / "apps/web/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
     workflow = (root / ".github/workflows/build-desktop.yml").read_text(encoding="utf-8")
     errors = check_workflow(workflow, str(config["version"]))
-    errors.extend(check_cab_artifact_partition(workflow))
+    errors.extend(check_cab_artifact_partition(workflow, str(config["version"])))
     if errors:
         for error in errors:
             print(f"Windows acceptance version gate: {error}", file=sys.stderr)

@@ -50,11 +50,46 @@ _MODEL_PURPOSES_BY_NODE: dict[str, set[str]] = {
     "video_tracking": {"detector", "segmenter"},
     "pose_inference": {"detector"},
     "pose_model_training": {"detector"},
+    "pose_model_evaluation": {"detector"},
 }
 
 _ACTIONS: dict[str, str] = {
+    "reefpose_reference_source": "Freeze or resolve an independent scientific reference revision.",
+    "reefpose_scientific_validation": "Score original pose outputs and persist a report.",
     "project_source": "Resolve the project selected in the API route.",
+    "scientific_records_source": (
+        "Load explicit project scientific records and verify their immutable checksums."
+    ),
+    "computed_metric": (
+        "Evaluate a safe unit-aware metric definition and persist the provenance-complete result."
+    ),
+    "annotation_aggregate": (
+        "Count reviewed annotation evidence using explicit images and an independence contract."
+    ),
+    "mask_coverage": (
+        "Calculate verified-mask union area and explicit image or ROI coverage denominators."
+    ),
+    "annotation_comparison": (
+        "Compare explicit annotation sources with class-aware deterministic IoU matching."
+    ),
+    "geographic_pairwise": (
+        "Measure WGS84 distance and initial bearing between two explicit geographic endpoints."
+    ),
+    "environmental_threshold": (
+        "Find bounded QC-eligible threshold samples with provenance, without event inference."
+    ),
+    "current_streamline_analysis": (
+        "Persist deterministic streamlines through one frozen QC-compatible current field."
+    ),
+    "lunar_context_analysis": "Persist deterministic offline lunar context.",
+    "tidal_context_analysis": "Persist bounded observed and predicted NOAA tidal context.",
+    "event_window_analysis": "Create explicit windows around saved threshold samples.",
+    "observation_environment_join": (
+        "Join explicit biological records to bounded environmental records."
+    ),
+    "lagged_comparison": "Re-match a saved environmental join at explicit descriptive lags.",
     "project_images": "Resolve project images using the configured filters.",
+    "scientific_heatmap": "Persist an image's scientific heatmap with its source evidence.",
     "dataset_version_source": "Load one immutable dataset version and its image membership.",
     "dataset_version_create": (
         "Freeze current reviewed project state into a new immutable dataset version."
@@ -107,6 +142,28 @@ _ACTIONS: dict[str, str] = {
         "and identity-break provenance."
     ),
     "pose_review_gate": ("Pause until temporal pose state has explicit scientist review."),
+    "pose_identity_association": (
+        "Associate pose instances into auditable, persistent animal identities."
+    ),
+    "pose_identity_review_gate": (
+        "Pause until multi-animal identity assignments have explicit scientist review."
+    ),
+    "pose_identity_evaluation": (
+        "Evaluate reviewed animal identities against immutable verified identity truth."
+    ),
+    "pose_identity_export": "Export reviewed identities and scientific evaluation provenance.",
+    "anatomical_measurement": (
+        "Calculate immutable anatomical time series from reviewed animal identities."
+    ),
+    "biological_event_detection": (
+        "Detect complete and partial biological movement candidates with deterministic hysteresis."
+    ),
+    "biological_event_review_gate": (
+        "Pause until every retained biological event candidate has scientist disposition."
+    ),
+    "biological_movement_export": (
+        "Export reviewed measurements, event revisions, and integrity provenance."
+    ),
     "behavior_dynamics": (
         "Calculate deterministic behavior dynamics from scientist-reviewed tracks."
     ),
@@ -119,13 +176,52 @@ _ACTIONS: dict[str, str] = {
     "pose_training_dataset_freeze": (
         "Freeze only verified pose candidates into immutable Phase 9 training truth."
     ),
+    "pose_training_dataset": (
+        "Resolve one existing immutable scientist-verified pose training dataset."
+    ),
     "pose_training_export": (
         "Export the immutable pose dataset through the validated Phase 9 exporters."
     ),
     "pose_model_training": (
-        "Retrain an Ultralytics pose checkpoint from immutable scientist-verified pose truth."
+        "Train a provider-native pose checkpoint from immutable scientist-verified pose truth."
+    ),
+    "pose_model_evaluation": (
+        "Compare registered pose models on immutable scientist-verified held-out truth."
     ),
     "project_exchange_export": "Build a Phase 9 checksummed project exchange export inline.",
+    "ecology_coral_skeleton": "Extract coral segments from a project-owned verified mask.",
+    "ecology_coral_growth": "Calculate 2D coral growth from reviewed correspondence.",
+    "ecology_verified_analysis": "Recalculate a reviewed ecological analysis.",
+    "ecology_event_summary": "Calculate or replay an event summary from reviewed evidence.",
+    "scientific_comparison": "Calculate or replay agreement on frozen held-out evidence.",
+    "research_publication_figure": "Create or reopen a figure and table with its source.",
+    "image_acquisition_quality": "Measure acquisition quality and retain reviewable image flags.",
+    "temporal_reefpose_dataset": "Freeze or load a recording-group-split temporal pose dataset.",
+    "temporal_reefpose_training": "Train or replay a native temporal pose checkpoint.",
+    "temporal_reefpose_inference": "Refine video pose observations for explicit review.",
+    "temporal_reefpose_evaluation": "Compare frame and temporal pose on frozen test recordings.",
+    "ecology_connected_branch_preview": (
+        "Preview an attached coral centerline segment without changing saved geometry."
+    ),
+    "ecology_identity_registry_source": (
+        "Snapshot versioned project-owned organism identities; scientist review remains required."
+    ),
+    "ecology_population_csv_export": (
+        "Export unverified, unit-balanced ecological population summaries with QC exclusions."
+    ),
+    "ecology_measurement_csv_export": (
+        "Export source-linked projected measurements with rechecked QC; "
+        "retain unverified evidence and scientist review."
+    ),
+    "ecology_longitudinal_analysis": (
+        "Analyze repeated organism observations; label source evidence unverified."
+    ),
+    "ecology_paired_count_comparison": (
+        "Compare human-model counts without claiming verified agreement."
+    ),
+    "ecology_paired_count_csv_export": (
+        "Export source-linked human-model CSV with unverified evidence and review restrictions."
+    ),
 }
 
 

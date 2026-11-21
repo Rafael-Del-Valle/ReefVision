@@ -1,11 +1,16 @@
+import { EnvironmentalSubjectInspector } from "../environmental-context/EnvironmentalSubjectInspector";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { AnnotatedVideoExportPanel } from "./AnnotatedVideoExportPanel";
 import { BehaviorDynamicsPanel } from "./BehaviorDynamicsPanel";
+import { BiologicalMovementPanel } from "./BiologicalMovementPanel";
+import { ReefPoseValidationPanel } from "./ReefPoseValidationPanel";
+import { TemporalReefPosePanel } from "./TemporalReefPosePanel";
 import { GeoreferencedMapPanel } from "./GeoreferencedMapPanel";
 import { GeoreferencingSetupPanel } from "./GeoreferencingSetupPanel";
 import { GeographicExportPanel } from "./GeographicExportPanel";
 import { GeographicMovementAnalyticsPanel } from "./GeographicMovementAnalyticsPanel";
 import { PoseActiveLearningPanel } from "./PoseActiveLearningPanel";
+import { PoseIdentityReviewPanel } from "./PoseIdentityReviewPanel";
 import {
   reviewPoseActiveLearningCandidate,
   type PoseActiveLearningCandidate,
@@ -23,11 +28,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { cancelJob, retryJob, type Project } from "../../api/client";
 import { PoseAnnotationEditor } from "../pose/PoseAnnotationEditor";
+import { AnatomySkeletonDesigner } from "../pose/AnatomySkeletonDesigner";
+import type { AnatomySchemaRevision } from "../pose/anatomyApi";
 import type { PoseSaveRequest } from "../pose/types";
 import {
   correctedVideoKeyframeFromPoseSave,
   editorSchemaForVideoTrack,
   poseInstanceFromVideoKeyframe,
+  videoSchemaFromAnatomy,
 } from "./poseKeyframeAdapter";
 import {
   benchmarkVideoTracking,
@@ -57,6 +65,7 @@ import {
 } from "./videoApi";
 import { trackingBenchmarkCsv, trackingBenchmarkJson } from "./trackingReport";
 import type {
+  PoseEvidenceNavigation,
   VideoWorkspaceCommand,
   VideoWorkspaceContext,
   VideoWorkspaceTrackSource,
@@ -174,6 +183,12 @@ export function VideoTrackingWorkspace({
   workspaceCommand = null,
   onWorkspaceCommandHandled,
 }: VideoTrackingWorkspaceProps) {
+  const [temporalReview, setTemporalReview] = useState<{
+    videoId: string;
+    identityRunId: string;
+    animalIdentityId: string;
+    frameIndex: number;
+  } | null>(null);
   const queryClient = useQueryClient();
   const desktopMode =
     typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -184,6 +199,10 @@ export function VideoTrackingWorkspace({
   const previousSelectedVideoIdRef = useRef("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [telemetryFile, setTelemetryFile] = useState<File | null>(null);
+  const [telemetryUtcOffsetMinutes, setTelemetryUtcOffsetMinutes] =
+    useState("");
+  const [telemetryUtcOffsetEvidence, setTelemetryUtcOffsetEvidence] =
+    useState("");
   const [airdataFile, setAirdataFile] = useState<File | null>(null);
   const [airdataTimeOffsetSeconds, setAirdataTimeOffsetSeconds] = useState(0);
   const [airdataTimeOffsetEvidence, setAirdataTimeOffsetEvidence] =
@@ -192,6 +211,11 @@ export function VideoTrackingWorkspace({
   const [everyNFrames, setEveryNFrames] = useState(1);
   const [frameIndex, setFrameIndex] = useState(0);
   const [selectedTrackId, setSelectedTrackId] = useState("");
+  const [poseEvidence, setPoseEvidence] = useState<
+    (PoseEvidenceNavigation & { id: number }) | null
+  >(null);
+  const [selectedAnatomySchema, setSelectedAnatomySchema] =
+    useState<AnatomySchemaRevision | null>(null);
   const [
     activePoseActiveLearningCandidate,
     setActivePoseActiveLearningCandidate,
@@ -215,7 +239,7 @@ export function VideoTrackingWorkspace({
   const [poseInteropImportFile, setPoseInteropImportFile] =
     useState<File | null>(null);
   const [poseInteropImportFormat, setPoseInteropImportFormat] =
-    useState<PoseInteroperabilityFormat>("slp");
+    useState<PoseInteroperabilityFormat>("nwb");
   const [confirmPoseInteropFrameMapping, setConfirmPoseInteropFrameMapping] =
     useState(false);
 
@@ -341,6 +365,11 @@ export function VideoTrackingWorkspace({
   const selectedTrackPoseSchema = poseLandmarkSchemaFromMetadata(
     selectedTrack?.metadata_json,
   );
+  const activeTrackPoseSchema =
+    selectedTrackPoseSchema ??
+    (selectedAnatomySchema
+      ? videoSchemaFromAnatomy(selectedAnatomySchema)
+      : null);
 
   const videoWorkspaceContext = useMemo<VideoWorkspaceContext>(() => {
     const videos = (videosQuery.data ?? []).map((video) => ({
@@ -535,9 +564,7 @@ export function VideoTrackingWorkspace({
   useLayoutEffect(() => {
     const previousVideoId = previousSelectedVideoIdRef.current;
     previousSelectedVideoIdRef.current = selectedVideoId;
-    // The first asynchronously loaded video is not a user-initiated switch.
-    // Do not clear a pose file or its explicit frame-mapping confirmation if
-    // the user starts interacting as soon as the initial video appears.
+    // Initial video hydration can coincide with the first import interaction.
     if (!previousVideoId || previousVideoId === selectedVideoId) return;
     pendingMapSeekRef.current = null;
     setFrameIndex(0);
@@ -669,6 +696,8 @@ export function VideoTrackingWorkspace({
       setSelectedVideoId(video.id);
       setUploadFile(null);
       setTelemetryFile(null);
+      setTelemetryUtcOffsetMinutes("");
+      setTelemetryUtcOffsetEvidence("");
       setAirdataFile(null);
       setAirdataTimeOffsetSeconds(0);
       setAirdataTimeOffsetEvidence("");
@@ -709,8 +738,25 @@ export function VideoTrackingWorkspace({
           "Nonzero AirData time offsets require alignment evidence",
         );
       }
+      if (
+        telemetryFile &&
+        (telemetryUtcOffsetMinutes.trim() !== "" ||
+          telemetryUtcOffsetEvidence.trim() !== "") &&
+        (telemetryUtcOffsetMinutes.trim() === "" ||
+          !telemetryUtcOffsetEvidence.trim())
+      ) {
+        throw new Error(
+          "DJI SRT UTC alignment requires both a timezone offset and evidence",
+        );
+      }
       return importVideo(project.id, uploadFile, {
         telemetryFile,
+        ...(telemetryUtcOffsetMinutes.trim() === ""
+          ? {}
+          : {
+              telemetryUtcOffsetMinutes: Number(telemetryUtcOffsetMinutes),
+              telemetryUtcOffsetEvidence,
+            }),
         airdataFile,
         airdataTimeOffsetSeconds,
         airdataTimeOffsetEvidence,
@@ -720,6 +766,8 @@ export function VideoTrackingWorkspace({
       setSelectedVideoId(video.id);
       setUploadFile(null);
       setTelemetryFile(null);
+      setTelemetryUtcOffsetMinutes("");
+      setTelemetryUtcOffsetEvidence("");
       setAirdataFile(null);
       setAirdataTimeOffsetSeconds(0);
       setAirdataTimeOffsetEvidence("");
@@ -988,21 +1036,21 @@ export function VideoTrackingWorkspace({
   );
   const poseEditorSchema = useMemo(
     () =>
-      selectedTrack && selectedTrackPoseSchema
-        ? editorSchemaForVideoTrack(selectedTrack, selectedTrackPoseSchema)
+      selectedTrack && activeTrackPoseSchema
+        ? editorSchemaForVideoTrack(selectedTrack, activeTrackPoseSchema)
         : null,
-    [selectedTrack, selectedTrackPoseSchema],
+    [activeTrackPoseSchema, selectedTrack],
   );
   const poseEditorPose = useMemo(
     () =>
-      selectedTrack && poseFrame && selectedTrackPoseSchema
+      selectedTrack && poseFrame && activeTrackPoseSchema
         ? poseInstanceFromVideoKeyframe(
             selectedTrack,
             poseFrame,
-            selectedTrackPoseSchema,
+            activeTrackPoseSchema,
           )
         : null,
-    [poseFrame, selectedTrack, selectedTrackPoseSchema],
+    [activeTrackPoseSchema, poseFrame, selectedTrack],
   );
   const extractionStride = Number(
     selectedVideo?.metadata_json.extraction_every_n_frames ?? everyNFrames,
@@ -1023,7 +1071,7 @@ export function VideoTrackingWorkspace({
     trackingRunsQuery.error;
 
   async function savePoseFrameReview(request: PoseSaveRequest) {
-    if (!selectedTrack || !selectedTrackPoseSchema || !poseFrame) {
+    if (!selectedTrack || !activeTrackPoseSchema || !poseFrame) {
       throw new Error("Select a persisted pose track keyframe first");
     }
 
@@ -1039,7 +1087,7 @@ export function VideoTrackingWorkspace({
 
     const correctedFrame = correctedVideoKeyframeFromPoseSave(
       poseFrame,
-      selectedTrackPoseSchema,
+      activeTrackPoseSchema,
       request,
     );
     const correctedFrames = sortedKeyframes(
@@ -1053,6 +1101,15 @@ export function VideoTrackingWorkspace({
       keyframes: correctedFrames,
       interpolation: selectedTrack.interpolation === "hold" ? "hold" : "linear",
       status: selectedTrack.status,
+      ...(selectedAnatomySchema && !selectedTrackPoseSchema
+        ? {
+            pose_schema_binding: {
+              schema_id: selectedAnatomySchema.id,
+              schema_revision: selectedAnatomySchema.revision,
+              content_hash: selectedAnatomySchema.content_hash,
+            },
+          }
+        : {}),
     });
     const persistedFrame = updatedTrack.keyframes_json.find(
       (frame) => frame.frame === poseFrame.frame,
@@ -1115,7 +1172,7 @@ export function VideoTrackingWorkspace({
     return poseInstanceFromVideoKeyframe(
       updatedTrack,
       persistedFrame,
-      selectedTrackPoseSchema,
+      activeTrackPoseSchema,
     );
   }
 
@@ -1246,8 +1303,59 @@ export function VideoTrackingWorkspace({
     ) {
       return;
     }
+    if (
+      workspaceCommand.type === "select_model" &&
+      !(modelsQuery.data ?? []).some(
+        (model) => model.id === workspaceCommand.modelId,
+      )
+    ) {
+      return;
+    }
+
+    if (
+      (workspaceCommand.type === "select_video" ||
+        workspaceCommand.type === "open_pose_evidence") &&
+      videosQuery.data === undefined
+    ) {
+      return;
+    }
+
+    if (workspaceCommand.type === "open_pose_evidence") {
+      const targetExists = videosQuery.data?.some(
+        (video) => video.id === workspaceCommand.videoId,
+      );
+      if (targetExists && selectedVideo?.id !== workspaceCommand.videoId) {
+        setSelectedVideoId(workspaceCommand.videoId);
+        return;
+      }
+      if (targetExists && workspaceCommand.sourceTrackId && !tracksQuery.data)
+        return;
+    }
 
     lastWorkspaceCommandIdRef.current = workspaceCommand.id;
+
+    if (
+      workspaceCommand.type === "open_pose_evidence" &&
+      selectedVideo?.id === workspaceCommand.videoId
+    ) {
+      const frame = Math.min(
+        workspaceCommand.frameIndex,
+        Math.max(0, selectedVideo.frame_count - 1),
+      );
+      seekVideoFromMap(
+        frame,
+        selectedVideo.fps > 0 ? frame / selectedVideo.fps : 0,
+      );
+      setPreviewFrameIndex(frame);
+      if (
+        tracksQuery.data?.some(
+          (track) => track.id === workspaceCommand.sourceTrackId,
+        )
+      ) {
+        setSelectedTrackId(workspaceCommand.sourceTrackId ?? "");
+      }
+      setPoseEvidence(workspaceCommand);
+    }
 
     if (workspaceCommand.type === "select_video") {
       if (
@@ -1270,6 +1378,17 @@ export function VideoTrackingWorkspace({
       }
     }
 
+    if (workspaceCommand.type === "select_model") {
+      if (
+        (modelsQuery.data ?? []).some(
+          (model) => model.id === workspaceCommand.modelId,
+        )
+      ) {
+        setTrackingModelId(workspaceCommand.modelId);
+        setTrackingMode("auto");
+      }
+    }
+
     if (workspaceCommand.type === "seek_frame" && selectedVideo) {
       const clampedFrame = Math.min(
         Math.max(0, Math.round(workspaceCommand.frameIndex)),
@@ -1286,6 +1405,7 @@ export function VideoTrackingWorkspace({
     onWorkspaceCommandHandled?.(workspaceCommand.id);
   }, [
     onWorkspaceCommandHandled,
+    modelsQuery.data,
     selectedVideo,
     tracksQuery.data,
     videosQuery.data,
@@ -1346,6 +1466,10 @@ export function VideoTrackingWorkspace({
           </div>
         </div>
       </section>
+      <AnatomySkeletonDesigner
+        projectId={project.id}
+        onSchemaSelected={setSelectedAnatomySchema}
+      />
       <section className="management-card">
         <p className="eyebrow">Research workflow</p>
         <h3>Managed videos</h3>
@@ -1394,6 +1518,38 @@ export function VideoTrackingWorkspace({
             }
           />
         </label>
+        {telemetryFile && (
+          <div className="workspace-guide compact">
+            <label>
+              SRT wall-clock UTC offset (minutes, optional)
+              <input
+                type="number"
+                min={-840}
+                max={840}
+                step={1}
+                value={telemetryUtcOffsetMinutes}
+                onChange={(event) =>
+                  setTelemetryUtcOffsetMinutes(event.target.value)
+                }
+              />
+            </label>
+            <label>
+              SRT timezone evidence
+              <textarea
+                value={telemetryUtcOffsetEvidence}
+                onChange={(event) =>
+                  setTelemetryUtcOffsetEvidence(event.target.value)
+                }
+                placeholder="Describe the field log or source metadata establishing this offset."
+              />
+            </label>
+            <p className="annotation-helper">
+              SRT wall-clock text has no timezone. ReefVision only derives UTC
+              when both an explicit offset and independent evidence are saved;
+              otherwise absolute UTC remains unavailable.
+            </p>
+          </div>
+        )}
         <label>
           AirData CSV telemetry (optional)
           <input
@@ -1484,6 +1640,13 @@ export function VideoTrackingWorkspace({
               {selectedVideo.airdata_telemetry.available
                 ? ` | offset ${selectedVideo.airdata_alignment.time_offset_s.toFixed(2)} s`
                 : ""}
+            </p>
+            <p className="annotation-helper">
+              Absolute SRT time:{" "}
+              {selectedVideo.telemetry.utc_offset_minutes !== undefined &&
+              selectedVideo.telemetry.utc_offset_minutes !== null
+                ? `evidence-backed UTC offset ${selectedVideo.telemetry.utc_offset_minutes} min · ${selectedVideo.telemetry.wall_clock_sample_count ?? 0} wall-clock samples · ${selectedVideo.telemetry.utc_offset_evidence ?? "evidence unavailable"} · ${selectedVideo.telemetry.content_sha256?.slice(0, 12) ?? "unhashed"}…`
+                : "unavailable; the SRT wall clock is not assigned a timezone without explicit evidence"}
             </p>
             <div
               className="workspace-guide compact"
@@ -1719,10 +1882,10 @@ export function VideoTrackingWorkspace({
                   Pose landmarks on this frame:{" "}
                   {poseFrame?.keypoints?.length ?? 0}
                 </p>
-                {selectedTrackPoseSchema && (
+                {activeTrackPoseSchema && (
                   <p className="annotation-helper">
                     Landmark schema:{" "}
-                    {selectedTrackPoseSchema.groups
+                    {activeTrackPoseSchema.groups
                       .map((group) => `${group.name} × ${group.count}`)
                       .join(" · ")}
                   </p>
@@ -1743,11 +1906,10 @@ export function VideoTrackingWorkspace({
 
             {selectedVideo.frame_directory_path &&
               selectedTrack &&
-              selectedTrackPoseSchema &&
+              activeTrackPoseSchema &&
               poseEditorSchema &&
               poseEditorPose &&
-              ((poseFrame?.keypoints?.length ?? 0) > 0 ||
-                (poseFrame?.pose_observations?.length ?? 0) > 0) && (
+              poseFrame && (
                 <div className="workspace-guide compact">
                   <div>
                     <strong>Pose review editor</strong>
@@ -1774,7 +1936,7 @@ export function VideoTrackingWorkspace({
                   />
                 </div>
               )}
-            {selectedTrack && selectedTrackPoseSchema && (
+            {selectedTrack && activeTrackPoseSchema && (
               <PoseTemporalReviewPanel
                 trackId={selectedTrack.id}
                 frameIndex={frameIndex}
@@ -1784,7 +1946,7 @@ export function VideoTrackingWorkspace({
                 }}
               />
             )}
-            {selectedTrack && selectedTrackPoseSchema && (
+            {selectedTrack && activeTrackPoseSchema && (
               <PoseVisualizationPanel
                 trackId={selectedTrack.id}
                 frameIndex={previewFrameIndex}
@@ -1843,6 +2005,79 @@ export function VideoTrackingWorkspace({
         )}
       </section>
 
+      {selectedVideo &&
+        (tracksQuery.data ?? []).some((track) =>
+          Boolean(poseLandmarkSchemaFromMetadata(track.metadata_json)),
+        ) && (
+          <>
+            <PoseIdentityReviewPanel
+              key={`identity-${selectedVideo.id}-${poseEvidence?.videoId === selectedVideo.id ? poseEvidence.id : ""}`}
+              evidence={
+                poseEvidence?.videoId === selectedVideo.id ? poseEvidence : null
+              }
+              projectId={project.id}
+              videoId={selectedVideo.id}
+              frameIndex={frameIndex}
+              tracks={tracksQuery.data ?? []}
+              onFrameChange={(nextFrame) => {
+                setFrameIndex(nextFrame);
+                setPreviewFrameIndex(nextFrame);
+              }}
+            />
+            <BiologicalMovementPanel
+              key={`movement-${selectedVideo.id}-${poseEvidence?.videoId === selectedVideo.id ? poseEvidence.id : ""}-${temporalReview?.identityRunId ?? ""}`}
+              evidence={
+                temporalReview?.videoId === selectedVideo.id
+                  ? temporalReview
+                  : poseEvidence?.videoId === selectedVideo.id
+                    ? poseEvidence
+                    : null
+              }
+              projectId={project.id}
+              videoId={selectedVideo.id}
+              tracks={tracksQuery.data ?? []}
+              onFrameChange={(nextFrame) => {
+                setFrameIndex(nextFrame);
+                setPreviewFrameIndex(nextFrame);
+              }}
+            />
+            <ReefPoseValidationPanel
+              key={project.id}
+              projectId={project.id}
+              videoId={selectedVideo.id}
+              onFrameChange={(nextFrame) => {
+                setFrameIndex(nextFrame);
+                setPreviewFrameIndex(nextFrame);
+              }}
+            />
+            <TemporalReefPosePanel
+              key={`temporal-${project.id}-${selectedVideo.id}`}
+              projectId={project.id}
+              videoId={selectedVideo.id}
+              onFrameChange={(nextFrame) => {
+                setFrameIndex(nextFrame);
+                setPreviewFrameIndex(nextFrame);
+              }}
+              onReviewed={(identityRunId, animalIdentityId) => {
+                setTemporalReview({
+                  videoId: selectedVideo.id,
+                  identityRunId,
+                  animalIdentityId,
+                  frameIndex,
+                });
+                requestAnimationFrame(() => {
+                  const target = document.querySelector<HTMLElement>(
+                    '[aria-label="Biological movement analysis"]',
+                  );
+                  target?.setAttribute("tabindex", "-1");
+                  target?.focus();
+                  target?.scrollIntoView({ block: "start" });
+                });
+              }}
+            />
+          </>
+        )}
+
       {selectedVideo && (
         <section className="management-card">
           <p className="eyebrow">Pose exchange</p>
@@ -1851,7 +2086,7 @@ export function VideoTrackingWorkspace({
             <div>
               <strong>Import/export safeguards</strong>
               <p className="annotation-helper">
-                Import or export canonical pose data through SLEAP-IO.
+                Import or export canonical pose data through neutral formats.
                 ReefVision-exported files must match the target video checksum.
                 External files without ReefVision provenance require explicit
                 confirmation that frame indices correspond to this video.
@@ -1862,21 +2097,13 @@ export function VideoTrackingWorkspace({
                 <p className="annotation-helper">
                   Exports use the scientist-reviewed canonical pose state.
                   Repeated semantic labels receive stable external node names.
-                  SLP is exported natively; NWB, COCO, DeepLabCut, and
-                  Ultralytics downloads are ZIP bundles containing the standard
-                  native artifact plus a ReefVision manifest for exact frame and
-                  identity restoration. The full immutable
-                  association/correction audit history remains in ReefVision.
+                  NWB, COCO, DeepLabCut, and Ultralytics downloads are ZIP
+                  bundles containing the standard native artifact plus a
+                  ReefVision manifest for exact frame and identity restoration.
+                  The full immutable association/correction audit history
+                  remains in ReefVision.
                 </p>
                 <div className="workspace-actions">
-                  <a
-                    href={poseInteroperabilityExportUrl(
-                      selectedVideo.id,
-                      "slp",
-                    )}
-                  >
-                    SLEAP SLP
-                  </a>
                   <a
                     href={poseInteroperabilityExportUrl(
                       selectedVideo.id,
@@ -1923,7 +2150,6 @@ export function VideoTrackingWorkspace({
                   )
                 }
               >
-                <option value="slp">SLEAP SLP</option>
                 <option value="nwb">NWB</option>
                 <option value="coco">COCO pose JSON</option>
                 <option value="dlc_csv">DeepLabCut CSV</option>
@@ -1949,10 +2175,10 @@ export function VideoTrackingWorkspace({
             <label>
               Pose file
               <input
-                key={selectedVideoId}
+                key={selectedVideo.id}
                 aria-label="Pose interoperability import file"
                 type="file"
-                accept=".slp,.nwb,.json,.csv,.zip,application/zip"
+                accept=".nwb,.json,.csv,.zip,application/zip"
                 onChange={(event) =>
                   setPoseInteropImportFile(event.target.files?.[0] ?? null)
                 }
@@ -1970,9 +2196,9 @@ export function VideoTrackingWorkspace({
               file has no ReefVision provenance
             </label>
             <p className="annotation-helper">
-              Imported instances use the current Identity class selected in the
-              Track editor. External tracked instances keep their grouping;
-              untracked instances are never auto-associated across frames.
+              Choose an identity class and pose file to enable import. External
+              tracked instances keep their grouping. Untracked instances are
+              never auto-associated across frames.
             </p>
             <button
               type="button"
@@ -2460,11 +2686,12 @@ export function VideoTrackingWorkspace({
         {sleapTrackingSelected ? (
           <div className="workspace-guide compact">
             <div>
-              <strong>SLEAP-NN animal-instance tracking</strong>
+              <strong>Historical SLEAP-NN model unavailable</strong>
               <p className="annotation-helper">
-                {linkDetections
-                  ? "ReefVision uses SLEAP-NN fixed-window OKS/Hungarian tracking for animal instances. ByteTrack, BoT-SORT, and detector IoU do not apply to this provider."
-                  : "Animal-instance linking is disabled. Each SLEAP-NN instance is retained independently for review."}
+                Active SLEAP-NN execution is retired pending an authoritative
+                license resolution. ReefVision keeps this registration and its
+                provenance readable; use native ReefPose or an audited neutral
+                export for new work.
               </p>
             </div>
           </div>
@@ -2537,6 +2764,7 @@ export function VideoTrackingWorkspace({
             !selectedVideoId ||
             !trackingModelId ||
             trackingMutation.isPending ||
+            sleapTrackingSelected ||
             (trackingMode === "hybrid" &&
               (!segmentationTrackingModelId ||
                 selectedTrackingModel?.provider_name !== "ultralytics" ||
@@ -2547,17 +2775,17 @@ export function VideoTrackingWorkspace({
         >
           {trackingMutation.isPending
             ? "Queuing..."
-            : linkDetections
-              ? sleapTrackingSelected
-                ? "Run SLEAP-NN pose + instance tracking"
-                : trackingMode === "hybrid"
+            : sleapTrackingSelected
+              ? "SLEAP-NN execution unavailable"
+              : linkDetections
+                ? trackingMode === "hybrid"
                   ? `Run hybrid + ${trackerLabel(trackerName)}`
                   : poseTrackingSelected
                     ? `Run pose + ${trackerLabel(trackerName)}`
                     : `Run ${trackerLabel(trackerName)}`
-              : poseTrackingSelected
-                ? "Run pose inference"
-                : "Run instance detection"}
+                : poseTrackingSelected
+                  ? "Run pose inference"
+                  : "Run instance detection"}
         </button>
         <label className="annotation-selection-row">
           <input
@@ -2714,7 +2942,19 @@ export function VideoTrackingWorkspace({
         )}
       </section>
 
+      {selectedVideo && (
+        <EnvironmentalSubjectInspector
+          projectId={project.id}
+          subject={{
+            video_id: selectedVideo.id,
+            frame_index: frameIndex,
+            track_id: selectedTrackId || null,
+          }}
+        />
+      )}
+
       <GeographicMovementAnalyticsPanel
+        projectId={project.id}
         state={geographicMovementAnalyticsState}
         onReload={reloadGeographicMovementAnalytics}
         activeFrameIndex={frameIndex}

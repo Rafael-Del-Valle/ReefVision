@@ -25,6 +25,7 @@ SLEAP_NN_SUPPORTED_VERSION = "0.3.3"
 SLEAP_IO_SUPPORTED_VERSION = "0.9.2"
 SLEAP_BUNDLE_FORMAT = "reefvision_sleap_nn"
 SLEAP_BUNDLE_MANIFEST = "reefvision-sleap-nn-model.json"
+SLEAP_NN_RETIREMENT_REASON = "retired pending an authoritative SLEAP-NN license resolution"
 
 
 class SleapNNRuntimeStatus(TypedDict):

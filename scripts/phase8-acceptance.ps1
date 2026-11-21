@@ -76,7 +76,7 @@ Write-Host "[ ] Confirm mismatched registered provider checkpoints are rejected.
 Write-Host "[ ] Confirm Depth Anything V2 remains explicitly relative depth only."
 Write-Host "[ ] Confirm blocked/existing-workflow providers have no Provider Lab launch action."
 Write-Host "[ ] Confirm Grounding DINO and SAM 2 outputs remain review proposals, never automatic truth."
-Write-Host "[ ] Confirm Ultralytics and SLEAP-NN do not claim heatmap/PAF evidence they do not expose."
+Write-Host "[ ] Confirm historical SLEAP-NN records show unavailable and cannot execute."
 Write-Host "[ ] Confirm native heatmap/PAF evidence enters scoring only when actually supplied."
 Write-Host "[ ] Confirm cross-model disagreement retains comparison model/track provenance."
 Write-Host "[ ] Confirm uncertainty-only pose acquisition."

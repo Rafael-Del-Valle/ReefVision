@@ -4,12 +4,42 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 
 
-def test_mask_migrations_form_one_linear_head() -> None:
+def test_mask_migrations_retain_the_common_lineage() -> None:
     api_root = Path(__file__).resolve().parents[2]
     config = Config(str(api_root / "alembic.ini"))
     scripts = ScriptDirectory.from_config(config)
 
-    assert scripts.get_heads() == ["0037"]
+    assert scripts.get_heads() == ["b14_spatial_0040"]
+    spatial_metadata = scripts.get_revision("b14_spatial_0040")
+    assert spatial_metadata is not None
+    assert spatial_metadata.down_revision == "b14_integration_0001"
+    integration = scripts.get_revision("b14_integration_0001")
+    assert integration is not None
+    assert set(integration.down_revision) == {"b13_temporal_0001", "spatial_0039"}
+    temporal = scripts.get_revision("b13_temporal_0001")
+    assert temporal is not None
+    assert temporal.down_revision == "b13_scientific_0001"
+    study_assignments = scripts.get_revision("b13_scientific_0001")
+    assert study_assignments is not None
+    assert study_assignments.down_revision == "b12_integrated_0002"
+    reviewed_science = scripts.get_revision("b12_integrated_0002")
+    assert reviewed_science is not None
+    assert reviewed_science.down_revision == "b12_integrated_0001"
+    frozen_image_metadata = scripts.get_revision("b12_identity_0005")
+    assert frozen_image_metadata is not None
+    assert frozen_image_metadata.down_revision == "b12_identity_0004"
+    calibration_evidence = scripts.get_revision("b12_identity_0004")
+    assert calibration_evidence is not None
+    assert calibration_evidence.down_revision == "b12_identity_0003"
+    annotation_evidence = scripts.get_revision("b12_identity_0003")
+    assert annotation_evidence is not None
+    assert annotation_evidence.down_revision == "b12_identity_0002"
+    image_evidence = scripts.get_revision("b12_identity_0002")
+    assert image_evidence is not None
+    assert image_evidence.down_revision == "b12_identity_0001"
+    ecology_identity = scripts.get_revision("b12_identity_0001")
+    assert ecology_identity is not None
+    assert ecology_identity.down_revision == "0037"
     editable_masks = scripts.get_revision("0015")
     mask_datasets = scripts.get_revision("0016")
     segmentation_proposals = scripts.get_revision("0017")
@@ -28,6 +58,8 @@ def test_mask_migrations_form_one_linear_head() -> None:
     behavior_models = scripts.get_revision("0035")
     pose_active_learning = scripts.get_revision("0036")
     pose_training_datasets = scripts.get_revision("0037")
+    spatial_source_assets = scripts.get_revision("spatial_0038")
+    spatial_calibration_reviews = scripts.get_revision("spatial_0039")
     assert editable_masks is not None
     assert editable_masks.down_revision == "53ba400993db"
     assert mask_datasets is not None
@@ -64,3 +96,7 @@ def test_mask_migrations_form_one_linear_head() -> None:
     assert pose_active_learning.down_revision == "0035"
     assert pose_training_datasets is not None
     assert pose_training_datasets.down_revision == "0036"
+    assert spatial_source_assets is not None
+    assert spatial_source_assets.down_revision == "0037"
+    assert spatial_calibration_reviews is not None
+    assert spatial_calibration_reviews.down_revision == "spatial_0038"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib import import_module
 from math import isfinite
 from pathlib import Path
@@ -11,6 +11,7 @@ from typing import Any, Protocol, cast
 
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.sleap_nn_provider import (
+    SLEAP_NN_RETIREMENT_REASON,
     SLEAP_NN_SUPPORTED_VERSION,
     extract_sleap_nn_bundle,
     keypoint_bbox,
@@ -98,6 +99,7 @@ class TrackObservation:
     pose_uncertainty: dict[str, Any] | None = None
     # Zero or more source-pixel polygons for an instance segmentation result.
     mask_polygons: tuple[tuple[tuple[float, float], ...], ...] | None = None
+    timestamp_seconds: float | None = None
 
 
 @dataclass(frozen=True)
@@ -360,6 +362,158 @@ class UltralyticsVideoTrackingProvider:
         return observations
 
 
+class ReefPoseVideoTrackingProvider:
+    """Stream a native single-animal ReefPose checkpoint over a video."""
+
+    provider_id = "reefpose"
+
+    @property
+    def provider_version(self) -> str:
+        from reefvision.ml.reefpose.constants import REEFPOSE_PROVIDER_VERSION
+
+        return REEFPOSE_PROVIDER_VERSION
+
+    def resolve_tracker_name(
+        self,
+        requested: str,
+        *,
+        link_detections: bool,
+    ) -> str:
+        del requested
+        return "reefpose:single-animal" if link_detections else "instances-only"
+
+    def track(
+        self,
+        checkpoint_path: Path,
+        video_path: Path,
+        *,
+        tracker: str,
+        confidence: float,
+        iou: float,
+        device: str,
+        link_detections: bool = True,
+        on_progress: VideoTrackingProgressCallback | None = None,
+        should_cancel: VideoTrackingCancellationCheck | None = None,
+    ) -> list[TrackObservation]:
+        del tracker, iou
+        if not checkpoint_path.is_file():
+            raise ValidationError("ReefPose tracking checkpoint is missing")
+        if not video_path.is_file():
+            raise ValidationError("Tracking source video is missing")
+        if should_cancel is not None and should_cancel():
+            raise VideoTrackingCancelled("Video tracking cancelled before inference")
+
+        try:
+            cv2 = cast(Any, import_module("cv2"))
+            image_module = import_module("PIL.Image")
+            from reefvision.ml.reefpose.checkpoints import load_checkpoint
+            from reefvision.ml.reefpose.errors import ReefPoseError
+            from reefvision.ml.reefpose.inference import ReefPosePredictor
+        except ImportError as exc:
+            raise ValidationError("ReefPose video inference dependencies are unavailable") from exc
+
+        if on_progress is not None:
+            on_progress(VideoTrackingProgress(0, 0, 0, 0, stage="loading_model"))
+
+        try:
+            checkpoint = load_checkpoint(checkpoint_path, device="cpu")
+            predictor = ReefPosePredictor(checkpoint.model, checkpoint.schema, device=device)
+        except ReefPoseError as exc:
+            raise ValidationError(f"ReefPose checkpoint is invalid: {exc}") from exc
+
+        class_name = str(checkpoint.training_config.get("class_label") or "animal").strip()
+        capture = cv2.VideoCapture(str(video_path))
+        if not capture.isOpened():
+            capture.release()
+            raise ValidationError("Tracking source video could not be opened")
+
+        observations: list[TrackObservation] = []
+        detections_seen = 0
+        unique_track_ids: set[int] = set()
+        frame_index = 0
+        previous_timestamp = -1.0
+        try:
+            has_presentation_times = capture.getBackendName() == "FFMPEG"
+            while True:
+                if should_cancel is not None and should_cancel():
+                    raise VideoTrackingCancelled(
+                        f"Video tracking cancelled before frame {frame_index}"
+                    )
+                ok, frame = capture.read()
+                if not ok or frame is None:
+                    break
+
+                timestamp_seconds = None
+                if has_presentation_times:
+                    # The FFmpeg millisecond clock retains the stream time base for VFR media.
+                    timestamp = float(capture.get(cv2.CAP_PROP_POS_MSEC)) / 1000
+                    has_presentation_times = (
+                        isfinite(timestamp) and timestamp >= 0 and timestamp > previous_timestamp
+                    )
+                    if has_presentation_times:
+                        timestamp_seconds = previous_timestamp = timestamp
+                source = image_module.fromarray(frame[:, :, ::-1].copy(), mode="RGB")
+                try:
+                    pose = predictor.predict(source, confidence_threshold=confidence)
+                except ReefPoseError as exc:
+                    raise ValidationError(f"ReefPose video inference failed: {exc}") from exc
+
+                if pose.bbox is not None:
+                    x_min, y_min, x_max, y_max = pose.bbox
+                    provider_track_id = 1 if link_detections else frame_index + 1
+                    keypoints = tuple(
+                        (
+                            float(item.x),
+                            float(item.y),
+                            float(item.confidence) if item.visibility_state == "visible" else 0.0,
+                        )
+                        for item in pose.landmarks
+                    )
+                    detections_seen += 1
+                    unique_track_ids.add(provider_track_id)
+                    observations.append(
+                        TrackObservation(
+                            frame=frame_index,
+                            provider_track_id=provider_track_id,
+                            class_name=class_name,
+                            confidence=float(pose.confidence),
+                            bbox=(
+                                float(x_min),
+                                float(y_min),
+                                float(x_max - x_min),
+                                float(y_max - y_min),
+                            ),
+                            keypoints=keypoints,
+                            timestamp_seconds=timestamp_seconds,
+                            pose_uncertainty=build_pose_uncertainty_evidence(
+                                provider_id=self.provider_id,
+                                provider_version=self.provider_version,
+                                keypoints=keypoints,
+                            ),
+                        )
+                    )
+
+                frame_index += 1
+                if on_progress is not None:
+                    on_progress(
+                        VideoTrackingProgress(
+                            frames_processed=frame_index,
+                            detections_seen=detections_seen,
+                            tracked_observations_seen=len(observations),
+                            unique_tracks_seen=len(unique_track_ids),
+                        )
+                    )
+        finally:
+            capture.release()
+
+        if frame_index == 0:
+            raise ValidationError("Tracking source video contains no decodable frames")
+        if not has_presentation_times and previous_timestamp >= 0:
+            # A nonmonotonic decoder clock supplies no reliable presentation evidence.
+            return [replace(item, timestamp_seconds=None) for item in observations]
+        return observations
+
+
 class SleapNNVideoTrackingProvider:
     provider_id = "sleap_nn"
 
@@ -573,5 +727,7 @@ def video_tracking_provider_for_name(provider_id: str) -> VideoTrackingProvider:
     if normalized == "ultralytics":
         return UltralyticsVideoTrackingProvider()
     if normalized == "sleap_nn":
-        return SleapNNVideoTrackingProvider()
+        raise ValidationError(SLEAP_NN_RETIREMENT_REASON)
+    if normalized == "reefpose":
+        return ReefPoseVideoTrackingProvider()
     raise ValidationError(f"Unsupported video tracking provider: {provider_id}")

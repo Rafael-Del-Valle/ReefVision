@@ -369,7 +369,6 @@ export function PoseActiveLearningPanel({
                 <option value="coco">COCO Keypoints</option>
                 <option value="ultralytics_pose">Ultralytics Pose</option>
                 <option value="dlc_csv">DeepLabCut CSV</option>
-                <option value="slp">SLEAP .slp</option>
                 <option value="nwb">NWB</option>
               </select>
             </label>

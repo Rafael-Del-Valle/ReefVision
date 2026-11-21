@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from itertools import pairwise
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, FiniteFloat, field_validator, model_validator
@@ -61,6 +62,7 @@ class VideoAssetResponse(BaseModel):
 
 class VideoPoseObservation(BaseModel):
     id: str = Field(min_length=1, max_length=200)
+    landmark_id: str | None = Field(default=None, min_length=1, max_length=100)
     semantic_label: str = Field(min_length=1, max_length=100)
     occurrence_index: int = Field(ge=0, le=999)
     x: FiniteFloat = Field(ge=0)
@@ -72,6 +74,7 @@ class VideoPoseObservation(BaseModel):
 
 class VideoTrackKeyframe(BaseModel):
     frame: int = Field(ge=0)
+    timestamp_seconds: FiniteFloat | None = Field(default=None, ge=0)
     bbox: tuple[float, float, float, float]
     confidence: float | None = Field(default=None, ge=0, le=1)
     keypoints: list[tuple[FiniteFloat, FiniteFloat, FiniteFloat]] | None = Field(
@@ -141,7 +144,22 @@ class VideoTrackCreate(BaseModel):
         frames = [item.frame for item in self.keyframes]
         if frames != sorted(frames) or len(frames) != len(set(frames)):
             raise ValueError("Track keyframes must use unique frames in ascending order")
+        timestamps = [item.timestamp_seconds for item in self.keyframes]
+        if any(value is not None for value in timestamps):
+            if any(value is None for value in timestamps):
+                raise ValueError(
+                    "Variable-frame-rate tracks require a presentation timestamp for every keyframe"
+                )
+            resolved = [float(value) for value in timestamps if value is not None]
+            if any(second <= first for first, second in pairwise(resolved)):
+                raise ValueError("Keyframe presentation timestamps must be strictly increasing")
         return self
+
+
+class VideoPoseSchemaBinding(BaseModel):
+    schema_id: str = Field(min_length=1, max_length=36)
+    schema_revision: int = Field(ge=1)
+    content_hash: str = Field(min_length=64, max_length=64)
 
 
 class VideoTrackUpdate(BaseModel):
@@ -150,12 +168,22 @@ class VideoTrackUpdate(BaseModel):
     keyframes: list[VideoTrackKeyframe] = Field(min_length=1, max_length=100000)
     interpolation: TrackInterpolation = "linear"
     status: str = Field(default="verified", min_length=1, max_length=30)
+    pose_schema_binding: VideoPoseSchemaBinding | None = None
 
     @model_validator(mode="after")
     def unique_ordered_frames(self) -> VideoTrackUpdate:
         frames = [item.frame for item in self.keyframes]
         if frames != sorted(frames) or len(frames) != len(set(frames)):
             raise ValueError("Track keyframes must use unique frames in ascending order")
+        timestamps = [item.timestamp_seconds for item in self.keyframes]
+        if any(value is not None for value in timestamps):
+            if any(value is None for value in timestamps):
+                raise ValueError(
+                    "Variable-frame-rate tracks require a presentation timestamp for every keyframe"
+                )
+            resolved = [float(value) for value in timestamps if value is not None]
+            if any(second <= first for first, second in pairwise(resolved)):
+                raise ValueError("Keyframe presentation timestamps must be strictly increasing")
         return self
 
 

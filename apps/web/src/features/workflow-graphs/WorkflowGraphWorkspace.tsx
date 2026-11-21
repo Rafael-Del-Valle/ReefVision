@@ -1,7 +1,8 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 
-import type { Project } from "../../api/client";
+import { getModelHubBootstrap, type Project } from "../../api/client";
+import { getApiBaseUrl } from "../../runtime";
 import { getPoseTrainingDatasets } from "../video/poseActiveLearningApi";
 import {
   cancelWorkflowRunJob,
@@ -14,16 +15,122 @@ import {
   resumeWorkflowReviewNode,
   saveWorkflowGraph,
   validateWorkflowGraph,
+  type WorkflowArtifact,
 } from "./workflowGraphApi";
 import {
   createPoseArchitectureWorkflow,
   workflowTemplates,
 } from "./workflowTemplates";
+import { LocalMeshPreview } from "./LocalMeshPreview";
+import { LocalPointCloudPreview } from "./LocalPointCloudPreview";
+import { ProjectSpatialAssetPreview } from "./ProjectSpatialAssetPreview";
+import { MeshArtifactViewer } from "./MeshArtifactViewer";
+import { PointCloudArtifactViewer } from "./PointCloudArtifactViewer";
 import { WorkflowVisualEditor } from "./WorkflowVisualEditor";
+import { scientificConfigurationIssue } from "./ScientificNodeControls";
 
 interface WorkflowGraphWorkspaceProps {
   project: Project;
   initialPoseArchitecture?: string | null;
+  onOpenScience?: (
+    view: "ecology" | "models" | "quality_control" | "video",
+  ) => void;
+}
+
+function ScienceArtifact({
+  artifact,
+  projectId,
+  onOpen,
+}: {
+  artifact: WorkflowArtifact;
+  projectId: string;
+  onOpen: WorkflowGraphWorkspaceProps["onOpenScience"];
+}) {
+  const data = artifact.payload_json;
+  const api = `${getApiBaseUrl()}/projects/${projectId}`;
+  if (artifact.data_type === "acquisition_quality_result")
+    return onOpen ? (
+      <button type="button" onClick={() => onOpen("quality_control")}>
+        Open Quality Control
+      </button>
+    ) : null;
+  if (artifact.data_type === "verified_ecology_analysis")
+    return onOpen ? (
+      <button type="button" onClick={() => onOpen("ecology")}>
+        Open reviewed analyses
+      </button>
+    ) : null;
+  if (
+    artifact.data_type === "reviewed_ecology_event_summary" &&
+    typeof data.summary_id === "string"
+  )
+    return (
+      <div className="button-row">
+        <span>
+          {Array.isArray(data.organisms) ? data.organisms.length : 0} organisms
+        </span>
+        <a
+          href={`${api}/ecology/event-summaries/${data.summary_id}/results.csv`}
+          download
+        >
+          Download event CSV
+        </a>
+        {onOpen && (
+          <button type="button" onClick={() => onOpen("ecology")}>
+            Open organism evidence
+          </button>
+        )}
+      </div>
+    );
+  if (
+    artifact.data_type === "research_report_figure" &&
+    typeof data.report_id === "string"
+  )
+    return (
+      <div className="button-row">
+        <a
+          href={`${api}/research-reports/${data.report_id}/figure.svg`}
+          download
+        >
+          Download figure
+        </a>
+        <a
+          href={`${api}/research-reports/${data.report_id}/table.csv`}
+          download
+        >
+          Download table
+        </a>
+        {onOpen && (
+          <button type="button" onClick={() => onOpen("ecology")}>
+            Open Research reports
+          </button>
+        )}
+      </div>
+    );
+  if (
+    artifact.data_type === "scientific_comparison_report" &&
+    typeof data.export_path === "string" &&
+    data.export_path.startsWith(`/projects/${projectId}/`)
+  )
+    return (
+      <div className="button-row">
+        <a href={`${getApiBaseUrl()}${data.export_path}?format=csv`} download>
+          Download comparison CSV
+        </a>
+        {onOpen && (
+          <button type="button" onClick={() => onOpen("models")}>
+            Open Model Hub comparisons
+          </button>
+        )}
+      </div>
+    );
+  if (artifact.data_type.startsWith("temporal_reefpose") && onOpen)
+    return (
+      <button type="button" onClick={() => onOpen("video")}>
+        Open temporal ReefPose
+      </button>
+    );
+  return null;
 }
 
 function statusIsActive(status: string | undefined): boolean {
@@ -35,7 +142,8 @@ function statusIsActive(status: string | undefined): boolean {
   );
 }
 
-function shortHash(value: string): string {
+function shortHash(value: string | undefined): string {
+  if (!value) return "unavailable";
   return value.length > 12 ? `${value.slice(0, 12)}…` : value;
 }
 
@@ -53,7 +161,9 @@ function safeParseGraph(value: string): Record<string, unknown> | null {
 export function WorkflowGraphWorkspace({
   project,
   initialPoseArchitecture,
+  onOpenScience,
 }: WorkflowGraphWorkspaceProps) {
+  const queryClient = useQueryClient();
   const [graphJson, setGraphJson] = useState(() =>
     JSON.stringify(
       initialPoseArchitecture
@@ -82,6 +192,11 @@ export function WorkflowGraphWorkspace({
   const poseDatasets = useQuery({
     queryKey: ["pose-training-datasets", project.id],
     queryFn: ({ signal }) => getPoseTrainingDatasets(project.id, signal),
+    enabled: poseDatasetSources.length > 0,
+  });
+  const modelHubQuery = useQuery({
+    queryKey: ["model_hub_bootstrap", project.id],
+    queryFn: ({ signal }) => getModelHubBootstrap(project.id, signal),
     enabled: poseDatasetSources.length > 0,
   });
 
@@ -175,6 +290,16 @@ export function WorkflowGraphWorkspace({
     resumeReviewMutation.error ??
     cancelMutation.error;
   const selectedRun = runDetailQuery.data?.run;
+  useEffect(() => {
+    if (selectedRun?.status === "succeeded") {
+      void queryClient.invalidateQueries({
+        queryKey: ["model_hub_bootstrap", project.id],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["video-tracking-models", project.id],
+      });
+    }
+  }, [project.id, queryClient, selectedRun?.status]);
   const selectedProvenanceSha =
     typeof selectedRun?.result_json.provenance_sha256 === "string"
       ? selectedRun.result_json.provenance_sha256
@@ -185,6 +310,24 @@ export function WorkflowGraphWorkspace({
     typeof selectedRun.result_json.provenance_manifest === "object"
       ? (selectedRun.result_json.provenance_manifest as Record<string, unknown>)
       : null;
+  const pytorchRuntime = modelHubQuery.data?.runtime_statuses?.find(
+    (runtime) => runtime.runtime_id === "pytorch",
+  );
+  const reefposeCudaRequested = graphNodes.some(
+    (node) =>
+      node.node_type === "pose_model_training" &&
+      node.parameters?.provider_id === "reefpose" &&
+      String(node.parameters?.device ?? "auto").startsWith("cuda"),
+  );
+  const scienceIssue = graphNodes
+    .map((node) =>
+      scientificConfigurationIssue(node.node_type, node.parameters ?? {}),
+    )
+    .find(Boolean);
+  const guiConfigurationIssue =
+    reefposeCudaRequested && pytorchRuntime?.cuda_available === false
+      ? "CUDA was selected for ReefPose, but the PyTorch runtime reports that CUDA is unavailable."
+      : (scienceIssue ?? null);
 
   return (
     <section className="feature-workspace">
@@ -263,6 +406,10 @@ export function WorkflowGraphWorkspace({
         </p>
       </div>
 
+      <ProjectSpatialAssetPreview projectId={project.id} />
+      <LocalMeshPreview projectId={project.id} />
+      <LocalPointCloudPreview projectId={project.id} />
+
       {poseDatasetSources.length > 0 && (
         <section className="panel-card">
           <h4>Verified pose training data</h4>
@@ -306,6 +453,20 @@ export function WorkflowGraphWorkspace({
                   </option>
                 ))}
               </select>
+              {(() => {
+                const dataset = poseDatasets.data?.find(
+                  (item) =>
+                    item.id === String(source.parameters?.dataset_id ?? ""),
+                );
+                return dataset ? (
+                  <small>
+                    Immutable manifest {shortHash(dataset.manifest_sha256)} ·
+                    schema {shortHash(dataset.pose_schema_id)} revision{" "}
+                    {dataset.pose_schema_revision} · integrity{" "}
+                    {shortHash(dataset.pose_schema_content_hash)}
+                  </small>
+                ) : null;
+              })()}
             </label>
           ))}
           {poseDatasets.isPending && <p>Loading frozen pose datasets...</p>}
@@ -325,10 +486,14 @@ export function WorkflowGraphWorkspace({
         <h4>Visual workflow editor</h4>
         {visualGraph ? (
           <WorkflowVisualEditor
+            projectId={project.id}
             graph={visualGraph}
             registry={registryQuery.data ?? []}
             plan={planMutation.data ?? null}
             runDetail={runDetailQuery.data ?? null}
+            poseDatasets={poseDatasets.data ?? []}
+            registeredModels={modelHubQuery.data?.models ?? []}
+            runtimeStatuses={modelHubQuery.data?.runtime_statuses ?? []}
             onChange={(graph) => setGraphJson(JSON.stringify(graph, null, 2))}
           />
         ) : (
@@ -391,13 +556,18 @@ export function WorkflowGraphWorkspace({
             <button
               type="button"
               onClick={() => saveAndRunMutation.mutate()}
-              disabled={saveAndRunMutation.isPending}
+              disabled={
+                saveAndRunMutation.isPending || guiConfigurationIssue !== null
+              }
             >
               Save &amp; run
             </button>
           </div>
           {mutationError && (
             <p className="form-error">{mutationError.message}</p>
+          )}
+          {guiConfigurationIssue && (
+            <p className="form-error">{guiConfigurationIssue}</p>
           )}
           <p className="muted-copy">
             Review gates pause safely. Complete the requested review in
@@ -621,6 +791,20 @@ export function WorkflowGraphWorkspace({
                     <code>{artifact.data_type}</code> from{" "}
                     {artifact.producer_port_id} ·{" "}
                     <code>{shortHash(artifact.payload_sha256)}</code>
+                    {artifact.data_type === "mesh_measurement_preview" && (
+                      <MeshArtifactViewer artifact={artifact.payload_json} />
+                    )}
+                    {artifact.data_type ===
+                      "point_cloud_measurement_preview" && (
+                      <PointCloudArtifactViewer
+                        artifact={artifact.payload_json}
+                      />
+                    )}
+                    <ScienceArtifact
+                      artifact={artifact}
+                      projectId={project.id}
+                      onOpen={onOpenScience}
+                    />
                     <details>
                       <summary>Inspect artifact</summary>
                       <pre>

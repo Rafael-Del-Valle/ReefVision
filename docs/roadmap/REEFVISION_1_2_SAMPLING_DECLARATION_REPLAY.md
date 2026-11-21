@@ -1,0 +1,7 @@
+# ReefVision 1.2 — persisted sampling declaration replay (2026-11-02)
+
+The shared `LongitudinalAnalysisResponse` now checks that a saved result with both a per-organism unit coverage audit and dated visit coverage explicitly declares its sampling schedule. It also checks that the top-level caller-supplied expected-roster flag agrees with all unit-coverage rows. These checks reject internally contradictory re-signed scientific artifacts while preserving historical artifacts that contain only one of the optional audit sections.
+
+Standalone endpoint regressions cover forged top-level schedule and expected-roster declarations. The executable saved `project_source → ecology_longitudinal_analysis` Workflow Builder regression now also rejects a persisted result with its schedule declaration erased. The existing typed artifact, review boundary, source fingerprint and `caller_supplied_unverified` evidence classification remain unchanged. The preceding failing regression was corrected to expect the earlier valid organism-date reconciliation diagnostic when dated coverage is forged.
+
+This is **internal replay consistency**, not authentication of observations, sampling plans, calibration, colony identity or independent experimental units. Full exact-head CI, 1.1 migration reconciliation, scientist-reviewed data, and installed Windows MSI/GUI/GPU acceptance remain mandatory. Version 1.2 is **not release-ready**; 1.3 is not started.

@@ -7,8 +7,11 @@ import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -30,6 +33,26 @@ from reefvision.services.bundled_models import (
 from reefvision.services.model_catalog import validate_catalog_startup
 
 LOGGER = logging.getLogger("reefvision.api")
+
+
+def _safe_validation_error_detail(value: Any) -> Any:
+    """Keep Pydantic's error structure serializable with malformed JSON Unicode.
+
+    JSON permits escaped lone UTF-16 surrogates in request strings, but the
+    response encoder cannot write those code points to UTF-8. Represent only
+    invalid surrogate code points as literal escape text in the 422 detail.
+    Valid Unicode and the ordinary FastAPI error shape remain unchanged.
+    """
+    if isinstance(value, str):
+        return value.encode("utf-8", errors="backslashreplace").decode("utf-8")
+    if isinstance(value, list):
+        return [_safe_validation_error_detail(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            _safe_validation_error_detail(key): _safe_validation_error_detail(item)
+            for key, item in value.items()
+        }
+    return value
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -112,6 +135,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(RequestValidationError)
+    async def handle_request_validation(_: Request, exc: RequestValidationError) -> JSONResponse:
+        # Match FastAPI's default 422 envelope, but never echo invalid UTF-16
+        # surrogates that would make the response itself unencodable.
+        return JSONResponse(
+            status_code=422,
+            content={"detail": _safe_validation_error_detail(jsonable_encoder(exc.errors()))},
+        )
 
     @app.exception_handler(NotFoundError)
     async def handle_not_found(_: Request, exc: NotFoundError) -> JSONResponse:

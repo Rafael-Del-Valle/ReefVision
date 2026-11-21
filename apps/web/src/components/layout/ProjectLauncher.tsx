@@ -51,6 +51,7 @@ export function ProjectLauncher({
   onOpenOnboarding: () => void;
 }) {
   const [pinnedIds, setPinnedIds] = useState<string[]>(readPinnedProjects);
+  const [projectSearch, setProjectSearch] = useState("");
 
   const recentProjects = useMemo(
     () =>
@@ -84,6 +85,12 @@ export function ProjectLauncher({
           ),
         ]
       : recentProjects;
+  const search = projectSearch.trim().toLocaleLowerCase();
+  const displayedProjects = search
+    ? projectCollection.filter((project) =>
+        project.name.toLocaleLowerCase().includes(search),
+      )
+    : projectCollection.slice(0, 12);
 
   return (
     <section className="rv-launcher" aria-label="ReefVision project launcher">
@@ -177,14 +184,21 @@ export function ProjectLauncher({
               : "Recent projects"}
           </h3>
         </div>
-        <span>
-          {projects.length} local project{projects.length === 1 ? "" : "s"}
-        </span>
+        {projects.length > 0 && (
+          <label className="rv-project-search">
+            Find projects
+            <input
+              type="search"
+              value={projectSearch}
+              onChange={(event) => setProjectSearch(event.target.value)}
+            />
+          </label>
+        )}
       </div>
 
-      {projectCollection.length > 0 ? (
+      {displayedProjects.length > 0 ? (
         <div className="rv-project-launcher-grid">
-          {projectCollection.slice(0, 12).map((project) => {
+          {displayedProjects.map((project) => {
             const pinned = pinnedIds.includes(project.id);
             return (
               <article className="rv-project-launcher-card" key={project.id}>
@@ -221,6 +235,10 @@ export function ProjectLauncher({
             );
           })}
         </div>
+      ) : search ? (
+        <p role="status" className="annotation-helper">
+          No projects match your search.
+        </p>
       ) : (
         <div className="rv-launcher-empty">
           <span className="rv-empty-glyph" aria-hidden="true">

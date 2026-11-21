@@ -22,8 +22,14 @@ from reefvision.db.models import (
     Annotation,
     ClassificationDataset,
     ClassificationPrediction,
+    ComputedMetricDefinition,
+    ComputedMetricResult,
     DatasetVersion,
     DatasetVersionItem,
+    EnvironmentalAnalysisDefinition,
+    EnvironmentalAnalysisResult,
+    EnvironmentalCacheEntry,
+    EnvironmentalEventDefinition,
     ExperimentRecord,
     ImageAsset,
     ImageLabel,
@@ -38,11 +44,13 @@ from reefvision.db.models import (
     QualityControlRun,
     ReviewQueue,
     ReviewQueueItem,
+    ScientificRecord,
     TrainingRun,
     VideoAsset,
     VideoTrack,
 )
 from reefvision.domain.errors import NotFoundError, ValidationError
+from reefvision.jobs.reefpose_validation import recover_legacy_heldout_manifest
 from reefvision.schemas.project_exchange import (
     ProjectExchangeCreateRequest,
     ProjectExchangeCreateResponse,
@@ -118,6 +126,25 @@ class ProjectExchangeService:
     def get_package(self, package_id: str) -> ProjectExchangePackageResponse:
         return ProjectExchangePackageResponse.model_validate(self._package(package_id))
 
+    def _format_version(self, project_id: str) -> str:
+        enriched_models = (
+            ScientificRecord,
+            EnvironmentalCacheEntry,
+            ComputedMetricDefinition,
+            ComputedMetricResult,
+            EnvironmentalEventDefinition,
+            EnvironmentalAnalysisDefinition,
+            EnvironmentalAnalysisResult,
+        )
+        return (
+            "1.1"
+            if any(
+                self.session.scalar(select(model.id).where(model.project_id == project_id).limit(1))
+                for model in enriched_models
+            )
+            else FORMAT_VERSION
+        )
+
     def queue_export(
         self,
         project_id: str,
@@ -131,7 +158,7 @@ class ProjectExchangeService:
             project_id=project.id,
             direction="export",
             status="queued",
-            format_version=FORMAT_VERSION,
+            format_version=self._format_version(project_id),
             manifest_json={},
             manifest_sha256="",
             archive_path=archive_relative,
@@ -283,6 +310,57 @@ class ProjectExchangeService:
                 )
             ),
         }
+        sections.update(
+            {
+                "scientific_records": list(
+                    self.session.scalars(
+                        select(ScientificRecord).where(ScientificRecord.project_id == project.id)
+                    )
+                ),
+                "environmental_cache_entries": list(
+                    self.session.scalars(
+                        select(EnvironmentalCacheEntry).where(
+                            EnvironmentalCacheEntry.project_id == project.id
+                        )
+                    )
+                ),
+                "computed_metric_definitions": list(
+                    self.session.scalars(
+                        select(ComputedMetricDefinition).where(
+                            ComputedMetricDefinition.project_id == project.id
+                        )
+                    )
+                ),
+                "computed_metric_results": list(
+                    self.session.scalars(
+                        select(ComputedMetricResult).where(
+                            ComputedMetricResult.project_id == project.id
+                        )
+                    )
+                ),
+                "environmental_event_definitions": list(
+                    self.session.scalars(
+                        select(EnvironmentalEventDefinition).where(
+                            EnvironmentalEventDefinition.project_id == project.id
+                        )
+                    )
+                ),
+                "environmental_analysis_definitions": list(
+                    self.session.scalars(
+                        select(EnvironmentalAnalysisDefinition).where(
+                            EnvironmentalAnalysisDefinition.project_id == project.id
+                        )
+                    )
+                ),
+                "environmental_analysis_results": list(
+                    self.session.scalars(
+                        select(EnvironmentalAnalysisResult).where(
+                            EnvironmentalAnalysisResult.project_id == project.id
+                        )
+                    )
+                ),
+            }
+        )
         return sections
 
     def build_export(self, package_id: str) -> ProjectExchangePackageResponse:
@@ -304,7 +382,7 @@ class ProjectExchangeService:
             with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as archive:
                 for section_name, records in sections.items():
                     ordered = sorted(records, key=lambda item: str(getattr(item, "id", "")))
-                    payload = _jsonl_bytes(_row(item) for item in ordered)
+                    payload = _jsonl_bytes(self._export_row(item) for item in ordered)
                     member = f"records/{section_name}.jsonl"
                     archive.writestr(member, payload)
                     section_manifest[section_name] = {
@@ -317,6 +395,8 @@ class ProjectExchangeService:
                     for image in cast(Sequence[ImageAsset], sections["images"]):
                         source = resolve_managed_project_path(self.settings, image.managed_path)
                         if not source.is_file():
+                            if (image.metadata_json or {}).get("exchange_media_missing") is True:
+                                continue
                             raise ValidationError(
                                 f"Managed image is missing: {image.original_filename}"
                             )
@@ -334,6 +414,8 @@ class ProjectExchangeService:
                     for video in cast(Sequence[VideoAsset], sections["videos"]):
                         source = resolve_managed_project_path(self.settings, video.managed_path)
                         if not source.is_file():
+                            if (video.metadata_json or {}).get("exchange_media_missing") is True:
+                                continue
                             raise ValidationError(
                                 f"Managed video is missing: {video.original_filename}"
                             )
@@ -353,6 +435,8 @@ class ProjectExchangeService:
                     for model in cast(Sequence[ModelRegistration], sections["models"]):
                         source = resolve_managed_project_path(self.settings, model.managed_path)
                         if not source.is_file():
+                            if (model.metadata_json or {}).get("exchange_media_missing") is True:
+                                continue
                             raise ValidationError(f"Managed model is missing: {model.display_name}")
                         member = f"models/{model.id}{source.suffix.lower()}"
                         archive.write(source, member)
@@ -368,7 +452,7 @@ class ProjectExchangeService:
 
                 manifest = {
                     "format_name": FORMAT_NAME,
-                    "format_version": FORMAT_VERSION,
+                    "format_version": self._format_version(project.id),
                     "application_version": __version__,
                     "project": {
                         "id": project.id,
@@ -388,6 +472,7 @@ class ProjectExchangeService:
                 archive.writestr(MANIFEST_NAME, manifest_bytes)
             temporary.replace(archive_path)
             package.status = "complete"
+            package.format_version = str(manifest["format_version"])
             package.manifest_json = manifest
             package.manifest_sha256 = canonical_json_sha256(manifest)
             package.completed_at = datetime.now().astimezone()
@@ -402,6 +487,17 @@ class ProjectExchangeService:
             package.error_message = str(exc)
             self.session.commit()
             raise
+
+    def _export_row(self, record: Base) -> dict[str, object]:
+        row = _row(record)
+        if isinstance(record, Job):
+            recovered = recover_legacy_heldout_manifest(self.session, self.settings, record)
+            if recovered is not None:
+                row["request_json"] = {
+                    **record.request_json,
+                    "heldout_input_manifest": recovered,
+                }
+        return row
 
     def inspect_upload(self, source: BinaryIO) -> ProjectExchangeInspectionResponse:
         warnings: list[str] = []
@@ -438,8 +534,8 @@ class ProjectExchangeService:
                 if manifest.get("format_name") != FORMAT_NAME:
                     errors.append("Archive is not a ReefVision project exchange package")
                 version = str(manifest.get("format_version", ""))
-                if version.split(".", 1)[0] != FORMAT_VERSION.split(".", 1)[0]:
-                    errors.append("Exchange format major version is incompatible")
+                if version not in {"1.0", "1.1"}:
+                    errors.append("Unsupported exchange format version")
                 sections = manifest.get("sections", {})
                 if not isinstance(sections, dict):
                     errors.append("Manifest sections are invalid")

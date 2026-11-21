@@ -10,8 +10,9 @@
 - Deprecation and resource warnings are treated as errors.
 - Phase 5 real pose interoperability tests use the existing `integration` marker
   and opt in with `--pose-interop-integration`. Install `.[interoperability]` first.
-  They generate synthetic temporary media and execute SLEAP-IO 0.9.2 without
-  network access. See [the format contracts and test command](POSE_INTEROPERABILITY.md).
+  They generate synthetic temporary media and exercise neutral NWB through
+  SLEAP-IO 0.9.2 without network access. SLEAP-NN and SLP are retired. See
+  [the format contracts and test command](POSE_INTEROPERABILITY.md).
 
 ## Frontend
 

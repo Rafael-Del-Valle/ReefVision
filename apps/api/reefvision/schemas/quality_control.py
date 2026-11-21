@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
 
 from reefvision.domain.enums import (
     QUALITY_CONTROL_RULE_CATEGORIES,
@@ -13,6 +13,26 @@ from reefvision.domain.enums import (
     QualityControlRuleCategory,
     QualityControlSeverity,
 )
+
+
+class AcquisitionQualityThresholds(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    min_width_px: int = Field(default=1, ge=1)
+    min_height_px: int = Field(default=1, ge=1)
+    min_sharpness: FiniteFloat = Field(default=25, ge=0)
+    dark_luma_max: int = Field(default=5, ge=0, le=255)
+    bright_luma_min: int = Field(default=250, ge=0, le=255)
+    max_clipped_fraction: FiniteFloat = Field(default=0.05, ge=0, le=1)
+    require_capture_time: bool = False
+    require_camera_metadata: bool = False
+    require_calibration: bool = False
+
+    @model_validator(mode="after")
+    def validate_exposure_bands(self) -> Self:
+        if self.dark_luma_max >= self.bright_luma_min:
+            raise ValueError("Dark luma maximum must be lower than bright luma minimum")
+        return self
 
 
 class QualityControlThresholdConfig(BaseModel):
@@ -27,6 +47,7 @@ class QualityControlThresholdConfig(BaseModel):
     suspicious_bulk_acceptance_min_count: int = Field(default=12, ge=2)
     suspicious_bulk_acceptance_window_minutes: int = Field(default=10, ge=1, le=1_440)
     overlap_spatial_cell_px: int = Field(default=128, ge=8, le=4_096)
+    acquisition: AcquisitionQualityThresholds = Field(default_factory=AcquisitionQualityThresholds)
 
 
 class QualityControlRunCreateRequest(BaseModel):
@@ -60,6 +81,7 @@ class QualityControlRunResponse(BaseModel):
     completed_at: datetime | None
     cancelled_at: datetime | None
     error_message: str | None
+    acquisition_stale_reasons: list[str] = Field(default_factory=list)
 
 
 class QualityControlIssueResponse(BaseModel):

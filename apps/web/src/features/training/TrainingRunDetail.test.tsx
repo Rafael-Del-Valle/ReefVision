@@ -175,4 +175,50 @@ describe("TrainingRunDetail", () => {
       screen.getByRole("img", { name: /val dfl loss across 2 epochs/i }),
     ).toBeInTheDocument();
   });
+
+  it("shows ReefPose losses, best checkpoint state, device, and resume action", async () => {
+    const onResume = vi.fn();
+    render(
+      <TrainingRunDetail
+        run={{
+          ...run,
+          task: "pose",
+          provider_id: "reefpose",
+          architecture: "reefpose-s",
+          status: "cancelled",
+          stage: "cancelled",
+          device: "cuda",
+          precision: "amp",
+          progress_epoch: 2,
+          metrics_history: {
+            epoch: [1, 2, 3],
+            train_loss: [2.1, 1.4, 1.2],
+            validation_loss: [2.0, 1.1, 1.5],
+            selection_loss: [2.0, 1.1, 1.5],
+            learning_rate: [0.0003, 0.0002, 0.0001],
+          },
+          artifact_manifest: {
+            ...run.artifact_manifest,
+            resume_checkpoint_path: "projects/project-1/runs/run-1/last.pt",
+          },
+        }}
+        registering={false}
+        onCancel={vi.fn()}
+        onRegister={vi.fn()}
+        onResume={onResume}
+      />,
+    );
+
+    expect(screen.getByText("Best epoch").parentElement).toHaveTextContent("2");
+    expect(
+      screen.getAllByText("Device / precision")[0].parentElement,
+    ).toHaveTextContent("cuda / amp");
+    expect(
+      screen.getByRole("img", { name: /validation loss across 3 epochs/i }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Resume from checkpoint" }),
+    );
+    expect(onResume).toHaveBeenCalledTimes(1);
+  });
 });

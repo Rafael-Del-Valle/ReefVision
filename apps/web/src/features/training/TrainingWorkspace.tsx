@@ -16,6 +16,7 @@ import {
   getTrainingRuns,
   getTrainingWorkspaceBootstrap,
   registerModelFromRun,
+  retryJob,
   runTrainingPreflight,
   type ModelCatalogEntry,
   type ModelCatalogTask,
@@ -670,6 +671,14 @@ export function TrainingWorkspace({
 
   const cancelRunMutation = useMutation({
     mutationFn: (runId: string) => cancelTrainingRun(runId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["training_runs", project.id],
+      });
+    },
+  });
+  const resumeRunMutation = useMutation({
+    mutationFn: (jobId: string) => retryJob(jobId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["training_runs", project.id],
@@ -2120,6 +2129,18 @@ export function TrainingWorkspace({
                           displayName: `${selectedRun.run_name} best`,
                           notes: selectedRun.notes ?? undefined,
                         })
+                      }
+                      resuming={
+                        resumeRunMutation.isPending &&
+                        resumeRunMutation.variables === selectedRun.job_id
+                      }
+                      onResume={
+                        selectedRun.job_id
+                          ? () =>
+                              resumeRunMutation.mutate(
+                                selectedRun.job_id as string,
+                              )
+                          : undefined
                       }
                       onApplyBest={(trial) =>
                         applyTuningMutation.mutate({ run: selectedRun, trial })

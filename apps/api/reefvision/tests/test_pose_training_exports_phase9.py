@@ -104,7 +104,6 @@ def _frozen_dataset(
         "coco",
         "dlc_csv",
         "ultralytics_pose",
-        "slp",
         "nwb",
     ],
 )
@@ -201,6 +200,9 @@ def test_frozen_dataset_exports_exact_frames_and_loss_manifest(
             "tentacle__1",
             "tentacle__2",
         ]
+        assert manifest["pose_schema"]["definition"]["edges"] == [
+            {"from_id": "tentacle_1", "to_id": "tentacle_2"}
+        ]
 
         assert len(manifest["annotations"]) == 1
 
@@ -227,9 +229,6 @@ def test_frozen_dataset_exports_exact_frames_and_loss_manifest(
             yaml_text = archive.read("data.yaml").decode("utf-8")
 
             assert "reefvision_keypoint_names" in yaml_text
-
-        elif export_format == "slp":
-            assert "dataset.pose.slp" in names
 
         else:
             assert "dataset.pose.nwb" in names
