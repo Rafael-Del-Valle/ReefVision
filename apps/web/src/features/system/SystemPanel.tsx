@@ -21,6 +21,7 @@ import {
   type SystemCommandShortcutRepairResponse,
   type SystemDiagnosticsStatusResponse,
 } from "../../api/client";
+import { OfflineUpdatePanel } from "./OfflineUpdatePanel";
 import { ConfigurationDiagnostics } from "./ConfigurationDiagnostics";
 
 const ACTIVE_JOB_STATUSES = new Set(["queued", "running", "cancel_requested"]);
@@ -128,7 +129,9 @@ export function JobStatusCard({
 
 export function SystemPanel({
   onOpenOnboarding,
+  updatesFocus,
 }: {
+  updatesFocus?: number;
   onOpenOnboarding?: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -399,12 +402,15 @@ export function SystemPanel({
       </div>
 
       <ConfigurationDiagnostics />
+      <OfflineUpdatePanel focusRequest={updatesFocus} />
 
       <section className="system-card">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Recovery</p>
-            <h3>Backups and restore</h3>
+            <h3 id="system-backups-heading" tabIndex={-1}>
+              Backups and restore
+            </h3>
           </div>
         </div>
         <form

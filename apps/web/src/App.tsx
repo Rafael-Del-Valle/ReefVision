@@ -382,6 +382,7 @@ function ReefVisionMainApp() {
   const [classificationArchitecture, setClassificationArchitecture] = useState<
     string | null
   >(null);
+  const [updatesFocus, setUpdatesFocus] = useState(0);
   const [activeView, setActiveView] = useState<ProjectView>("gallery");
   const [environmentProjectId, setEnvironmentProjectId] = useState<
     string | null
@@ -688,6 +689,7 @@ function ReefVisionMainApp() {
 
   function openSystemStatus() {
     if (preventQcNavigation()) return false;
+    setUpdatesFocus(0);
     setSelectedProjectId(null);
     setEditorLaunch(null);
     setActiveView("system");
@@ -695,8 +697,9 @@ function ReefVisionMainApp() {
   }
 
   function openOnboardingWorkspace(workspace: OnboardingWorkspace) {
-    if (workspace === "system") {
+    if (workspace === "system" || workspace === "updates") {
       if (!openSystemStatus()) return false;
+      if (workspace === "updates") setUpdatesFocus(Date.now());
     } else {
       if (!navigateToView(workspace)) return false;
       setEditorLaunch(null);
@@ -1030,7 +1033,10 @@ function ReefVisionMainApp() {
             ref={systemSurfaceRef}
             tabIndex={-1}
           >
-            <SystemPanel onOpenOnboarding={() => setShowOnboarding(true)} />
+            <SystemPanel
+              updatesFocus={updatesFocus}
+              onOpenOnboarding={() => setShowOnboarding(true)}
+            />
           </section>
         )}
 

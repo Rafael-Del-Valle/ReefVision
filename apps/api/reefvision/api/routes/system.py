@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request
 from sqlalchemy.engine import Engine
 
 from reefvision.config import Settings
+from reefvision.schemas.offline_update import OfflineUpdateReport, OfflineUpdateRequest
 from reefvision.schemas.system import (
     SystemCommandShortcutRepairResponse,
     SystemCommandShortcutStatusResponse,
@@ -21,6 +22,7 @@ from reefvision.schemas.system import (
 )
 from reefvision.schemas.system_machine import SystemMachineCompatibilityResponse
 from reefvision.services.system import SystemService
+from reefvision.storage.offline_update import inspect_offline_update
 
 router = APIRouter(tags=["system"])
 
@@ -97,3 +99,8 @@ def get_migration_status(request: Request) -> SystemMigrationStatusResponse:
 @router.post("/system/migrations/preflight", response_model=SystemMigrationPreflightResponse)
 def post_migration_preflight(request: Request) -> SystemMigrationPreflightResponse:
     return service(request).migration_preflight()
+
+
+@router.post("/system/updates/inspect", response_model=OfflineUpdateReport)
+def inspect_update_media(payload: OfflineUpdateRequest) -> OfflineUpdateReport:
+    return inspect_offline_update(payload)

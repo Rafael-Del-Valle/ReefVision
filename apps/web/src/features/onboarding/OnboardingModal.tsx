@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { AutomationApiHelp } from "./AutomationApiHelp";
 
 export type OnboardingWorkspace =
-  "classes" | "review_queue" | "workflows" | "system";
+  "classes" | "review_queue" | "workflows" | "system" | "updates";
 
 const projectActions = [
   { workspace: "classes", label: "Open class manager" },
@@ -229,6 +229,13 @@ export function OnboardingModal({
                     onClick={() => openWorkspace("system")}
                   >
                     Open System status
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => openWorkspace("updates")}
+                  >
+                    Diagnostics / Updates
                   </button>
                   {automationApiBaseUrl !== undefined && (
                     <button
