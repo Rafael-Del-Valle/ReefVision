@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T01:16:21Z`
+Updated: `2026-11-21T01:19:27Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1332,10 +1332,12 @@ Evidence:
 - Dependencies: `rv17-device-sources`, `rv15-reviewer-lab`
 - Entry point: Project assets → Import audio → Review
 - Workflow Builder: `required`
+- Missing input: Authorized field WAV audio and synchronized video or observation clocks, the recording device timebase and uncertainty, independently marked events and channel identities, and prespecified onset, offset and matching tolerances.
 
 Acceptance checks:
 
 - **in_progress** — Preserve original audio, annotate source time, align clocks explicitly, review proposals, and export provenance. (`rv18-bioacoustics-check`)
+- **blocked** — From Project assets → Import audio → Review, compare reviewed source-sample intervals and aligned event times against the independent references by recording and channel. Retain clock fit, residuals, exclusions and reviewer decisions. (`rv18-bioacoustics-independent-field-check`)
 
 Evidence:
 
@@ -1357,10 +1359,12 @@ Evidence:
 - Dependencies: `rv15-model-comparison`, `rv18-underwater-correction`
 - Entry point: Models & AI → Model comparison → Domain shift
 - Workflow Builder: `required`
+- Missing input: Labeled observations from prespecified independent sites or recordings in each compared acquisition domain, frozen assignments with disjoint training and selection groups, compatible registered model weights, and a declared uncertainty and decision protocol.
 
 Acceptance checks:
 
 - **in_progress** — Compare frozen acquisition groups without leakage and report uncertainty, missing groups, and training/selection overlap. (`rv18-domain-shift-check`)
+- **blocked** — From Models & AI → Model comparison → Domain shift, score the same held-out acquisitions for each model, reconcile group identity and excluded overlap, and compare the paired errors and across-unit uncertainty to independently scored results. (`rv18-domain-shift-independent-field-check`)
 
 Evidence:
 
@@ -1383,10 +1387,12 @@ Evidence:
 - Dependencies: `rv18-underwater-correction`, `rv12-calibration-evidence`
 - Entry point: Project assets → Import multispectral image
 - Workflow Builder: `required`
+- Missing input: An authorized physical-sensor acquisition with original discrete bands, wavelengths and units, dark and reference or reflectance measurements, independently surveyed alignment controls, and prespecified radiometric and spatial tolerances.
 
 Acceptance checks:
 
 - **in_progress** — Preserve bands and calibration, render selected composites, align source coordinates, and withhold incompatible indices. (`rv18-multispectral-check`)
+- **blocked** — From Project assets → Import multispectral image, compare registered control-point residuals and calibrated band or index values to the independent references. Retain sensor and band identities, unavailable or excluded samples and uncertainty. (`rv18-multispectral-independent-field-check`)
 
 Evidence:
 
@@ -1408,10 +1414,12 @@ Evidence:
 - Dependencies: `rv12-organism-identity`, `rv15-reviewer-lab`
 - Entry point: Research → Organisms & ecology → Taxonomy and detectability
 - Workflow Builder: `required`
+- Missing input: A versioned taxon reference, independently reviewed taxon and known-presence labels, repeated field surveys by independent unit, effort and exclusion rules, plus an independent reference estimate and decision margins.
 
 Acceptance checks:
 
 - **in_progress** — Review taxonomy proposals and estimate detectability only from declared sampling/observation evidence with uncertainty and assumptions. (`rv18-taxonomy-detectability-check`)
+- **blocked** — From Research → Organisms & ecology → Taxonomy and detectability, reconcile adjudicated taxa and per-visit detection histories, then compare eligible sampling units, effort, estimates and uncertainty to the independent survey analysis. (`rv18-taxonomy-detectability-independent-field-check`)
 
 Evidence:
 
@@ -1433,10 +1441,12 @@ Evidence:
 - Dependencies: `rv16-class-visibility-dense-editing`
 - Entry point: Annotate → Image adjustments
 - Workflow Builder: `required`
+- Missing input: Authorized underwater originals with independently measured color or radiometric targets, illumination and acquisition metadata, and an agreed error and repeatability margin for the selected correction.
 
 Acceptance checks:
 
 - **in_progress** — Preview reversible corrections, retain original pixels and transform provenance, and map annotations/predictions exactly to source pixels. (`rv18-underwater-correction-check`)
+- **blocked** — From Annotate → Image adjustments, compare the original and corrected measurements against the independent targets by acquisition. Retain transform, original and corrected input hashes, uncertainty and reviewer decision. (`rv18-underwater-correction-independent-field-check`)
 
 Evidence:
 
