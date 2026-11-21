@@ -504,9 +504,9 @@ def test_distinct_xyz_gap_boundary_loci_audited_in_saved_workflow(
     )
     assert expected["preview_omitted_largest_gap_boundary_acquisition_axes"] == ["x"]
     assert "x" not in expected["preview_omitted_largest_gap_boundary_axes"]
-    assert (
-        "preview_omits_largest_axis_gap_boundary_xyz_loci" in expected["qc_warnings"]
-    ) is (not duplicate_loci)
+    assert ("preview_omits_largest_axis_gap_boundary_xyz_loci" in expected["qc_warnings"]) is (
+        not duplicate_loci
+    )
     assert "preview_omits_largest_axis_gap_boundary_acquisition_rows" in expected["qc_warnings"]
     assert "preview_omits_largest_axis_gap_endpoint" not in expected["qc_warnings"]
     assert (
