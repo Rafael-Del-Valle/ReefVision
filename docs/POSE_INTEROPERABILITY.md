@@ -29,6 +29,13 @@ leakage-safe training/validation splits before training or reporting metrics.
 
 ## Scientific preservation and limitations
 
+Video & tracking exports include verified pose tracks by default. Choose
+**Include unreviewed tracks in archival export** to transfer a mixture of
+verified and provisional tracks. API clients make the same choice with
+`include_unreviewed=true` on the video pose export endpoint. The ReefVision
+metadata records each exported track's original status. Import always creates
+tracks that require review, including tracks whose source status was verified.
+
 Exactly retained where the format supports them: semantic node order, instances,
 finite x/y values (subject to the numeric encodings above), known versus unknown
 confidence, visible versus occluded state, and source association. Repeated
@@ -44,6 +51,13 @@ replayed as historical database changes. Native imports use new observation IDs,
 derive pose boxes, and enter `imported_review_required`; the scientist's selected
 target class applies to imported tracks. Original classes and boxes remain in
 provenance. Consequently all export responses retain the lossy header.
+
+Explicit presentation timestamps in ReefVision canonical keyframes are restored
+on their matching source frames. They must be finite, nonnegative and strictly
+increasing, and must be supplied for every keyframe of a timed track. Untimed
+historical imports keep their source frame indices with no inferred timestamps.
+New bundles record a digest over the canonical keyframes and source review
+status. Imports verify this digest when present.
 
 Unsupported external fields are not claimed to survive: arbitrary external
 model/identity embeddings, suggestions and correction history; arbitrary NWB

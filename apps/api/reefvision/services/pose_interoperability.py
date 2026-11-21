@@ -35,9 +35,10 @@ from reefvision.schemas.pose_interoperability import (
     PoseInteroperabilityImportResponse,
     PoseInteroperabilityRuntimeResponse,
 )
-from reefvision.schemas.videos import VideoPoseObservation, VideoTrackKeyframe
+from reefvision.schemas.videos import VideoPoseObservation, VideoTrackCreate, VideoTrackKeyframe
 from reefvision.services.pose_temporal_tracking import PoseTemporalTrackingService
 from reefvision.storage import pose_text_records
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.pose_exchange_text import (
     read_legacy_dlc,
     read_legacy_yolo,
@@ -143,7 +144,7 @@ class PoseInteroperabilityService:
             raise NotFoundError("Video not found")
         return video
 
-    def _pose_tracks(self, video_id: str) -> list[VideoTrack]:
+    def _pose_tracks(self, video_id: str, *, include_unreviewed: bool) -> list[VideoTrack]:
         tracks = list(
             self.session.scalars(
                 select(VideoTrack)
@@ -168,7 +169,24 @@ class PoseInteroperabilityService:
             raise ValidationError(
                 "No canonical pose tracks with a bound ReefVision landmark schema are available"
             )
-        return pose_tracks
+        if include_unreviewed:
+            return pose_tracks
+        reviewed = [track for track in pose_tracks if track.status == "verified"]
+        if not reviewed:
+            raise ValidationError(
+                "No verified pose tracks are available. Review the pose tracks or explicitly "
+                "include unreviewed tracks for an archival export"
+            )
+        return reviewed
+
+    @staticmethod
+    def _canonical_pose_sha256(track: dict[str, object]) -> str:
+        return canonical_json_sha256(
+            {
+                "source_track_status": track.get("source_track_status"),
+                "canonical_keyframes": track.get("canonical_keyframes"),
+            }
+        )
 
     @staticmethod
     def _external_node_names(
@@ -372,10 +390,14 @@ class PoseInteroperabilityService:
                 "label_class_id": track.label_class_id,
                 "source_model_id": track.source_model_id,
                 "source_job_id": track.source_job_id,
+                "source_track_status": track.status,
                 "revision": track.revision,
                 "canonical_keyframes": track.keyframes_json,
                 "canonical_metadata": track.metadata_json,
             }
+            track_provenance[external_name]["canonical_pose_sha256"] = self._canonical_pose_sha256(
+                track_provenance[external_name]
+            )
             temporal = PoseTemporalTrackingService(self.session)
             if temporal.summary(track.id).observations:
                 track_provenance[external_name]["temporal_audit"] = json.loads(
@@ -627,6 +649,16 @@ class PoseInteroperabilityService:
                 used_reefvision_provenance=False,
                 provenance=None,
             )
+
+        raw_tracks = provenance.get("tracks")
+        if isinstance(raw_tracks, dict):
+            for track in raw_tracks.values():
+                if not isinstance(track, dict) or "canonical_pose_sha256" not in track:
+                    continue
+                if track["canonical_pose_sha256"] != cls._canonical_pose_sha256(track):
+                    raise ValidationError(
+                        "Canonical pose digest mismatch: source timing or review evidence changed"
+                    )
 
         raw_mapping = provenance.get("node_mapping")
         raw_schema = provenance.get("pose_schema")
@@ -1055,6 +1087,8 @@ class PoseInteroperabilityService:
 
         canonical = VideoTrackKeyframe.model_validate(matches[0])
         payload = keyframe.model_dump(mode="python")
+        if canonical.timestamp_seconds is not None:
+            payload["timestamp_seconds"] = canonical.timestamp_seconds
         if keyframe.confidence is None and canonical.confidence is not None:
             payload["confidence"] = canonical.confidence
 
@@ -1524,17 +1558,25 @@ class PoseInteroperabilityService:
             )
             created: list[VideoTrack] = []
             for offset, imported_track in enumerate(imported_tracks, start=1):
-                track = VideoTrack(
-                    video_id=video.id,
+                track_number = next_track_number + offset
+                track_input = VideoTrackCreate(
                     label_class_id=label_class.id,
-                    track_number=next_track_number + offset,
-                    geometry_kind="bbox",
-                    keyframes_json=[
-                        keyframe.model_dump(mode="json", exclude_none=True)
-                        for keyframe in imported_track.keyframes
-                    ],
+                    track_number=track_number,
+                    keyframes=list(imported_track.keyframes),
                     interpolation="hold",
                     status="imported_review_required",
+                )
+                track = VideoTrack(
+                    video_id=video.id,
+                    label_class_id=track_input.label_class_id,
+                    track_number=track_number,
+                    geometry_kind=track_input.geometry_kind,
+                    keyframes_json=[
+                        keyframe.model_dump(mode="json", exclude_none=True)
+                        for keyframe in track_input.keyframes
+                    ],
+                    interpolation=track_input.interpolation,
+                    status=track_input.status,
                     source_model_id=None,
                     source_job_id=None,
                     metadata_json={
@@ -1614,6 +1656,8 @@ class PoseInteroperabilityService:
         self,
         video_id: str,
         exchange_format: PoseInteroperabilityFormat,
+        *,
+        include_unreviewed: bool = False,
     ) -> PoseInteroperabilityArtifact:
         try:
             if exchange_format not in {
@@ -1627,7 +1671,7 @@ class PoseInteroperabilityService:
                 )
 
             video = self._video(video_id)
-            tracks = self._pose_tracks(video_id)
+            tracks = self._pose_tracks(video_id, include_unreviewed=include_unreviewed)
             schema = self._schema_context(tracks)
             sio = self._sleap_io() if exchange_format == "nwb" else None
             labels = self._labels(video, tracks, schema, sio)

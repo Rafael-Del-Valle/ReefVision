@@ -639,6 +639,17 @@ describe("VideoTrackingWorkspace", () => {
     expect(
       screen.queryByRole("link", { name: "SLEAP SLP" }),
     ).not.toBeInTheDocument();
+    const archiveScope = screen.getByRole("checkbox", {
+      name: "Include unreviewed tracks in archival export",
+    });
+    expect(archiveScope).not.toBeChecked();
+    expect(
+      screen.queryByRole("link", { name: "COCO pose" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/No verified pose tracks are available/),
+    ).toBeVisible();
+    fireEvent.click(archiveScope);
     const nwbExport = screen.getByRole("link", { name: "NWB" });
     const cocoExport = screen.getByRole("link", { name: "COCO pose" });
     const dlcExport = screen.getByRole("link", { name: "DeepLabCut CSV" });
@@ -661,6 +672,13 @@ describe("VideoTrackingWorkspace", () => {
       "href",
       expect.stringContaining("format=ultralytics_pose"),
     );
+    expect(cocoExport.getAttribute("href")).toContain(
+      "include_unreviewed=true",
+    );
+    fireEvent.click(archiveScope);
+    expect(
+      screen.queryByRole("link", { name: "COCO pose" }),
+    ).not.toBeInTheDocument();
 
     expect(screen.getByText("tentacle 1 / 2")).toBeInTheDocument();
     expect(screen.queryByLabelText("tentacle 2")).not.toBeInTheDocument();
