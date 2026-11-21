@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T05:15:23.123262+00:00",
+  "updated_utc": "2026-11-21T05:30:45.522499+00:00",
   "candidate_pr": 131,
   "scope": "Generated research projects. Registered installer trials identify their own package.",
   "reviewed_predecessors": {
@@ -40,6 +40,23 @@
       "raw": {
         "owner_file": "1.9/evidence/1.8-local-windows-reviewed-4ac9.json",
         "sha256": "a459fd69f601c757831b1a4896f79f02e1773ec244c72c1e1bda69fb5106a43c"
+      }
+    },
+    "current_sibling_snapshot": {
+      "observed_utc": "2026-11-21T05:17:54.3783389Z",
+      "validated_13": "f44053a90286ce57cc6f7356be922bcf8ba41e22",
+      "integration_14": "36c80224a627e8fe1c1d8ffb5a704ffa9f90c701",
+      "spatial_draft": "7e7c31f939c5cb0fee9310f89d3d7a3f8ca723cd",
+      "spatial_delta": "The latest #79 work adds an opt-in strict preview of disconnected patches. The bounded visualization and full-mesh scientific measurements retain their own controls. The optional preview remains available on its original branch.",
+      "class_draft": "dd3d14cd9736e142aee74f351a67bbedb15b038e",
+      "pose_draft": "dba52a2f93009ec8b1daac74befc3f433f526a24",
+      "integrated_fixes": [
+        138,
+        139
+      ],
+      "evidence": {
+        "file": "1.9/evidence/concurrent-prs-and-runs-0518-utc.json",
+        "sha256": "63e23c8a2ab44d47dc1194ae5d23f58e63edb04fce6e91d16843162994face47"
       }
     }
   },
@@ -354,6 +371,101 @@
       "video_presented_seek_ms": 134.29999999701977,
       "extracted_review_seek_ms": 275.60129999999845
     },
-    "surface": "Administrative extraction of the local production MSI and all matching cabinets on physical Windows 11"
+    "surface": "Administrative extraction of the local production MSI and all matching cabinets on physical Windows 11",
+    "rich_rollback": {
+      "file": "1.9/checkpoints/96476bc46/local-production/evidence/pose-rollback/local-1.9-original-1.8-pose-upgrade-and-rollback.json",
+      "sha256": "e697c8945601cc0179d1489b623db46111b2f41d31070f2a8110234cf72f1648"
+    },
+    "neutral_pose_compatibility": {
+      "result": "COCO and DeepLabCut archives retained 96 frames, 192 landmarks, subframe timing and visibility. Neutral COCO import preserved the source pixels and required new review. The installed package correctly reported absence of the optional NWB 0.9.2 codec. Its error message points to the Python development extra. COCO and DeepLabCut are available inside the Windows desktop. Historical SLEAP metadata and the disabled execution state reopened.",
+      "raw": {
+        "file": "1.9/checkpoints/96476bc46/local-production/evidence/neutral-pose-compatibility/index.json",
+        "sha256": "131956bfbf18120dd8750f3823287d7ad5d7f70bd1aa479e41f74de402e59837"
+      }
+    }
+  },
+  "reviewed_successor": {
+    "source": "caa6931c2f4a8aefbf4e248d2c46c61ca9c8688b",
+    "product_pr": 140,
+    "parent_pr": 131,
+    "parent": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+    "schema": "b19_registration_0001",
+    "class_reference_pr": 138,
+    "class_source": "49273e9f60d0a70acfd50fb055fed4eaa3ac580b",
+    "class_browser": {
+      "file": "1.9/checkpoints/caa6931c2/source/class-lifecycle-evidence.json",
+      "sha256": "9837fa41a710f56ef3fd151b55b9b3a0d3709eaf97d359f78f59b34c54259e84"
+    },
+    "ultralytics_pr": 139,
+    "ultralytics_source": "98bd3bca5120c244784194d59671ea96d21899fe",
+    "ultralytics_interrupted_log_and_weights": {
+      "file": "1.9/checkpoints/98bd3bca5/pose-output-preservation/evidence-index.json",
+      "sha256": "754ada80547d11188a54fdf65ab02bb253dc7725ee328586c26119a2a9ccf59f"
+    },
+    "joined_ordinary_retry": {
+      "file": "1.9/checkpoints/caa6931c2/source-ordinary-ultralytics/evidence-index.json",
+      "sha256": "d23fbb008a05d7b3b8eea8bdce47c924663b6caa061139327004c50936c770a0"
+    },
+    "prior_package_rich_rollback": {
+      "file": "1.9/checkpoints/96476bc46/local-production/evidence/pose-rollback/local-1.9-original-1.8-pose-upgrade-and-rollback.json",
+      "sha256": "e697c8945601cc0179d1489b623db46111b2f41d31070f2a8110234cf72f1648"
+    },
+    "targeted_checks": {
+      "frontend": {
+        "file": "1.9/checkpoints/caa6931c2/source/caa-web-test.log",
+        "sha256": "490e453506a100df491b5167c2bc1dbca8c974810d312a88c91e5007d40037f7"
+      },
+      "build": {
+        "file": "1.9/checkpoints/caa6931c2/source/caa-web-build.log",
+        "sha256": "ff82bb3da09693249088fbd9e3ea39bdb86dae3869c55d2e4b489d0ff36355be"
+      },
+      "rust": {
+        "file": "1.9/checkpoints/caa6931c2/source/caa-rust.log",
+        "sha256": "244a0d8d4a4ca925f876ffc2b78e289bdea6d1b3dbfcd3f979fa0630f2fb1772"
+      },
+      "browser": {
+        "file": "1.9/checkpoints/caa6931c2/source/caa-standard-browser.log",
+        "sha256": "8f8c036adf8a569d267d87b034ef21f0b38572c685a34f70aad2f964b8346cfe"
+      },
+      "format": {
+        "file": "1.9/checkpoints/caa6931c2/source/caa-web-format-check.log",
+        "sha256": "4666969f85835307e8d360234a1877ad8ae96cd6cecd0f578932384d65aa6967"
+      },
+      "ruff": {
+        "file": "1.9/checkpoints/caa6931c2/source/caa-ruff-api.log",
+        "sha256": "a4443afdcfb6d7363adb285762515ccf7cf50473b1a05c20c1a50f6bed4d26b0"
+      },
+      "ruff_format": {
+        "file": "1.9/checkpoints/caa6931c2/source/caa-ruff-api-format.log",
+        "sha256": "bccbb720d6df896137597d3d834eb492c3cf6e235b1f23fa354a51788e7e79de"
+      },
+      "mypy": {
+        "file": "1.9/checkpoints/caa6931c2/source/caa-mypy.log",
+        "sha256": "615b502f7347809330754d6bf605998bc6289a8865aba36c6dec5ab4ab92c53f"
+      },
+      "migrations": {
+        "file": "1.9/checkpoints/caa6931c2/source/fresh-upgrade-downgrade-upgrade.log",
+        "sha256": "09839064b5b5bb688eb340d7b4bde5d5a5bed0e85b1cb987c0af7fc9d030ad58"
+      },
+      "targeted_api": {
+        "file": "1.9/checkpoints/caa6931c2/source/targeted_api.xml",
+        "sha256": "2fd84960f87ecc7b8f5ea35cda2e3c9021632337d6d4d1be5119a9ad86f65c31"
+      },
+      "actual_cuda": {
+        "file": "1.9/checkpoints/caa6931c2/source/actual_cuda.xml",
+        "sha256": "9f49c36c4b0870956a4b562ba6218216e8e39080322fd46d0dd5933df20316d6"
+      },
+      "neutral_interop_and_retirement": {
+        "file": "1.9/checkpoints/caa6931c2/source/neutral_interop_and_retirement.xml",
+        "sha256": "713627222b3ac659b6c1545d49f02867f517bbdac87e8b82fdb12c0838b94e93"
+      }
+    },
+    "hosted": {
+      "original_build_run": 44870566679,
+      "build_job": 136743919198,
+      "general_ci": 44870566833,
+      "scientific_and_secondary_build": 44870566734
+    },
+    "broader_optional_lint": "Extending the CI command to all historical scripts reported 16 lint diagnostics. The successor changes no scripts. The CI-scoped API lint and format commands both passed."
   }
 }
