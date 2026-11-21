@@ -788,20 +788,26 @@ def measure_point_cloud_preview(
 
 
 def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
-    source_bytes = payload.ply_text.encode("utf-8") if payload.ply_text is not None else None
+    point_colors: list[list[int]] = []
+    if payload.ply_text is not None:
+        # Validate the ASCII source before encoding it for provenance. Escaped
+        # lone UTF-16 surrogates must fail as a controlled parser error, never
+        # escape as UnicodeEncodeError before the standalone/workflow guards.
+        points = parse_ascii_ply_points(payload.ply_text, colors_out=point_colors)
+        source_bytes = payload.ply_text.encode("ascii")
+        source_format = "ply_ascii_point_cloud"
+    else:
+        points = payload.points
+        source_bytes = None
+        source_format = "xyz_points"
+    # Valid ASCII has identical byte-for-byte UTF-8 and ASCII digests. Preserve
+    # the exact submitted PLY (including comments/RGB) in source provenance.
     source_sha256 = hashlib.sha256(source_bytes).hexdigest() if source_bytes is not None else None
     expected_sha256 = payload.expected_source_payload_sha256
     if expected_sha256 is not None and source_sha256 != expected_sha256:
         raise ValueError(
             "Imported point-cloud source SHA-256 does not match expected source payload"
         )
-    point_colors: list[list[int]] = []
-    if payload.ply_text is not None:
-        points = parse_ascii_ply_points(payload.ply_text, colors_out=point_colors)
-        source_format = "ply_ascii_point_cloud"
-    else:
-        points = payload.points
-        source_format = "xyz_points"
     result = measure_point_cloud_preview(
         points=points,
         meters_per_unit=payload.meters_per_unit,
