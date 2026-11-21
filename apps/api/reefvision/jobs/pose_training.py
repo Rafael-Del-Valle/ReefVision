@@ -478,6 +478,25 @@ def _verify_pose_export_frame_pairs(
         )
 
 
+def _reject_overlapping_pose_zip_frames(
+    training_archive: zipfile.ZipFile,
+    validation_archive: zipfile.ZipFile,
+) -> None:
+    """Reject identical held-out frames before allocating immutable scientific data."""
+
+    def frame_hashes(archive: zipfile.ZipFile) -> set[bytes]:
+        return {
+            hashlib.sha256(archive.read(member)).digest()
+            for member in archive.infolist()
+            if not member.is_dir()
+            and member.filename.replace("\\", "/").startswith("images/train/")
+            and member.filename.endswith(".png")
+        }
+
+    if frame_hashes(training_archive) & frame_hashes(validation_archive):
+        raise ValidationError("Ultralytics pose validation export reuses a frozen training frame")
+
+
 def _reject_overlapping_pose_validation_frames(
     training_root: Path,
     validation_root: Path,
@@ -721,6 +740,8 @@ def materialize_pose_training_exports(
                 # incomplete scientist-reviewed frame pairs.
                 _preflight_pose_zip_labels(training_archive)
                 _preflight_pose_zip_labels(validation_archive)
+                # Verify independence before claiming the run directory.
+                _reject_overlapping_pose_zip_frames(training_archive, validation_archive)
         except KeyError as exc:
             raise ValidationError("Ultralytics pose export is missing data.yaml") from exc
         except (zipfile.BadZipFile, EOFError, zlib.error) as exc:
