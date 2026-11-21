@@ -7,7 +7,11 @@ on:
     branches:
       - develop/reefvision-1.0.3-consolidated
     paths:
+      # A candidate's CI and Windows console release gates must be rechecked
+      # alongside camera/gallery when their verification policy changes.
       - .github/workflows/reefvision-103-camera-gallery-regression.yml
+      - .github/workflows/ci.yml
+      - .github/workflows/reefvision-103-console-regression.yml
       - .github/workflows/build-desktop.yml
       - scripts/check-windows-installer-acceptance-version.py
       - apps/api/reefvision/tests/test_windows_installer_preflight_103.py
