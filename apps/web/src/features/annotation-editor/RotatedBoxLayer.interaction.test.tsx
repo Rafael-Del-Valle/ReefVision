@@ -179,6 +179,121 @@ describe("RotatedBoxLayer pointer integrity", () => {
     expect(onUpdate.mock.calls[0][0].points).not.toEqual(original.points);
   });
 
+
+  it("does not revise selected rotated boxes for clicks on move, rotation or resize handles", () => {
+    const original = rotatedBoxFromDrag(
+      { x: 200, y: 150 },
+      { x: 400, y: 300 },
+      "class-1",
+      "box-1",
+    );
+    const onCreate = vi.fn();
+    const onUpdate = vi.fn();
+    const canvas = renderLayer([original], onCreate, onUpdate);
+    const points = original.points;
+
+    const polygon = canvas.querySelector("polygon") as SVGPolygonElement;
+    fireEvent.pointerDown(polygon, {
+      button: 0,
+      pointerId: 41,
+      clientX: 150,
+      clientY: 100,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 41 });
+
+    const rotation = canvas.querySelector("circle") as SVGCircleElement;
+    fireEvent.pointerDown(rotation, {
+      button: 0,
+      pointerId: 42,
+      clientX: 150,
+      clientY: 62.5,
+    });
+    fireEvent.pointerMove(canvas, {
+      pointerId: 42,
+      clientX: 150,
+      clientY: 62.5,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 42 });
+
+    const corner = canvas.querySelector("rect") as SVGRectElement;
+    fireEvent.pointerDown(corner, {
+      button: 0,
+      pointerId: 43,
+      clientX: 100,
+      clientY: 75,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 43 });
+
+    expect(onCreate).not.toHaveBeenCalled();
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(original.points).toEqual(points);
+    expect(canvas.querySelector("polygon")?.getAttribute("points")).toBe(
+      points?.map((point) => `${point.x},${point.y}`).join(" "),
+    );
+
+    fireEvent.pointerDown(canvas.querySelector("polygon") as SVGPolygonElement, {
+      button: 0,
+      pointerId: 44,
+      clientX: 150,
+      clientY: 100,
+    });
+    fireEvent.pointerMove(canvas, {
+      pointerId: 44,
+      clientX: 175,
+      clientY: 120,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 44 });
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate.mock.calls[0][0].points).not.toEqual(original.points);
+  });
+
+  it("does not revise rotated boxes when image-edge clamping or return motion leaves geometry unchanged", () => {
+    const original = rotatedBoxFromDrag(
+      { x: 600, y: 200 },
+      { x: 800, y: 350 },
+      "class-1",
+      "box-edge",
+    );
+    const onUpdate = vi.fn();
+    const canvas = renderLayer([original], vi.fn(), onUpdate);
+
+    fireEvent.pointerDown(canvas.querySelector("polygon") as SVGPolygonElement, {
+      button: 0,
+      pointerId: 51,
+      clientX: 350,
+      clientY: 135,
+    });
+    fireEvent.pointerMove(canvas, {
+      pointerId: 51,
+      clientX: 395,
+      clientY: 135,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 51 });
+
+    fireEvent.pointerDown(canvas.querySelector("polygon") as SVGPolygonElement, {
+      button: 0,
+      pointerId: 52,
+      clientX: 350,
+      clientY: 135,
+    });
+    fireEvent.pointerMove(canvas, {
+      pointerId: 52,
+      clientX: 325,
+      clientY: 155,
+    });
+    fireEvent.pointerMove(canvas, {
+      pointerId: 52,
+      clientX: 350,
+      clientY: 135,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 52 });
+
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(canvas.querySelector("polygon")?.getAttribute("points")).toBe(
+      original.points?.map((point) => `${point.x},${point.y}`).join(" "),
+    );
+  });
+
   it("does not save a rotated-box edit when the browser revokes pointer capture", () => {
     const original = rotatedBoxFromDrag(
       { x: 200, y: 150 },
