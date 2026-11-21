@@ -115,6 +115,9 @@ class MeshPreviewRequest(BaseModel):
     # Render-only: keep faces containing source-axis extrema in the 512-face sample.
     # Never alters the full-mesh scientific measurements or their source fingerprint.
     preserve_axis_extrema_in_preview: StrictBool = False
+    # Render-only: prioritize one representative face per disconnected surface
+    # patch if the face budget permits; never changes scientific patch totals.
+    preserve_edge_connected_patches_in_preview: StrictBool = False
 
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> MeshPreviewRequest:
