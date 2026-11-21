@@ -25,6 +25,7 @@ from reefvision.services.workflow_metric_depth_3d import (
 )
 from reefvision.services.workflow_monitoring import monitoring_assessment_node
 from reefvision.services.workflow_monitoring_summary import monitoring_summary_node
+from reefvision.services.workflow_multimodal import register as register_multimodal
 from reefvision.services.workflow_multispectral import multispectral_node
 from reefvision.services.workflow_node_registry import (
     workflow_node_registry as base_workflow_node_registry,
@@ -979,6 +980,7 @@ def workflow_node_registry() -> dict[str, WorkflowNodeDefinitionResponse]:
     registry.update(register_scientific_comparison_nodes())
     registry.update(register_temporal_reefpose_nodes())
     registry["reefpose_appearance_replay"] = register_appearance_node()
+    registry["multimodal_study_replay"] = register_multimodal()
 
     registry["ecology_connected_branch_preview"] = WorkflowNodeDefinitionResponse(
         node_type="ecology_connected_branch_preview",

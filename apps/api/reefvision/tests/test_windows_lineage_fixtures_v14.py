@@ -187,7 +187,7 @@ def test_windows_lineage_fixtures_upgrade_and_keep_pre_upgrade_backups(
         )
         command.upgrade(config, "head")
         assert _query(database, "SELECT version_num FROM alembic_version") == [
-            ("b20_compute_0001",)
+            ("b20_integrated_0001",)
         ]
         assert _query(database, evidence_query) == expected
         assert _query(backup, "SELECT version_num FROM alembic_version") == [(entry["revision"],)]

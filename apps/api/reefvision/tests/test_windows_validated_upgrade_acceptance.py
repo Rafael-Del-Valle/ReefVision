@@ -61,7 +61,7 @@ def test_20_direct_upgrade_requires_original_19_msi_and_rollback(required: str) 
         "$partMatches[0].digest -cne $pin.digest",
         ".Count -ne 6",
         "-ExpectedInitialSchemaRevision 'b18_spectral_0002'",
-        "-ExpectedSchemaRevision 'b20_compute_0001'",
+        "-ExpectedSchemaRevision 'b20_integrated_0001'",
         "-VerifyPreviousInstallerRejectsUpgradedProfile",
     ],
 )
@@ -106,7 +106,7 @@ def test_direct_validated_16_upgrade_is_pinned_and_exercises_rollback() -> None:
     assert "d4e53ebfebdf8201526fa7f58acd31392eceba6cdee12b5145e55313452ffb3c" in job
     assert "3b596ee3ba5e9188776cd3208245c277a72013877677c9a16e359ee6da04c3be" in job
     assert "-ExpectedInitialSchemaRevision 'b16_integrated_0001'" in job
-    assert "-ExpectedSchemaRevision 'b20_compute_0001'" in job
+    assert "-ExpectedSchemaRevision 'b20_integrated_0001'" in job
     assert "-VerifyPreviousInstallerRejectsUpgradedProfile" in job
     assert PREFLIGHT.check_workflow(WORKFLOW, VERSION) == []
     assert PREFLIGHT.check_cab_artifact_partition(WORKFLOW, VERSION) == []
@@ -151,7 +151,7 @@ def test_direct_validated_14_upgrade_is_separate_from_existing_roles() -> None:
             "-ExpectedInitialSchemaRevision '0039'",
         ),
         (
-            "-ExpectedSchemaRevision 'b20_compute_0001'",
+            "-ExpectedSchemaRevision 'b20_integrated_0001'",
             "-ExpectedSchemaRevision 'b16_integrated_0001'",
         ),
         ("foreach ($part in 1..2)", "foreach ($part in 1..1)"),
@@ -216,7 +216,7 @@ def test_validated_upgrade_requires_independent_rollback(job_name: str) -> None:
             "-ExpectedInitialSchemaRevision '0039'",
         ),
         (
-            "-ExpectedSchemaRevision 'b20_compute_0001'",
+            "-ExpectedSchemaRevision 'b20_integrated_0001'",
             "-ExpectedSchemaRevision 'b16_integrated_0001'",
         ),
     ],

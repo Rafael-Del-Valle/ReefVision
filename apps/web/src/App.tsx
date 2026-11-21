@@ -43,6 +43,7 @@ import {
   type OnboardingWorkspace,
 } from "./features/onboarding/OnboardingModal";
 import { QualityControlDashboard } from "./features/quality-control/QualityControlDashboard";
+import { MultimodalWorkspace } from "./features/multimodal/MultimodalWorkspace";
 import { ReproducibilityWorkspace } from "./features/reproducibility/ReproducibilityWorkspace";
 import type { WorkflowGraphRecord } from "./features/workflow-graphs/workflowGraphApi";
 import { ReviewerLab } from "./features/reviewer-lab/ReviewerLab";
@@ -113,6 +114,7 @@ type ProjectView =
   | "computed_metrics"
   | "scientific_heatmaps"
   | "ecology"
+  | "multimodal"
   | "research_ecology"
   | "study_design"
   | "monitoring"
@@ -266,6 +268,11 @@ const PROJECT_NAV_GROUPS: Array<{
         label: "Monitoring",
         description:
           "Assess observation windows, review alerts, and compare local projects.",
+      },
+      {
+        id: "multimodal",
+        label: "Multimodal analysis",
+        description: "Align reviewed acoustic and optical survey observations.",
       },
       {
         id: "study_design",
@@ -1276,6 +1283,12 @@ function ReefVisionMainApp() {
                   handleVideoSelect(videoId);
                   setActiveView("video");
                 }}
+              />
+            )}
+            {activeView === "multimodal" && (
+              <MultimodalWorkspace
+                key={selectedProject.id}
+                projectId={selectedProject.id}
               />
             )}
             {activeView === "reproducibility" && (

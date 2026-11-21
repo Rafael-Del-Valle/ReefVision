@@ -6,16 +6,24 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import Job, PoseAppearanceStudy, ScientificRecord, WorkflowGraphRecord
+from reefvision.db.models.multimodal import MultimodalStudy
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.pose_appearance import AppearanceRequest
+from reefvision.services import project_exchange_multimodal_v20 as multimodal
 from reefvision.storage.datasets import canonical_json_sha256
 
 FORMAT = "2.0"
 STUDIES = "pose_appearance_studies"
 DECISIONS = "pose_appearance_decisions"
-SECTIONS = (STUDIES, DECISIONS)
+APPEARANCE_SECTIONS = (STUDIES, DECISIONS)
+SECTIONS = (*APPEARANCE_SECTIONS, multimodal.SECTION)
 WORKFLOW_TYPES = frozenset(
-    {"reefpose_appearance_replay", "plugin_image_measurement", "measurement_review_gate"}
+    {
+        "reefpose_appearance_replay",
+        "plugin_image_measurement",
+        "measurement_review_gate",
+        "multimodal_study_replay",
+    }
 )
 
 
@@ -49,6 +57,10 @@ def has_v20_records(session: Session, project: str) -> bool:
             select(Job.id)
             .where(Job.project_id == project, Job.job_type == "pose_appearance")
             .limit(1)
+        )
+        is not None
+        or session.scalar(
+            select(MultimodalStudy.id).where(MultimodalStudy.project_id == project).limit(1)
         )
         is not None
         or session.scalar(measurements) is not None
@@ -99,7 +111,10 @@ def snapshot_sources(name: str, payload: dict[str, Any]) -> dict[str, set[str]]:
 def remap_appearance(
     name: str, row: dict[str, Any], values: dict[str, Any], mapping: dict[str, str]
 ) -> None:
-    if name not in SECTIONS:
+    if name == multimodal.SECTION:
+        multimodal.remap(row, values, mapping)
+        return
+    if name not in APPEARANCE_SECTIONS:
         return
     values["payload_json"] = row["payload_json"]
     previous = row["source_id_map_json"]
@@ -115,6 +130,7 @@ def validate_appearance_exchange(
 ) -> None:
     try:
         _validate_records(version, project, rows)
+        multimodal.validate(rows)
     except (KeyError, ValueError, TypeError, IndexError, AttributeError) as exc:
         raise ValidationError("Appearance archive has malformed or unresolved evidence") from exc
 
@@ -128,7 +144,7 @@ def _validate_records(version: str, project: str, rows: dict[str, list[dict[str,
     by_section = {
         section: {r["id"]: r for r in items if "id" in r} for section, items in rows.items()
     }
-    for section in SECTIONS:
+    for section in APPEARANCE_SECTIONS:
         for row in rows.get(section, []):
             payload = row["payload_json"]
             mapping = row["source_id_map_json"]

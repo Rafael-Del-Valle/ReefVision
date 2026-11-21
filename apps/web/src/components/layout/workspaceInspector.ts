@@ -11,6 +11,7 @@ export type WorkspaceInspectorView =
   | "computed_metrics"
   | "scientific_heatmaps"
   | "ecology"
+  | "multimodal"
   | "research_ecology"
   | "study_design"
   | "monitoring"
@@ -64,6 +65,7 @@ export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "scientific_heatmaps",
   "ecology",
   "research_ecology",
+  "multimodal",
   "study_design",
   "monitoring",
   "reproducibility",
@@ -167,6 +169,21 @@ const WORKSPACE_INSPECTORS: Record<
         label: "Model comparison",
         target: "model_comparison",
         description: "Open paired comparisons.",
+      },
+    ],
+  },
+  multimodal: {
+    title: "Multimodal analysis",
+    summary:
+      "Compare paired optical measurements on a reviewed acoustic clock and spatial footprint.",
+    boundary: "record",
+    recordPolicy:
+      "A frozen study retains source measurements, alignment uncertainties, decision and reviewer.",
+    actions: [
+      {
+        label: "Organisms & ecology",
+        target: "research_ecology",
+        description: "Review registered identities and linked image evidence.",
       },
     ],
   },

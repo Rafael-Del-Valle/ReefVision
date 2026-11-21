@@ -22,7 +22,7 @@ from reefvision.storage.datasets import canonical_json_sha256
 
 _API_ROOT = Path(__file__).resolve().parents[2]
 _VERSIONS = _API_ROOT / "migrations" / "versions"
-_INTEGRATED_HEAD = "b20_compute_0001"
+_INTEGRATED_HEAD = "b20_integrated_0001"
 _POSE_MIGRATIONS = (
     "0038_pose_anatomy_definitions.py",
     "0039_pose_evaluation_runs.py",

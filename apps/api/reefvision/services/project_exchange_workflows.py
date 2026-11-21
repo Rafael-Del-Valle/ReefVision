@@ -301,6 +301,13 @@ def restore_workflow_provenance(
                         artifact.payload_json = _restore_report_link(
                             session, project_id, artifact.payload_json
                         )
+                    elif artifact.data_type == "multimodal_study_report":
+                        study_id = artifact.payload_json["study_id"]
+                        route = f"/projects/{project_id}/multimodal/studies/{study_id}"
+                        artifact.payload_json = {
+                            **artifact.payload_json,
+                            "download_url": route + "/export",
+                        }
                     elif artifact.data_type == "pose_appearance_report":
                         study_id = artifact.payload_json["study_id"]
                         route = f"/projects/{project_id}/pose-appearance/studies/{study_id}"
