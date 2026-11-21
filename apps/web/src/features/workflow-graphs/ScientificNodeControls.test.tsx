@@ -108,6 +108,27 @@ it("configures a project-owned mesh measurement from the guided workspace", asyn
     '"meters_per_unit":0.001',
   );
   expect(screen.getByText(/Surface routes are geometric paths/)).toBeVisible();
+  const extrema = screen.getByLabelText(
+    "Preserve source-axis extrema faces in preview",
+  );
+  const patches = screen.getByLabelText(
+    "Preserve disconnected mesh patches in preview",
+  );
+  expect(extrema).not.toBeChecked();
+  expect(patches).not.toBeChecked();
+  fireEvent.click(extrema);
+  fireEvent.click(patches);
+  expect(screen.getByRole("status").textContent).toContain(
+    '"preserve_axis_extrema_in_preview":true',
+  );
+  expect(screen.getByRole("status").textContent).toContain(
+    '"preserve_edge_connected_patches_in_preview":true',
+  );
+  fireEvent.click(extrema);
+  expect(screen.getByRole("status").textContent).toContain(
+    '"preserve_axis_extrema_in_preview":false',
+  );
+  expect(screen.getByText(/Display sampling only/)).toBeVisible();
 });
 
 it("keeps point-cloud measurements distinct from surface and branch claims", async () => {
