@@ -95,11 +95,33 @@ def _sample_mesh_display_geometry(
     points: list[tuple[float, float, float]],
     faces: list[list[int]],
     scale: float,
+    preserve_axis_extrema: bool = False,
 ) -> dict[str, Any]:
     """Bounded render-only triangle sample; scientific metrics use all faces."""
     count = min(len(faces), MAX_PREVIEW_TRIANGLES)
     last = len(faces) - 1
     face_indices = [0] if count == 1 else [index * last // (count - 1) for index in range(count)]
+    if preserve_axis_extrema and count < len(faces):
+        # Choose the first referenced vertex at each source-axis extremum,
+        # then preserve a source face containing it. Orphan vertices must not
+        # affect the display or the full-reconstruction camera frame.
+        referenced = sorted({index for face in faces for index in face})
+        extremal_vertices: set[int] = set()
+        for axis in range(3):
+            extremal_vertices.add(min(referenced, key=lambda index: (points[index][axis], index)))
+            extremal_vertices.add(max(referenced, key=lambda index: (points[index][axis], -index)))
+        protected = {0, last}
+        for vertex_index in sorted(extremal_vertices):
+            protected.add(next(index for index, face in enumerate(faces) if vertex_index in face))
+        remaining = [index for index in range(len(faces)) if index not in protected]
+        slots = count - len(protected)
+        if slots == 1:
+            sampled = [remaining[len(remaining) // 2]]
+        elif slots > 1:
+            sampled = [remaining[i * (len(remaining) - 1) // (slots - 1)] for i in range(slots)]
+        else:
+            sampled = []
+        face_indices = sorted(protected | set(sampled))
     vertex_indices: list[int] = []
     local_indices: dict[int, int] = {}
     display_faces: list[list[int]] = []
@@ -119,6 +141,11 @@ def _sample_mesh_display_geometry(
             [coordinate * scale for coordinate in points[index]] for index in vertex_indices
         ],
         "preview_is_decimated": count < len(faces),
+        "preview_sampling_strategy": (
+            "uniform_face_index_extrema_preserving"
+            if preserve_axis_extrema
+            else "uniform_face_index"
+        ),
         "preview_face_count": count,
         "preview_face_fraction": count / len(faces),
         # Render-only sampling coverage, not biological area coverage.
@@ -136,6 +163,7 @@ def measure_mesh_preview(
     source_label: str | None = None,
     surface_path_vertex_pairs: list[list[int]] | None = None,
     surface_trace_vertex_paths: list[list[int]] | None = None,
+    preserve_axis_extrema_in_preview: bool = False,
 ) -> dict[str, Any]:
     if (
         not 3 <= len(vertices) <= spatial_mesh_obj_v14.MAX_VERTICES
@@ -165,6 +193,8 @@ def measure_mesh_preview(
         or not isfinite(relative_scale_uncertainty)
     ):
         raise ValueError("relative_scale_uncertainty must be between 0 and 1")
+    if type(preserve_axis_extrema_in_preview) is not bool:
+        raise ValueError("preserve_axis_extrema_in_preview must be a boolean")
 
     points: list[tuple[float, float, float]] = []
     for vertex in vertices:
@@ -641,7 +671,9 @@ def measure_mesh_preview(
     ).hexdigest()
     # Display sampling can underrepresent large triangles; expose its area
     # coverage without treating sampled faces as scientific measurements.
-    display_geometry = _sample_mesh_display_geometry(points, faces, scale)
+    display_geometry = _sample_mesh_display_geometry(
+        points, faces, scale, preserve_axis_extrema_in_preview
+    )
     sampled_raw_area = fsum(face_areas[index] for index in display_geometry["preview_face_indices"])
     # The camera frame uses all source faces, whereas the renderer only
     # displays a bounded sample. Detect when the displayed vertices omit a
@@ -1188,6 +1220,7 @@ def preview_from_request(payload: Any) -> dict[str, Any]:
         source_label=payload.source_label,
         surface_path_vertex_pairs=payload.surface_path_vertex_pairs,
         surface_trace_vertex_paths=payload.surface_trace_vertex_paths,
+        preserve_axis_extrema_in_preview=payload.preserve_axis_extrema_in_preview,
     )
     source_byte_count = len(source_bytes) if source_bytes is not None else None
     result["provenance"].update(
