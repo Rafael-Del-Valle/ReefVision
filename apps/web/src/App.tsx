@@ -46,6 +46,7 @@ import { QualityControlDashboard } from "./features/quality-control/QualityContr
 import { MultimodalWorkspace } from "./features/multimodal/MultimodalWorkspace";
 import { ReproducibilityWorkspace } from "./features/reproducibility/ReproducibilityWorkspace";
 import type { WorkflowGraphRecord } from "./features/workflow-graphs/workflowGraphApi";
+import { getApiBaseUrl } from "./runtime";
 import { ReviewerLab } from "./features/reviewer-lab/ReviewerLab";
 import { ReviewQueueDashboard } from "./features/review-queues/ReviewQueueDashboard";
 import { SystemPanel } from "./features/system/SystemPanel";
@@ -363,6 +364,11 @@ function ReefVisionMainApp() {
   const [showImport, setShowImport] = useState(false);
   const [researchGraph, setResearchGraph] =
     useState<WorkflowGraphRecord | null>(null);
+  const [automationRevision, setAutomationRevision] = useState<{
+    projectId: string;
+    openedFromId?: string;
+    recordId: string;
+  }>();
   const [scheduledRunId, setScheduledRunId] = useState<string | null>(null);
   const [workflowReviewOrigin, setWorkflowReviewOrigin] = useState<
     string | null
@@ -1379,6 +1385,13 @@ function ReefVisionMainApp() {
                     ? researchGraph.graph_json
                     : undefined
                 }
+                onSelectSavedRevision={(record) =>
+                  setAutomationRevision({
+                    projectId: record.project_id,
+                    openedFromId: researchGraph?.id,
+                    recordId: record.id,
+                  })
+                }
                 onOpenScience={setActiveView}
                 onOpenPoseReview={(target) => {
                   setScheduledRunId(target.runId);
@@ -1627,6 +1640,17 @@ function ReefVisionMainApp() {
         <OnboardingModal
           version={health.data?.version ?? applicationVersion}
           hasProject={Boolean(selectedProject)}
+          automationApiBaseUrl={getApiBaseUrl()}
+          automationProject={selectedProject ?? undefined}
+          preferredWorkflowRevisionId={
+            automationRevision &&
+            automationRevision.projectId === selectedProject?.id &&
+            automationRevision.openedFromId === researchGraph?.id
+              ? automationRevision.recordId
+              : researchGraph?.project_id === selectedProject?.id
+                ? researchGraph?.id
+                : undefined
+          }
           onStartProject={(action) => {
             if (preventQcNavigation()) return;
             setSelectedProjectId(null);
