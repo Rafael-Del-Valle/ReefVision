@@ -1069,6 +1069,49 @@
       },
       "live_imported_review_state": "imported_review_required",
       "limitations": "The canonical source export preserved explicit per-frame times in its manifest. Imported observations retained frame indices and positions but lacked live timestamp_seconds. A separate mixed-status source exported both verified and machine-generated tracks without identifying source status."
+    },
+    "registered_clean": {
+      "source": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8",
+      "run": 44853957856,
+      "job": 136703618659,
+      "artifact": 14689805690,
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/official/registered-clean-verification.json",
+        "sha256": "c6f87b4200d0aa6536d27f80ac48419d38a3ade79ab13979644fc98352e00a5a"
+      },
+      "stage_counts": {
+        "PASS": 21,
+        "SKIPPED": 11
+      },
+      "journeys": {
+        "first_use": 1,
+        "workspaces": 7,
+        "research": 6,
+        "spatial": 10,
+        "monitoring": 2,
+        "research_tools": 5
+      },
+      "scheduler_restarts": 2,
+      "standard_user": {
+        "desktop_integrity": 8192,
+        "driver_integrity": 12288,
+        "desktop_sha256": "0b0bac68d35827aa1d2956ddf3f119cd3f525fbe05862ca18b546d07eb94cf30"
+      },
+      "source_box": [
+        20.00393,
+        15.03628,
+        55.00524,
+        40.03721
+      ],
+      "max_source_delta_px": 0.03721,
+      "transport_sha256": "be3c5c40542566339f2d87502d954330fe2baa88b9eae5f923b81b941cb35506"
+    },
+    "original_catalog_limitation": {
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/official/evidence/compatibility-handoff/original-compatibility-handoff.json",
+        "sha256": "c38f05cca3859d6436e7cfbfe6abb5dcdc961abc3f4ee33bbfebb1a82482af26"
+      },
+      "result": "After ordinary import of a fixture with a historical provider, its model card reported ready for offline inference while its provider and capabilities were unavailable. The historical registration and its stored bytes remained readable."
     }
   },
   "reviewed_retirement_predecessor": {
@@ -1100,5 +1143,63 @@
     "linux_skips": 18,
     "linux_failures": 2,
     "cause": "Two tests used the deprecated Pillow Image.getdata on the newest supported Pillow, which raises with warnings treated as errors. The independent compatibility correction is in 54a89896c484fc0525d9c8e73323d5f5706d3522."
+  },
+  "reviewed_neutral_exchange": {
+    "source": "d80365c77139c4e0bc04ed157d5c5790259cf62a",
+    "draft": 123,
+    "receipt": {
+      "file": "1.8/checkpoints/d80365c77/source/neutral-pose/index.json",
+      "sha256": "8089bb22e511e56e438b8682a854704920463a9965e9079c29cae962a926358b"
+    },
+    "observed": "On generated mixed tracks, default COCO contained 36 reviewed observations. Explicit archival inclusion retained 72 observations and both source statuses. The new imported track required review and all 96 irregular presentation timestamps survived."
+  },
+  "reviewed_native_anatomy": {
+    "source": "57f16152be0b3220a5bc4f85ceff35a42161825a",
+    "draft": 124,
+    "receipt": {
+      "file": "1.8/checkpoints/57f16152b/native-pose-review/evidence-index.json",
+      "sha256": "f9bf4b289a5b3cbf9fb5408042dbf8d8185a0398f9aa9d26b7fd131a982f1b5b"
+    },
+    "run_ids": [
+      "69404350-dace-4ec2-8fec-f331a2dcbb17",
+      "d6b7ef0b-b0a0-4bd9-bcf5-993b0b1b7e23"
+    ],
+    "observed": "Two ordinary saved executions on generated data independently trained on CPU, registered checkpoints, processed a held-out recording, reached two human review gates and exported a ZIP with the verified pose. Keeping the run-derived registration name allowed both runs. Explicitly reusing a fixed name for the second distinct checkpoint was refused."
+  },
+  "reviewed_historical_model_exchange": {
+    "source": "3736712ff3c43bc7063a312244e9ab042c2a0185",
+    "draft": 125,
+    "receipt": {
+      "file": "1.8/checkpoints/3736712ff/source/provider-exchange/index.json",
+      "sha256": "c3e0d76d15315096bbeda5d2df6f56f2bd50e45fbb584b4e9d8252b66c9e3cff"
+    },
+    "two_hop_receipt": {
+      "file": "1.8/checkpoints/3736712ff/source/provider-exchange/two-exchange-generations.json",
+      "sha256": "849053ec92c9bbe5fb46886413a2265741e0238dce9ae20c3da3a670dfdddc28"
+    },
+    "tests": {
+      "focused": 65,
+      "additional_field_binding": 1,
+      "mypy_files": 775,
+      "ruff": "passed"
+    },
+    "observed": "Both public exchange generations preserved opaque vendor metadata, literal class labels, original asset bytes and a historical pending prediction. Known local relationships mapped to new IDs. Unavailable inference created zero new jobs and directed the researcher to Model Hub."
+  },
+  "reviewed_predecessor_integration": {
+    "source": "4ac9fd69be43a9d0045e6dd8816041c4c796b098",
+    "worktree": "C:/rv18-reviewed-predecessors",
+    "drafts": [
+      120,
+      122,
+      123,
+      124,
+      125
+    ],
+    "frontend_tests": 954,
+    "frontend_files": 140,
+    "frontend_build": "passed",
+    "windows_full_backend": "C:/rvb18-4ac9",
+    "product_version": "1.8.0",
+    "schema": "b18_spectral_0002"
   }
 }

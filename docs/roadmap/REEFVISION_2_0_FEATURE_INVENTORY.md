@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T03:19:20Z`
+Updated: `2026-11-21T03:35:58Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -672,6 +672,7 @@ Evidence:
 - `source`: Refinement, boundary context, identity/revision staleness, and review tests. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/87` (`rv13-refine-src`)
 - `browser`: In the corrected 1.8 local MSI's ordinary extracted WebView2, disconnect, selection change and reconnect cancelled only the clicked queued identity job. The raw reopened database preserved both job/run outcomes. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv13-temporal-refinement-review-native-identity-cancel-9cde9e6e7`)
 - `browser`: The application refined 12 frames, persisted six explicit review decisions, measured movement and exported six measurements with their review history. Its comparison recorded the limits of group verification. — `docs/validation/stable-research-e3e8ffb63.json` (`rv13-temporal-refinement-review-ordinary-temporal-review-e3e8ffb63`)
+- `browser`: The source browser opened the schema bound to the native model, recorded explicit identity breaks and landmark review, and exported a verified pose on each of two independent scratch-trained saved executions. — `docs/validation/stable-research-e3e8ffb63.json` (`rv13-temporal-refinement-review-native-bound-57f16152b`)
 - `windows_installed`: Installed 1.2 to 1.3 temporal workflow acceptance. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/87` (`rv13-refine-win`)
 - `physical_hardware`: The exact local 1.8 production desktop froze three synthetic recordings, trained a causal CPU checkpoint, reviewed six frame decisions and downloaded their measurements. WebView2 kept all original video hashes intact and the evaluation recorded unverified animal groups. — `docs/validation/stable-research-e3e8ffb63.json` (`rv13-temporal-refinement-review-native-temporal-ui-e3e8ffb63`)
 - `representative_data`: none recorded
@@ -1366,6 +1367,7 @@ Evidence:
 - `browser`: On the corrected source, two real CPU training controls and all five research journeys passed with generated data, retained exports and two saved reproductions per workflow. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-bioacoustics-stable-e3e8ffb63`)
 - `browser`: The ordinary-account WebView2 of the corrected local 1.8 MSI completed two CPU training controls and all five research journeys. A second marked profile reopened all ten earlier saved research outputs and verified its 229-file backup. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-bioacoustics-local-webview2-e3e8ffb63`)
 - `windows_installed`: The original 542254b8a MSI completed all five generated research workflows in a registered standard-user Windows desktop, with retained report and saved replay results. The pinned test-driver retest ran 30 journeys plus two scheduler phases. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-bioacoustics-registered-standard-user-542254b8a`)
+- `windows_installed`: The registered 1.8 MSI passed this ordinary research journey on generated inputs under a standard Windows account. Research Tools ran five journeys. All 31 desktop journeys passed on the same package. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-bioacoustics-registered-e3e8ffb63`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1401,6 +1403,7 @@ Evidence:
 - `browser`: Two independent normal segmenter clicks on generated held-out stills preserved the frozen reference and existing reviewed masks; the new model outputs stayed pending on their selected originals. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-domain-shift-normal-segmentation-e3e8ffb63`)
 - `browser`: The ordinary-account WebView2 of the corrected local 1.8 MSI completed two CPU training controls and all five research journeys. A second marked profile reopened all ten earlier saved research outputs and verified its 229-file backup. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-domain-shift-local-webview2-e3e8ffb63`)
 - `windows_installed`: The original 542254b8a MSI completed all five generated research workflows in a registered standard-user Windows desktop, with retained report and saved replay results. The pinned test-driver retest ran 30 journeys plus two scheduler phases. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-domain-shift-registered-standard-user-542254b8a`)
+- `windows_installed`: The registered 1.8 MSI passed this ordinary research journey on generated inputs under a standard Windows account. Research Tools ran five journeys. All 31 desktop journeys passed on the same package. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-domain-shift-registered-e3e8ffb63`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1433,6 +1436,7 @@ Evidence:
 - `browser`: On the corrected source, two real CPU training controls and all five research journeys passed with generated data, retained exports and two saved reproductions per workflow. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-multispectral-stable-e3e8ffb63`)
 - `browser`: The ordinary-account WebView2 of the corrected local 1.8 MSI completed two CPU training controls and all five research journeys. A second marked profile reopened all ten earlier saved research outputs and verified its 229-file backup. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-multispectral-local-webview2-e3e8ffb63`)
 - `windows_installed`: The original 542254b8a MSI completed all five generated research workflows in a registered standard-user Windows desktop, with retained report and saved replay results. The pinned test-driver retest ran 30 journeys plus two scheduler phases. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-multispectral-registered-standard-user-542254b8a`)
+- `windows_installed`: The registered 1.8 MSI passed this ordinary research journey on generated inputs under a standard Windows account. Research Tools ran five journeys. All 31 desktop journeys passed on the same package. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-multispectral-registered-e3e8ffb63`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1465,6 +1469,7 @@ Evidence:
 - `browser`: On the corrected source, two real CPU training controls and all five research journeys passed with generated data, retained exports and two saved reproductions per workflow. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-taxonomy-detectability-stable-e3e8ffb63`)
 - `browser`: The ordinary-account WebView2 of the corrected local 1.8 MSI completed two CPU training controls and all five research journeys. A second marked profile reopened all ten earlier saved research outputs and verified its 229-file backup. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-taxonomy-detectability-local-webview2-e3e8ffb63`)
 - `windows_installed`: The original 542254b8a MSI completed all five generated research workflows in a registered standard-user Windows desktop, with retained report and saved replay results. The pinned test-driver retest ran 30 journeys plus two scheduler phases. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-taxonomy-detectability-registered-standard-user-542254b8a`)
+- `windows_installed`: The registered 1.8 MSI passed this ordinary research journey on generated inputs under a standard Windows account. Research Tools ran five journeys. All 31 desktop journeys passed on the same package. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-taxonomy-detectability-registered-e3e8ffb63`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1498,6 +1503,7 @@ Evidence:
 - `browser`: A real scratch segmenter bound to the new image generated two pending polygons. In a separate adjusted-display case, the unchecked deployment opt-in preserved the original model input. The actual visible and managed pixel digests, source masks and frozen reference were checked. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-underwater-correction-normal-segmentation-e3e8ffb63`)
 - `browser`: The ordinary-account WebView2 of the corrected local 1.8 MSI completed two CPU training controls and all five research journeys. A second marked profile reopened all ten earlier saved research outputs and verified its 229-file backup. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-underwater-correction-local-webview2-e3e8ffb63`)
 - `windows_installed`: The original 542254b8a MSI completed all five generated research workflows in a registered standard-user Windows desktop, with retained report and saved replay results. The pinned test-driver retest ran 30 journeys plus two scheduler phases. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-underwater-correction-registered-standard-user-542254b8a`)
+- `windows_installed`: The registered 1.8 MSI passed this ordinary research journey on generated inputs under a standard Windows account. Research Tools ran five journeys. All 31 desktop journeys passed on the same package. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-underwater-correction-registered-e3e8ffb63`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1516,6 +1522,7 @@ Acceptance checks:
 Evidence:
 
 - `source`: Two actual export/import generations on the inherited 1.8 source preserved typed links and original bytes but changed an unavailable provider's external UUID literals. The source project and opaque-field regression fixture are retained for repair. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv19-ancestry-integration-inherited-transfer-baseline-9cde9e6e7`)
+- `source`: Two real export, inspect, import and reopen generations preserved unknown provider data and checkpoint bytes exactly while the local rows and ordinary class links rebound. This is inherited source evidence. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-ancestry-integration-literal-history-3736712ff`)
 - `browser`: none recorded
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
@@ -1556,7 +1563,7 @@ Acceptance checks:
 Evidence:
 
 - `source`: none recorded
-- `browser`: none recorded
+- `browser`: A researcher used the existing advanced graph editor with declared input IDs, then ran one 14-node revision twice. Both scratch CPU checkpoints, reviewed held-out poses and downloaded ZIPs have distinct receipts. The result uses run-derived registration names and provides the source baseline for the 1.9 guided and installed workflow. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-end-to-end-workflows-inherited-57f16152b`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
