@@ -270,3 +270,49 @@ node is appropriate for an external installer-evidence verifier. Scientific
 workflow execution and human review remain unchanged. **Release HOLD** for
 Alembic reconciliation, installed Windows GUI/MSI upgrade/rollback and
 representative biological acceptance.
+
+
+## Track D 1.6 — isolated exact-head Phase 11C Windows acceptance (2026-11-21)
+
+The existing Phase 11C wrapper was pinned to the historical
+`feat/scientist-ready-phase11-packaging-hardware-20261004` branch and inspected
+only generic installation/persistence PASS flags. Consequently it could not
+validate the independent `develop/reefvision-1.6` candidate and did not
+independently enforce its installed class-visibility, manual QC coordination,
+persisted typed QC Workflow Builder graph and replay gates. Its build-provenance
+checks also did not bind the MSI source commit to the checkout under test.
+
+`scripts/phase11c-acceptance.ps1 -TrackD16` now explicitly permits **only**
+`develop/reefvision-1.6`, rejects a missing/malformed/mismatched MSI
+`build-provenance.json` source commit, and reads `ProductVersion` from the
+actual MSI rather than trusting a report claim. After the disposable installed
+harness completes, it runs the existing independent
+`validate_windows_acceptance_report.py` against the exact MSI bytes, reported
+schema/version, temporal order and human-review/QC/saved-workflow evidence.
+An invalid, omitted or skipped required scientific check is a failure.
+The historical Phase 11 branch remains the default when `-TrackD16` is absent.
+`-PlanOnly` remains **plan-only** and exits without claiming installation.
+
+On a disposable and researcher-approved Windows VM with a locally built,
+source-matched MSI/CAB bundle and a clean 1.6 checkout, the intended invocation
+is:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\phase11c-acceptance.ps1 -TrackD16 -DisposableTest
+```
+
+The run requires the existing local Python interpreter for offline independent
+evidence verification; it never downloads a pretrained checkpoint by default.
+Native `scripts/test-windows-clean-install-harness.ps1` now exercises the
+isolated/legacy branch choices, missing/stale source provenance, and wrapper
+evidence-verifier wiring without installing anything or accessing research data.
+The original typed, executable, persisted QC Workflow Builder graph and
+reviewer approval gate are **reused**, not duplicated as a new node.
+
+**Release HOLD:** This is a guarded harness path, **not evidence that the MSI,
+cabinet, installed GUI, upgrade/rollback, representative biological workflows,
+or independent 1.1/1.6 Alembic-0038 reconciliation passed**. Native Windows
+tests and complete exact-head CI are separately required. Do not point the
+harness at a non-disposable system or researcher's only database; no installation,
+release, approval, schema merge, user-asset alteration or hosted service is
+authorized by this change.

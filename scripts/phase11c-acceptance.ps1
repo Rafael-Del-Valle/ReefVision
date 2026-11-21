@@ -5,14 +5,15 @@ param(
     [switch]$PreviousInstallerSupportsIsolatedAcceptance,
     [switch]$DisposableTest,
     [switch]$PlanOnly,
-    [switch]$KeepArtifacts
+    [switch]$KeepArtifacts,
+    [switch]$TrackD16
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $Repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$ExpectedBranch = "feat/scientist-ready-phase11-packaging-hardware-20261004"
+. (Join-Path $PSScriptRoot "lib\phase11c-track16.ps1")
 $CleanHarness = Join-Path $Repo "scripts\acceptance-windows-clean-install.ps1"
 
 Set-Location $Repo
@@ -25,9 +26,10 @@ if (-not $DisposableTest -and -not $PlanOnly) {
 }
 
 $Branch = (git branch --show-current).Trim()
-if ($LASTEXITCODE -ne 0 -or $Branch -ne $ExpectedBranch) {
-    throw "Phase 11C must run on $ExpectedBranch (found: $Branch)"
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not determine Phase 11C source branch."
 }
+[void](Assert-ReefVisionPhase11CBranch -ActualBranch $Branch -TrackD16:$TrackD16)
 
 $Head = (git rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) {
@@ -64,6 +66,7 @@ if (-not [bool]$BuildProvenance.source_tree_clean) {
 if (-not [bool]$BuildProvenance.msi_verified) {
     throw "Installer provenance says MSI package verification was skipped."
 }
+Assert-ReefVisionPhase11CBuildSource -HarnessHead $Head -InstallerSourceCommit ([string]$BuildProvenance.source_commit) -TrackD16:$TrackD16
 
 $MsiHash = (Get-FileHash -LiteralPath $Msi.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
 $MsiRecord = @($BuildProvenance.files | Where-Object { [string]$_.name -eq $Msi.Name })
@@ -76,6 +79,14 @@ if ([string]$MsiRecord[0].sha256 -ne $MsiHash) {
 
 $InstallerCom = New-Object -ComObject WindowsInstaller.Installer
 $Database = $InstallerCom.OpenDatabase($Msi.FullName, 0)
+$VersionView = $Database.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property`` = 'ProductVersion'")
+$VersionView.Execute()
+$VersionRecord = $VersionView.Fetch()
+if ($null -eq $VersionRecord) {
+    throw "The MSI has no ProductVersion property."
+}
+$MsiProductVersion = [string]$VersionRecord.StringData(1)
+$VersionView.Close()
 $MediaView = $Database.OpenView("SELECT ``Cabinet`` FROM ``Media`` ORDER BY ``DiskId``")
 $MediaView.Execute()
 $RequiredCabs = @()
@@ -204,6 +215,22 @@ if ($PreviousInstallerPath) {
 }
 elseif ([string]$Report.upgrade.status -ne "SKIPPED") {
     throw "Upgrade should be explicitly SKIPPED when no previous safe MSI is supplied."
+}
+
+if ($TrackD16) {
+    # Require the already-existing independent installed-science report verifier.
+    # It checks 1.6 class visibility, QC review, persisted/replayed typed QC graphs,
+    # timestamps, migration identity, offline model policy, and MSI digest.
+    $verifier = Join-Path $Repo "scripts\validate_windows_acceptance_report.py"
+    $python = Get-Command python.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $python) {
+        throw "Track D 1.6 installed acceptance requires an existing Python interpreter for offline evidence verification."
+    }
+    $expectedUpgrade = if ($PreviousInstallerPath) { "passed" } else { "skipped" }
+    & $python.Source $verifier --report $ReportPath --expected-version $MsiProductVersion --expected-upgrade $expectedUpgrade --installer $Msi.FullName
+    if ($LASTEXITCODE -ne 0) {
+        throw "Track D 1.6 installed class visibility, QC, and saved Workflow Builder evidence failed independent validation."
+    }
 }
 
 if (git status --porcelain) {

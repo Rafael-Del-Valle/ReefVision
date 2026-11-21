@@ -43,6 +43,42 @@ function Assert-ThrowsContaining([scriptblock]$Action, [string]$ExpectedText) {
     $script:passed++
 }
 
+# Track D 1.6 Phase 11C must work on its own isolated branch, and only
+# an MSI built at the exact validated branch SHA can count as acceptance.
+. (Join-Path $PSScriptRoot 'lib\phase11c-track16.ps1')
+$phase11Legacy = 'feat/scientist-ready-phase11-packaging-hardware-20261004'
+$phase11TrackD = 'develop/reefvision-1.6'
+Assert-True ((Assert-ReefVisionPhase11CBranch -ActualBranch $phase11Legacy) -ceq $phase11Legacy) 'Legacy Phase 11 branch support was lost.'
+Assert-True ((Assert-ReefVisionPhase11CBranch -ActualBranch $phase11TrackD -TrackD16) -ceq $phase11TrackD) 'Track D Phase 11C branch was rejected.'
+Assert-ThrowsContaining {
+    Assert-ReefVisionPhase11CBranch -ActualBranch $phase11Legacy -TrackD16
+} $phase11TrackD
+Assert-ThrowsContaining {
+    Assert-ReefVisionPhase11CBranch -ActualBranch $phase11TrackD
+} $phase11Legacy
+Assert-ThrowsContaining {
+    Assert-ReefVisionPhase11CBranch -ActualBranch 'main' -TrackD16
+} $phase11TrackD
+$phase11Sha = 'a' * 40
+Assert-ReefVisionPhase11CBuildSource -HarnessHead $phase11Sha -InstallerSourceCommit $phase11Sha -TrackD16
+$passed++
+foreach ($source in @('b' * 40, 'not-a-commit', '')) {
+    Assert-ThrowsContaining {
+        Assert-ReefVisionPhase11CBuildSource -HarnessHead $phase11Sha -InstallerSourceCommit $source -TrackD16
+    } 'exact checked-out commit'
+}
+Assert-ThrowsContaining {
+    Assert-ReefVisionPhase11CBuildSource -HarnessHead 'invalid' -InstallerSourceCommit $phase11Sha -TrackD16
+} 'exact checked-out commit'
+Assert-ReefVisionPhase11CBuildSource -HarnessHead $phase11Sha -InstallerSourceCommit ('b' * 40)
+$passed++
+$phase11Wrapper = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'phase11c-acceptance.ps1') -Raw
+Assert-True ($phase11Wrapper.Contains('[switch]$TrackD16')) 'Phase 11C has no Track D opt-in.'
+Assert-True ($phase11Wrapper.Contains('Assert-ReefVisionPhase11CBuildSource -HarnessHead $Head')) 'Phase 11C does not enforce exact-head build provenance.'
+Assert-True ($phase11Wrapper.Contains('validate_windows_acceptance_report.py')) 'Phase 11C omits installed-science evidence validation.'
+Assert-True ($phase11Wrapper.Contains('--expected-version $MsiProductVersion')) 'Phase 11C does not bind reported version to MSI ProductVersion.'
+Assert-True ($phase11Wrapper.Contains('--expected-upgrade $expectedUpgrade')) 'Phase 11C does not check upgrade evidence status.'
+
 $defaultData = Join-Path $env:APPDATA 'org.reefvision.desktop'
 $OldConfig = $env:REEFVISION_CONFIG_DIR
 $HadConfig = Test-Path Env:REEFVISION_CONFIG_DIR
