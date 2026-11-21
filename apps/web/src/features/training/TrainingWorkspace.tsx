@@ -32,7 +32,10 @@ import {
 import { TaskCapabilityMatrix } from "./TaskCapabilityMatrix";
 import { useActionConfirmation } from "../../components/ui/ActionConfirmation";
 import { SegmentationEvaluationPanel } from "./SegmentationEvaluationPanel";
-import { TrainingRunDetail } from "./TrainingRunDetail";
+import {
+  trainingRegistrationLabel,
+  TrainingRunDetail,
+} from "./TrainingRunDetail";
 import { trainingRunsContainActive } from "./trainingRunState";
 
 type TrainingSection =
@@ -910,8 +913,9 @@ export function TrainingWorkspace({
     visibleRuns.find((run) => run.id === selectedRunId) ??
     visibleRuns[0] ??
     null;
-  const isHistorySection =
-    activeSection === "runs" || activeSection === "experiments";
+  const requiresDraft = !["runs", "experiments", "models"].includes(
+    activeSection,
+  );
 
   const registeredRunModels = useMemo(() => {
     const legacy = new Map<string, ModelRegistration>();
@@ -1026,7 +1030,7 @@ export function TrainingWorkspace({
         </aside>
 
         <div className="training-content">
-          {!isHistorySection &&
+          {requiresDraft &&
             selectedDraftId &&
             !selectedDraft &&
             selectedDraftQuery.isPending && (
@@ -1038,13 +1042,13 @@ export function TrainingWorkspace({
                 </p>
               </div>
             )}
-          {!isHistorySection && selectedDraftId && selectedDraftQuery.error && (
+          {requiresDraft && selectedDraftId && selectedDraftQuery.error && (
             <div className="empty-state">
               <h4>Training draft unavailable</h4>
               <p>{selectedDraftQuery.error.message}</p>
             </div>
           )}
-          {!isHistorySection && !selectedDraft && !selectedDraftId && (
+          {requiresDraft && !selectedDraft && !selectedDraftId && (
             <div className="empty-state">
               <h4>No training draft selected</h4>
               <p>
@@ -2238,79 +2242,78 @@ export function TrainingWorkspace({
             </div>
           )}
 
+          {activeSection === "models" && (
+            <div className="training-card-grid">
+              <SegmentationEvaluationPanel project={project} />
+              <article className="system-card">
+                <h4>Run artifacts</h4>
+                <p className="system-subtle">
+                  Completed runs keep their best checkpoint paths and experiment
+                  lineage here. Registration is explicit, so a completed run
+                  stays separate from the active model registry until you choose
+                  to register it.
+                </p>
+                <div className="training-run-list">
+                  {runs.data
+                    ?.filter((run) => run.result_checkpoint_path)
+                    .map((run) => (
+                      <div key={run.id} className="system-record-card">
+                        <strong>{run.run_name}</strong>
+                        <small>{run.result_checkpoint_path}</small>
+                        <span>
+                          Dataset checksum:{" "}
+                          {run.dataset_manifest_sha256.slice(0, 12)}...
+                        </span>
+                        <span>Status: {run.status}</span>
+                        {registeredRunModels.get(run.id) ? (
+                          <span>
+                            Registered as{" "}
+                            {registeredRunModels.get(run.id)?.display_name}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() =>
+                              registerRunModelMutation.mutate({
+                                runId: run.id,
+                                displayName: `${run.run_name} best`,
+                                notes: run.notes ?? undefined,
+                              })
+                            }
+                            disabled={
+                              run.status !== "completed" ||
+                              registerRunModelMutation.isPending
+                            }
+                          >
+                            {registerRunModelMutation.isPending &&
+                            registerRunModelMutation.variables?.runId === run.id
+                              ? "Registering..."
+                              : trainingRegistrationLabel(run.task)}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </article>
+
+              <article className="system-card">
+                <h4>Registered project models</h4>
+                <div className="training-run-list">
+                  {models.data?.map((model) => (
+                    <div key={model.id} className="system-record-card">
+                      <strong>{model.display_name}</strong>
+                      <small>{model.provider_name}</small>
+                      <span>{model.source_filename}</span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            </div>
+          )}
+
           {selectedDraft && (
             <>
-              {activeSection === "models" && (
-                <div className="training-card-grid">
-                  <SegmentationEvaluationPanel project={project} />
-                  <article className="system-card">
-                    <h4>Run artifacts</h4>
-                    <p className="system-subtle">
-                      Completed runs keep their best checkpoint paths and
-                      experiment lineage here. Registration is explicit, so a
-                      completed run stays separate from the active model
-                      registry until you choose to register it.
-                    </p>
-                    <div className="training-run-list">
-                      {runs.data
-                        ?.filter((run) => run.result_checkpoint_path)
-                        .map((run) => (
-                          <div key={run.id} className="system-record-card">
-                            <strong>{run.run_name}</strong>
-                            <small>{run.result_checkpoint_path}</small>
-                            <span>
-                              Dataset checksum:{" "}
-                              {run.dataset_manifest_sha256.slice(0, 12)}...
-                            </span>
-                            <span>Status: {run.status}</span>
-                            {registeredRunModels.get(run.id) ? (
-                              <span>
-                                Registered as{" "}
-                                {registeredRunModels.get(run.id)?.display_name}
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                className="secondary"
-                                onClick={() =>
-                                  registerRunModelMutation.mutate({
-                                    runId: run.id,
-                                    displayName: `${run.run_name} best`,
-                                    notes: run.notes ?? undefined,
-                                  })
-                                }
-                                disabled={
-                                  run.status !== "completed" ||
-                                  registerRunModelMutation.isPending
-                                }
-                              >
-                                {registerRunModelMutation.isPending &&
-                                registerRunModelMutation.variables?.runId ===
-                                  run.id
-                                  ? "Registering..."
-                                  : "Register as detector model"}
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                    </div>
-                  </article>
-
-                  <article className="system-card">
-                    <h4>Registered project models</h4>
-                    <div className="training-run-list">
-                      {models.data?.map((model) => (
-                        <div key={model.id} className="system-record-card">
-                          <strong>{model.display_name}</strong>
-                          <small>{model.provider_name}</small>
-                          <span>{model.source_filename}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </article>
-                </div>
-              )}
-
               {(preflight?.warnings.length ?? 0) > 0 && (
                 <div className="system-card">
                   <h4>Preflight warnings</h4>
