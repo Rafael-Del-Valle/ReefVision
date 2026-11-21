@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T09:15:12Z`
+Updated: `2026-11-21T09:31:24Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1315,6 +1315,7 @@ Evidence:
 - `browser`: After a valid scheduled detector lost its copied checkpoint, the original MSI desktop displayed the failed Reviewed model runtime node. One occurrence produced zero inference jobs and zero proposals. A separate desktop process reopened the paused schedule and downloaded the same failure receipt. — `docs/validation/installed-monitoring-3e37524e2.json` (`rv17-schedules-unavailable-checkpoint-3e37524e2`)
 - `windows_installed`: After Windows Installer registered the candidate, the same ordinary account reopened its saved schedule in a new desktop and sidecar process, inspected one coalesced catch-up job and matching replay receipts. The paused control stayed empty. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-scheduler-registered-restart`)
 - `windows_installed`: Both native scheduler phases passed under a registered standard account on the combined 1.7 schema. The account reopened its missed occurrence and paused control. Eight historical installation and upgrade roles passed on the same MSI. — `docs/validation/installed-monitoring-3e37524e2.json` (`rv17-durable-schedules-combined-registered-3e37524e2`)
+- `windows_installed`: The ordinary original Windows desktop scheduled a frozen QC graph. The sidecar was stopped at the observed SQLite commit after five queue tables had staged changes. The committed database contained zero workflow jobs and the original due time. Restart created one occurrence, one run, one job and a single two-item review queue for that slot. The researcher opened the result and paused the schedule. — `docs/validation/durable-schedules-e60ed5503.json` (`rv17-original-scheduler-interruption-before-commit`)
 - `physical_hardware`: The official MSI desktop submitted one detector occurrence to the physical RTX 3090. Two held-out images produced 19 pending proposals. Four training images were excluded. The sidecar GPU process, six original images, seven existing annotations and checkpoint were independently checked. — `docs/validation/installed-monitoring-3e37524e2.json` (`rv17-schedules-original-package-cuda-3e37524e2`)
 - `representative_data`: none recorded
 

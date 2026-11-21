@@ -406,5 +406,41 @@
       "desktop_sha256": "5fc6b759c6a9a8f9636168ee561663bf4d48e42b872f8baff49d34d50b024716",
       "backend_sha256": "7c572d8bde94e5edb261de660addf7c772c8e1cb0ce2aab2b7d591b82c3d1421"
     }
+  },
+  "original_installer_precommit_interruption": {
+    "source": "e60ed5503451991316b831aab7a3841afa8705f7",
+    "original_run": 44814797163,
+    "original_msi_sha256": "60d3824e8fda5ddefba339603e73f191b8769efccfd6ab2b882196b35f8b4034",
+    "desktop_sha256": "5fc6b759c6a9a8f9636168ee561663bf4d48e42b872f8baff49d34d50b024716",
+    "sidecar_sha256": "7c572d8bde94e5edb261de660addf7c772c8e1cb0ce2aab2b7d591b82c3d1421",
+    "surface": "Original GitHub Actions MSI, administratively extracted production Tauri/WebView2 and its verified ordinary-account sidecar",
+    "fixture": "New generated quality-control project in ordinary Windows WebView2.",
+    "witness": "An independent open read transaction held the SQLite commit. Journal pages matched the pre-enqueue bytes of jobs, workflow runs, node runs, schedules and occurrences. A second reader received SQLITE_BUSY. The owned sidecar was terminated during that interval.",
+    "schedule": "e0c6bf92-a994-4be7-ab23-621ba863e5bb",
+    "slot_utc": "2026-11-21 09:28:51+00:00",
+    "graph_sha256": "0265fa52bb272b91df6fefc9d3313a842a452c688c5246ca06d925530554b749",
+    "inputs_sha256": "0eb219dff2f566a14c931c01239e0561f8db6fd77f7337c878fe3dbad8c5afed",
+    "before_restart": {
+      "workflow_jobs": 0,
+      "occurrences": 0,
+      "workflow_runs": 0,
+      "workflow_artifacts": 0,
+      "due_cursor": "2026-11-21 09:28:51+00:00"
+    },
+    "reopened": {
+      "occurrence": "a57329b4-c088-49c2-92e6-1a3a74526263",
+      "workflow_run": "a9fcca57-ca62-45f2-aa6a-1f0715308455",
+      "job": "2626fb39-d6c8-46f9-83aa-7a06b27d405a",
+      "terminal_output": "6961169d-b6ba-40b4-b44e-f82314398cfb",
+      "output_sha256": "73a8d166f3ed312ac462d00efcf5c3a85403be6b42df1846dd44944a96287845",
+      "review_queues": 1,
+      "items": 2,
+      "workflow_jobs": 1
+    },
+    "journal_sha256": "4f344861f57942201ab227c3703f7e49b3c8074791f6a52b2f7cbbbb01b3a551",
+    "receipt": {
+      "file": "1.7/checkpoints/e60ed5503/official/evidence/scheduler-crash-precommit/index.json",
+      "sha256": "fd5ef06c1972347fc031f68cb3474c31eea544500a8ba204052de77847a5c138"
+    }
   }
 }
