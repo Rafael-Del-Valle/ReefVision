@@ -17,7 +17,6 @@ from reefvision.storage.images import (
     inspect_staged_image,
 )
 
-
 @pytest.mark.parametrize(
     "suffix",
     [".jpg", ".JPG", ".jpeg", ".JPEG", ".jpe", ".JPE", ".jfif", ".JFIF", ".jfi", ".jif"],
@@ -214,6 +213,42 @@ def test_camera_processing_dates_never_substitute_for_exposure_time(
     assert inspected.media_type == "image/jpeg"
     assert inspected.sha256 == hashlib.sha256(original).hexdigest()
     assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    ("exposure", "offset"),
+    [
+        ("2026:04:03 14:25:30", "+14:01"),  # Beyond the maximum civil UTC offset.
+        ("2026:04:03 14:25:30", "+0230"),  # Missing EXIF offset colon.
+        ("2026:04:03 14:25:30", "+02:3"),  # Noncanonical minute width.
+        ("2026:04:03 14:25:30", "+24:00"),  # Invalid civil time zone.
+        ("2026:02:30 14:25:30", "+02:00"),  # Impossible calendar date.
+        ("2026:4:03 14:25:30", "+02:00"),  # Noncanonical EXIF date width.
+        ("0001:01:01 00:00:00", "+14:00"),  # UTC conversion underflows.
+    ],
+)
+def test_camera_unverifiable_exif_never_fabricates_utc_exposure(
+    tmp_path, exposure: str, offset: str
+) -> None:
+    """Camera clock/offset anomalies are QC evidence, never verified acquisition."""
+    path = tmp_path / "camera_clock_qc.JPG"
+    exif = Image.Exif()
+    exif[36867] = exposure
+    exif[36881] = offset
+    Image.new("RGB", (23, 17), (30, 65, 115)).save(path, format="JPEG", exif=exif)
+    original = path.read_bytes()
+    digest = hashlib.sha256(original).hexdigest()
+
+    inspected = inspect_staged_image(path, digest, len(original))
+
+    assert inspected.capture_timestamp is None
+    assert inspected.metadata["exif"]["DateTimeOriginal"] == exposure
+    assert inspected.metadata["exif"]["OffsetTimeOriginal"] == offset
+    assert "UTC capture timestamp not inferred" in inspected.metadata["capture_time_warning"]
+    assert inspected.sha256 == digest
+    assert (inspected.width_px, inspected.height_px) == (23, 17)
+    assert path.read_bytes() == original
+
 
 
 @pytest.mark.parametrize(
