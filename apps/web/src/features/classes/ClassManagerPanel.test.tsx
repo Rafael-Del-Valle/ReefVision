@@ -589,42 +589,76 @@ describe("ClassManagerPanel", () => {
   );
 
   it.each(
-    ([
-      ["reassign", "reassign", "Preview reassign", "Run reassign"],
+    (
       [
-        "reassign-delete",
-        "reassign_delete",
-        "Preview Reassign and Delete",
-        "Run Reassign and Delete",
-      ],
-    ] as const).flatMap(([endpoint, operationType, previewLabel, runLabel]) =>
-      ([
-        ["null mutable record", { mutable_records: [null] }],
+        ["reassign", "reassign", "Preview reassign", "Run reassign"],
         [
-          "negative protected count",
-          {
-            protected_records: [
-              {
-                key: "dataset_versions",
-                label: "Immutable versions",
-                count: -1,
-                record_ids: ["version-1"],
-              },
-            ],
-          },
+          "reassign-delete",
+          "reassign_delete",
+          "Preview Reassign and Delete",
+          "Run Reassign and Delete",
         ],
+      ] as const
+    ).flatMap(([endpoint, operationType, previewLabel, runLabel]) =>
+      (
         [
-          "missing blocking record IDs",
-          {
-            blocking_records: [
-              { key: "annotations_deleted", label: "Historical records", count: 1 },
-            ],
-          },
-        ],
-        ["null compatibility impact", { compatibility_impacts: [null] }],
-        ["nonstring blocker", { blockers: [null] }],
-        ["nonstring warning", { warnings: [null] }],
-      ] as const).map(([defect, invalidPlan]) => ({
+          ["null mutable record", { mutable_records: [null] }],
+          [
+            "negative protected count",
+            {
+              protected_records: [
+                {
+                  key: "dataset_versions",
+                  label: "Immutable versions",
+                  count: -1,
+                  record_ids: ["version-1"],
+                },
+              ],
+            },
+          ],
+          [
+            "missing blocking record IDs",
+            {
+              blocking_records: [
+                {
+                  key: "annotations_deleted",
+                  label: "Historical records",
+                  count: 1,
+                },
+              ],
+            },
+          ],
+          [
+            "mutable count exceeds listed records",
+            {
+              mutable_records: [
+                {
+                  key: "annotations_active",
+                  label: "Current annotations",
+                  count: 2,
+                  record_ids: ["annotation-1"],
+                },
+              ],
+            },
+          ],
+          [
+            "protected record count conceals an identifier",
+            {
+              protected_records: [
+                {
+                  key: "dataset_versions",
+                  label: "Immutable dataset versions",
+                  count: 0,
+                  record_ids: ["version-1"],
+                },
+              ],
+            },
+          ],
+          ["null compatibility impact", { compatibility_impacts: [null] }],
+          ["nonstring blocker", { blockers: [null] }],
+          ["nonstring warning", { warnings: [null] }],
+        ] as const
+      ).map(([defect, invalidPlan]) => ({
         endpoint,
         operationType,
         previewLabel,
@@ -673,7 +707,9 @@ describe("ClassManagerPanel", () => {
               failures: [],
             });
           }
-          throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`);
+          throw new Error(
+            `Unexpected request: ${init?.method ?? "GET"} ${url}`,
+          );
         });
       renderPanel();
       const row = sourceClassRow();
@@ -700,7 +736,9 @@ describe("ClassManagerPanel", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (
-        url.endsWith(`/projects/${project.id}/classes/class-1/reassign/preview`) &&
+        url.endsWith(
+          `/projects/${project.id}/classes/class-1/reassign/preview`,
+        ) &&
         init?.method === "POST"
       ) {
         return jsonResponse({
@@ -733,7 +771,9 @@ describe("ClassManagerPanel", () => {
     await userEvent.click(
       within(row).getByRole("button", { name: "Preview reassign" }),
     );
-    expect(await within(row).findByText("Reassign preview")).toBeInTheDocument();
+    expect(
+      await within(row).findByText("Reassign preview"),
+    ).toBeInTheDocument();
     expect(
       within(row).getAllByText("Historical annotations remain unchanged."),
     ).toHaveLength(1);

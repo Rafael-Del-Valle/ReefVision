@@ -57,13 +57,16 @@ function validReviewTextList(value: unknown): value is string[] {
 function validReviewGroup(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
+  // Backend group counts equal the complete listed IDs, not a sample.
+  // Never allow a partial review response to authorize class operations.
   return (
     validReviewText(item.key) &&
     validReviewText(item.label) &&
     typeof item.count === "number" &&
     Number.isSafeInteger(item.count) &&
     item.count >= 0 &&
-    validReviewTextList(item.record_ids)
+    validReviewTextList(item.record_ids) &&
+    item.count === item.record_ids.length
   );
 }
 
@@ -260,8 +263,8 @@ function OperationSummary({
       <div className="class-usage-card">
         <strong>{title}</strong>
         <p className="form-error" role="alert">
-          Operation evidence is incomplete. Execution is disabled; preview
-          again before reviewing or proceeding.
+          Operation evidence is incomplete. Execution is disabled; preview again
+          before reviewing or proceeding.
         </p>
       </div>
     );
