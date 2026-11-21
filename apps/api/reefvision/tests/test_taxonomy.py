@@ -1,5 +1,6 @@
 """Reviewed taxon labeling and grouped, known-positive detectability at project API entry."""
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -190,6 +191,83 @@ def test_detectability_uses_repeated_known_positive_groups_and_excludes_gaps(
     assert export.status_code == 200
     assert export.json() == saved
     assert "attachment" in export.headers["Content-Disposition"]
+
+    prior = result["visits"][0]
+    duplicated = successful(
+        client.post(
+            endpoint + "/visits",
+            headers=author,
+            json={
+                "proposal_id": prior["proposal"]["id"],
+                "protocol": PROTOCOL,
+                "started_at": (START + timedelta(minutes=90)).isoformat(),
+                "effort_seconds": 6,
+                "outcome": "detected",
+                "source": prior["visit"]["source"],
+                "notes": "Reuses existing bytes",
+            },
+        ),
+        201,
+    )
+    presence_url = f"{endpoint}/visits/{duplicated['id']}/presence-reviews"
+    presence_body = {
+        "expected_revision": 0,
+        "decision": "confirmed",
+        "source": prior["visit"]["source"],
+        "reason": "Intentionally incompatible same-source evidence",
+    }
+    assert client.post(presence_url, headers=reviewer, json=presence_body).status_code == 409
+    successful(
+        client.post(
+            presence_url,
+            headers=reviewer,
+            json={
+                **presence_body,
+                "source": source(client, project, 250),
+                "reason": "Separate media does not make the observed visit original",
+            },
+        ),
+        201,
+    )
+    new = successful(client.post(endpoint + "/assessments", json=assessment_request), 201)
+    assert new["id"] != saved["id"]
+    assert new["result"]["estimate"] is None
+    assert new["result"]["independent_groups"] == 4
+    assert [row["reason"] for row in new["result"]["exclusions"]].count("reused_source_bytes") == 2
+    assert successful(client.get(f"{endpoint}/assessments/{saved['id']}")) == saved
+
+
+def test_competing_taxon_decisions_preserve_one_initial_revision(client: TestClient) -> None:
+    project, _, roles = role_fixture(client)
+    base = f"/api/v1/projects/{project}"
+    endpoint = base + "/taxonomy/proposals"
+    proposal = successful(
+        client.post(
+            endpoint,
+            json=proposal_body(organism(client, base, 1), source(client, project, 1)),
+            headers=roles["Manager"][1],
+        ),
+        201,
+    )
+    path = endpoint + "/" + proposal["id"] + "/reviews"
+
+    def decide(name: str, choice: str) -> int:
+        return client.post(
+            path,
+            headers=roles[name][1],
+            json={
+                "decision": choice,
+                "expected_revision": 0,
+                "reason": "Synthetic concurrent local decision",
+            },
+        ).status_code
+
+    with ThreadPoolExecutor(2) as executor:
+        confirmed = executor.submit(decide, "Reviewer A", "confirmed")
+        unresolved = executor.submit(decide, "Reviewer B", "unresolved")
+        assert sorted([confirmed.result(), unresolved.result()]) == [201, 409]
+    history = successful(client.get(path))
+    assert len(history["items"]) == 1 and history["items"][0]["revision"] == 1
 
 
 def test_saved_detectability_replays_same_cached_payload_twice(client: TestClient) -> None:
