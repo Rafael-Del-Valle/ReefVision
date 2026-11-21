@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T03:11:40Z`
+Updated: `2026-11-21T03:19:20Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1143,6 +1143,7 @@ Evidence:
 - `browser`: The corrected 1.8 local MSI's extracted ordinary WebView2 consumed both preview approvals, preserved the earlier class export and retained original media and annotation, mask and label evidence. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv16-class-management-native-class-provenance-9cde9e6e7`)
 - `browser`: On the separately reviewed source c572964dc, ordinary Classes navigation detected a truncated real preview, kept Run disabled, accepted the fresh complete response, preserved the frozen export and reopened the reviewed box. The exact source passed all 942 frontend tests. Draft #120 contains the correction. — `docs/validation/stable-research-e3e8ffb63.json` (`rv16-class-management-preview-recovery-c572964dc`)
 - `browser`: Independent production-browser checks on #120 kept the class page open and the generated annotation at revision 2 with a missing affected ID, absent compatibility row, or unusable token. Each fresh preview recovered, and one explicit confirmation advanced to revision 3. The complete 948-test frontend suite passed. — `docs/validation/stable-research-e3e8ffb63.json` (`rv16-class-management-complete-record-review-89a6fffee`)
+- `browser`: The real Classes preview and completed receipt each displayed the returned frozen-class warning once. A damaged warning list kept execution disabled. After explicit confirmation, the generated project reopened and exported its frozen dataset. — `docs/validation/stable-research-e3e8ffb63.json` (`rv16-class-management-warnings-549750d95`)
 - `windows_installed`: On the original 1.6 MSI under an ordinary Windows account, the class lifecycle test passed. The researcher reviewed the reassignment, reopened the project and verified the earlier frozen export. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44768324452/job/136420579045` (`rv16-class-management-original-msi-used-classes`)
 - `windows_installed`: The corrected original MSI passed the standard-user class lifecycle, including explicit reassignment after annotations exist and reopening the frozen export. — `docs/validation/installed-workflows-a580042e8.json` (`rv16-class-management-original-a580042e8`)
 - `physical_hardware`: In native Classes, confirmed reassignment advanced the live annotation from revision 2 to 3. Mask and image-classification references remained protected. The frozen dataset manifest and YOLO mapping survived reopening. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-class-management-physical-83b0`)
@@ -1216,6 +1217,7 @@ Evidence:
 - `windows_installed`: An ordinary user installed the original MSI under measured outbound denial, reviewed a box, exported it, reopened it in a fresh desktop process and uninstalled successfully. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-offline-original-3a9`)
 - `windows_installed`: The genuine hosted MSI installed and launched in a clean disposable standard-user Windows environment under 201 seconds of outbound denial. The project reopened and retained its data after uninstall. The verifier sampled both ordinary and SYSTEM identities 511 times. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv16-onboarding-installer-offline-install-542254b8a`)
 - `windows_installed`: The 1.8 hosted MSI completed fresh and cached 1.7 upgrade runs under enforced network denial for both Windows identities. The restored seven-file backup reopened under the original 1.7 standard-user desktop. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv16-registered-offline-9cde9e6e7`)
+- `windows_installed`: The exact original 1.8 package passed both registered offline roles. A standard user installed, annotated, exported, reopened and uninstalled. A separately cached 1.7 upgrade recovered and reopened all seven files under enforced outbound denial. — `docs/validation/stable-research-e3e8ffb63.json` (`rv16-onboarding-installer-offline-e3e8ffb63`)
 - `physical_hardware`: The native packaged first launch at 960 by 640 CSS pixels and emulated 150% scaling preserved keyboard focus and dismissal. The researcher imported image and video, edited, undid and redid, reviewed, exported YOLO and reopened. The browser attempted zero external HTTP requests. A separate eight-project 1.5 backup reopened with all 303 project files. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-onboarding-installer-physical-83b0`)
 - `physical_hardware`: The locally built Windows desktop restored both generations, preserved both historical metadata digests and reopened all seven projects in a separate launch. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-repeated-recovery-local-production-3a9`)
 - `physical_hardware`: The desktop extracted from the original GitHub MSI restored both generations from System status and reopened the existing QC project on physical Windows. — `docs/validation/restored-projects-3a9ce1622.json` (`rv16-repeated-recovery-original-windows-3a9`)
@@ -1737,6 +1739,7 @@ Evidence:
 - `source`: none recorded
 - `browser`: The 1.8 production frontend saved the intended source box while the full image arrived during the same gesture. The researcher could undo, redo, review, reopen, switch images, retry by keyboard and use the segmentation control on the adjusted display. Ordinary 2D, video and YOLO export also passed. — `docs/validation/stable-research-e3e8ffb63.json` (`rv20-compact-source-stable-e3e8ffb63`)
 - `windows_installed`: A registered 1.8 first-use run saved a box at source row 60 after requesting row 40. Controlled WebView2 reproduction traced it to the full image arriving during a drag. This 1.8 baseline identifies a regression to retest on the integrated candidate. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv20-compact-box-baseline-9cde9e6e7`)
+- `windows_installed`: Predecessor evidence from the independent 1.8 challenge. Both the standard account and SYSTEM remained offline for the clean install and the 1.7 upgrade and recovery. Each job verified original package identity. — `docs/validation/stable-research-e3e8ffb63.json` (`rv20-release-journeys-prior-offline-e3e8ffb63`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
