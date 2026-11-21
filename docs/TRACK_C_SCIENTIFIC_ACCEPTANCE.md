@@ -4,6 +4,23 @@ This is a **test plan**, not evidence that ReefVision 1.4 or 1.5 is validated or
 
 ## 1.4: 3D geometry and longitudinal studies
 
+## Interactive render coverage QA (synthetic, GUI test; CI pending)
+
+The persisted 1.4 mesh artifact already reports whether render-only sampling
+omits source-axis extrema, the dominant triangle, disconnected patches or
+reconstructed surface area, and whether missing area is numerically unrepresentable.
+The interactive `MeshArtifactViewer` must show these **persisted** coverage
+warnings in human-readable form rather than silently rendering an incomplete
+sample. It must ignore arbitrary or malformed warning fields, preserve the
+scientific artifact unchanged, and state that display QC cannot establish coral
+condition or verified physical calibration. The source measurements, saved
+typed Workflow Builder outputs, provenance hashes and calibration review remain
+server-owned and are not recomputed or promoted by this UI.
+Regression: `apps/web/src/features/workflow-graphs/MeshArtifactViewer.test.tsx`.
+Representative installed-Windows inspection and independent biological review
+remain release gates; a synthetic frontend test is not field validation.
+
+
 **Near-parallel face area under 3D coordinate-frame changes (synthetic; CI pending):**
 Seven integer-coordinate reference triangles include XY, XZ and YZ planes
 and two genuinely oblique XYZ surfaces, with large translation, reflection
