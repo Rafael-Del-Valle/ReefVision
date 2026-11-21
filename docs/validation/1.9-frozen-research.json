@@ -678,5 +678,93 @@
         "sha256": "36571d00df474b9f38ddade4a2214f3b8c090f783a2eda88b6eb533811b52b94"
       }
     }
+  },
+  "saved_checkpoint_and_class_identity": {
+    "source": "9124acdb0696871208c69f2ffc7601722329daac",
+    "version": "1.9.0",
+    "schema": "b19_registration_0001",
+    "product_pr": 148,
+    "branch": "codex/reefvision-1.9-checkpoint-and-class-integrity",
+    "product_worktree": "C:/rv19-integrity",
+    "parent": "7797efad64f65e2f19c6f4ff64a94382335bd0a9",
+    "integrated_pull_requests": [
+      146,
+      147
+    ],
+    "surface": "Generated media and local weights in disposable Windows profiles",
+    "source_workflows": {
+      "native_checkpoint_recovery": {
+        "file": "1.9/checkpoints/9124acdb0/source/evidence/pose-checkpoint-recovery/selected-checkpoint-recovery.json",
+        "sha256": "f33c5d4ab724ed2e64355944f790e967465381611bbb078707db8d2833502467"
+      },
+      "two_split_fit_register_restart": {
+        "file": "1.9/checkpoints/9124acdb0/source-pose-training-integrity/two-split-checkpoint-reopen.json",
+        "sha256": "86dc1718db9c03a269c0bb57e773f6ba1b2cea62615cd08aee2e1b3601a78ba2"
+      },
+      "workflow_builder_class_and_checkpoint_recovery": {
+        "file": "1.9/checkpoints/9124acdb0/source/workflow-builder-recovery.json",
+        "sha256": "e7ef1804e03419bc20becee00dce08b8e744a6acfb23cc1fa5212438d679a451"
+      }
+    },
+    "source_checks": {
+      "focused": {
+        "file": "1.9/checkpoints/9124acdb0/source/rv19-starting-point-9124-focused.xml",
+        "sha256": "8d4966f227a4b8943c8d27592f1f77c6dbaa5fd05fab930a18623183f88feb5b"
+      },
+      "experiment_recovery": {
+        "file": "1.9/checkpoints/9124acdb0/source/rv19-starting-point-9124-recovery.xml",
+        "sha256": "a2225e8b15e098a1366169f4c36b745a1d31fbf653cd29ec6a221bee5c08ea99"
+      },
+      "mypy": {
+        "file": "1.9/checkpoints/9124acdb0/source/mypy.log",
+        "sha256": "615b502f7347809330754d6bf605998bc6289a8865aba36c6dec5ab4ab92c53f"
+      },
+      "database_upgrade_downgrade_upgrade": {
+        "file": "1.9/checkpoints/9124acdb0/source/roundtrip.log",
+        "sha256": "614363a4932e9422cda58b812c85468d877d274d40cc75e8e33ac7d7f85040b9"
+      },
+      "physical_rtx3090": {
+        "file": "1.9/checkpoints/9124acdb0/source/9124-cuda-results.xml",
+        "sha256": "2ee6a0e08e4ca45e0af00074c45d22fd69df4728e5691075cb62ae298ff92ba8"
+      }
+    },
+    "previous_unchanged_surface": {
+      "source": "7797efad64f65e2f19c6f4ff64a94382335bd0a9",
+      "verified_trees": [
+        "apps/web",
+        "scripts/build-desktop.ps1",
+        "scripts/build-desktop-backend.ps1",
+        "scripts/finalize-release-artifacts.ps1",
+        ".github/workflows",
+        "requirements",
+        "apps/api/alembic.ini",
+        "apps/api/migrations"
+      ],
+      "tests": "974 frontend tests, 8 Rust tests and 15 default browser journeys. Current source desktop workflow additionally exercised both new conditions."
+    },
+    "full_windows": {
+      "checkout": "C:/rv19-9124-full",
+      "output": "C:/rvb19-9124",
+      "distinct_ids": 6084,
+      "collection_sha256": "6a7e6e143ae7614cb806d7d42e7d1e257915fb27b02941005b7cdb46b69a395c",
+      "shards": 16
+    },
+    "original_windows": {
+      "run": 44875837825,
+      "job": 136760221622,
+      "matrix_roles": 11
+    },
+    "hosted_ci": {
+      "general_run": 44875837777,
+      "backend": 136760221507,
+      "frontend": 136760221723,
+      "scientific_run": 44875837969,
+      "scientific_backend": 136760222165
+    },
+    "local_manufacture": {
+      "checkout": "C:/rv19n-9124acdb",
+      "staging": "C:/rv19e-9124acdb",
+      "owner_location": "1.9/checkpoints/9124acdb0/local-production"
+    }
   }
 }
