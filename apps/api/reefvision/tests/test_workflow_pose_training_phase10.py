@@ -1107,6 +1107,39 @@ def test_pose_materialization_rejects_aliased_archive_entries(
     assert (destination / "images" / "train" / "frame_00000001.png").read_bytes() == b"reviewed"
 
 
+def test_pose_materialization_missing_header_allows_corrected_frozen_export(
+    tmp_path: Path,
+) -> None:
+    # A reviewed export lacking its required header must not occupy the run
+    # directory, or a subsequently corrected export cannot be materialized.
+    reviewed = _pose_export_zip(b"reviewed-frame")
+    incomplete = io.BytesIO()
+    with (
+        zipfile.ZipFile(io.BytesIO(reviewed)) as original,
+        zipfile.ZipFile(incomplete, "w", compression=zipfile.ZIP_DEFLATED) as altered,
+    ):
+        for member in original.namelist():
+            if member != "data.yaml":
+                altered.writestr(member, original.read(member))
+
+    destination = tmp_path / "pose-missing-header"
+    with pytest.raises(ValidationError, match=r"missing data\\.yaml"):
+        materialize_pose_training_exports(
+            training_content=incomplete.getvalue(),
+            validation_content=None,
+            destination=destination,
+        )
+    assert not destination.exists()
+
+    result = materialize_pose_training_exports(
+        training_content=reviewed,
+        validation_content=None,
+        destination=destination,
+    )
+    assert result["training_image_count"] == 1
+    assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed-frame"
+
+
 def test_pose_materialization_rejects_corrupt_frame_before_creating_dataset(
     tmp_path: Path,
 ) -> None:
