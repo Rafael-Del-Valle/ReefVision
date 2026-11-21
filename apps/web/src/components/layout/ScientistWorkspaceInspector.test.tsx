@@ -35,7 +35,9 @@ function renderInspector({
 
 describe("ScientistWorkspaceInspector", () => {
   it("defines context for every current project workspace", () => {
-    expect(WORKSPACE_INSPECTOR_VIEWS).toHaveLength(25);
+    expect(WORKSPACE_INSPECTOR_VIEWS).toHaveLength(27);
+    expect(WORKSPACE_INSPECTOR_VIEWS).toContain("project_assets");
+    expect(WORKSPACE_INSPECTOR_VIEWS).toContain("research_ecology");
     expect(WORKSPACE_INSPECTOR_VIEWS).toContain("acquisition_sources");
     expect(WORKSPACE_INSPECTOR_VIEWS).toContain("monitoring");
     expect(WORKSPACE_INSPECTOR_VIEWS).toContain("workflow_schedules");
@@ -60,6 +62,26 @@ describe("ScientistWorkspaceInspector", () => {
         true,
       );
     }
+  });
+
+  it("links the asset and taxonomy inspectors to their reviewed evidence", () => {
+    const assets = workspaceInspectorDefinition("project_assets");
+    const ecology = workspaceInspectorDefinition("research_ecology");
+
+    expect(assets.title).toBe("Project assets");
+    expect(assets.recordPolicy).toMatch(
+      /sample clock, calibration and source checksums/,
+    );
+    expect(assets.actions.map((action) => action.target)).toContain(
+      "workflows",
+    );
+    expect(ecology.title).toBe("Organisms & ecology");
+    expect(ecology.recordPolicy).toMatch(
+      /source checksums, effort and local review history/,
+    );
+    expect(ecology.actions.map((action) => action.target)).toEqual(
+      expect.arrayContaining(["reviewer_lab", "workflows"]),
+    );
   });
 
   it("preserves scientific truth boundaries for spatial heatmaps", () => {
