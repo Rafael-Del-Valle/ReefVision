@@ -1112,6 +1112,135 @@
         "sha256": "c38f05cca3859d6436e7cfbfe6abb5dcdc961abc3f4ee33bbfebb1a82482af26"
       },
       "result": "After ordinary import of a fixture with a historical provider, its model card reported ready for offline inference while its provider and capabilities were unavailable. The historical registration and its stored bytes remained readable."
+    },
+    "combined_installed": {
+      "run": 44853957856,
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/official/combined-installed-qualification.json",
+        "sha256": "3ebe7a39efe7360bff8cd0cd902159a36146f254296b11bb8cfb44e8a5e3b13d"
+      },
+      "registered_roles": {
+        "clean": {
+          "job_id": 136703618659,
+          "id": 14689805690,
+          "sha256": "be3c5c40542566339f2d87502d954330fe2baa88b9eae5f923b81b941cb35506",
+          "files_rehashed": 71
+        },
+        "published-1.0.3": {
+          "job_id": 136703618628,
+          "id": 14689611672,
+          "sha256": "2004ab8d9cba0fcbf3862d8c38d5516f4d2a40f6e29d0b70fbf742d3628a482e",
+          "files_rehashed": 6
+        },
+        "validated-1.3": {
+          "job_id": 136703618701,
+          "id": 14690542614,
+          "sha256": "abb89d081512a4db7f03b42dbb9ca1c56b9467f3d9ad80b9212713fd2ec2b5bd",
+          "files_rehashed": 12
+        },
+        "validated-1.4": {
+          "job_id": 136703618656,
+          "id": 14689229378,
+          "sha256": "2323f12022f56a287efc8d7b84d342299c496dc6819a8e2300fe6a6902cd149b",
+          "files_rehashed": 7
+        },
+        "validated-1.5": {
+          "job_id": 136703618658,
+          "id": 14689672615,
+          "sha256": "18fbb020411ac77c73383407631aaf9dbd7650a5210b1c9bb48907728783183b",
+          "files_rehashed": 11
+        },
+        "validated-1.6": {
+          "job_id": 136703618660,
+          "id": 14690691205,
+          "sha256": "b2701fa48a8a440c3ca449bc1e7f4b4623448faa4b1755bb58304c4a088d98a1",
+          "files_rehashed": 11
+        },
+        "validated-1.7": {
+          "job_id": 136703618575,
+          "id": 14689685637,
+          "sha256": "730d88330eb10c6294cd6c9cc81934f454b40008dd45138a9c691a05866d4794",
+          "files_rehashed": 11
+        },
+        "draft-1.4-0038": {
+          "job_id": 136703618715,
+          "id": 14690130222,
+          "sha256": "bbd8f652f6956bdad99b3c8759a5a848c69ecbd0f9635817b91e3093bdf8a922",
+          "files_rehashed": 9
+        },
+        "draft-1.4-0039": {
+          "job_id": 136703618724,
+          "id": 14689356705,
+          "sha256": "a5a649de81f94c92ff76615e59764cf30f3c47b00e699ad16240509fd035d57d",
+          "files_rehashed": 9
+        },
+        "historical-qc": {
+          "job_id": 136703618625,
+          "id": 14688459913,
+          "sha256": "b433420eae65353a36ee7bc107b751710f22024d652a3a731bd638ce6132e940",
+          "files_rehashed": 67
+        }
+      },
+      "result": "All ten registered roles passed on one original MSI and its six matching cabinets, including clean, published 1.0.3, validated 1.3 through 1.7, both historical 1.4 draft schemas, and the historical science/QC collision."
+    },
+    "physical_performance": {
+      "desktop": "Original MSI payload extracted for native WebView2 on the Windows 11 RTX 3090 workstation with disposable generated projects.",
+      "gallery": {
+        "receipt": {
+          "file": "1.8/checkpoints/e3e8ffb63/official/evidence/performance/5000-gallery-1500-boxes.json",
+          "sha256": "d4a52e9477b1b17985fe5656c1bb59c3760625e8c7ce0bec017aa19e42b2c9e1"
+        },
+        "indexed": 5000,
+        "decoded": 5000,
+        "boxes": 1500,
+        "pages": 209,
+        "thumbnail_ms": 231.79999999701977,
+        "editor_ms": 271.23160000000007
+      },
+      "video": {
+        "receipt": {
+          "file": "1.8/checkpoints/e3e8ffb63/official/evidence/performance/18000-frame-video.json",
+          "sha256": "aeed2ace4b615b37fc7a2d1ff141de696b8fde9f92a0f9b0d6be40a928d19753"
+        },
+        "fixture_sha256": "cf8fae086789321f711a322261b0f3b24afce1f322e8cbf78ec0a285d345d9ed",
+        "source_bytes": 362039850,
+        "source_frames": 18000,
+        "frame_rate_hz": 10,
+        "period_seconds": 12,
+        "playback_ready_ms": 1387.6752,
+        "sparse_extraction_ms": 19570.957899999998,
+        "near_end_seek_and_decode_ms": 239.54119999999966,
+        "reopened_reviewed_frame": 17100,
+        "source_pixel_box_xywh": [
+          223,
+          113,
+          122,
+          97
+        ]
+      }
+    },
+    "independent_build_disposition": {
+      "run": 44853957924,
+      "backend_job": 136691608557,
+      "backend": {
+        "passed": 6017,
+        "skipped": 18,
+        "failed": 2
+      },
+      "skipped_installer_job": 136720242699,
+      "installer_created": false,
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/second-build/workflow-disposition.json",
+        "sha256": "58a0d0d4aee3e2cfee53d4652eff94b8cf7d152964125420e972d9a07c471fe3"
+      },
+      "ordinary_linux": {
+        "run": 44853958059,
+        "backend_job": 136691609015,
+        "passed": 6024,
+        "skipped": 11,
+        "failed": 2
+      },
+      "cause": "Both suites failed the two image-adjustment assertions that called Pillow's deprecated pixel accessor. The separate 54a89896c test correction compares identical RGB bytes on both supported Pillow versions."
     }
   },
   "reviewed_retirement_predecessor": {
@@ -1186,20 +1315,42 @@
     "observed": "Both public exchange generations preserved opaque vendor metadata, literal class labels, original asset bytes and a historical pending prediction. Known local relationships mapped to new IDs. Unavailable inference created zero new jobs and directed the researcher to Model Hub."
   },
   "reviewed_predecessor_integration": {
-    "source": "4ac9fd69be43a9d0045e6dd8816041c4c796b098",
+    "source": "fd5406597f14f3a984c6bc402f1658672bcad515",
     "worktree": "C:/rv18-reviewed-predecessors",
     "drafts": [
       120,
       122,
       123,
       124,
-      125
+      125,
+      126,
+      127
     ],
-    "frontend_tests": 954,
+    "frontend_tests": 955,
     "frontend_files": 140,
     "frontend_build": "passed",
     "windows_full_backend": "C:/rvb18-4ac9",
     "product_version": "1.8.0",
-    "schema": "b18_spectral_0002"
+    "schema": "b18_spectral_0002",
+    "catalog_and_exchange_tests": 26,
+    "windows_full_backend_source": "4ac9fd69be43a9d0045e6dd8816041c4c796b098",
+    "reviewed_corrections": [
+      {
+        "draft": 126,
+        "source": "ead3367e3a84224d8d32cf4a8bf976e82711ae36",
+        "receipt": {
+          "file": "1.8/checkpoints/ead3367e3/stable-pose-marker-drag/evidence-index.json",
+          "sha256": "fefb800c96146fcb40b4960423820bca435b78430e24ba334f458bb19c405635"
+        }
+      },
+      {
+        "draft": 127,
+        "source": "18926b4d6bf89a0f88c04644c09ad2d2043c0059",
+        "receipt": {
+          "file": "1.8/checkpoints/18926b4d6/source/model-hub-availability/index.json",
+          "sha256": "b1ee59fe64d12e2f66b4507a79ce854d46fed53b3f62bcfd8b53c7ba493fa204"
+        }
+      }
+    ]
   }
 }

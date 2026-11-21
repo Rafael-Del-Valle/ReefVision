@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T03:35:58Z`
+Updated: `2026-11-21T03:50:08Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -673,6 +673,7 @@ Evidence:
 - `browser`: In the corrected 1.8 local MSI's ordinary extracted WebView2, disconnect, selection change and reconnect cancelled only the clicked queued identity job. The raw reopened database preserved both job/run outcomes. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv13-temporal-refinement-review-native-identity-cancel-9cde9e6e7`)
 - `browser`: The application refined 12 frames, persisted six explicit review decisions, measured movement and exported six measurements with their review history. Its comparison recorded the limits of group verification. — `docs/validation/stable-research-e3e8ffb63.json` (`rv13-temporal-refinement-review-ordinary-temporal-review-e3e8ffb63`)
 - `browser`: The source browser opened the schema bound to the native model, recorded explicit identity breaks and landmark review, and exported a verified pose on each of two independent scratch-trained saved executions. — `docs/validation/stable-research-e3e8ffb63.json` (`rv13-temporal-refinement-review-native-bound-57f16152b`)
+- `browser`: Selecting and dragging an unselected landmark in one gesture preserved its source point (20,25) through save and reopen. Revert restored the original location. — `docs/validation/stable-research-e3e8ffb63.json` (`rv13-temporal-refinement-review-first-landmark-drag-126`)
 - `windows_installed`: Installed 1.2 to 1.3 temporal workflow acceptance. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/87` (`rv13-refine-win`)
 - `physical_hardware`: The exact local 1.8 production desktop froze three synthetic recordings, trained a causal CPU checkpoint, reviewed six frame decisions and downloaded their measurements. WebView2 kept all original video hashes intact and the evaluation recorded unverified animal groups. — `docs/validation/stable-research-e3e8ffb63.json` (`rv13-temporal-refinement-review-native-temporal-ui-e3e8ffb63`)
 - `representative_data`: none recorded
@@ -1524,7 +1525,7 @@ Evidence:
 - `source`: Two actual export/import generations on the inherited 1.8 source preserved typed links and original bytes but changed an unavailable provider's external UUID literals. The source project and opaque-field regression fixture are retained for repair. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv19-ancestry-integration-inherited-transfer-baseline-9cde9e6e7`)
 - `source`: Two real export, inspect, import and reopen generations preserved unknown provider data and checkpoint bytes exactly while the local rows and ordinary class links rebound. This is inherited source evidence. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-ancestry-integration-literal-history-3736712ff`)
 - `browser`: none recorded
-- `windows_installed`: none recorded
+- `windows_installed`: Ten registered roles with rehashed reports passed on the original 1.8 package, including the two historical 1.4 fingerprints. A second workflow exercised fresh and cached offline recovery. This identifies the predecessor for the direct 1.8 upgrade. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-ancestry-integration-installed-1-8-lineage`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
 
@@ -1543,7 +1544,7 @@ Acceptance checks:
 Evidence:
 
 - `source`: none recorded
-- `browser`: none recorded
+- `browser`: An ordinary imported historical model reports Unavailable in Model Hub with its retained bytes and hash. The native frame and temporal models report Ready, and removing then restoring a copied native checkpoint shows Model required then Ready. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-compatibility-matrix-historic-model-127`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1585,7 +1586,7 @@ Evidence:
 - `source`: none recorded
 - `browser`: In the inherited ReefPose identity workspace, reopening two real queued runs and changing selection during a network interruption cancelled the originally requested job and retained the other run. The same workflow on 542254b8a cancelled the wrong persisted run. Both used generated video and a real local queue. — `docs/validation/reviewed-operations-dd3c7207e.json` (`rv19-performance-resilience-identity-job-reconnect-dd3c7207e`)
 - `windows_installed`: none recorded
-- `physical_hardware`: none recorded
+- `physical_hardware`: On original 1.8 the generated 5,000-image gallery decoded a first thumbnail in 232 ms. The 1,500-box editor drew in 271 ms and preserved all original boxes. A 30-minute 720p fixture opened for playback in 1.39 s and decoded a near-end seek in 240 ms. A source-pixel annotation saved at frame 17,100 reopened after restart. — `docs/validation/stable-research-e3e8ffb63.json` (`rv19-performance-resilience-5000-gallery-long-video-1-8`)
 - `representative_data`: none recorded
 
 ### rv20-cli-sdk-headless: CLI, Python SDK, and headless infer/benchmark/export
