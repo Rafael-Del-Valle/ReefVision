@@ -1132,7 +1132,9 @@ function SpatialMeasurementFields({
               type="checkbox"
               checked={parameters.preserve_axis_extrema_in_preview === true}
               onChange={(event) =>
-                update({ preserve_axis_extrema_in_preview: event.target.checked })
+                update({
+                  preserve_axis_extrema_in_preview: event.target.checked,
+                })
               }
             />
             Preserve source-axis extrema faces in preview
