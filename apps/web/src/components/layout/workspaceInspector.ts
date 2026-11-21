@@ -26,6 +26,7 @@ export type WorkspaceInspectorView =
   | "review_queue"
   | "reviewer_lab"
   | "advanced_providers"
+  | "compute"
   | "workflows"
   | "workflow_schedules";
 
@@ -77,6 +78,7 @@ export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "review_queue",
   "reviewer_lab",
   "advanced_providers",
+  "compute",
   "workflows",
   "workflow_schedules",
 ];
@@ -85,6 +87,20 @@ const WORKSPACE_INSPECTORS: Record<
   WorkspaceInspectorView,
   WorkspaceInspectorDefinition
 > = {
+  compute: {
+    title: "Jobs and resources",
+    summary: "Inspect this project's running jobs, queue and checkpoints.",
+    boundary: "record",
+    recordPolicy:
+      "Local CPU and GPU limits apply to every project. A resumed job keeps its original identity and verified outputs.",
+    actions: [
+      {
+        label: "Training",
+        target: "training",
+        description: "Inspect training progress and registered checkpoints.",
+      },
+    ],
+  },
   acquisition_sources: {
     title: "Acquisition sources",
     summary: "Inspect the source, recording clock and capture history.",

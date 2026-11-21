@@ -45,6 +45,7 @@ from reefvision.services.workflow_pose_sources import verify_pose_dataset_separa
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.training_resume import capture_checkpoints, retire_previous_pair
 
 
 def _dataset_for_run(
@@ -166,25 +167,11 @@ def _record_interrupted_checkpoint(
     work_output_dir: Path,
     managed_output_dir: Path,
 ) -> None:
-    checkpoint = work_output_dir / "cancelled.pt"
-    if not checkpoint.is_file():
-        checkpoint = work_output_dir / "last.pt"
-    if checkpoint.is_file():
-        managed_output_dir.mkdir(parents=True, exist_ok=True)
-        persisted = managed_output_dir / checkpoint.name
-        shutil.copy2(checkpoint, persisted)
-        best = work_output_dir / "best.pt"
-        persisted_best = managed_output_dir / "best.pt"
-        if best.is_file():
-            shutil.copy2(best, persisted_best)
+    snapshot = capture_checkpoints(settings, work_output_dir, managed_output_dir)
+    if snapshot:
         run.artifact_manifest_json = {
             **dict(run.artifact_manifest_json or {}),
-            "resume_checkpoint_path": _relative_to_data_dir(settings, persisted),
-            "resume_best_checkpoint_path": (
-                _relative_to_data_dir(settings, persisted_best)
-                if persisted_best.is_file()
-                else None
-            ),
+            **snapshot,
         }
 
 
@@ -368,6 +355,12 @@ def process_reefpose_training_job(
                     "resume-input.pt" if resume_from is not None else "seed-input.pt"
                 )
                 shutil.copy2(checkpoint_source, short_resume)
+                if (
+                    resume_from is not None
+                    and manifest.get("resume_checkpoint_sha256")
+                    and hash_model_file(short_resume)[0] != manifest["resume_checkpoint_sha256"]
+                ):
+                    raise ValidationError("The resume checkpoint checksum changed before execution")
                 source_best = checkpoint_source.with_name("best.pt")
                 if (
                     resume_from is not None
@@ -375,6 +368,16 @@ def process_reefpose_training_job(
                     and source_best != checkpoint_source
                 ):
                     shutil.copy2(source_best, output_dir / "best.pt")
+                    if (
+                        manifest.get("resume_best_checkpoint_sha256")
+                        and hash_model_file(output_dir / "best.pt")[0]
+                        != manifest["resume_best_checkpoint_sha256"]
+                    ):
+                        raise ValidationError(
+                            "The best checkpoint checksum changed before execution"
+                        )
+                elif resume_from is not None and manifest.get("resume_best_checkpoint_sha256"):
+                    raise ValidationError("The previously saved best checkpoint is missing")
                 if seed_model is None:
                     state = load_checkpoint(
                         short_resume,
@@ -397,6 +400,20 @@ def process_reefpose_training_job(
                 if resume_from is not None:
                     resume_from = short_resume
                     resume_state = state
+                    # The checkpoint can survive a stop between the native epoch write and
+                    # the database progress commit. Recover that measured epoch exactly once.
+                    completed_epoch = state.epoch + 1
+                    history = {
+                        key: list(values)
+                        for key, values in (run.metrics_history_json or {}).items()
+                    }
+                    if completed_epoch > 0 and completed_epoch not in history.get("epoch", []):
+                        history.setdefault("epoch", []).append(completed_epoch)
+                        for key, value in state.metrics.items():
+                            if key != "epoch":
+                                history.setdefault(key, []).append(float(value))
+                        run.metrics_history_json = history
+                        run.progress_epoch = completed_epoch
                 expected = ReefPoseConfig(
                     num_keypoints=training_bundle.schema.keypoint_count,
                     input_height=int(configuration["input_height"]),
@@ -481,6 +498,12 @@ def process_reefpose_training_job(
                 callback_job = callback_session.get(Job, job_id)
                 if callback_run is None or callback_job is None:
                     raise RuntimeError("ReefPose progress target disappeared")
+                if output_dir is None or managed_output_dir is None:
+                    raise RuntimeError("ReefPose recovery output is unavailable")
+                previous = (callback_run.artifact_manifest_json or {}).get("resume_checkpoint_path")
+                _record_interrupted_checkpoint(
+                    settings, callback_run, output_dir, managed_output_dir
+                )
                 history = {
                     key: list(values)
                     for key, values in dict(callback_run.metrics_history_json or {}).items()
@@ -501,6 +524,8 @@ def process_reefpose_training_job(
                     "metrics": dict(metrics),
                 }
                 callback_session.commit()
+                current = callback_run.artifact_manifest_json.get("resume_checkpoint_path")
+                retire_previous_pair(settings, managed_output_dir, previous, current)
 
         configured_epochs = int(configuration["epochs"])
         if resume_state is not None and resume_state.epoch + 1 >= configured_epochs:

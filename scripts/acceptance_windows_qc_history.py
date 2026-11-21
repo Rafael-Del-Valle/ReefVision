@@ -29,7 +29,7 @@ from create_windows_qc_history_controls import (
 )
 
 CURRENT_VERSION = "2.0.0"
-CURRENT = "b20_appearance_0001"
+CURRENT = "b20_compute_0001"
 PREVIOUS = "b15_integrated_0002"
 
 

@@ -130,7 +130,7 @@ _CANDIDATE_REVISION = {
     "1.7.0": "b17_monitor_0003",
     "1.8.0": "b18_spectral_0002",
     "1.9.0": "b19_registration_0001",
-    "2.0.0": "b20_appearance_0001",
+    "2.0.0": "b20_compute_0001",
 }
 
 

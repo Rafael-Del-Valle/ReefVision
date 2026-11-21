@@ -6,11 +6,13 @@ from typing import cast
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from reefvision.config import Settings
 from reefvision.db.models import (
     Job,
     PoseEventDetectionRun,
     PoseIdentityAssociationRun,
     PoseMeasurementRun,
+    Project,
     TrainingRun,
     WorkflowNodeRun,
     WorkflowRun,
@@ -20,6 +22,8 @@ from reefvision.domain.errors import ConflictError, NotFoundError
 from reefvision.repositories.backups import BackupRepository
 from reefvision.repositories.jobs import JobRepository
 from reefvision.repositories.quality_control import QualityControlRepository
+from reefvision.services.workflow_provenance import verify_succeeded_node_artifacts
+from reefvision.storage.training_resume import verify_resume_checkpoint
 
 RUNNING_CANCELLABLE_JOB_TYPES = frozenset(
     {
@@ -46,6 +50,42 @@ RUNNING_CANCELLABLE_JOB_TYPES = frozenset(
         "temporal_reefpose",
     }
 )
+
+
+RETRYABLE_FAILED_TYPES = {
+    "reefpose_validation",
+    "static_comparison",
+    "paired_model_comparison",
+    "thumbnail",
+    "inference",
+    "sam_image_proposals",
+    "export",
+    "backup",
+    "restore",
+    "diagnostics",
+    "model_install",
+    "workflow_run",
+    "video_tracking",
+}
+
+
+def supports_retry(job: Job, training: TrainingRun | None) -> bool:
+    if job.job_type in {
+        "reefpose_validation",
+        "static_comparison",
+        "temporal_reefpose",
+    } and job.request_json.get("workflow_run_id"):
+        return False
+    if job.status == "failed" and job.job_type in RETRYABLE_FAILED_TYPES:
+        return True
+    return job.status in {"failed", "cancelled"} and (
+        job.job_type == "temporal_reefpose"
+        or bool(
+            training
+            and training.provider_id == "reefpose"
+            and (training.artifact_manifest_json or {}).get("resume_checkpoint_path")
+        )
+    )
 
 
 class JobService:
@@ -152,8 +192,57 @@ class JobService:
                 counts["cancel_requested"] += 1
         return counts
 
+    def resume(self, job_id: str, settings: Settings) -> Job:
+        job = self.jobs.get_for_update(job_id)
+        if job is None:
+            raise NotFoundError("Job not found")
+        if (job.result_json or {}).get("resume") and job.status in {"queued", "running"}:
+            return job
+        if job.status not in {"failed", "cancelled"}:
+            raise ConflictError("Resume requires an interrupted job with a saved checkpoint.")
+        if job.job_type == "training":
+            run = self.session.scalar(select(TrainingRun).where(TrainingRun.job_id == job.id))
+            if run is None or run.provider_id != "reefpose" or run.project_id != job.project_id:
+                raise ConflictError("This job has no native ReefPose recovery checkpoint.")
+            project = self.session.get(Project, run.project_id)
+            if project is None:
+                raise NotFoundError("Training project not found")
+            verify_resume_checkpoint(
+                settings,
+                dict(run.artifact_manifest_json or {}),
+                f"{project.storage_root}/training/{run.id}/reefpose/checkpoints",
+            )
+        elif job.job_type == "workflow_run" and job.status == "failed":
+            workflow = self._workflow_run(job)
+            completed = (
+                []
+                if workflow is None
+                else list(
+                    self.session.scalars(
+                        select(WorkflowNodeRun).where(
+                            WorkflowNodeRun.workflow_run_id == workflow.id,
+                            WorkflowNodeRun.status == "succeeded",
+                        )
+                    )
+                )
+            )
+            if workflow is None or not completed:
+                raise ConflictError("This graph has no completed nodes to resume from.")
+            for node in completed:
+                verify_succeeded_node_artifacts(self.session, run_id=workflow.id, node_run=node)
+        else:
+            raise ConflictError(
+                "This job has no supported recovery checkpoint. Use Retry for a failed job."
+            )
+        return self._retry(job, resume=True)
+
     def retry(self, job_id: str) -> Job:
-        job = self.get(job_id)
+        job = self.jobs.get_for_update(job_id)
+        if job is None:
+            raise NotFoundError("Job not found")
+        return self._retry(job, resume=False)
+
+    def _retry(self, job: Job, *, resume: bool) -> Job:
         if job.job_type in {"reefpose_validation", "static_comparison"} and job.request_json.get(
             "workflow_run_id"
         ):
@@ -167,32 +256,7 @@ class JobService:
             if job.job_type == "training"
             else None
         )
-        native_training_retry = (
-            job.status in {"failed", "cancelled"}
-            and training_run is not None
-            and training_run.provider_id == "reefpose"
-            and bool(dict(training_run.artifact_manifest_json or {}).get("resume_checkpoint_path"))
-        )
-        ordinary_retry = job.status == "failed" and job.job_type in {
-            "reefpose_validation",
-            "static_comparison",
-            "paired_model_comparison",
-            "thumbnail",
-            "inference",
-            "sam_image_proposals",
-            "export",
-            "backup",
-            "restore",
-            "diagnostics",
-            "model_install",
-            "workflow_run",
-            "video_tracking",
-        }
-        temporal_retry = job.job_type == "temporal_reefpose" and job.status in {
-            "failed",
-            "cancelled",
-        }
-        if not ordinary_retry and not native_training_retry and not temporal_retry:
+        if not supports_retry(job, training_run):
             raise ConflictError("Only supported failed background jobs can be retried")
         job.status = "queued"
         job.progress_current = 0
@@ -200,7 +264,7 @@ class JobService:
         job.started_at = None
         job.completed_at = None
         job.result_json = None
-        if native_training_retry and training_run is not None:
+        if training_run is not None:
             training_run.status = "queued"
             training_run.stage = "queued"
             training_run.error_message = None
@@ -255,6 +319,8 @@ class JobService:
                 node.input_artifact_ids_json = []
                 node.output_artifact_ids_json = []
                 node.result_json = {}
+        if resume:
+            job.result_json = {**dict(job.result_json or {}), "resume": True}
         self.session.commit()
         self.session.refresh(job)
         return job

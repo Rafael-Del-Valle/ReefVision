@@ -240,7 +240,7 @@ jobs:
           }
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
-            -ExpectedVersion '2.0.0' -ExpectedSchemaRevision 'b20_appearance_0001' `
+            -ExpectedVersion '2.0.0' -ExpectedSchemaRevision 'b20_compute_0001' `
             -AcceptanceRoot 'C:\reefvision-2-0-0-disposable-acceptance' `
             -SpatialWorkflowNodePath $playwrightNode -HostedStandardUserWebView2 -FirstUseAcceptance -ResearchWorkflowAcceptance -WorkspaceWorkflowAcceptance `
             -ScheduleWorkflowAcceptance -MonitoringWorkflowAcceptance -ResearchToolsAcceptance `
@@ -454,7 +454,7 @@ jobs:
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
             -PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance `
-            -ExpectedVersion '2.0.0' -ExpectedSchemaRevision 'b20_appearance_0001' `
+            -ExpectedVersion '2.0.0' -ExpectedSchemaRevision 'b20_compute_0001' `
             -AcceptanceRoot 'C:\reefvision-2-0-0-upgrade-acceptance' `
             -DisposableTest -KeepArtifacts
 
@@ -545,7 +545,7 @@ jobs:
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
             -PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance `
-            -ExpectedVersion '2.0.0' -ExpectedSchemaRevision 'b20_appearance_0001' `
+            -ExpectedVersion '2.0.0' -ExpectedSchemaRevision 'b20_compute_0001' `
             -ExpectedInitialSchemaRevision 'b14_condition_0041' `
             -AcceptanceRoot 'C:\reefvision-2-0-0-upgrade-validated-1-4' `
             -DisposableTest -KeepArtifacts
@@ -638,7 +638,7 @@ jobs:
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
             -PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance -VerifyPreviousInstallerRejectsUpgradedProfile `
-            -ExpectedVersion '2.0.0' -ExpectedSchemaRevision 'b20_appearance_0001' `
+            -ExpectedVersion '2.0.0' -ExpectedSchemaRevision 'b20_compute_0001' `
             -ExpectedInitialSchemaRevision 'b15_integrated_0002' `
             -AcceptanceRoot 'C:\reefvision-2-0-0-upgrade-validated-1-5' `
             -DisposableTest -KeepArtifacts
@@ -734,7 +734,7 @@ jobs:
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
             -PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance -VerifyPreviousInstallerRejectsUpgradedProfile `
-            -ExpectedVersion '2.0.0' -ExpectedSchemaRevision 'b20_appearance_0001' `
+            -ExpectedVersion '2.0.0' -ExpectedSchemaRevision 'b20_compute_0001' `
             -ExpectedInitialSchemaRevision 'b16_integrated_0001' `
             -AcceptanceRoot 'C:\reefvision-2-0-0-upgrade-validated-1-6' `
             -DisposableTest -KeepArtifacts
@@ -840,7 +840,7 @@ jobs:
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
             -PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance -VerifyPreviousInstallerRejectsUpgradedProfile `
-            -ExpectedVersion '2.0.0' -ExpectedSchemaRevision 'b20_appearance_0001' `
+            -ExpectedVersion '2.0.0' -ExpectedSchemaRevision 'b20_compute_0001' `
             -ExpectedInitialSchemaRevision 'b17_monitor_0003' `
             -AcceptanceRoot 'C:\reefvision-2-0-0-upgrade-validated-1-7' `
             -DisposableTest -KeepArtifacts
@@ -965,7 +965,7 @@ jobs:
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
             -PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance -VerifyPreviousInstallerRejectsUpgradedProfile `
-            -ExpectedVersion '2.0.0' -ExpectedSchemaRevision 'b20_appearance_0001' `
+            -ExpectedVersion '2.0.0' -ExpectedSchemaRevision 'b20_compute_0001' `
             -ExpectedInitialSchemaRevision 'b18_spectral_0002' `
             -AcceptanceRoot 'C:\reefvision-2-0-0-upgrade-validated-1-8' `
             -DisposableTest -KeepArtifacts
@@ -1091,7 +1091,7 @@ jobs:
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
             -PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance -VerifyPreviousInstallerRejectsUpgradedProfile `
-            -ExpectedVersion '2.0.0' -ExpectedSchemaRevision 'b20_appearance_0001' `
+            -ExpectedVersion '2.0.0' -ExpectedSchemaRevision 'b20_compute_0001' `
             -ExpectedInitialSchemaRevision 'b19_registration_0001' `
             -AcceptanceRoot 'C:\reefvision-2-0-0-upgrade-validated-1-9' `
             -DisposableTest -KeepArtifacts
@@ -1196,7 +1196,7 @@ jobs:
           $arguments = @{
             InstallerPath = $candidate
             ExpectedVersion = '2.0.0'
-            ExpectedSchemaRevision = 'b20_appearance_0001'
+            ExpectedSchemaRevision = 'b20_compute_0001'
             ExpectedInitialSchemaRevision = '${{ matrix.initial_revision }}'
             AcceptanceRoot = 'C:\reefvision-lineage-${{ matrix.acceptance_slug }}'
             LineageManifestPath = (Join-Path $fixtureRoot 'manifest.json')

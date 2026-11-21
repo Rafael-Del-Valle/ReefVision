@@ -2,19 +2,46 @@
 
 from datetime import UTC, datetime
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
 from reefvision.db.models import Job
-from reefvision.schemas.jobs import JobResponse
+from reefvision.schemas.jobs import (
+    ComputeJobPage,
+    ComputeLimitsRequest,
+    ComputeResources,
+    JobResponse,
+)
+from reefvision.services import compute_resources
 from reefvision.services.jobs import JobService
 from reefvision.storage.catalog_models import catalog_model_directories
 
 router = APIRouter(tags=["jobs"])
 DbSession = Annotated[Session, Depends(get_db_session)]
+
+
+@router.get("/compute/resources")
+def get_compute_resources(session: DbSession) -> ComputeResources:
+    return compute_resources.resources(session)
+
+
+@router.put("/compute/resources")
+def set_compute_resources(payload: ComputeLimitsRequest, session: DbSession) -> ComputeResources:
+    return compute_resources.set_limits(session, payload)
+
+
+@router.get("/projects/{project_id}/compute/jobs")
+def project_compute_jobs(
+    project_id: UUID,
+    session: DbSession,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> ComputeJobPage:
+    return compute_resources.list_jobs(session, str(project_id), limit, offset)
 
 
 def _live_model_install_response(job: Job, settings: Settings) -> JobResponse:
@@ -90,3 +117,10 @@ def retry_job(job_id: str, session: DbSession) -> JobResponse:
 @router.post("/jobs/{job_id}/cancel", response_model=JobResponse)
 def cancel_job(job_id: str, session: DbSession) -> JobResponse:
     return JobResponse.model_validate(JobService(session).cancel(job_id))
+
+
+@router.post("/jobs/{job_id}/resume", response_model=JobResponse)
+def resume_job(job_id: UUID, request: Request, session: DbSession) -> JobResponse:
+    return JobResponse.model_validate(
+        JobService(session).resume(str(job_id), request.app.state.settings)
+    )
