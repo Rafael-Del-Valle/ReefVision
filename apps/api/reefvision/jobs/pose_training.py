@@ -167,6 +167,55 @@ def _verified_pose_trainer_save_dir(actual: Path, expected: Path) -> Path:
     return save_dir
 
 
+def _canonical_pose_export_schema(yaml_text: str) -> tuple[int, int]:
+    """Validate canonical frozen metadata before creating scientific files."""
+
+    # The internal frozen-data exporter writes a canonical dataset header.
+    # A substring check could accept comments or duplicate YAML keys, allowing
+    # a later train/val/path declaration to silently redirect scientific data.
+    top_level = [line for line in yaml_text.splitlines() if line and not line[0].isspace()]
+    if (
+        len(top_level) != 6
+        or top_level[:3] != ["path: .", "train: images/train", "val: images/train"]
+        or re.fullmatch(r"kpt_shape: \[[1-9]\d*, 3\]", top_level[3]) is None
+        or top_level[4:] != ["names:", "reefvision_keypoint_names:"]
+    ):
+        raise ValidationError("Ultralytics pose export has a noncanonical data.yaml")
+
+    # Require the nested class map and ordered landmarks to match the
+    # canonical frozen exporter too. The six outer YAML keys alone do not
+    # detect duplicate class indices or extra keypoints within a section.
+    yaml_lines = yaml_text.splitlines()
+    landmark_header = yaml_lines.index("reefvision_keypoint_names:")
+    class_lines = yaml_lines[5:landmark_header]
+    landmark_lines = yaml_lines[landmark_header + 1 :]
+    expected_landmarks = int(top_level[3].split("[", 1)[1].split(",", 1)[0])
+    if not class_lines or len(landmark_lines) != expected_landmarks:
+        raise ValidationError("Ultralytics pose export has noncanonical class/keypoint metadata")
+
+    try:
+        for index, line in enumerate(class_lines):
+            prefix = f"  {index}: "
+            if not line.startswith(prefix):
+                raise ValueError("Unexpected class index")
+            display_name = json.loads(line[len(prefix) :])
+            if not isinstance(display_name, str) or json.dumps(display_name) != line[len(prefix) :]:
+                raise ValueError("Unexpected class display name")
+
+        for line in landmark_lines:
+            if not line.startswith("  - "):
+                raise ValueError("Unexpected landmark entry")
+            landmark_name = json.loads(line[4:])
+            if not isinstance(landmark_name, str) or json.dumps(landmark_name) != line[4:]:
+                raise ValueError("Unexpected landmark name")
+    except ValueError as exc:
+        raise ValidationError(
+            "Ultralytics pose export has noncanonical class/keypoint metadata"
+        ) from exc
+
+    return len(class_lines), expected_landmarks
+
+
 def _safe_extract_zip(
     content: bytes,
     destination: Path,
@@ -239,10 +288,14 @@ def _safe_extract_zip(
         # Missing the exported dataset header is an invalid frozen bundle.
         # Reject it before claiming the immutable run directory so a corrected
         # export can be retried without overwriting any prior scientific data.
-        if not any(
-            item.filename == "data.yaml" and not item.is_dir() for item in archive.infolist()
-        ):
-            raise ValidationError("Ultralytics pose export is missing data.yaml")
+        try:
+            header = archive.read("data.yaml")
+        except KeyError as exc:
+            raise ValidationError("Ultralytics pose export is missing data.yaml") from exc
+        try:
+            _canonical_pose_export_schema(header.decode("utf-8"))
+        except UnicodeDecodeError as exc:
+            raise ValidationError("Ultralytics pose export has noncanonical data.yaml") from exc
 
         # Invalid or ambiguous archives must not leave even an empty run
         # directory behind: that would block a corrected frozen export retry.
@@ -625,53 +678,12 @@ def materialize_pose_training_exports(
         encoding="utf-8",
     )
 
-    # The internal frozen-data exporter writes a canonical dataset header.
-    # A substring check could accept comments or duplicate YAML keys, allowing
-    # a later train/val/path declaration to silently redirect scientific data.
-    top_level = [line for line in yaml_text.splitlines() if line and not line[0].isspace()]
-    if (
-        len(top_level) != 6
-        or top_level[:3] != ["path: .", "train: images/train", "val: images/train"]
-        or re.fullmatch(r"kpt_shape: \[[1-9]\d*, 3\]", top_level[3]) is None
-        or top_level[4:] != ["names:", "reefvision_keypoint_names:"]
-    ):
-        raise ValidationError("Ultralytics pose export has a noncanonical data.yaml")
-
-    # Require the nested class map and ordered landmarks to match the
-    # canonical frozen exporter too. The six outer YAML keys alone do not
-    # detect duplicate class indices or extra keypoints within a section.
-    yaml_lines = yaml_text.splitlines()
-    landmark_header = yaml_lines.index("reefvision_keypoint_names:")
-    class_lines = yaml_lines[5:landmark_header]
-    landmark_lines = yaml_lines[landmark_header + 1 :]
-    expected_landmarks = int(top_level[3].split("[", 1)[1].split(",", 1)[0])
-    if not class_lines or len(landmark_lines) != expected_landmarks:
-        raise ValidationError("Ultralytics pose export has noncanonical class/keypoint metadata")
-
-    try:
-        for index, line in enumerate(class_lines):
-            prefix = f"  {index}: "
-            if not line.startswith(prefix):
-                raise ValueError("Unexpected class index")
-            display_name = json.loads(line[len(prefix) :])
-            if not isinstance(display_name, str) or json.dumps(display_name) != line[len(prefix) :]:
-                raise ValueError("Unexpected class display name")
-
-        for line in landmark_lines:
-            if not line.startswith("  - "):
-                raise ValueError("Unexpected landmark entry")
-            landmark_name = json.loads(line[4:])
-            if not isinstance(landmark_name, str) or json.dumps(landmark_name) != line[4:]:
-                raise ValueError("Unexpected landmark name")
-    except ValueError as exc:
-        raise ValidationError(
-            "Ultralytics pose export has noncanonical class/keypoint metadata"
-        ) from exc
+    class_count, keypoint_count = _canonical_pose_export_schema(yaml_text)
 
     _verify_pose_export_frame_pairs(
         destination,
-        class_count=len(class_lines),
-        keypoint_count=expected_landmarks,
+        class_count=class_count,
+        keypoint_count=keypoint_count,
     )
 
     validation_mode = "none"
@@ -705,8 +717,8 @@ def materialize_pose_training_exports(
                 validation_stage,
                 destination,
                 split_name="val",
-                class_count=len(class_lines),
-                keypoint_count=expected_landmarks,
+                class_count=class_count,
+                keypoint_count=keypoint_count,
             )
         finally:
             # A failed holdout-stage cleanup must fail the materialization,
