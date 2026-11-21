@@ -17,6 +17,8 @@ function LocalMeshPreviewSession({ projectId }: LocalMeshPreviewProps) {
   const [scale, setScale] = useState("0.01");
   const [evidence, setEvidence] = useState("");
   const [uncertainty, setUncertainty] = useState("");
+  const [preserveAxisExtrema, setPreserveAxisExtrema] = useState(false);
+  const [preservePatches, setPreservePatches] = useState(false);
   const [artifact, setArtifact] = useState<Record<string, unknown> | null>(
     null,
   );
@@ -44,6 +46,8 @@ function LocalMeshPreviewSession({ projectId }: LocalMeshPreviewProps) {
         calibration_evidence: evidence,
         relative_scale_uncertainty:
           uncertainty.trim() === "" ? null : Number(uncertainty),
+        preserve_axis_extrema_in_preview: preserveAxisExtrema,
+        preserve_edge_connected_patches_in_preview: preservePatches,
       });
       if (version === requestVersion.current) setArtifact(result);
     } catch (reason) {
@@ -118,6 +122,32 @@ function LocalMeshPreviewSession({ projectId }: LocalMeshPreviewProps) {
           />
         </label>
       </div>
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          checked={preserveAxisExtrema}
+          onChange={(event) => {
+            setPreserveAxisExtrema(event.target.checked);
+            invalidatePreview();
+          }}
+        />
+        Preserve source-axis extrema faces in preview
+      </label>
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          checked={preservePatches}
+          onChange={(event) => {
+            setPreservePatches(event.target.checked);
+            invalidatePreview();
+          }}
+        />
+        Preserve disconnected mesh patches in preview
+      </label>
+      <p className="muted-copy">
+        Display sampling only: these options do not alter full-mesh
+        measurements, physical calibration, or verified specimen identity.
+      </p>
       <button
         type="button"
         disabled={!file || loading}
