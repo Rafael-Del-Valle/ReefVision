@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { ContextualPanelLayoutProvider } from "./ContextualPanelLayout";
 import { ScientistWorkspaceInspector } from "./ScientistWorkspaceInspector";
 import {
   closeCurrentDetachedPanelWindow,
@@ -44,53 +45,60 @@ export function DetachedInspectorSurface({
       </div>
 
       <section className="rv-detached-inspector-content">
-        <ScientistWorkspaceInspector
-          activeView={snapshot.activeView}
-          activePreset={snapshot.activePreset}
-          activeClassCount={snapshot.activeClassCount}
-          annotationType={snapshot.annotationType}
+        <ContextualPanelLayoutProvider
+          key={snapshot.projectId}
           projectId={snapshot.projectId}
-          inferenceSelectedImageIds={snapshot.inferenceSelectedImageIds}
-          focusedImageId={snapshot.focusedImageId}
-          selectedReviewQueueId={snapshot.selectedReviewQueueId}
-          videoWorkspaceContext={snapshot.videoWorkspaceContext}
-          onOpenMeasurements={(imageId) =>
-            onCommand({
-              type: "open_measurements",
-              imageId,
-            })
-          }
-          onOpenReviewItem={(item) =>
-            onCommand({
-              type: "open_review_item",
-              item,
-            })
-          }
-          onVideoSelect={(videoId) =>
-            onCommand({
-              type: "video_select",
-              videoId,
-            })
-          }
-          onVideoFrameChange={(frameIndex) =>
-            onCommand({
-              type: "video_frame",
-              frameIndex,
-            })
-          }
-          onVideoTrackChange={(trackId) =>
-            onCommand({
-              type: "video_track",
-              trackId,
-            })
-          }
-          onNavigate={(view) =>
-            onCommand({
-              type: "navigate",
-              view,
-            })
-          }
-        />
+          view={snapshot.activeView}
+          preset={snapshot.activePreset}
+        >
+          <ScientistWorkspaceInspector
+            activeView={snapshot.activeView}
+            activePreset={snapshot.activePreset}
+            activeClassCount={snapshot.activeClassCount}
+            annotationType={snapshot.annotationType}
+            projectId={snapshot.projectId}
+            inferenceSelectedImageIds={snapshot.inferenceSelectedImageIds}
+            focusedImageId={snapshot.focusedImageId}
+            selectedReviewQueueId={snapshot.selectedReviewQueueId}
+            videoWorkspaceContext={snapshot.videoWorkspaceContext}
+            onOpenMeasurements={(imageId) =>
+              onCommand({
+                type: "open_measurements",
+                imageId,
+              })
+            }
+            onOpenReviewItem={(item) =>
+              onCommand({
+                type: "open_review_item",
+                item,
+              })
+            }
+            onVideoSelect={(videoId) =>
+              onCommand({
+                type: "video_select",
+                videoId,
+              })
+            }
+            onVideoFrameChange={(frameIndex) =>
+              onCommand({
+                type: "video_frame",
+                frameIndex,
+              })
+            }
+            onVideoTrackChange={(trackId) =>
+              onCommand({
+                type: "video_track",
+                trackId,
+              })
+            }
+            onNavigate={(view) =>
+              onCommand({
+                type: "navigate",
+                view,
+              })
+            }
+          />
+        </ContextualPanelLayoutProvider>
       </section>
     </main>
   );

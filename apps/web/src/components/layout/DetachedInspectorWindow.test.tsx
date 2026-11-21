@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -27,11 +28,13 @@ afterEach(() => {
 describe("DetachedInspectorSurface", () => {
   it("renders the canonical scientist inspector in a detached shell", async () => {
     render(
-      <DetachedInspectorSurface
-        snapshot={snapshot}
-        onCommand={vi.fn()}
-        onDock={vi.fn()}
-      />,
+      <QueryClientProvider client={new QueryClient()}>
+        <DetachedInspectorSurface
+          snapshot={snapshot}
+          onCommand={vi.fn()}
+          onDock={vi.fn()}
+        />
+      </QueryClientProvider>,
     );
 
     expect(screen.getByText("Detached scientist panel")).toBeInTheDocument();
@@ -53,11 +56,13 @@ describe("DetachedInspectorSurface", () => {
     const onDock = vi.fn();
 
     render(
-      <DetachedInspectorSurface
-        snapshot={snapshot}
-        onCommand={vi.fn()}
-        onDock={onDock}
-      />,
+      <QueryClientProvider client={new QueryClient()}>
+        <DetachedInspectorSurface
+          snapshot={snapshot}
+          onCommand={vi.fn()}
+          onDock={onDock}
+        />
+      </QueryClientProvider>,
     );
 
     await userEvent.click(
