@@ -447,6 +447,12 @@ def test_offline_noaa_cache_rejects_rehashed_foreign_identity_and_source(
     assert {item["id"] for item in records.json()["items"]} == {
         str(record_id) for record_id in original_ids
     }
+    # Malformed or foreign provider data cannot be displayed as current,
+    # even though the original observations remain accessible for audit.
+    assert all(
+        item["environmental_snapshot_current"] is False
+        for item in records.json()["items"]
+    )
 
 
 @pytest.mark.parametrize("alteration", ["missing", "foreign", "duplicate"])
