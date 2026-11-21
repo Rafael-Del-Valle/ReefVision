@@ -17,6 +17,7 @@ from reefvision.storage.images import (
     inspect_staged_image,
 )
 
+
 @pytest.mark.parametrize(
     "suffix",
     [".jpg", ".JPG", ".jpeg", ".JPEG", ".jpe", ".JPE", ".jfif", ".JFIF", ".jfi", ".jif"],
@@ -187,7 +188,6 @@ def test_orphaned_camera_exposure_exif_reports_uncertain_capture_time(
     assert path.read_bytes() == original
 
 
-
 @pytest.mark.parametrize(
     ("non_exposure_time_tag", "non_exposure_offset_tag", "suffix"),
     [
@@ -223,6 +223,8 @@ def test_camera_processing_dates_never_substitute_for_exposure_time(
         ("2026:04:03 14:25:30", "+02:3"),  # Noncanonical minute width.
         ("2026:04:03 14:25:30", "+24:00"),  # Invalid civil time zone.
         ("2026:02:30 14:25:30", "+02:00"),  # Impossible calendar date.
+        ("2025:02:29 14:25:30", "+02:00"),  # Non-leap-year date.
+        ("2026:04:03 14:25:30", "-14:01"),  # Outside supported UTC offsets.
         ("2026:4:03 14:25:30", "+02:00"),  # Noncanonical EXIF date width.
         ("0001:01:01 00:00:00", "+14:00"),  # UTC conversion underflows.
     ],
