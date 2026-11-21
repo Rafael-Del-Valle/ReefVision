@@ -44,7 +44,7 @@ from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import (
     resolve_managed_project_path,
 )
-from reefvision.storage.training import free_training_space_gib
+from reefvision.storage.training import free_training_space_gib, verify_pose_checkpoint_digest
 
 PoseTrainingProcessor = Callable[
     [
@@ -352,6 +352,9 @@ def _reused_pose_training_result(
         raise ValidationError("Recovered pose training checkpoint is missing")
 
     checkpoint_sha256, checkpoint_size = hash_model_file(checkpoint)
+    verify_pose_checkpoint_digest(
+        run.artifact_manifest_json or {}, run.result_checkpoint_path, checkpoint_sha256
+    )
 
     experiment = session.scalar(
         select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
@@ -862,6 +865,9 @@ def create_pose_workflow_training_result(
         raise ValidationError("Completed pose training checkpoint is missing")
 
     checkpoint_sha256, checkpoint_size = hash_model_file(checkpoint)
+    verify_pose_checkpoint_digest(
+        run.artifact_manifest_json or {}, run.result_checkpoint_path, checkpoint_sha256
+    )
 
     experiment = session.scalar(
         select(ExperimentRecord).where(ExperimentRecord.training_run_id == run.id)
