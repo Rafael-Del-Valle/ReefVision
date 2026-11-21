@@ -920,6 +920,82 @@ describe("AnnotationEditor", () => {
     expect(screen.getByTestId("annotation-annotation-1")).toBeInTheDocument();
   });
 
+  it("reports and rejects an invalid imported move and resize without making scientific edits dirty", async () => {
+    const corruptSession: AnnotationSession = {
+      ...session,
+      annotations: [
+        { ...session.annotations[0], x_max: session.image.width_px + 1 },
+      ],
+    };
+    const writes: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (
+        url.endsWith(`/images/${session.image.id}/annotations`) &&
+        (!init?.method || init.method === "GET")
+      ) {
+        return jsonResponse(corruptSession);
+      }
+      if (init?.method === "PUT") {
+        writes.push(url);
+        throw new Error("A rejected gesture must not autosave");
+      }
+      const shared = handleDefaultEditorRequests(url, init);
+      if (shared) return shared;
+      throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+    });
+
+    renderEditor();
+    await screen.findByRole("heading", {
+      name: session.image.original_filename,
+    });
+    stubCanvasRect();
+    const annotation = screen.getByTestId("annotation-annotation-1");
+    expect(screen.getByText("All changes synced")).toBeInTheDocument();
+
+    fireEvent.pointerDown(annotation, {
+      button: 0,
+      pointerId: 41,
+      clientX: 120,
+      clientY: 130,
+    });
+    fireEvent.pointerUp(window, {
+      pointerId: 41,
+      clientX: 180,
+      clientY: 190,
+    });
+    expect(screen.getByTestId("editor-gesture-status")).toHaveTextContent(
+      /Move canceled.*Original observations were preserved/,
+    );
+    expect(screen.getByText("All changes synced")).toBeInTheDocument();
+    expect(screen.getByTestId("annotation-annotation-1")).toHaveAttribute(
+      "width",
+      String(session.image.width_px + 1 - session.annotations[0].x_min),
+    );
+
+    const resizeHandle = annotation.parentElement?.querySelector("circle");
+    expect(resizeHandle).not.toBeNull();
+    fireEvent.pointerDown(resizeHandle!, {
+      button: 0,
+      pointerId: 42,
+      clientX: 120,
+      clientY: 130,
+    });
+    fireEvent.pointerUp(window, {
+      pointerId: 42,
+      clientX: 180,
+      clientY: 190,
+    });
+    expect(screen.getByTestId("editor-gesture-status")).toHaveTextContent(
+      /Resize canceled.*Original observations were preserved/,
+    );
+    expect(screen.getByText("All changes synced")).toBeInTheDocument();
+    expect(writes).toHaveLength(0);
+    expect(corruptSession.annotations[0].x_max).toBe(
+      session.image.width_px + 1,
+    );
+  });
+
   it("culls offscreen boxes while preserving the full object list and restores on reset", async () => {
     mockBasicEditorRequests();
     renderEditor();
