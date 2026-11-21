@@ -412,4 +412,109 @@ describe("ClassManagerPanel", () => {
       ),
     ).toBeInTheDocument();
   });
+  it.each([
+    ["reassign", "reassign", "Preview reassign", "Run reassign", 0],
+    [
+      "reassign-delete",
+      "reassign_delete",
+      "Preview Reassign and Delete",
+      "Run Reassign and Delete",
+      0,
+    ],
+    ["reassign", "reassign", "Preview reassign", "Run reassign", 1],
+    [
+      "reassign-delete",
+      "reassign_delete",
+      "Preview Reassign and Delete",
+      "Run Reassign and Delete",
+      1,
+    ],
+  ] as const)(
+    "withdraws %s class-operation preview approval after taxonomy identity drift",
+    async (endpoint, operationType, previewLabel, runLabel, changedIndex) => {
+      const requests = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async (input, init) => {
+          const url = String(input);
+          if (
+            url.endsWith(
+              `/projects/${project.id}/classes/class-1/${endpoint}/preview`,
+            ) &&
+            init?.method === "POST"
+          ) {
+            return jsonResponse({
+              id: "identity-bound-preview",
+              project_id: project.id,
+              source_class_id: "class-1",
+              target_class_id: "class-2",
+              source_class: project.label_classes[0],
+              target_class: project.label_classes[1],
+              operation_type: operationType,
+              status: "previewed",
+              preview_checksum: "e".repeat(64),
+              plan: {
+                mutable_records: [],
+                protected_records: [],
+                blocking_records: [],
+                compatibility_impacts: [],
+                blockers: [],
+              },
+              failures: [],
+              warnings: [],
+            });
+          }
+          throw new Error(
+            `Unexpected operation ${init?.method ?? "GET"} ${url}`,
+          );
+        });
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const panel = (currentProject: Project) => (
+        <QueryClientProvider client={queryClient}>
+          <ClassManagerPanel project={currentProject} />
+        </QueryClientProvider>
+      );
+      const { rerender } = render(panel(project));
+      const row = sourceClassRow();
+      const previewButton = within(row).getByRole("button", {
+        name: previewLabel,
+      });
+      const runButton = within(row).getByRole("button", { name: runLabel });
+      await userEvent.click(previewButton);
+      await waitFor(() => expect(runButton).toBeEnabled());
+
+      // A concurrent taxonomy edit must revoke the prior human preview,
+      // even if the selected class ID and typed audit notes have not changed.
+      const updated = project.label_classes.map((entry, index) =>
+        index === changedIndex
+          ? {
+              ...entry,
+              name: `${entry.name} revised`,
+              updated_at: "2026-11-20T23:00:00Z",
+            }
+          : entry,
+      );
+      rerender(panel({ ...project, label_classes: updated }));
+      expect(runButton).toBeDisabled();
+      expect(
+        within(row).getByText(/preview no longer matches/i),
+      ).toBeInTheDocument();
+      await userEvent.click(previewButton);
+      await waitFor(() => expect(runButton).toBeEnabled());
+      expect(
+        requests.mock.calls.filter(([input]) =>
+          String(input).endsWith(`/${endpoint}/preview`),
+        ),
+      ).toHaveLength(2);
+      expect(
+        requests.mock.calls.some(([input]) =>
+          String(input).endsWith(`/class-1/${endpoint}`),
+        ),
+      ).toBe(false);
+    },
+  );
 });
