@@ -19,6 +19,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: desktop-build-${{ github.event.pull_request.number || github.ref }}
@@ -305,6 +306,138 @@ jobs:
           path: |
             .artifacts/windows-clean-acceptance-*/report.json
             .artifacts/windows-clean-acceptance-*/*.log
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 14
+
+  windows-lineage-acceptance:
+    name: Installed 1.4 lineage — ${{ matrix.profile }}
+    runs-on: windows-latest
+    needs: build-windows-installer
+    timeout-minutes: 105
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: validated-1.3
+            initial_revision: b13_temporal_0001
+            previous_installer: true
+            acceptance_slug: validated-1-3
+          - profile: draft-1.4-0038
+            initial_revision: "0038"
+            previous_installer: false
+            acceptance_slug: draft-1-4-0038
+          - profile: draft-1.4-0039
+            initial_revision: "0039"
+            previous_installer: false
+            acceptance_slug: draft-1-4-0039
+    env:
+      SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      GH_TOKEN: ${{ github.token }}
+      REEFVISION_1_3_RUN: "43648296842"
+      REEFVISION_1_3_SOURCE: f56b577323c31f60b69251e1bb29e91b384d0d04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Retrieve exact 1.4 MSI and every external CAB
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ReefVision-1.4.0-RC-Installer-Part-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/reefvision-1-4-0-installer
+
+      - name: Verify exact-head candidate payload
+        shell: pwsh
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-1-4-0-installer'
+          $payload = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $folder -Version '1.4.0' -ExpectedFilename 'ReefVision_1.4.0_x64_en-US.msi' -SourceCommit $env:SOURCE_COMMIT -RequireProvenance
+          $payload | ConvertTo-Json -Depth 8
+
+      - name: Generate and independently verify deterministic lineage fixture
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check -e .
+          if ($LASTEXITCODE -ne 0) { throw 'Could not install the source package used only to generate lineage fixtures.' }
+          $fixtureRoot = Join-Path $env:RUNNER_TEMP 'reefvision-lineage-fixtures'
+          python scripts/create_windows_lineage_fixtures.py $fixtureRoot
+          if ($LASTEXITCODE -ne 0) { throw 'Could not generate deterministic lineage fixtures.' }
+          $manifest = Join-Path $fixtureRoot 'manifest.json'
+          $verification = python scripts/verify_windows_lineage_fixture.py $manifest --profile '${{ matrix.profile }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Independent lineage verification failed.' }
+          $verification | Set-Content -LiteralPath (Join-Path $fixtureRoot '${{ matrix.profile }}-verification.json') -Encoding utf8
+
+      - name: Retrieve and verify retained exact-SHA 1.3 installer
+        if: matrix.previous_installer
+        shell: pwsh
+        run: |
+          $run = gh run view $env:REEFVISION_1_3_RUN --repo Rafael-Del-Valle/ReefVision --json headSha,conclusion | ConvertFrom-Json
+          if ($run.headSha -cne $env:REEFVISION_1_3_SOURCE -or $run.conclusion -ne 'success') {
+            throw 'Retained 1.3 installer run does not identify the pinned successful source SHA.'
+          }
+          $previous = Join-Path $env:RUNNER_TEMP 'reefvision-1-3-0-installer'
+          New-Item -ItemType Directory -Path $previous | Out-Null
+          gh run download 43648296842 --repo Rafael-Del-Valle/ReefVision --name ReefVision-1.3.0-RC-Installer-Part-1 --dir $previous
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download retained 1.3 installer part 1.' }
+          gh run download 43648296842 --repo Rafael-Del-Valle/ReefVision --name ReefVision-1.3.0-RC-Installer-Part-2 --dir $previous
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download retained 1.3 installer part 2.' }
+          $payload = ./scripts/verify-windows-installer-payload.ps1 -InstallerDirectory $previous -Version '1.3.0' -ExpectedFilename 'ReefVision_1.3.0_x64_en-US.msi' -SourceCommit $env:REEFVISION_1_3_SOURCE -RequireProvenance
+          $payload | ConvertTo-Json -Depth 8
+
+      - name: Exercise installed historical profile, exchange, restore and compatibility
+        shell: pwsh
+        run: |
+          $candidate = Join-Path $env:RUNNER_TEMP 'reefvision-1-4-0-installer\ReefVision_1.4.0_x64_en-US.msi'
+          $fixtureRoot = Join-Path $env:RUNNER_TEMP 'reefvision-lineage-fixtures'
+          $arguments = @{
+            InstallerPath = $candidate
+            ExpectedVersion = '1.4.0'
+            ExpectedSchemaRevision = 'b14_spatial_0040'
+            ExpectedInitialSchemaRevision = '${{ matrix.initial_revision }}'
+            AcceptanceRoot = 'C:\reefvision-lineage-${{ matrix.acceptance_slug }}'
+            LineageManifestPath = (Join-Path $fixtureRoot 'manifest.json')
+            LineageProfile = '${{ matrix.profile }}'
+            LineageVerificationPath = (Join-Path $fixtureRoot '${{ matrix.profile }}-verification.json')
+            DisposableTest = $true
+            KeepArtifacts = $true
+          }
+          if ('${{ matrix.previous_installer }}' -eq 'true') {
+            $arguments.PreviousInstallerPath = Join-Path $env:RUNNER_TEMP 'reefvision-1-3-0-installer\ReefVision_1.3.0_x64_en-US.msi'
+            $arguments.PreviousInstallerSupportsIsolatedAcceptance = $true
+            $arguments.VerifyPreviousInstallerRejectsUpgradedProfile = $true
+          } else {
+            $arguments.SkipUpgrade = $true
+          }
+          $env:PATH = @(
+            (Join-Path $env:SystemRoot 'System32'),
+            $env:SystemRoot,
+            (Join-Path $env:SystemRoot 'System32\Wbem'),
+            (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0'),
+            (Join-Path $env:ProgramFiles 'PowerShell\7')
+          ) -join ';'
+          foreach ($cmd in @('python', 'python3', 'node', 'npm', 'rustc', 'cargo')) {
+            if (Get-Command $cmd -ErrorAction SilentlyContinue) {
+              throw "Unexpected developer runtime on isolated PATH: $cmd"
+            }
+          }
+          & ./scripts/acceptance-windows-clean-install.ps1 @arguments
+
+      - name: Upload installed lineage report, logs and fixture verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-1.4.0-Lineage-${{ matrix.profile }}-Evidence
+          path: |
+            .artifacts/windows-clean-acceptance-*/report.json
+            .artifacts/windows-clean-acceptance-*/*.log
+            .artifacts/windows-clean-acceptance-*/*.reefvision.zip
+            ${{ runner.temp }}/reefvision-lineage-fixtures/manifest.json
+            ${{ runner.temp }}/reefvision-lineage-fixtures/${{ matrix.profile }}-verification.json
           if-no-files-found: warn
           include-hidden-files: true
           retention-days: 14
