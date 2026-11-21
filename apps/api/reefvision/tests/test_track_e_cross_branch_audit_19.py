@@ -40,9 +40,7 @@ def test_cross_branch_audit_flags_distinct_branch_only_revisions(tmp_path: Path)
     git("commit", "-q", "-m", "science")
 
     git("switch", "-q", "review")
-    (migrations / "0002_review.py").write_text(
-        'revision = "0002_review"\ndown_revision = "0001"\n'
-    )
+    (migrations / "0002_review.py").write_text('revision = "0002_review"\ndown_revision = "0001"\n')
     git("add", ".")
     git("commit", "-q", "-m", "review")
 
