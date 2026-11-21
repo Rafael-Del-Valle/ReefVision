@@ -10,6 +10,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictBool,
     StrictFloat,
     StrictInt,
     model_validator,
@@ -111,6 +112,9 @@ class MeshPreviewRequest(BaseModel):
 
     surface_path_vertex_pairs: list[list[StrictInt]] | None = Field(default=None, max_length=16)
     surface_trace_vertex_paths: list[list[StrictInt]] | None = Field(default=None, max_length=16)
+    # Render-only: keep faces containing source-axis extrema in the 512-face sample.
+    # Never alters the full-mesh scientific measurements or their source fingerprint.
+    preserve_axis_extrema_in_preview: StrictBool = False
 
     @model_validator(mode="after")
     def geometry_is_unambiguous(self) -> MeshPreviewRequest:
