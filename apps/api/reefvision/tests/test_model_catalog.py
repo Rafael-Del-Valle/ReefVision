@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import json
 import sys
+from hashlib import sha256
 from pathlib import Path
+from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from reefvision.db.models import ModelRegistration
+from reefvision.ml import provider_hub
 from reefvision.services import model_catalog as model_catalog_service
+from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
 
 
@@ -85,6 +91,78 @@ def test_project_model_catalog_returns_all_definitions(client: TestClient) -> No
         item["installation_state"] in {"Available", "Provider Required"}
         for item in yolo_models.values()
     )
+
+
+def test_project_catalog_distinguishes_checkpoint_bytes_from_execution(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = create_project(client, "Restored checkpoint catalog")
+    app = cast(FastAPI, client.app)
+    settings = app.state.settings
+    monkeypatch.setattr(provider_hub, "_package_version", lambda _: "2.5.1")
+    cases = {
+        "supported": ("reefpose", "pose", True, "Ready"),
+        "omitted": ("reefpose", "pose", False, "Model Required"),
+        "wrong-size": ("reefpose", "pose", True, "Corrupted"),
+        "wrong-task": ("reefpose", "detect", True, "Unavailable"),
+        "unknown": ("synthetic_old_provider", "detect", True, "Unavailable"),
+        "catalog-only": ("rt_detr", "detect", True, "Unavailable"),
+        "retired": ("sleap_nn", "pose", True, "Unavailable"),
+    }
+    ids = {}
+    with app.state.session_factory() as session:
+        for title, (provider, task, present, _) in cases.items():
+            payload = ("Generated checkpoint witness " + title).encode()
+            path = f"projects/{project['id']}/models/{title}.pt"
+            if present:
+                resolved = resolve_managed_project_path(settings, path)
+                resolved.parent.mkdir(parents=True, exist_ok=True)
+                resolved.write_bytes(payload + b"unexpected" if title == "wrong-size" else payload)
+            model = ModelRegistration(
+                project_id=project["id"],
+                purpose="detector",
+                display_name=title,
+                source_filename=f"{title}.pt",
+                managed_path=path,
+                sha256=sha256(payload).hexdigest(),
+                file_size_bytes=len(payload),
+                framework="pytorch",
+                task=task,
+                provider_name=provider,
+                provider_version="fixture",
+                class_map_json={"0": "fixture"},
+                metadata_json={"external_model_receipt": "original"},
+            )
+            session.add(model)
+            session.flush()
+            ids[title] = model.id
+        session.commit()
+
+    endpoint = f"/api/v1/projects/{project['id']}/model-catalog"
+    response = client.get(endpoint, params={"workflow": "model_hub"})
+    assert response.status_code == 200, response.text
+    rows = {entry["resolved_model_id"]: entry for entry in response.json()["models"]}
+    for title, (provider, task, present, state) in cases.items():
+        model = client.get(f"/api/v1/models/{ids[title]}").raise_for_status().json()
+        row = rows[ids[title]]
+        assert row["provider_id"] == model["provider_name"] == provider
+        assert row["task"] == model["task"] == task
+        assert row["expected_checksum"] == model["sha256"]
+        assert model["metadata_json"] == {"external_model_receipt": "original"}
+        assert row["installation_state"] == state
+        assert row["inference_supported"] is (state == "Ready")
+        assert row["trainable"] is (state == "Ready")
+        matching_file = present and state != "Corrupted"
+        assert row["installed_checksum"] == (model["sha256"] if matching_file else None)
+        assert row["installed_path"] == (model["managed_path"] if matching_file else None)
+    ready_only = client.get(endpoint, params={"include_unavailable": False}).raise_for_status()
+    registered = [item for item in ready_only.json()["models"] if item["resolved_model_id"]]
+    assert [item["resolved_model_id"] for item in registered] == [ids["supported"]]
+    assert "weights" in rows[ids["omitted"]]["installation_reason"].lower()
+    assert "size" in rows[ids["wrong-size"]]["installation_reason"].lower()
+    assert "retired" in rows[ids["retired"]]["installation_reason"].lower()
+    assert "synthetic_old_provider" in rows[ids["unknown"]]["installation_reason"]
+    assert "detect" in rows[ids["wrong-task"]]["installation_reason"]
 
 
 def test_missing_provider_does_not_hide_entries(

@@ -427,10 +427,10 @@ function CatalogModelCard({
           <small>Configuration: {model.architecture_reference}</small>
         )}
         {registered && model.installed_path && (
-          <small>Location: {model.installed_path}</small>
+          <small>Checkpoint file present: {model.installed_path}</small>
         )}
-        {registered && model.installed_checksum && (
-          <small>Checksum: {model.installed_checksum}</small>
+        {registered && model.expected_checksum && (
+          <small>Expected checksum: {model.expected_checksum}</small>
         )}
         <p>{model.display_summary}</p>
         {architecture ? (
@@ -656,7 +656,10 @@ export function ModelManager({
         item.category === "architecture" &&
         item.installation_state === "Available",
     ).length,
-    ready: trainedCatalogModels.length + importedCatalogModels.length,
+    ready: [...trainedCatalogModels, ...importedCatalogModels].filter(
+      (entry) =>
+        entry.installation_state === "Ready" && entry.inference_supported,
+    ).length,
   };
 
   const filteredArchitectureCatalogModels = useMemo(() => {
@@ -925,7 +928,9 @@ export function ModelManager({
           className="model-ai-overview-card"
           onClick={() => jumpToModelSection("model-ai-project-models")}
         >
-          <span className="model-ai-overview-label">Registered models</span>
+          <span className="model-ai-overview-label">
+            Registered models ready
+          </span>
           <strong>{catalogSummary.ready}</strong>
           <small>See models that ReefVision can use now</small>
         </button>
@@ -1196,8 +1201,8 @@ export function ModelManager({
             <p className="eyebrow">Imported Custom Models</p>
             <h3>Researcher-registered checkpoints</h3>
             <span>
-              Your compatible local models, with explicit source and schema
-              binding
+              Local and historical checkpoints with source and schema
+              information
             </span>
           </div>
         </div>

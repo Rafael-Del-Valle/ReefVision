@@ -178,6 +178,63 @@ describe("ModelManager catalog", () => {
       return new Promise<Response>(() => undefined);
     });
   }
+  it("keeps historical checkpoints visible without counting them as ready", async () => {
+    const modelCatalog = catalog("Available");
+    const historical: ModelCatalogEntry = {
+      ...entry("Unavailable"),
+      category: "imported_custom_models",
+      selection_kind: "registered_model",
+      catalog_id: "registered-model/old-id",
+      resolved_model_id: "old-id",
+      display_name: "Historical custom checkpoint",
+      installation_reason:
+        "The historical provider is unavailable for inference.",
+      inference_supported: false,
+      installed_path: "projects/project-1/models/old.pt",
+      installed_checksum: "1".repeat(64),
+      expected_checksum: "1".repeat(64),
+    };
+    modelCatalog.models.push(historical, {
+      ...historical,
+      display_name: "Checkpoint archived without weights",
+      catalog_id: "registered-model/missing-id",
+      resolved_model_id: "missing-id",
+      installation_state: "Model Required",
+      installation_reason: "Checkpoint weights are missing.",
+      expected_checksum: "2".repeat(64),
+      installed_path: null,
+      installed_checksum: null,
+    });
+    serve(modelCatalog);
+    renderManager();
+    const unavailable = (
+      await screen.findByRole("heading", {
+        name: "Historical custom checkpoint",
+      })
+    ).closest("article")!;
+    expect(
+      within(unavailable).getByText(/Registered model.*Unavailable/),
+    ).toBeVisible();
+    expect(
+      within(unavailable).getByText(/Checkpoint file present/),
+    ).toBeVisible();
+    expect(
+      within(unavailable).getByText(/historical provider is unavailable/),
+    ).toBeVisible();
+    const missing = (
+      await screen.findByRole("heading", {
+        name: "Checkpoint archived without weights",
+      })
+    ).closest("article")!;
+    expect(within(missing).getByText(/Expected checksum: 22/)).toBeVisible();
+    expect(
+      within(missing).getByText(/Checkpoint weights are missing/),
+    ).toBeVisible();
+    const ready = screen.getByRole("button", {
+      name: /Registered models ready/,
+    });
+    expect(within(ready).getByText("0", { exact: true })).toBeVisible();
+  });
   it("separates architectures and registered models and selects scratch training without acquisition", async () => {
     const fetchSpy = serve(catalog("Available"));
     const onSelect = renderManager();
