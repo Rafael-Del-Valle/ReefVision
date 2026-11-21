@@ -1552,6 +1552,51 @@ def test_cancelling_running_pose_node_before_child_publication(
     assert len(detail["artifacts"]) == 1
 
 
+def test_cancelling_immediately_before_workflow_success_preserves_completed_nodes(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    url = f"/api/v1/projects/{project['id']}"
+    graph = _native_pose_workflow_graph(str(dataset["id"]))
+    graph["nodes"] = cast(list[dict[str, Any]], graph["nodes"])[:1]
+    graph["edges"] = []
+    saved = client.post(url + "/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    queued = client.post(url + "/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert queued.status_code == 202, queued.text
+    run_id, parent_id = queued.json()["id"], queued.json()["job_id"]
+    run_url = f"/api/v1/workflow-runs/{run_id}"
+    prior_artifacts: list[dict[str, Any]] = []
+    original_run_counts = WorkflowExecutionService.run_counts
+
+    def cancel_before_terminal_commit(
+        service: WorkflowExecutionService, current_id: str
+    ) -> dict[str, int]:
+        counts = original_run_counts(service, current_id)
+        assert current_id == run_id
+        detail = client.get(run_url).json()
+        assert detail["run"]["status"] == "running"
+        assert [node["status"] for node in detail["nodes"]] == ["succeeded"]
+        prior_artifacts.extend(detail["artifacts"])
+        assert len(prior_artifacts) == 1
+        assert prior_artifacts[0]["payload_json"]["manifest_sha256"] == dataset["manifest_sha256"]
+        cancelled = client.post(f"/api/v1/jobs/{parent_id}/cancel")
+        assert cancelled.status_code == 200, cancelled.text
+        assert cancelled.json()["status"] == "cancel_requested"
+        return counts
+
+    monkeypatch.setattr(WorkflowExecutionService, "run_counts", cancel_before_terminal_commit)
+    completed = process_workflow_run_job(app.state.settings, app.state.session_factory, parent_id)
+    detail = client.get(run_url).json()
+    assert detail["run"]["status"] == "cancelled", detail["run"]
+    assert not completed
+    assert client.get(f"/api/v1/jobs/{parent_id}").json()["status"] == "cancelled"
+    assert [node["status"] for node in detail["nodes"]] == ["succeeded"]
+    assert detail["artifacts"] == prior_artifacts
+
+
 def test_saved_native_reefpose_workflow_executes_and_replays(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
