@@ -25,6 +25,9 @@ from reefvision.tests.test_environmental_context import noaa_fixture
         "record_ids_non_string",
         "duplicate_record_ids",
         "missing_cache_identity",
+        "null_cache_identity",
+        "list_cache_identity",
+        "boolean_cache_identity",
         "wrong_cache_identity",
         "wrong_source_url",
         "missingness_is_boolean",
@@ -68,6 +71,12 @@ def test_scientific_record_listing_rejects_malformed_rehashed_cache(client, dama
             payload["record_ids"][1] = payload["record_ids"][0]
         elif damage == "missing_cache_identity":
             del payload["cache_identity"]
+        elif damage == "null_cache_identity":
+            payload["cache_identity"] = None
+        elif damage == "list_cache_identity":
+            payload["cache_identity"] = ["unexpected"]
+        elif damage == "boolean_cache_identity":
+            payload["cache_identity"] = False
         elif damage == "wrong_cache_identity":
             payload["cache_identity"]["source_url"] += "&foreign=1"
         elif damage == "wrong_source_url":
