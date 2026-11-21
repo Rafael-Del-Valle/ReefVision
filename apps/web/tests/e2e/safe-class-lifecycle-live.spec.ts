@@ -165,6 +165,18 @@ test("reviews class edits and preserves frozen exports after reopening", async (
     .fill("Reviewed mapping of this generated box");
   await button(renamed, "Preview reassign").click();
   await expect(button(renamed, "Run reassign")).toBeEnabled();
+  const destination = row(target.name);
+  await destination
+    .getByLabel(`Description for ${target.name}`)
+    .fill("Reviewed destination after the first preview");
+  await button(destination, "Save").click();
+  await expect(button(renamed, "Run reassign")).toBeDisabled();
+  await expect(renamed.getByText(/preview no longer matches/i)).toBeVisible();
+  expect((await get(annotation)).image.annotation_revision).toBe(
+    before.image.annotation_revision,
+  );
+  await button(renamed, "Preview reassign").click();
+  await expect(button(renamed, "Run reassign")).toBeEnabled();
   await renamed.getByText("Records in this preview", { exact: true }).click();
   await expect(renamed.getByText(box.id, { exact: true })).toBeVisible();
   const reassign = button(renamed, "Run reassign");
@@ -278,6 +290,7 @@ test("reviews class edits and preserves frozen exports after reopening", async (
         project_id: project.id,
         original_sha256: digest(image),
         explicit_confirmation: true,
+        destination_revision_required_new_preview: true,
         reassign: {
           annotation_id: box.id,
           from: source.id,

@@ -289,6 +289,24 @@ function OperationSummary({
   );
 }
 
+// A preview is approval of *these* source/target class revisions, not just IDs.
+function classPreviewIdentity(value: LabelClass | undefined) {
+  if (!value) return null;
+  return [
+    value.id,
+    value.updated_at,
+    value.name,
+    value.class_index,
+    value.scientific_name,
+    value.state_name,
+    value.description,
+    value.display_order,
+    value.display_color,
+    value.is_active,
+    value.archived_at,
+  ];
+}
+
 function ClassRow({
   project,
   labelClass,
@@ -325,6 +343,9 @@ function ClassRow({
   const [reassignTargetId, setReassignTargetId] = useState(
     mergeTargets[0]?.id ?? "",
   );
+  const selectedReassignTarget = mergeTargets.find(
+    (candidate) => candidate.id === reassignTargetId,
+  );
   const [reassignPreview, setReassignPreview] =
     useState<BoundClassPreview | null>(null);
   const [reassignDeletePreview, setReassignDeletePreview] =
@@ -333,7 +354,8 @@ function ClassRow({
     useState<ClassOperationRecord | null>(null);
   const previewSelectionKey = JSON.stringify([
     project.id,
-    labelClass.id,
+    classPreviewIdentity(labelClass),
+    classPreviewIdentity(selectedReassignTarget),
     reassignTargetId,
     reassignNotes.trim(),
     previewEpoch,
@@ -348,6 +370,7 @@ function ClassRow({
     candidate.operation.project_id === project.id &&
     candidate.operation.source_class_id === labelClass.id &&
     candidate.operation.target_class_id === reassignTargetId &&
+    selectedReassignTarget !== undefined &&
     candidate.operation.operation_type === operationType;
   const matchesReassignPreview = matchesPreview(reassignPreview, "reassign");
   const matchesReassignDeletePreview = matchesPreview(
@@ -791,7 +814,7 @@ function ClassRow({
             type="button"
             className="secondary"
             disabled={
-              !reassignTargetId ||
+              !selectedReassignTarget ||
               previewReassign.isPending ||
               runReassign.isPending ||
               runReassignDelete.isPending
@@ -833,7 +856,7 @@ function ClassRow({
             type="button"
             className="danger-ghost"
             disabled={
-              !reassignTargetId ||
+              !selectedReassignTarget ||
               previewReassignDelete.isPending ||
               runReassign.isPending ||
               runReassignDelete.isPending
@@ -938,8 +961,8 @@ function ClassRow({
       )}
       {reassignPreview && !matchesReassignPreview && (
         <p className="annotation-helper" role="status">
-          Reassignment preview no longer matches this target or its notes.
-          Preview again before executing.
+          Reassignment preview no longer matches the class identities, target,
+          or notes. Preview again before executing.
         </p>
       )}
 
@@ -951,8 +974,8 @@ function ClassRow({
       )}
       {reassignDeletePreview && !matchesReassignDeletePreview && (
         <p className="annotation-helper" role="status">
-          Reassign-and-delete preview no longer matches this target or its
-          notes. Preview again before executing.
+          Reassign-and-delete preview no longer matches the class identities,
+          target, or notes. Preview again before executing.
         </p>
       )}
 
