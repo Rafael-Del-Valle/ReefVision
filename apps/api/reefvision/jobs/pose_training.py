@@ -403,9 +403,7 @@ def _verify_pose_label_rows(rows: list[str], *, class_count: int, keypoint_count
             or re.fullmatch(r"(0|[1-9][0-9]*)", tokens[0]) is None
             or int(tokens[0]) >= class_count
         ):
-            raise ValidationError(
-                "Ultralytics pose export contains an invalid label class index"
-            )
+            raise ValidationError("Ultralytics pose export contains an invalid label class index")
 
         # Each reviewed pose must have class, normalized box geometry,
         # and exactly three values for every frozen schema landmark.
@@ -414,9 +412,7 @@ def _verify_pose_label_rows(rows: list[str], *, class_count: int, keypoint_count
         try:
             numbers = [float(value) for value in tokens[1:]]
         except ValueError as exc:
-            raise ValidationError(
-                "Ultralytics pose export has invalid label coordinates"
-            ) from exc
+            raise ValidationError("Ultralytics pose export has invalid label coordinates") from exc
         if (
             not all(math.isfinite(value) for value in numbers)
             or not all(0 <= value <= 1 for value in numbers[:4])
@@ -757,9 +753,7 @@ def materialize_pose_training_exports(
                 # immutable training directory. Frame checks alone never read
                 # unrelated members, which might be corrupt.
                 if validation_archive.testzip() is not None:
-                    raise ValidationError(
-                        "Pose training export contains a corrupt archive member"
-                    )
+                    raise ValidationError("Pose training export contains a corrupt archive member")
                 if training_archive.read("data.yaml") != validation_archive.read("data.yaml"):
                     raise ValidationError(
                         "Ultralytics pose validation export has incompatible data.yaml"
