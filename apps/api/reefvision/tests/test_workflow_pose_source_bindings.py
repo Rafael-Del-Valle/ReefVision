@@ -6,13 +6,21 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from reefvision.db.models import VideoAsset
+from reefvision.db.models import Job, VideoAsset
+from reefvision.domain.errors import ValidationError
+from reefvision.jobs.pose_training import process_pose_training_job
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services import workflow_pose_training
+from reefvision.services.workflow_pose_training import create_pose_workflow_training_result
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_pose_provider_backends import _import_pose_video, _pose_model
+from reefvision.tests.test_pose_training_datasets_phase9 import _verified_round
 from reefvision.tests.test_workflow_pose_review_resume_phase10 import _save_and_queue
-from reefvision.tests.test_workflow_pose_training_phase10 import _frozen_dataset
+from reefvision.tests.test_workflow_pose_training_phase10 import (
+    _fake_pose_processor,
+    _frozen_dataset,
+)
 
 
 def _edge(left: str, out_port: str, right: str, in_port: str) -> dict[str, str]:
@@ -178,3 +186,142 @@ def test_pinned_pose_video_checks_original_bytes_before_provider_runs(
     assert detail["run"]["status"] == "failed"
     assert "Pinned video original changed" in detail["run"]["error_message"]
     assert client.get(f"/api/v1/videos/{video['id']}/tracks").json() == []
+
+
+@pytest.mark.parametrize(
+    ("entry", "require_validation"),
+    [("planner", None), ("executor", False), ("ultralytics", False), ("reefpose", False)],
+)
+def test_optional_pose_holdout_still_rejects_shared_recording(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    require_validation: bool | None,
+    entry: str,
+) -> None:
+    project, video, track, first_round = _verified_round(client, monkeypatch)
+    project_id = str(project["id"])
+    base = f"/api/v1/projects/{project_id}"
+    second_round = client.post(
+        f"{base}/pose-active-learning-rounds",
+        json={
+            "name": "A separate freeze from the same original",
+            "video_id": video["id"],
+            "track_ids": [track["id"]],
+            "requested_size": 2,
+            "minimum_frame_spacing": 0,
+        },
+    )
+    assert second_round.status_code == 201, second_round.text
+    second_round_id = second_round.json()["id"]
+    candidates = client.get(
+        f"/api/v1/pose-active-learning-rounds/{second_round_id}/candidates"
+    ).json()
+    assert len(candidates) == 2
+    for candidate in candidates:
+        review = client.put(
+            f"/api/v1/pose-active-learning-candidates/{candidate['id']}/review",
+            json={"action": "verify", "reviewed_by": "fixture scientist"},
+        )
+        assert review.status_code == 200, review.text
+
+    datasets = []
+    for round_id in (first_round["id"], second_round_id):
+        response = client.post(
+            f"/api/v1/pose-active-learning-rounds/{round_id}/training-dataset",
+            json={"created_by": "fixture scientist"},
+        )
+        assert response.status_code == 201, response.text
+        datasets.append(response.json())
+    training, validation = datasets
+    assert training["id"] != validation["id"]
+    assert training["manifest_sha256"] != validation["manifest_sha256"]
+    assert all(
+        dataset["manifest_json"]["items"][0]["video_sha256"] == video["sha256"]
+        for dataset in datasets
+    )
+
+    train_pin = {"dataset_id": training["id"], "manifest_sha256": training["manifest_sha256"]}
+    held_pin = {
+        "dataset_id": validation["id"],
+        "manifest_sha256": validation["manifest_sha256"],
+    }
+    parameters = (
+        {} if require_validation is None else {"require_validation_dataset": require_validation}
+    )
+    if entry == "executor":
+        app = cast(FastAPI, client.app)
+        with (
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="share a recording"),
+        ):
+            create_pose_workflow_training_result(
+                session,
+                app.state.settings,
+                project_id=project_id,
+                dataset_payload=train_pin,
+                validation_dataset_payload=held_pin,
+                parameters=parameters,
+                processor=_fake_pose_processor,
+            )
+        return
+
+    if entry in {"ultralytics", "reefpose"}:
+        # Recreate a child the previous release admitted and committed before a shutdown.
+        app = cast(FastAPI, client.app)
+        jobs: list[str] = []
+
+        def leave_queued(_settings: object, _factory: object, job_id: str) -> bool:
+            jobs.append(job_id)
+            return False
+
+        with (
+            monkeypatch.context() as setup,
+            app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="job=queued"),
+        ):
+            setup.setattr(workflow_pose_training, "verify_pose_dataset_separation", lambda *_: None)
+            create_pose_workflow_training_result(
+                session,
+                app.state.settings,
+                project_id=project_id,
+                dataset_payload=train_pin,
+                validation_dataset_payload=held_pin,
+                parameters={**parameters, "provider_id": entry},
+                processor=leave_queued,
+            )
+        [job_id] = jobs
+        process_pose_training_job(app.state.settings, app.state.session_factory, job_id)
+        with app.state.session_factory() as session:
+            job = session.get(Job, job_id)
+            assert job is not None and job.status == "failed"
+            assert "share a recording" in (job.error_message or "")
+        return
+
+    graph = {
+        "graph_id": "explicit-overlap",
+        "name": "Explicit held-out data with optional validation",
+        "nodes": [
+            {"node_id": "dataset", "node_type": "pose_training_dataset", "parameters": train_pin},
+            {"node_id": "validation", "node_type": "pose_training_dataset", "parameters": held_pin},
+            {"node_id": "train", "node_type": "pose_model_training", "parameters": parameters},
+        ],
+        "edges": [
+            _edge("dataset", "dataset", "train", "dataset"),
+            _edge("validation", "dataset", "train", "validation_dataset"),
+        ],
+    }
+    planned = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert planned.status_code == 200, planned.text
+    assert planned.json()["executable"] is False
+    assert any(
+        issue["code"] == "invalid_frozen_pose_split"
+        and issue["node_id"] == "train"
+        and "share a recording" in issue["message"]
+        for issue in planned.json()["issues"]
+    )
+
+    graph["nodes"].pop(1)
+    graph["edges"].pop()
+    exploratory = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert exploratory.status_code == 200, exploratory.text
+    assert exploratory.json()["executable"] is True

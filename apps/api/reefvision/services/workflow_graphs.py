@@ -415,7 +415,7 @@ class WorkflowGraphService:
                 )
                 break
 
-    def _validate_guided_pose_sources(
+    def _validate_frozen_pose_bindings(
         self,
         nodes: dict[str, WorkflowNodeInstance],
         incoming: dict[tuple[str, str], list[WorkflowEdge]],
@@ -434,12 +434,13 @@ class WorkflowGraphService:
             return (training, validation) if training and validation else None
 
         for node in nodes.values():
-            if node.node_type == "pose_model_training" and (
-                node.parameters.get("require_validation_dataset") is True
-            ):
+            if node.node_type == "pose_model_training":
                 pair = split(node.node_id)
                 try:
-                    if source(node.node_id, "validation_dataset") is None:
+                    if (
+                        node.parameters.get("require_validation_dataset") is True
+                        and source(node.node_id, "validation_dataset") is None
+                    ):
                         raise ValidationError("Choose a separate frozen validation dataset")
                     if pair is not None:
                         verify_pose_dataset_separation(self.session, *pair)
@@ -776,7 +777,7 @@ class WorkflowGraphService:
                         )
                     )
 
-        self._validate_guided_pose_sources(nodes, incoming, frozen, issues)
+        self._validate_frozen_pose_bindings(nodes, incoming, frozen, issues)
 
         # Prediction proposals are deliberately excluded from immutable
         # dataset-version QC context. Flag confidence-gated version queues at

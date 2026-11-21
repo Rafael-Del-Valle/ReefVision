@@ -477,17 +477,6 @@ def create_pose_workflow_training_result(
         else None
     )
 
-    if validation_dataset is not None and validation_dataset.id == dataset.id:
-        raise ValidationError("Pose validation dataset must be distinct from the training dataset")
-
-    if (
-        validation_dataset is not None
-        and validation_dataset.pose_schema_content_hash != dataset.pose_schema_content_hash
-    ):
-        raise ValidationError(
-            "Pose validation dataset must use the same landmark schema as training truth"
-        )
-
     require_validation = bool(
         parameters.get(
             "require_validation_dataset",
@@ -499,7 +488,7 @@ def create_pose_workflow_training_result(
         raise ValidationError(
             "This pose retraining configuration requires a separate frozen validation dataset"
         )
-    if require_validation and validation_dataset is not None:
+    if validation_dataset is not None:
         verify_pose_dataset_separation(session, dataset, validation_dataset)
 
     provider_id = str(parameters.get("provider_id") or "ultralytics").strip().casefold()
