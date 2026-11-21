@@ -3,6 +3,21 @@ import { useMemo, useState } from "react";
 type Vec3 = [number, number, number];
 type Face = [number, number, number];
 
+// These are render-coverage diagnostics from the persisted scientific artifact,
+// not assertions about coral health, mesh completeness, or calibrated accuracy.
+const PREVIEW_QC_MESSAGES: Record<string, string> = {
+  preview_omits_source_axis_extrema:
+    "Sampled triangles omit source-axis extrema; the full-mesh bounds still govern camera fit.",
+  preview_omits_largest_mesh_triangle:
+    "The largest reconstructed source triangle is absent from the sampled display.",
+  preview_omits_edge_connected_mesh_patches:
+    "At least one disconnected reconstructed surface patch is absent from the display.",
+  preview_omits_reconstructed_mesh_surface_area:
+    "The displayed sample excludes reconstructed mesh surface area.",
+  preview_partially_sampled_missing_area_numeric_unrepresentable:
+    "Some missing display area cannot be represented at the supplied numeric scale.",
+};
+
 export interface MeshRenderArtifact {
   vertices: Vec3[];
   faces: Face[];
@@ -12,6 +27,7 @@ export interface MeshRenderArtifact {
   decimated: boolean;
   faceFraction: number;
   areaFraction: number | null;
+  previewQcWarnings: string[];
   relativeScaleUncertainty: number | null;
   pathPolylines: Vec3[][];
   routeInspections: MeshRouteInspection[];
@@ -629,6 +645,11 @@ export function parseMeshRenderArtifact(
     decimated: data.preview_is_decimated,
     faceFraction: fraction,
     areaFraction: areaFraction as number | null,
+    previewQcWarnings: Array.isArray(data.qc_warnings)
+      ? Object.keys(PREVIEW_QC_MESSAGES).filter((code) =>
+          data.qc_warnings.includes(code),
+        )
+      : [],
     relativeScaleUncertainty:
       typeof relativeScaleUncertainty === "number"
         ? relativeScaleUncertainty
@@ -1209,6 +1230,15 @@ export function MeshArtifactViewer({ artifact }: { artifact: unknown }) {
           : `${(mesh.areaFraction * 100).toFixed(1)}%`}
         {mesh.decimated ? " · Decimated preview" : " · Full face preview"}
       </p>
+      {mesh.previewQcWarnings.length > 0 && (
+        <p className="annotation-helper" role="status">
+          Preview coverage QC (rendering only):{" "}
+          {mesh.previewQcWarnings
+            .map((code) => PREVIEW_QC_MESSAGES[code])
+            .join(" ")}{" "}
+          These flags do not establish coral condition or verified calibration.
+        </p>
+      )}
     </section>
   );
 }
