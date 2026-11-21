@@ -352,6 +352,61 @@ describe("VideoTrackingWorkspace", () => {
     );
   });
 
+  it("waits for the workflow's replay track when a previous track is cached", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
+    });
+    const priorTrack: api.VideoTrackRecord = {
+      id: "prior-track",
+      video_id: "video-1",
+      label_class_id: "class-1",
+      track_number: 1,
+      geometry_kind: "bbox",
+      keyframes_json: [],
+      interpolation: "linear",
+      status: "machine_generated",
+      source_model_id: "pose-model-1",
+      source_job_id: "prior-job",
+      metadata_json: {},
+      revision: 1,
+    };
+    const replayTrack = {
+      ...priorTrack,
+      id: "replay-track",
+      track_number: 2,
+      source_job_id: "replay-job",
+    };
+    client.setQueryData(["video-tracks", "video-1"], [priorTrack]);
+    vi.mocked(api.getVideoTracks).mockResolvedValue([priorTrack, replayTrack]);
+    const onHandled = vi.fn();
+
+    render(
+      <QueryClientProvider client={client}>
+        <VideoTrackingWorkspace
+          project={project}
+          workspaceCommand={{
+            id: 10,
+            type: "open_workflow_pose_review",
+            runId: "replay-run",
+            videoId: "video-1",
+            trackId: replayTrack.id,
+          }}
+          onWorkspaceCommandHandled={onHandled}
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("combobox", { name: "Existing track" }),
+      ).toHaveValue(replayTrack.id);
+      expect(
+        screen.getByLabelText("Enable source-coordinate overlay"),
+      ).toBeChecked();
+    });
+    expect(onHandled).toHaveBeenCalledExactlyOnceWith(10);
+  });
+
   it("imports video with optional SRT and AirData alignment inputs", async () => {
     renderWorkspace();
     await screen.findByText("Managed videos");
