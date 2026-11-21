@@ -91,6 +91,89 @@ afterEach(() => {
 });
 
 describe("ClassManagerPanel", () => {
+  describe.each([
+    ["reassign", "reassign", "Preview reassign", "Run reassign"],
+    [
+      "reassign-delete",
+      "reassign_delete",
+      "Preview Reassign and Delete",
+      "Run Reassign and Delete",
+    ],
+  ] as const)(
+    "%s preview",
+    (endpoint, operationType, previewLabel, runLabel) => {
+      const report = {
+        mutable_records: [],
+        protected_records: [],
+        compatibility_impacts: [],
+        blocking_records: [],
+        blockers: [],
+      };
+      it.each([
+        ["blank operation identity", { id: " " }],
+        ["missing checksum", { preview_checksum: null }],
+        ["malformed checksum", { preview_checksum: "invalid-sha256" }],
+        [
+          "missing record groups",
+          { plan: { blockers: [], blocking_records: [] } },
+        ],
+        [
+          "missing record identifiers",
+          {
+            plan: {
+              ...report,
+              mutable_records: [
+                { key: "annotations", label: "Annotations", count: 1 },
+              ],
+            },
+          },
+        ],
+        ["missing source snapshot", { source_class: null }],
+      ] as const)(
+        "requires a fresh preview after %s",
+        async (_, incomplete) => {
+          const complete = {
+            id: "reviewed-operation",
+            project_id: project.id,
+            source_class_id: "class-1",
+            target_class_id: "class-2",
+            source_class: project.label_classes[0],
+            target_class: project.label_classes[1],
+            operation_type: operationType,
+            status: "previewed",
+            preview_checksum: "a".repeat(64),
+            plan: report,
+            failures: [],
+          };
+          const fetchMock = vi
+            .spyOn(globalThis, "fetch")
+            .mockResolvedValueOnce(jsonResponse({ ...complete, ...incomplete }))
+            .mockResolvedValueOnce(jsonResponse(complete));
+          renderPanel();
+          const row = within(sourceClassRow());
+          const preview = row.getByRole("button", { name: previewLabel });
+          const run = row.getByRole("button", { name: runLabel });
+          await userEvent.click(preview);
+          expect(
+            await row.findByText(
+              /Operation evidence is incomplete|Execution disabled/,
+            ),
+          ).toBeVisible();
+          expect(run).toBeDisabled();
+          await userEvent.click(run);
+          expect(screen.queryByRole("alertdialog")).toBeNull();
+          expect(fetchMock).toHaveBeenCalledTimes(1);
+          expect(String(fetchMock.mock.calls[0][0])).toMatch(
+            new RegExp(`/classes/class-1/${endpoint}/preview$`),
+          );
+          await userEvent.click(preview);
+          await waitFor(() => expect(run).toBeEnabled());
+          expect(fetchMock).toHaveBeenCalledTimes(2);
+        },
+      );
+    },
+  );
+
   it.each([
     ["Run reassign", "Reassign class", false],
     ["Run Reassign and Delete", "Reassign and delete class", false],

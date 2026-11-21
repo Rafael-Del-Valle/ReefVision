@@ -45,18 +45,32 @@ type MergeClassApproval = {
   expectedSourceIdentity: MergeTargetIdentity;
 };
 
-// A preview is not permission to execute while any safety evidence is blocked
-// or absent. The backend also validates the immutable preview checksum.
+function hasClassReviewReport(operation: ClassOperationRecord): boolean {
+  const plan = operation.plan;
+  return (
+    typeof operation.source_class?.name === "string" &&
+    Array.isArray(plan?.mutable_records) &&
+    Array.isArray(plan.protected_records) &&
+    plan.mutable_records.every((group) => Array.isArray(group?.record_ids)) &&
+    plan.protected_records.every((group) => Array.isArray(group?.record_ids)) &&
+    Array.isArray(plan.compatibility_impacts) &&
+    Array.isArray(plan.blocking_records) &&
+    Array.isArray(plan.blockers) &&
+    Array.isArray(operation.failures)
+  );
+}
+
 function previewHasNoBlockingEvidence(
   operation: ClassOperationRecord,
 ): boolean {
-  const plan = operation.plan;
   return (
-    Array.isArray(plan?.blockers) &&
-    plan.blockers.length === 0 &&
-    Array.isArray(plan.blocking_records) &&
-    plan.blocking_records.length === 0 &&
-    Array.isArray(operation.failures) &&
+    hasClassReviewReport(operation) &&
+    typeof operation.id === "string" &&
+    operation.id.trim().length > 0 &&
+    typeof operation.preview_checksum === "string" &&
+    /^[0-9a-f]{64}$/i.test(operation.preview_checksum) &&
+    operation.plan.blockers.length === 0 &&
+    operation.plan.blocking_records.length === 0 &&
     operation.failures.length === 0
   );
 }
@@ -206,6 +220,18 @@ function OperationSummary({
   operation: ClassOperationRecord;
   title: string;
 }) {
+  if (!hasClassReviewReport(operation)) {
+    return (
+      <div className="class-usage-card">
+        <strong>{title}</strong>
+        <p className="form-error" role="alert">
+          Operation evidence is incomplete. Request a fresh preview to review
+          the affected records.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="class-usage-card">
       <strong>{title}</strong>
@@ -281,8 +307,8 @@ function OperationSummary({
       {operation.status === "previewed" &&
         !previewHasNoBlockingEvidence(operation) && (
           <p className="form-error" role="status">
-            Execution disabled: preview contains blockers or incomplete safety
-            evidence. Resolve the issues and preview again.
+            Execution disabled. Resolve any blockers and request a complete
+            preview with its review checksum.
           </p>
         )}
     </div>
