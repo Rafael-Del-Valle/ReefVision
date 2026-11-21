@@ -27,6 +27,11 @@ from reefvision.jobs import reefpose_training
 from reefvision.jobs.pose_training import process_pose_training_job
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.ml.reefpose.training import ReefPoseTrainer
+from reefvision.services.pose_training_exports import (
+    PoseTrainingExportArtifact,
+    PoseTrainingExportFormat,
+    PoseTrainingExportService,
+)
 from reefvision.services.workflow_execution import WorkflowExecutionService
 from reefvision.services.workflow_pose_training import create_pose_workflow_training_result
 from reefvision.storage.projects import resolve_managed_project_path
@@ -357,17 +362,8 @@ def test_queued_pose_worker_refuses_frozen_frame_overlap_before_output(
     assert not managed.exists()
 
 
-@pytest.mark.parametrize("overlapping", [True, False], ids=["overlap", "disjoint"])
-def test_saved_pose_retry_revalidates_frozen_frames_from_completed_child(
-    client: TestClient,
-    test_settings: Settings,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    overlapping: bool,
-) -> None:
-    project, training, holdout = _frozen_split(client, tmp_path, overlapping=overlapping)
-    project_id = project["id"]
-    graph = {
+def _native_frozen_split_graph(training: dict[str, Any], holdout: dict[str, Any]) -> dict[str, Any]:
+    return {
         "graph_id": "recover-frozen-frame-study",
         "name": "Recovery of a completed native pose study",
         "nodes": [
@@ -406,6 +402,19 @@ def test_saved_pose_retry_revalidates_frozen_frames_from_completed_child(
             for node_id, port_id in (("training", "dataset"), ("holdout", "validation_dataset"))
         ],
     }
+
+
+@pytest.mark.parametrize("overlapping", [True, False], ids=["overlap", "disjoint"])
+def test_saved_pose_retry_revalidates_frozen_frames_from_completed_child(
+    client: TestClient,
+    test_settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    overlapping: bool,
+) -> None:
+    project, training, holdout = _frozen_split(client, tmp_path, overlapping=overlapping)
+    project_id = project["id"]
+    graph = _native_frozen_split_graph(training, holdout)
     factory = cast(FastAPI, client.app).state.session_factory
     url = f"/api/v1/projects/{project_id}"
     saved = _checked(client.post(f"{url}/workflow-graphs", json={"graph": graph}), 201)
@@ -519,3 +528,70 @@ def test_saved_pose_retry_revalidates_frozen_frames_from_completed_child(
         assert results[0]["experiment_id"] == experiment_id
         assert results[0]["result_checkpoint_sha256"] == sha256
         assert _checked(registration, 200)["sha256"] == sha256
+
+
+def test_cancelling_a_workflow_during_frozen_pose_preparation_cancels_parent(
+    client: TestClient,
+    test_settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, training, holdout = _frozen_split(client, tmp_path, overlapping=False)
+    project_id = project["id"]
+    graph = _native_frozen_split_graph(training, holdout)
+    graph["nodes"].append({"node_id": "register", "node_type": "register_trained_model"})
+    graph["edges"].append(
+        {
+            "edge_id": "train-register",
+            "source_node_id": "train",
+            "source_port_id": "training",
+            "target_node_id": "register",
+            "target_port_id": "training",
+        }
+    )
+    factory = cast(FastAPI, client.app).state.session_factory
+    url = f"/api/v1/projects/{project_id}"
+    saved = _checked(client.post(f"{url}/workflow-graphs", json={"graph": graph}), 201)
+    queued = _checked(
+        client.post(f"{url}/workflow-runs", json={"graph_record_id": saved["id"]}), 202
+    )
+    parent_job_id = queued["job_id"]
+    child_ids: list[str] = []
+    export = PoseTrainingExportService.export
+
+    def cancel_during_export(
+        service: PoseTrainingExportService,
+        dataset_id: str,
+        export_format: PoseTrainingExportFormat,
+    ) -> PoseTrainingExportArtifact:
+        if dataset_id == training["id"] and not child_ids:
+            [child] = _checked(client.get(f"{url}/training-runs"), 200)
+            assert child["stage"] == "preparing_dataset"
+            assert child["progress_epoch"] == 0
+            child_ids.append(child["id"])
+            cancelled = _checked(client.post(f"/api/v1/jobs/{parent_job_id}/cancel"), 200)
+            assert cancelled["status"] == "cancel_requested"
+        return export(service, dataset_id, export_format)
+
+    with monkeypatch.context() as preparing:
+        preparing.setattr(PoseTrainingExportService, "export", cancel_during_export)
+        assert not process_workflow_run_job(test_settings, factory, parent_job_id)
+
+    [child_id] = child_ids
+    child = _checked(client.get(f"/api/v1/training-runs/{child_id}"), 200)
+    assert child["status"] == "cancelled" and child["progress_epoch"] == 0
+    assert child["metrics"] == {} and child["result_checkpoint_path"] is None
+    assert child["registered_model_id"] is None
+    assert _checked(client.get(f"/api/v1/jobs/{child['job_id']}"), 200)["status"] == "cancelled"
+    assert _checked(client.get(f"{url}/models"), 200) == []
+    assert _checked(client.get(f"{url}/experiments"), 200) == []
+    parent = _checked(client.get(f"/api/v1/workflow-runs/{queued['id']}"), 200)
+    assert {artifact["data_type"] for artifact in parent["artifacts"]} == {"pose_training_dataset"}
+    for dataset in (training, holdout):
+        frozen = _checked(client.get(f"/api/v1/pose-training-datasets/{dataset['id']}"), 200)
+        assert frozen["manifest_sha256"] == dataset["manifest_sha256"]
+        assert frozen["item_count"] == FRAME_COUNT
+    assert parent["run"]["status"] == "cancelled", parent["run"]
+    assert _checked(client.get(f"/api/v1/jobs/{parent_job_id}"), 200)["status"] == "cancelled"
+    train = next(node for node in parent["nodes"] if node["node_id"] == "train")
+    assert train["status"] == "cancelled"
