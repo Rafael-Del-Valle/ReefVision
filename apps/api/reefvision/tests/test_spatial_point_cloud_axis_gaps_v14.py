@@ -102,6 +102,15 @@ def test_gap_boundary_support_distinguishes_rows_and_distinct_xyz_loci() -> None
         "lower": {"source_rows": 3, "distinct_xyz_loci": 2},
         "upper": {"source_rows": 1, "distinct_xyz_loci": 1},
     }
+    # Adding a duplicate scan row changes row support, not distinct loci or geometry.
+    with_extra_row = _direct([*points, [2.0, 1.0, 0.0]])
+    duplicate_gap = with_extra_row["axis_largest_adjacent_coordinate_gaps"]["x"]
+    assert duplicate_gap["source_endpoint_values"] == x_gap["source_endpoint_values"]
+    assert duplicate_gap["largest_adjacent_source_gap_units"] == 7.0
+    assert duplicate_gap["gap_endpoint_support"]["lower"] == {
+        "source_rows": 4,
+        "distinct_xyz_loci": 2,
+    }
     assert original["axis_largest_adjacent_coordinate_gaps"] == reordered[
         "axis_largest_adjacent_coordinate_gaps"
     ]
