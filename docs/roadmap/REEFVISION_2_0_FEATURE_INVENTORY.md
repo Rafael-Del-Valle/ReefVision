@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T02:30:30Z`
+Updated: `2026-11-21T02:42:50Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -652,6 +652,7 @@ Evidence:
 - `windows_installed`: none recorded
 - `physical_hardware`: On the official Windows 1b0f29cff package, two real training jobs on the RTX 3090 registered the same immutable checkpoint. Project Exchange recovered both training histories, their metrics, the original producing run and the identical checkpoint bytes. — `docs/REEFVISION_1.4.0_REPORT.md#official-windows-build-and-recovery-at-1b0f29cff` (`rv13-packaged-repeat-exchange`)
 - `physical_hardware`: The official 1.5 Windows sidecar trained and registered native frame and temporal checkpoints on a physical RTX 3090 using disjoint generated recording groups. The native Temporal panel then ran a 24-frame causal refinement with zero future-frame use. Physical receipt SHA-256 9539c37a38e7c3a486bfd3503c5d2c1647783869a0ce8ae74059ad61cbd4f637. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv13-temporal-dataset-training-physical-3c8e2d070`)
+- `physical_hardware`: The exact local 1.8 production desktop froze three synthetic recordings, trained a causal CPU checkpoint, reviewed six frame decisions and downloaded their measurements. WebView2 kept all original video hashes intact and the evaluation recorded unverified animal groups. — `docs/validation/stable-research-e3e8ffb63.json` (`rv13-temporal-dataset-training-native-temporal-ui-e3e8ffb63`)
 - `representative_data`: none recorded
 
 ### rv13-temporal-refinement-review: Temporal ReefPose refinement and explicit frame review
@@ -672,7 +673,7 @@ Evidence:
 - `browser`: In the corrected 1.8 local MSI's ordinary extracted WebView2, disconnect, selection change and reconnect cancelled only the clicked queued identity job. The raw reopened database preserved both job/run outcomes. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv13-temporal-refinement-review-native-identity-cancel-9cde9e6e7`)
 - `browser`: The application refined 12 frames, persisted six explicit review decisions, measured movement and exported six measurements with their review history. Its comparison recorded the limits of group verification. — `docs/validation/stable-research-e3e8ffb63.json` (`rv13-temporal-refinement-review-ordinary-temporal-review-e3e8ffb63`)
 - `windows_installed`: Installed 1.2 to 1.3 temporal workflow acceptance. — `https://github.com/Rafael-Del-Valle/ReefVision/pull/87` (`rv13-refine-win`)
-- `physical_hardware`: none recorded
+- `physical_hardware`: The exact local 1.8 production desktop froze three synthetic recordings, trained a causal CPU checkpoint, reviewed six frame decisions and downloaded their measurements. WebView2 kept all original video hashes intact and the evaluation recorded unverified animal groups. — `docs/validation/stable-research-e3e8ffb63.json` (`rv13-temporal-refinement-review-native-temporal-ui-e3e8ffb63`)
 - `representative_data`: none recorded
 
 ### rv14-3d-organism-matching: Reviewed 3D organism matching across acquisitions
@@ -1140,6 +1141,7 @@ Evidence:
 - `browser`: At reviewed 1.6 source 044e8e2de, editing the destination class withdrew a previously enabled reassignment. The Classes workspace required another preview before confirmation and retained the source-pixel boxes, unrelated masks and labels, original and frozen export. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv16-class-management-class-preview-revision-bdcec01e3`)
 - `browser`: The integrated Classes journey withdrew the other review after reassignment, preserved the completed receipt during a new preview and retained source pixels and frozen exports. Two corresponding unit cases failed on the predecessor, and all ten corrected panel cases passed. — `docs/validation/reviewed-operations-dd3c7207e.json` (`rv16-class-management-single-use-dd3c7207e`)
 - `browser`: The corrected 1.8 local MSI's extracted ordinary WebView2 consumed both preview approvals, preserved the earlier class export and retained original media and annotation, mask and label evidence. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv16-class-management-native-class-provenance-9cde9e6e7`)
+- `browser`: On the separately reviewed source c572964dc, ordinary Classes navigation detected a truncated real preview, kept Run disabled, accepted the fresh complete response, preserved the frozen export and reopened the reviewed box. The exact source passed all 942 frontend tests. Draft #120 contains the correction. — `docs/validation/stable-research-e3e8ffb63.json` (`rv16-class-management-preview-recovery-c572964dc`)
 - `windows_installed`: On the original 1.6 MSI under an ordinary Windows account, the class lifecycle test passed. The researcher reviewed the reassignment, reopened the project and verified the earlier frozen export. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44768324452/job/136420579045` (`rv16-class-management-original-msi-used-classes`)
 - `windows_installed`: The corrected original MSI passed the standard-user class lifecycle, including explicit reassignment after annotations exist and reopening the frozen export. — `docs/validation/installed-workflows-a580042e8.json` (`rv16-class-management-original-a580042e8`)
 - `physical_hardware`: In native Classes, confirmed reassignment advanced the live annotation from revision 2 to 3. Mask and image-classification references remained protected. The frozen dataset manifest and YOLO mapping survived reopening. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-class-management-physical-83b0`)

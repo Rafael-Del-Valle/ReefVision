@@ -462,6 +462,10 @@
       "physical-rtx3090-segmentation": {
         "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/physical-rtx3090-segmentation/evidence-index.json",
         "sha256": "a91cf1bb6ae66d65dfb8d335617f5e048e19105992799631085f1baf8357ae77"
+      },
+      "native-temporal-review": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/native-temporal-review/native-temporal-receipt.json",
+        "sha256": "e8a1208dc209bf26dc724e141e1a7ecd6fefc4b1fe2cd3c0a8bb7c662e51daa0"
       }
     },
     "previous_1_8_reopened": {
@@ -581,6 +585,111 @@
         ],
         "exact_sidecar_gpu_samples": 26
       }
+    },
+    "temporal_review": {
+      "surface": "physical Windows Tauri/WebView2, administratively extracted MSI, existing medium-integrity account",
+      "frozen_dataset": {
+        "id": "c4ec8138-d068-48ce-abf7-1beb186ea13b",
+        "sha256": "72ab43a6972d0c70f7d7099724c4d8d67f3ae7661badf84a3aa27f44288ce648",
+        "splits": {
+          "train": 1,
+          "validation": 1,
+          "test": 1
+        }
+      },
+      "checkpoint": {
+        "id": "fb15b78e-e297-4eb2-a9b2-12e9bbff3efc",
+        "sha256": "d14d1c5be5774b62e7b9059142f40b30712c45453c94fea7c772903af7b9d7a9",
+        "provider": "reefpose_temporal",
+        "task": "pose_temporal"
+      },
+      "refinement": {
+        "frames": 12,
+        "maximum_future_frames": 0
+      },
+      "review": {
+        "receipt": {
+          "id": "821b3ebe-3d49-4dbf-a1cd-857cc5a1c2ca",
+          "revision": 1,
+          "identity_run_id": "288be9fb-6add-4bfe-8e16-c59ff77ef228",
+          "identity_id": "49b86f83-d522-4db2-ab2b-c6074ffc3fc7",
+          "accepted_frame_count": 6,
+          "source_stale": false
+        },
+        "decisions": [
+          {
+            "frame_index": 0,
+            "source": "refined",
+            "corrections": []
+          },
+          {
+            "frame_index": 1,
+            "source": "frame",
+            "corrections": []
+          },
+          {
+            "frame_index": 2,
+            "source": "refined",
+            "corrections": []
+          },
+          {
+            "frame_index": 3,
+            "source": "frame",
+            "corrections": []
+          },
+          {
+            "frame_index": 4,
+            "source": "refined",
+            "corrections": []
+          },
+          {
+            "frame_index": 5,
+            "source": "frame",
+            "corrections": []
+          }
+        ]
+      },
+      "evaluation": {
+        "evaluation_status": "exploratory",
+        "frame_lineage_state": "unverified",
+        "temporal_lineage_state": "recording_disjoint_group_unverified"
+      },
+      "reviewed_download": {
+        "suggested_name": "reefpose-biological-movement-6f8d71c0-6ac0-40ef-8b8c-2d8e0eaab7be.zip",
+        "bytes": 6219,
+        "sha256": "48dc7d2a9391c609fc8fab505c7dfd0a4f730ee58459bb3deb6ee3f1fe77ecb3",
+        "csv_rows": {
+          "events.csv": 0,
+          "individual_summaries.csv": 1,
+          "measurements.csv": 6,
+          "review_history.csv": 1
+        },
+        "member_digests_verified": true,
+        "bound_refinement_id": "befa091a-0f86-4c86-8236-904acf976668",
+        "bound_review_revision": 1
+      },
+      "job_outcomes": [
+        [
+          "pose_biological_event_detection",
+          "completed",
+          1
+        ],
+        [
+          "pose_biological_measurement",
+          "completed",
+          1
+        ],
+        [
+          "temporal_reefpose",
+          "succeeded",
+          3
+        ],
+        [
+          "video_tracking",
+          "succeeded",
+          3
+        ]
+      ]
     }
   },
   "earlier_qualified_registered_suite": {
@@ -617,6 +726,51 @@
     "receipt": {
       "file": "1.8/checkpoints/9cde9e6e7/official/registered-retest/attempt-44852831817/registered-retest-index.json",
       "sha256": "70ba57a7b209e4aa5ca8d9259113c3892a8493fded33cab278c6e7094b608749"
+    }
+  },
+  "concurrent_mesh_review": {
+    "candidate": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8",
+    "reviewed_track": "f5f003acff08369ad631812819ea3130f4771036",
+    "scope_base": "3654a781adf1774b8b16ab03993404ea2c70c143",
+    "tests": {
+      "candidate_tracked_backend_pass": 9,
+      "candidate_ui_pass": 47,
+      "donor_tracked_backend_pass": 79,
+      "paired_synthetic_obj_api_and_saved_pass_per_head": 2,
+      "candidate_exact_planar_green": 2,
+      "donor_exact_planar_red": 2
+    },
+    "receipt": {
+      "file": "1.8/checkpoints/e3e8ffb63/source/predecessors/spatial-79/triage-receipt.json",
+      "sha256": "d8ae194902a786e09a835201da489e3cdf6cb94aef3e4768604c5ee929b4ac0f"
+    },
+    "decision": "Retain the qualified mesh solver. Default geometry and measurements matched for two ordinary files. The donor adds an optional display-only sampling parameter and changes the serialized default payload. On an exactly coplanar mesh its full solver reported 388.04959816377374 m³ in both windings. The integrated solver correctly withheld that volume in two standalone calls and four saved runs."
+  },
+  "reviewed_class_transport_predecessor": {
+    "source": "c572964dc50a520bcf85caf9c31e30458300e257",
+    "predecessor": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8",
+    "donor": "3a77c6d6ee1b77b585983fec5240bb394065c1bc",
+    "draft": "https://github.com/Rafael-Del-Valle/ReefVision/pull/120",
+    "surface": "Source browser showing production UI with real loopback API and a disposable project.",
+    "initial_transport_observations": {
+      "enabled_on_malformed_operation_id_or_checksum": 6,
+      "truncated_report_prevented_render": 2
+    },
+    "class_tests": 22,
+    "ordinary": {
+      "startTime": "2026-11-21T02:39:53.056Z",
+      "duration": 6866.227,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "backend_class_tests": 9,
+    "frontend_tests": 942,
+    "frontend_files": 140,
+    "receipt": {
+      "file": "1.8/checkpoints/c572964dc/source/class-review/class-review-qualification.json",
+      "sha256": "511528e732672892b5484ba4b0743359fd127fee8c2c49090ab60e77e182ae79"
     }
   }
 }
