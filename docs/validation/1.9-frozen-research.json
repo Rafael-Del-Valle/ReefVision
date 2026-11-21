@@ -1,6 +1,6 @@
 {
   "milestone": "1.9",
-  "updated_utc": "2026-11-21T09:00:53.326782+00:00",
+  "updated_utc": "2026-11-21T09:15:12.328311+00:00",
   "candidate_pr": 131,
   "scope": "Generated research projects. Registered installer trials identify their own package.",
   "reviewed_predecessors": {
@@ -1174,7 +1174,20 @@
       "fresh": 136770405841,
       "cached_upgrade": 136770405714
     },
-    "generated_fixture_only": true
+    "generated_fixture_only": true,
+    "registered_clean": {
+      "source": "96476bc462aeed0137a55b02ded6d66b1d4a2c72",
+      "original_msi_sha256": [
+        "86bc21d9bffbafd514b355e9d57266cfea5d93df7e6ee46fb653e15f599e2f5f"
+      ],
+      "role": 136770245418,
+      "standard_user_desktop_journeys": 31,
+      "scheduler_restart_phases": 2,
+      "results": {
+        "file": "1.9/checkpoints/96476bc46/official/first-clean-verified-snapshot.json",
+        "sha256": "6c3e166c8d67c1ee4ae1ce0752cb745bfe7f1beac238c64d5843d16351c085fb"
+      }
+    }
   },
   "active_product_pr": 150,
   "exchanged_pose_training": {
@@ -1321,8 +1334,8 @@
       }
     },
     "concurrent_heads": {
-      "file": "1.9/evidence/concurrent-prs-20261121-083315-utc.json",
-      "sha256": "4cf98511d3962521eb98da0c7ffbe32eaf012e6e3829a8a775a5d289fbf47c30"
+      "file": "1.9/evidence/concurrent-prs-20261121-090545-utc.json",
+      "sha256": "343ec947b7600bb5dc859720df982add1356fd1ee5d9bc174caef5d3ab2f4828"
     },
     "verified_locally_packaged_workflows": {
       "product_pr": 150,
@@ -1399,6 +1412,14 @@
     "gallery_scroll_and_final_decoded_page": {
       "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/native-gallery-navigation/index.json",
       "sha256": "3688d8cd380e0fdd6e0a1420a6167a06bbf4a6da9d35d817a172fc8d1a84a355"
+    },
+    "saved_nonpose_tracking": {
+      "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/native-saved-object-tracking/index.json",
+      "sha256": "69593b70532d0e33e04b96b3eac5c742f453b7a0ffec92e78f3cd859f7158869"
+    },
+    "concurrent_pose_export_review": {
+      "file": "1.9/checkpoints/6334bcbb8/local-production/evidence/pose-export-reconciliation/receipt.json",
+      "sha256": "046cd91e3d2ac13b4f16f901e009876e925db00a1608a3e7c16ead00b71ba52e"
     }
   },
   "original_offline_7797": {
