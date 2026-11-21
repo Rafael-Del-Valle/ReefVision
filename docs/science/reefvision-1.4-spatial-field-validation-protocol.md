@@ -35,6 +35,32 @@ For ASCII PLY **triangle meshes**, apply the same source-decimal collision gate 
 
 The typed `point_cloud_preview` Workflow Builder node registry must expose both `preserve_largest_axis_gap_boundaries_in_preview` and `preserve_largest_axis_gap_boundary_loci_in_preview` with `false` defaults, matching the standalone request schema and saved-graph runtime. Test each option using 600-point synthetic XYZ and ASCII PLY inputs through the project API, persisted graph planning, two independent saved-graph executions, and SHA-256-identical replay artifacts. The first option protects at least one source row for each projected coordinate endpoint of all equally largest gaps; the second protects a source row for every distinct three-dimensional XYZ locus at those endpoints. Reject over-budget requests explicitly rather than suggesting complete preservation. Even when all distinct boundary locations are displayed, the 512-point preview may omit repeated acquisition rows; maintain separate omission warnings and do not interpret projected gaps or preview sampling as tissue loss, scan completeness, calibrated anatomical length, or verified identity.
 
+### Colored PLY preview fidelity (not biological-condition assessment)
+
+When imported ASCII PLY rows supply `uchar`/`uint8` RGB, audit distinct observed
+(XYZ, RGB) pairs separately from XYZ loci. A complete XYZ preview can still
+discard a rare observed color at a repeatedly acquired coordinate. Report
+the total and displayed distinct XYZ/RGB pairs, their displayed fraction,
+the number of XYZ loci with more than one observed RGB, and a SHA-256 over
+displayed original row indices, coordinates and colors. Warn separately
+when an XYZ locus has multiple RGB observations and when display decimation
+omits a distinct XYZ/RGB pair. Uncolored PLY and inline XYZ must report
+unavailable RGB diagnostics, **not** perfect color coverage.
+
+For acceptance, use a 600-row colored PLY fixture with two XYZ locations,
+a distinct RGB observation at a row that deterministic 512-row decimation
+omits, and retained XYZ extrema. Repeat with optional distinct-XYZ locus
+pinning: it must not claim RGB coverage just because both XYZ locations
+remain visible. Compare the standalone API result with two runs of a
+persisted executable typed `point_cloud_preview` Workflow Builder graph,
+including full artifact values, warnings, RGB-display hash, imported-source
+hash and artifact SHA-256. All test inputs must retain explicitly unverified
+calibration, specimen identity and anatomical interpretation. RGB variation
+can reflect light, camera response, reconstruction, acquisition time or
+actual appearance; it must not be scored as coral health, bleaching, lesion
+extent or tissue survival without separately validated color standards
+and human-reviewed biological references.
+
 ## Anatomical measurements
 
 A selected surface-edge path is not automatically a coral branch centerline. For anatomical branch length, document branch endpoints, skeletonization or centerline algorithm, branch/junction rules, ambiguity handling, and repeatability across at least two blinded annotators. Report uncertainty from scale, endpoint placement, reconstruction, and repeat segmentation independently. Do not label surface paths as validated branch lengths until an independent specimen reference and repeatability study pass.
