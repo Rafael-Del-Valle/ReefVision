@@ -1967,5 +1967,117 @@
       "cabinets": 6,
       "backup_files": 112
     }
+  },
+  "registered_predecessor_media": {
+    "144": {
+      "source": "7797efad64f65e2f19c6f4ff64a94382335bd0a9",
+      "manufacturer_run": 44873530801,
+      "manufacturer_job": 136753099467,
+      "original_msi_sha256": "cbb877535bb94b8c34e54a3932e31b4bdb3a53519f5f36ec893dff3f40068480",
+      "cabinet_count": 6,
+      "media_validation": {
+        "file": "1.9/checkpoints/7797efad6/official/independent-package-validation.json",
+        "sha256": "e970e54f6c997e2484abc0a5aa2856f5354ab0f1b8d0dd1add7a4f263725c17b"
+      },
+      "registered_checks": {
+        "result": "failure",
+        "outcomes": {
+          "failure": 1,
+          "success": 10
+        },
+        "validation": {
+          "file": "1.9/checkpoints/7797efad6/official/full-hosted-role-validation.json",
+          "sha256": "6678f89453ac9567e8f25397e630d6e76e8942a3fa4ac2c7f80e99242e293f07"
+        },
+        "failed_role": "clean",
+        "observation": "The underwater original-display assertion compared the thumbnail URL. The other ten registered upgrade and recovery scenarios passed."
+      }
+    },
+    "148": {
+      "source": "9124acdb0696871208c69f2ffc7601722329daac",
+      "manufacturer_run": 44875837825,
+      "manufacturer_job": 136760221622,
+      "original_msi_sha256": "11eec4d4780a1613e36c3101f04ebae626a8053c7cd403ab6b872b67507a9146",
+      "cabinet_count": 5,
+      "media_validation": {
+        "file": "1.9/checkpoints/9124acdb0/official/independent-package-validation.json",
+        "sha256": "a99df699a65a9db3413e186af9018c855e372e26096de95fadc1e071efb61c54"
+      },
+      "registered_checks": {
+        "result": "failure",
+        "outcomes": {
+          "failure": 1,
+          "success": 10
+        },
+        "validation": {
+          "file": "1.9/checkpoints/9124acdb0/official/full-hosted-role-validation.json",
+          "sha256": "41982d1b42f4a6bad28acce4763fb857e104f8669584efb0a81d3a4e290ff5ad"
+        },
+        "failed_role": "clean",
+        "observation": "The underwater original-display assertion compared the thumbnail URL. The other ten registered upgrade and recovery scenarios passed."
+      }
+    },
+    "149": {
+      "source": "15be85268fc0cf4f801152fa79b4901adffddc3d",
+      "manufacturer_run": 44878790843,
+      "manufacturer_job": 136769291129,
+      "original_msi_sha256": "0ca3fe2cd489ffd84fb542598a1734e32987367998b587589482b4686fa1f14c",
+      "cabinet_count": 6,
+      "media_validation": {
+        "file": "1.9/checkpoints/15be85268/official/independent-package-validation.json",
+        "sha256": "625f759c3cf29a50dafa1c26d4e3914cb4a5dbb132270aae3473da57a99b7d23"
+      },
+      "registered_checks": {
+        "result": "success",
+        "outcomes": {
+          "success": 11
+        },
+        "validation": {
+          "file": "1.9/checkpoints/15be85268/official/full-hosted-role-validation.json",
+          "sha256": "9c238d7e8841c9344ee1f3d661abe225a75adbc10b185808eb948a907a58613e"
+        }
+      }
+    },
+    "150": {
+      "source": "6334bcbb81a19638d9803bca0217b042a3cb3047",
+      "manufacturer_run": 44884655409,
+      "manufacturer_job": 136787200988,
+      "original_msi_sha256": "8155f626ea99b5052658d81fc6d6b6300ce66eb7d479bda48a161b1c51ea9c35",
+      "cabinet_count": 6,
+      "media_validation": {
+        "file": "1.9/checkpoints/6334bcbb8/official/independent-package-validation.json",
+        "sha256": "7e08e1d6e8ca613540d7ec8adf27983dd2aec047fb02e497b3fc85c625ec2fbc"
+      },
+      "registered_checks": {
+        "result": "success",
+        "outcomes": {
+          "success": 11
+        },
+        "validation": {
+          "file": "1.9/checkpoints/6334bcbb8/official/full-hosted-role-validation.json",
+          "sha256": "9db23dcea23d05f9a939dec5b4f002e8ef1437de631f2291693daeb789a51845"
+        }
+      }
+    },
+    "151": {
+      "source": "91027e893172d500897058dbb2c1cc5b9de5d50a",
+      "manufacturer_run": 44897196611,
+      "manufacturer_job": 136825277972,
+      "original_msi_sha256": "b52c298567e88f48b72dac1cd49771582ad487941989878f1f8d23db25e93b43",
+      "cabinet_count": 6,
+      "media_validation": {
+        "file": "1.9/checkpoints/91027e893/official/independent-package-validation.json",
+        "sha256": "a4392e531f1431f8843ba376deadc2d001b0e5ad219461f15f9f7c35f84f9148"
+      },
+      "original_18_rollback": {
+        "restored_files": 112,
+        "restored_bytes": 27777736,
+        "restored_nonempty_tables": 37,
+        "receipt": {
+          "file": "1.9/checkpoints/91027e893/official/evidence/pose-rollback/installed-backends-1.8-to-1.9-and-restore.json",
+          "sha256": "9f1416a99ace7337a5f639de79b269031b64cd7567d6053946e79a4d7ae34c0c"
+        }
+      }
+    }
   }
 }
