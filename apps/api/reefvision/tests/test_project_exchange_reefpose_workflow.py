@@ -12,6 +12,7 @@ from reefvision.db.models import ModelRegistration
 from reefvision.jobs import video_tracking
 from reefvision.jobs.project_exchange import process_project_exchange_export_job
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.project_exchange_models import remap_model_registration
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_reefpose_validation import freeze_fixture
@@ -227,3 +228,55 @@ def test_exchange_inspection_rejects_rehashed_inconsistent_event_totals(
     assert not inspected.json()["compatible"]
     assert "event" in " ".join(inspected.json()["errors"]).lower()
     assert import_archive(client, damaged).status_code == 400
+
+
+def test_registration_rebinds_local_links_and_preserves_checkpoint_metadata() -> None:
+    ids = {
+        "project": "new-project",
+        "class": "new-class",
+        "model": "new-model",
+        "training": "new-training",
+        "schema": "new-schema",
+    }
+    row: dict[str, Any] = {
+        "id": "model",
+        "project_id": "project",
+        "provider_name": "reefpose",
+        "display_name": "schema",
+        "class_map_json": {
+            "labels": ["class"],
+            "mapping": {"class": "class"},
+            "provider_classes": {"model": {"label_class_id": "class", "class_name": "training"}},
+        },
+        "metadata_json": {
+            "source_training_run_id": "training",
+            "pose_landmark_schema": {"schema_id": "schema", "expanded_labels": ["model", "model"]},
+            "reefpose_anatomy_schema": {"schema_id": "schema"},
+            "provider_extension": {"source_training_run_id": "training", "literal": "project"},
+        },
+    }
+    for provider in ("reefpose", "unavailable_provider"):
+        result = remap_model_registration({**row, "provider_name": provider}, ids)
+        assert (result["id"], result["project_id"], result["display_name"]) == (
+            "new-model",
+            "new-project",
+            "schema",
+        )
+        assert result["class_map_json"] == {
+            "labels": ["class"],
+            "mapping": {"class": "new-class"},
+            "provider_classes": {
+                "model": {"label_class_id": "new-class", "class_name": "training"}
+            },
+        }
+        expected = row["metadata_json"]
+        if provider == "reefpose":
+            expected = {
+                **expected,
+                "source_training_run_id": "new-training",
+                "pose_landmark_schema": {
+                    "schema_id": "new-schema",
+                    "expanded_labels": ["model", "model"],
+                },
+            }
+        assert result["metadata_json"] == expected

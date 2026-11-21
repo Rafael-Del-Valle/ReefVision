@@ -35,6 +35,7 @@ from reefvision.services.model_comparison_stills_v15 import (
 )
 from reefvision.services.model_comparison_video_v15 import compare_video_models
 from reefvision.services.paired_models_v15 import JOB_TYPE, summarize_groups
+from reefvision.services.project_exchange_models import has_local_model_lineage
 from reefvision.storage.datasets import canonical_json_sha256
 
 ARTIFACT_TYPE = "paired_model_report"
@@ -612,7 +613,8 @@ def restore_frozen_dataset_and_model_lineage(
     relevant_model_ids = {
         row["id"]
         for row in sections.get("models", [])
-        if (row.get("metadata_json") or {}).get("source_dataset_version_id") in linked_dataset_ids
+        if has_local_model_lineage(row)
+        and (row.get("metadata_json") or {}).get("source_dataset_version_id") in linked_dataset_ids
     }
     children: set[str] = set()
     for row in completed:
@@ -668,6 +670,8 @@ def restore_frozen_dataset_and_model_lineage(
                 for label, identifier in original_map.get("mapping", {}).items()
             },
         }
+        if not has_local_model_lineage(row):
+            continue
         metadata = deepcopy(model.metadata_json)
         source = datasets_by_old_id.get(
             (row["metadata_json"] or {}).get("source_dataset_version_id")

@@ -22,11 +22,11 @@ from reefvision.db.models import (
     TrainingRun,
 )
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
+from reefvision.ml.provider_hub import require_image_inference_provider
 from reefvision.ml.semantic_segmentation import (
     NNUNET_PROVIDER_ID,
     SEMANTIC_SEGMENTATION_TASK,
 )
-from reefvision.ml.sleap_nn_provider import SLEAP_NN_ACTIONABLE_RETIREMENT, SLEAP_NN_PROVIDER_ID
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.models import (
     InferenceJobCreateRequest,
@@ -679,8 +679,7 @@ class SemanticModelService(SegmentationModelService):
                 "Inference jobs require a compatible detector, pose model, instance segmenter, "
                 "or semantic segmenter from the same project"
             )
-        if model.provider_name.strip().casefold() == SLEAP_NN_PROVIDER_ID:
-            raise ValidationError(SLEAP_NN_ACTIONABLE_RETIREMENT)
+        require_image_inference_provider(model.provider_name, model.task)
         pinned: dict[str, Any] = {}
         if payload.runtime_selection_id is not None:
             selection = ModelRuntimeService(self.session, self.settings).verify(
