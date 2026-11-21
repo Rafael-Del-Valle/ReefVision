@@ -1,0 +1,242 @@
+{
+  "product": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8",
+  "version": "1.8.0",
+  "schema": "b18_spectral_0002",
+  "draft": 119,
+  "source_workflows": {
+    "ordinary_first_use_and_controlled_mid_drag": {
+      "stats": {
+        "startTime": "2026-11-21T02:05:59.314Z",
+        "duration": 7216.737,
+        "expected": 2,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "ordinary_viewport": [
+        960,
+        640,
+        1.5
+      ],
+      "controlled_viewport": {
+        "width": 880,
+        "height": 680,
+        "devicePixelRatio": 1
+      },
+      "requested_source_box": [
+        20,
+        15,
+        55,
+        40
+      ],
+      "stored_source_box": [
+        20.028717690325795,
+        14.97134983793218,
+        54.985445063164896,
+        39.94044527094415
+      ],
+      "source_to_screen_anchor_points_identical": true,
+      "source_image_sha256": "11da437ad33072b11627e77994f869a1f92c4c0b94e0b64f920567853ff0674b",
+      "keyboard_retry_after_503": true,
+      "second_image_target_and_adjustment_preview_checked": true,
+      "files": [
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/ordinary/identity.json",
+          "sha256": "74d5f960a334e52865251e83ef788652745abdd9733a63956bcc96cd539d7f47"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/ordinary/closure.json",
+          "sha256": "d4fcd846e397a60822c3591616ac4ca00c091fb758fcc861199632163f62ebcf"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/ordinary/playwright.json",
+          "sha256": "9f9162886e04e974ef22b03d55439a98d85dc436eb88c474dc83ec1622645951"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/ordinary/first-use-box-evidence.json",
+          "sha256": "9f0dc100e5a27036f93e2c6c1a922400a9141309022cf8b711ab3fbf6f9df37f"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/ordinary/source-image-gesture-evidence.json",
+          "sha256": "26f9171cbf53022047a6ce596ef7ec4b8a55247ec1afc907ffb5259e635bf996"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/ordinary/first-use-evidence.json",
+          "sha256": "ced4ed8f108c9e4c84af808cf3a5cee6e59f9c935668218e4ef514ab2aa5efc3"
+        }
+      ]
+    },
+    "preserved_coral_help_qc_classes": {
+      "stats": {
+        "startTime": "2026-11-21T02:06:43.239Z",
+        "duration": 25126.135000000002,
+        "expected": 4,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "files": [
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/preserved/identity.json",
+          "sha256": "f3194dd97a9e0f008edec5071651f5ca59005067e1c159a003a5f353d1a617a4"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/preserved/closure.json",
+          "sha256": "36463f3d759e11137169906abe795948d7979010cc605827c4ee026de19f3ca3"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/preserved/playwright.json",
+          "sha256": "43c3ce21cc6dfb9482f389f0c019e0307cf92131b7e6b5daf77e281d30c788aa"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/preserved/help-handoff-evidence.json",
+          "sha256": "8561495831193d42431aa3686a8c5c72f565f9a2dded4c86c2ea9d802be8911d"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/preserved/qc-review-workflow.json",
+          "sha256": "11c72766350e50fe6922f379c439dd7fb37e75efd9a358fa6242ab12752acfb3"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/preserved/class-lifecycle-evidence.json",
+          "sha256": "cf2b29986177e8989dbfb0d021925dfb353d785ab53f7624c197d441d9d2fe6e"
+        }
+      ]
+    },
+    "research": {
+      "surface": "source Chromium with real local API and queue",
+      "scratch_training_and_registration": {
+        "startTime": "2026-11-21T02:05:55.242Z",
+        "duration": 50619.42,
+        "expected": 2,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "five_workflows": {
+        "startTime": "2026-11-21T02:06:46.387Z",
+        "duration": 29793.686999999998,
+        "expected": 5,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "files": [
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/source-research-tools-rehearsal.json",
+          "sha256": "ef147b25f105714c41b6722f14faac3032495785ecea57f8245792e0a1ea33f1"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/seed.json",
+          "sha256": "ecf22b89cef2de839afafaca9c7ced688ba9d022ecfd7a3b7a1bbc8d6e57ba71"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/playwright.json",
+          "sha256": "43649356d7c14d0150f18c77db7a466b99e591c15cdd379e0802f14094f16c62"
+        },
+        {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/closure.json",
+          "sha256": "ac3573955f243f215f0c3a5548ccc84766a4c30171c15227c8d3aa7ba4f9b4ad"
+        }
+      ],
+      "feature_receipts": {
+        "taxonomy": {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/taxonomy-detectability-proof.json",
+          "sha256": "0f2f4767896a0e452b28962d4d04460ea0e318deb90782ac7230f7e73a43143d"
+        },
+        "audio": {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/bioacoustics-evidence.json",
+          "sha256": "ee70abf291a2be16d464b794527e001f1f91589d38711c0e910d6591294d44b2"
+        },
+        "multispectral": {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/multispectral-evidence.json",
+          "sha256": "ae8ac4fb70c811abdf96653745b0da8780e9f974af45995487f19fd6ea939ab5"
+        },
+        "underwater": {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/underwater-adjustment-evidence.json",
+          "sha256": "3e5feeab51a4faa5f596105fdbda9ea6651db40b2658ce2a40bc1e3189030a5e"
+        },
+        "domain": {
+          "file": "1.8/checkpoints/e3e8ffb63/source/research/domain-shift-evidence.json",
+          "sha256": "e3276f52b7216e154c6bf942738f95d014d05eae4a3227b1ccf0789c9a1ba15d"
+        }
+      }
+    }
+  },
+  "frontend": {
+    "unit_tests": 930,
+    "unit_files": 140,
+    "production_build": "passed",
+    "default_browser_suite": {
+      "startTime": "2026-11-21T02:06:39.990Z",
+      "duration": 11337.406,
+      "expected": 15,
+      "skipped": 50,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "receipt": {
+      "file": "1.8/checkpoints/e3e8ffb63/source/frontend/checks.json",
+      "sha256": "a320cff8ac81008291930131b220d35bf4e2990061793a7f2ea9765024a8bf5c"
+    },
+    "logs": [
+      {
+        "file": "1.8/checkpoints/e3e8ffb63/source/frontend/node.log",
+        "sha256": "6aff48828de66fbac1ebde4c0c96dd197aa1013dc9964508988344265818e783"
+      },
+      {
+        "file": "1.8/checkpoints/e3e8ffb63/source/frontend/lockfile.log",
+        "sha256": "a4f05eb0e0f8c59dc774dbcc0f960075269991f0bb58fa76735a0f21b6e87b56"
+      },
+      {
+        "file": "1.8/checkpoints/e3e8ffb63/source/frontend/format.log",
+        "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+      },
+      {
+        "file": "1.8/checkpoints/e3e8ffb63/source/frontend/typecheck.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "file": "1.8/checkpoints/e3e8ffb63/source/frontend/unit.log",
+        "sha256": "e041a1f538f8752282418975e45f23d245dd9fa16a484986d02982c00584ede0"
+      },
+      {
+        "file": "1.8/checkpoints/e3e8ffb63/source/frontend/production.log",
+        "sha256": "93575d0ca9e9d104e64fdd0c1829eaadbb20486f8cf8b3c9c998741f00bb4179"
+      },
+      {
+        "file": "1.8/checkpoints/e3e8ffb63/source/frontend/browser.log",
+        "sha256": "4ad3e882b916f8ba2067feb10fed692c970afa8afec10a0850bf621336c5d5de"
+      }
+    ]
+  },
+  "backend_scope": {
+    "verified_prior_source": "9cde9e6e730d4065f4223ea92baea7091f118b0b",
+    "matched_prior_test_ids": 6037,
+    "passed": 6025,
+    "skipped": 12,
+    "identical_git_objects": {
+      "apps/api": "ed10ba990943927b92ee175cfb1eb455998d1690",
+      "requirements": "ff8dc6002c29bbc500497667ec49e51203c5208e",
+      "pyproject.toml": "2c3adff6cde8474970fd3f2dc38b328ea53f92b5",
+      "apps/web/src-tauri": "86f851d7c72ebef069bdc7648e255220f0656fd4"
+    },
+    "prior_verification": {
+      "file": "1.8/checkpoints/9cde9e6e7/source/full-windows-backend/independent-verification.json",
+      "sha256": "662265d75050cd16e54dd22234d585b059ce7c27e8e1a62c0cf16d95a305d22c"
+    },
+    "notes": "The original complete Windows backend run belongs to the prior SHA. The repair changes the editor, native test drivers and evidence. Release contracts reading those files were run again."
+  },
+  "source_qualification": {
+    "integrated_release_contract_tests": 138,
+    "junit": {
+      "file": "1.8/checkpoints/e3e8ffb63/source/gates/stable-wired-release-contract.xml",
+      "sha256": "25e6d0c1f9aca748c88af6e1e069d814038d5a2c1a73ebd653901b15365b4682"
+    },
+    "installer_harness_assertions": 205
+  },
+  "original_windows_run": 44853957856,
+  "original_windows_build_job": 136691608332,
+  "general_ci": 44853958059,
+  "separate_scientific_ci": 44853957924,
+  "open_acceptance": "Registered installation, direct historical upgrades, enforced offline rollback, repaired native RTX checks and independent field acceptance are tracked by product and binary identity."
+}
