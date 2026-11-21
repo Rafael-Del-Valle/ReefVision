@@ -671,6 +671,34 @@ def test_pose_materialization_preserves_prior_scientific_data(
         assert not (destination / "images").exists()
 
 
+def test_pose_materialization_preserves_validation_stage_raced_after_precheck(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Simulate another scientist's run claiming the holdout stage after our
+    # initial existence check but before the archive extractor's exclusive mkdir.
+    destination = tmp_path / "pose-dataset"
+    staging = tmp_path / ".pose-dataset-validation"
+    original_extract = _safe_extract_zip
+
+    def competing_claim(content: bytes, target: Path) -> None:
+        if target == staging:
+            staging.mkdir()
+            (staging / "prior-science.txt").write_bytes(b"other-reviewed-run")
+        original_extract(content, target)
+
+    monkeypatch.setattr("reefvision.jobs.pose_training._safe_extract_zip", competing_claim)
+    with pytest.raises(ValidationError, match="refusing to overwrite prior scientific data"):
+        materialize_pose_training_exports(
+            training_content=_pose_export_zip(b"reviewed-training"),
+            validation_content=_pose_export_zip(b"new-holdout"),
+            destination=destination,
+        )
+
+    assert (staging / "prior-science.txt").read_bytes() == b"other-reviewed-run"
+    assert not (staging / "data.yaml").exists()
+    assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed-training"
+
+
 def test_pose_materialization_rejects_failed_final_holdout_cleanup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
