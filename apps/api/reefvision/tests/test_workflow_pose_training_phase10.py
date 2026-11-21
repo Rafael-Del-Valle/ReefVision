@@ -1282,6 +1282,41 @@ def test_pose_materialization_rejects_corrupt_frame_before_creating_dataset(
     )
 
 
+def test_pose_materialization_rejects_unsafe_holdout_member_before_training_output(
+    tmp_path: Path,
+) -> None:
+    # Valid frozen training and validation frames can be bundled with an
+    # unsafe supplementary review file. Reject the entire holdout before
+    # claiming the immutable training output, not during second extraction.
+    training = _pose_export_zip(b"reviewed-training")
+    valid_holdout = _pose_export_zip(b"reviewed-validation")
+    holdout_stream = io.BytesIO(valid_holdout)
+    with zipfile.ZipFile(holdout_stream, "a", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("notes/../another-run.txt", b"unreviewed")
+
+    destination = tmp_path / "pose-unsafe-holdout"
+    with pytest.raises(ValidationError, match="unsafe archive path"):
+        materialize_pose_training_exports(
+            training_content=training,
+            validation_content=holdout_stream.getvalue(),
+            destination=destination,
+        )
+    assert not destination.exists()
+    assert not (tmp_path / ".pose-unsafe-holdout-validation").exists()
+
+    corrected = materialize_pose_training_exports(
+        training_content=training,
+        validation_content=valid_holdout,
+        destination=destination,
+    )
+    assert corrected["validation_mode"] == "separate_frozen_pose_dataset"
+    assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed-training"
+    assert (
+        (destination / "images/val/frame_00000001.png").read_bytes()
+        == b"reviewed-validation"
+    )
+
+
 def test_pose_materialization_rejects_corrupt_unread_holdout_member(
     tmp_path: Path,
 ) -> None:
