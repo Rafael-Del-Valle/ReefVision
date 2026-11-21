@@ -193,6 +193,7 @@ def _canonical_pose_export_schema(yaml_text: str) -> tuple[int, int]:
     if not class_lines or len(landmark_lines) != expected_landmarks:
         raise ValidationError("Ultralytics pose export has noncanonical class/keypoint metadata")
 
+    seen_landmarks: set[str] = set()
     try:
         for index, line in enumerate(class_lines):
             prefix = f"  {index}: "
@@ -206,8 +207,14 @@ def _canonical_pose_export_schema(yaml_text: str) -> tuple[int, int]:
             if not line.startswith("  - "):
                 raise ValueError("Unexpected landmark entry")
             landmark_name = json.loads(line[4:])
-            if not isinstance(landmark_name, str) or json.dumps(landmark_name) != line[4:]:
+            if (
+                not isinstance(landmark_name, str)
+                or not landmark_name.strip()
+                or landmark_name in seen_landmarks
+                or json.dumps(landmark_name) != line[4:]
+            ):
                 raise ValueError("Unexpected landmark name")
+            seen_landmarks.add(landmark_name)
     except ValueError as exc:
         raise ValidationError(
             "Ultralytics pose export has noncanonical class/keypoint metadata"
