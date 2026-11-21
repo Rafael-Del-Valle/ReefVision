@@ -7,6 +7,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'lib\windows-standard-user-webview2.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-scheduler-webview2-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-monitoring-webview2-acceptance.ps1')
+. (Join-Path $PSScriptRoot 'lib\windows-research-tools-webview2-acceptance.ps1')
 
 $passed = 0
 function Assert-True([bool]$Condition, [string]$Message) {
@@ -84,6 +85,70 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
     $monitoring.summary.project_rows[2].status = 'excluded'
     $monitoring.summary_replays[1].payloadSha256 = 'c' * 64
     Assert-Throws { Assert-ReefVisionInstalledMonitoringResults $capture $monitoring '1.7.0' 'b17_monitor_0003' } 'A differing replay must not qualify.'
+}
+
+& {
+    $hash = 'a' * 64
+    $second = 'b' * 64
+    $version = '1.8.0'
+    $schema = 'b18_spectral_0002'
+    $owned = @{surface='tauri-webview2'; application_version=$version; schema_revision=$schema; generated_fixture=$true}
+    $typed = @(@{id='run-a';sha256=$hash}, @{id='run-b';sha256=$hash})
+    $reported = @(@{run_id='run-c';payload_sha256=$hash}, @{run_id='run-d';payload_sha256=$hash})
+    $groups = @(1..5 | ForEach-Object { @{
+        unit_id="unit-$_"; eligible_visits=2; detections=1; nondetections=1; effort_seconds=60
+    } })
+    $originals = @(1..25 | ForEach-Object { @{
+        id="original-$_"; kind='image'; sha256=('{0:x64}' -f $_)
+    } })
+    $taxonomy = $owned + @{
+        project_id='source-project'; proposal_id='taxon-proposal'; proposal_sha256=$hash; assessment_id='assessment-id'
+        result_sha256=$hash; graph_id='graph-id'; graph_sha256=$hash; exported_file_sha256=$hash
+        two_fixture_role_revisions=@('author-role', 'reviewer-role'); originals=$originals; grouped_result=$groups
+        runs=$reported
+    }
+    $audio = @{surface='tauri-webview2'; version=$version; schema=$schema; generated_fixture=$true;
+        recording_id='original.wav'; review_id='audio-review'; anchor_id='clock';
+        fixture='generated.wav'; source_sha256=$hash; report_sha256=$hash; export_sha256=$hash; replays=$reported }
+    $spectral = $owned + @{
+        project_id='spectral-project'; acquisition_sha256=$hash; graph_sha256=$hash; runs=$typed
+        export_sha256=$hash; tiff_sha256=$second
+        record=@{id='spectral';project_id='spectral-project';content_sha256=$hash;snapshot=@{
+            selection=@{acquisition_sha256=$hash}
+            acquisition=@{bands=@(
+                @{original_sha256=$hash;image_id='red';calibration=@{white_dn=40}},
+                @{original_sha256=$second;image_id='nir';calibration=@{white_dn=40}}
+            )}
+            result=@{status='available';valid_pixels=6}
+        }}
+    }
+    $correction = @{content_sha256=$hash; receipt=@{original_sha256=$hash; image_id='original-image'}}
+    $underwater = $owned + @{
+        fixture_source='installed_scratch_detector'; source_training_run_id='training-run';
+        recipe=$correction; image_id='original-image'; job='inference-job'; original_sha256=$hash; model_sha256=$second
+        saved_graph_runs=@(
+            @{ id='underwater-run-a';graph_sha256=$hash;payload_sha256=$second },
+            @{ id='underwater-run-b';graph_sha256=$hash;payload_sha256=$second }
+        ); raw_axes_reopened=$true; polygon_and_raster_reused_rendition=$true; original_bytes_match=$true
+        source_pixel_predictions=@(@{id='pending-prediction'})
+    }
+    $exports = @{taxonomy=$hash;audio=$hash;spectral_json=$hash;spectral_tiff=$second}
+    Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema
+    Assert-True $true 'Bound, independent generated research tools evidence qualifies.'
+    $taxonomy.surface = 'source-browser'
+    Assert-Throws { Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema } 'Source-browser proof cannot qualify as installed.'
+    $taxonomy.surface = 'tauri-webview2'
+    $taxonomy.two_fixture_role_revisions = @('author-role','author-role')
+    Assert-Throws { Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema } 'A repeated role revision cannot qualify as independent.'
+    $taxonomy.two_fixture_role_revisions = @('author-role','reviewer-role')
+    $exports.audio = $second
+    Assert-Throws { Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema } 'A substituted downloaded report cannot qualify.'
+    $exports.audio = $hash
+    $spectral.record.snapshot.acquisition.bands[1].original_sha256 = $hash
+    Assert-Throws { Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema } 'Identical bytes cannot stand in for two spectral bands.'
+    $spectral.record.snapshot.acquisition.bands[1].original_sha256 = $second
+    $underwater.saved_graph_runs[1].id = $underwater.saved_graph_runs[0].id
+    Assert-Throws { Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema } 'A duplicate workflow run cannot qualify for replay.'
 }
 
 $slot = [datetimeoffset]'2026-11-20T15:00:10Z'
@@ -642,6 +707,13 @@ Assert-True ($cleanInstallStep.Contains('-ScheduleWorkflowAcceptance -Monitoring
 foreach ($monitoringArtifact in @('monitoring-workflow-evidence.json','monitoring-playwright.json',
     'monitoring-playwright/**/acquisition-source-evidence.json','monitoring-playwright/**/monitoring-proof.json')) {
     Assert-True ($cleanInstallStep.Contains(".artifacts/windows-clean-acceptance-*/$monitoringArtifact")) "Missing installed evidence retention for $monitoringArtifact."
+}
+
+Assert-True ($cleanInstallStep.Contains('-ResearchToolsAcceptance')) 'The clean role must run the 1.8 research tools.'
+foreach ($researchArtifact in @('research-tools-evidence.json','research-tools-playwright.json',
+    'research-tools-playwright/**/taxonomy-detectability-proof.json','research-tools-playwright/**/bioacoustics-evidence.json',
+    'research-tools-playwright/**/multispectral-evidence.json','research-tools-playwright/**/underwater-adjustment-evidence.json')) {
+    Assert-True ($cleanInstallStep.Contains(".artifacts/windows-clean-acceptance-*/$researchArtifact")) "Missing installed evidence retention for $researchArtifact."
 }
 
 $nodeFixtureRoot = Join-Path $env:TEMP ('reefvision-node-selection-' + [guid]::NewGuid().ToString('N'))
