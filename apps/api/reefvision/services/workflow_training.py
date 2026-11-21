@@ -310,7 +310,7 @@ def register_workflow_trained_model(
             "pose_schema_content_hash"
         ):
             raise ValidationError(
-                "Pose registration landmark-schema provenance does not match frozen training lineage"
+                "Pose registration landmark-schema provenance differs from frozen training"
             )
         if (
             not isinstance(manifest_digest, str)
