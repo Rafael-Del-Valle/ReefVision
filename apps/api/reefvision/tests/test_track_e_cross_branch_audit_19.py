@@ -92,7 +92,6 @@ def test_cross_branch_audit_flags_distinct_branch_only_revisions(tmp_path: Path)
     ]
     assert invalid_report["refs"]["review"]["commit"] != report["refs"]["review"]["commit"]
 
-
     # Reassigning Alembic identity in one migration must fail the static
     # audit rather than silently treating the last assignment as canonical.
     (migrations / "0002_review.py").write_text(
