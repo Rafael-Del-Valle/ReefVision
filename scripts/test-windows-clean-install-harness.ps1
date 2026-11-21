@@ -7,6 +7,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'lib\windows-standard-user-webview2.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-scheduler-webview2-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-monitoring-webview2-acceptance.ps1')
+. (Join-Path $PSScriptRoot 'lib\windows-research-tools-webview2-acceptance.ps1')
 
 $passed = 0
 function Assert-True([bool]$Condition, [string]$Message) {
@@ -84,6 +85,129 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
     $monitoring.summary.project_rows[2].status = 'excluded'
     $monitoring.summary_replays[1].payloadSha256 = 'c' * 64
     Assert-Throws { Assert-ReefVisionInstalledMonitoringResults $capture $monitoring '1.7.0' 'b17_monitor_0003' } 'A differing replay must not qualify.'
+}
+
+& {
+    $hash = 'a' * 64
+    $second = 'b' * 64
+    $version = '1.8.0'
+    $schema = 'b18_spectral_0002'
+    $owned = @{surface='tauri-webview2'; application_version=$version; schema_revision=$schema; generated_fixture=$true}
+    $typed = @(@{id='run-a';sha256=$hash}, @{id='run-b';sha256=$hash})
+    $reported = @(@{run_id='run-c';payload_sha256=$hash}, @{run_id='run-d';payload_sha256=$hash})
+    $groups = @(1..5 | ForEach-Object { @{
+        unit_id="unit-$_"; eligible_visits=2; detections=1; nondetections=1; effort_seconds=60
+    } })
+    $originals = @(1..25 | ForEach-Object { @{
+        id="original-$_"; kind='image'; sha256=('{0:x64}' -f $_)
+    } })
+    $taxonomy = $owned + @{
+        project_id='source-project'; proposal_id='taxon-proposal'; proposal_sha256=$hash; assessment_id='assessment-id'
+        result_sha256=$hash; graph_id='graph-id'; graph_sha256=$hash; exported_file_sha256=$hash
+        two_fixture_role_revisions=@('author-role', 'reviewer-role'); originals=$originals; grouped_result=$groups
+        runs=$reported
+    }
+    $audio = @{surface='tauri-webview2'; version=$version; schema=$schema; generated_fixture=$true;
+        recording_id='original.wav'; review_id='audio-review'; anchor_id='clock';
+        fixture='generated-wav'; source_sha256=$hash; report_sha256=$hash; export_sha256=$hash; replays=$reported }
+    $spectral = $owned + @{
+        project_id='spectral-project'; acquisition_sha256=$hash; graph_sha256=$hash; runs=$typed
+        export_sha256=$hash; tiff_sha256=$second
+        record=@{id='spectral';project_id='spectral-project';content_sha256=$hash;snapshot=@{
+            selection=@{acquisition_sha256=$hash}
+            acquisition=@{bands=@(
+                @{original_sha256=$hash;image_id='red';calibration=@{white_dn=40}},
+                @{original_sha256=$second;image_id='nir';calibration=@{white_dn=40}}
+            )}
+            result=@{status='available';valid_pixels=6}
+        }}
+    }
+    $correction = @{content_sha256=$hash; receipt=@{original_sha256=$hash; image_id='original-image'}}
+    $underwater = $owned + @{
+        fixture_source='installed_scratch_detector'; source_training_run_id='training-run';
+        recipe=$correction; image_id='original-image'; job='inference-job'; original_sha256=$hash; model_sha256=$second
+        saved_graph_runs=@(
+            @{ id='underwater-run-a';graph_sha256=$hash;payload_sha256=$second },
+            @{ id='underwater-run-b';graph_sha256=$hash;payload_sha256=$second }
+        ); raw_axes_reopened=$true; polygon_and_raster_reused_rendition=$true; original_bytes_match=$true
+        source_pixel_predictions=@(@{id='pending-prediction'})
+    }
+    $exports = @{taxonomy=$hash;audio=$hash;spectral_json=$hash;spectral_tiff=$second}
+    Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema
+    Assert-True $true 'Bound, independent generated research tools evidence qualifies.'
+    $taxonomy.surface = 'source-browser'
+    Assert-Throws { Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema } 'Source-browser proof cannot qualify as installed.'
+    $taxonomy.surface = 'tauri-webview2'
+    $taxonomy.two_fixture_role_revisions = @('author-role','author-role')
+    Assert-Throws { Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema } 'A repeated role revision cannot qualify as independent.'
+    $taxonomy.two_fixture_role_revisions = @('author-role','reviewer-role')
+    $audio.fixture = 'unverified.wav'
+    Assert-Throws { Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema } 'A filename cannot substitute for the generated WAV receipt.'
+    $audio.fixture = 'generated-wav'
+    $exports.audio = $second
+    Assert-Throws { Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema } 'A substituted downloaded report cannot qualify.'
+    $exports.audio = $hash
+    $spectral.record.snapshot.acquisition.bands[1].original_sha256 = $hash
+    Assert-Throws { Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema } 'Identical bytes cannot stand in for two spectral bands.'
+    $spectral.record.snapshot.acquisition.bands[1].original_sha256 = $second
+    $underwater.saved_graph_runs[1].id = $underwater.saved_graph_runs[0].id
+    Assert-Throws { Assert-ReefVisionInstalledResearchToolsResults $taxonomy $audio $spectral $underwater $exports $version $schema } 'A duplicate workflow run cannot qualify for replay.'
+}
+
+& {
+    $sha = 'a' * 64
+    $weights = @($sha, ('b' * 64))
+    $sources = @{imageA=$sha;imageB=('c'*64)}
+    $paired = @{
+        surface='tauri-webview2';fixture_source='local_cpu_training';project_id='paired-project'
+        comparison_id='paired-report';report_sha256=$sha;reference_sha256=$sha;checkpoint_sha256=$weights
+        groups=@(@{id='known-A'},@{id='known-B'})
+    }
+    $report = @{content_sha256=$sha;snapshot=@{
+        project_id='paired-project'; reference=@{manifest_sha256=$sha;split='test'}; preprocessing_executed='adjusted'
+        declaration=@{
+            comparison_id='paired-report';comparison_sha256=$sha;independent_unit='colony';preprocessing='adjusted'
+            adjustments=@(
+                @{image_id='imageA';recipe_id='recipeA';content_sha256=$sha;original_sha256=$sources.imageA;rendition_sha256=('e'*64)},
+                @{image_id='imageB';recipe_id='recipeB';content_sha256=$sha;original_sha256=$sources.imageB;rendition_sha256=('d'*64)}
+            )
+        }
+        models=@(@{checkpoint_sha256=$weights[0]},@{checkpoint_sha256=$weights[1]})
+        summary=@{lineage='held_out';status='scored';groups=@(
+            @{group_id='known-A';domain='reference';status='included'},
+            @{group_id='known-B';domain='target';status='included'},
+            @{group_id='Unobserved validation acquisition';domain='target';status='missing'}
+        )}
+    }}
+    Assert-ReefVisionInstalledDomainReceipt $report $paired $sources
+    Assert-True $true 'The domain export must retain both exact held-out cohorts and adjustments.'
+    $report.snapshot.summary.lineage='exploratory'
+    Assert-Throws { Assert-ReefVisionInstalledDomainReceipt $report $paired $sources } 'Unverified training separation cannot qualify as held-out.'
+    $report.snapshot.summary.lineage='held_out'
+    $report.snapshot.declaration.adjustments[1].original_sha256=$sources.imageA
+    Assert-Throws { Assert-ReefVisionInstalledDomainReceipt $report $paired $sources } 'A replaced source original cannot qualify as a checked correction.'
+    $report.snapshot.declaration.adjustments[1].original_sha256=$sources.imageB
+    $report.snapshot.declaration.comparison_id='alternate-paired-run'
+    Assert-Throws { Assert-ReefVisionInstalledDomainReceipt $report $paired $sources } 'The selected comparison must come from the previous proven local CPU fixture.'
+
+    $report.snapshot.declaration.comparison_id='paired-report'
+    $paired.original_images=@(@{id='imageA';sha256=$sources.imageA},@{id='imageB';sha256=$sources.imageB})
+    $report.snapshot.observed_evidence=@{inference_job_ids=@('left-a','left-b','right-a','right-b')}
+    $proof=@{
+        surface='tauri-webview2';applicationVersion='1.8.0';schemaRevision='b18_spectral_0002';projectId='paired-project'
+        comparisonId='paired-report';comparisonSha256=$sha;referenceSha256=$sha;checkpointSha256=$weights
+        reportId='domain-report';reportSha256=$sha;graphId='domain-graph';graphSha256=$sha
+        jsonSha256=$sha;csvSha256=$sha;inferenceJobIds=@('left-a','left-b','right-a','right-b')
+        replays=@(@{id='run-first';payloadSha256=$sha},@{id='run-replay';payloadSha256=$sha})
+    }
+    $exports=@{domain_json=$sha;domain_csv=$sha}
+    Assert-ReefVisionInstalledDomainEvidence $proof $report $paired $exports '1.8.0' 'b18_spectral_0002'
+    Assert-True $true 'Exact domain job identities and two replay receipts qualify.'
+    $proof.inferenceJobIds[3]='right-a'
+    Assert-Throws { Assert-ReefVisionInstalledDomainEvidence $proof $report $paired $exports '1.8.0' 'b18_spectral_0002' } 'A repeated child cannot be counted as a distinct model-by-original evaluation.'
+    $proof.inferenceJobIds[3]='right-b'
+    $proof.csvSha256='d' * 64
+    Assert-Throws { Assert-ReefVisionInstalledDomainEvidence $proof $report $paired $exports '1.8.0' 'b18_spectral_0002' } 'A replaced domain CSV cannot qualify.'
 }
 
 $slot = [datetimeoffset]'2026-11-20T15:00:10Z'
@@ -642,6 +766,14 @@ Assert-True ($cleanInstallStep.Contains('-ScheduleWorkflowAcceptance -Monitoring
 foreach ($monitoringArtifact in @('monitoring-workflow-evidence.json','monitoring-playwright.json',
     'monitoring-playwright/**/acquisition-source-evidence.json','monitoring-playwright/**/monitoring-proof.json')) {
     Assert-True ($cleanInstallStep.Contains(".artifacts/windows-clean-acceptance-*/$monitoringArtifact")) "Missing installed evidence retention for $monitoringArtifact."
+}
+
+Assert-True ($cleanInstallStep.Contains('-ResearchToolsAcceptance')) 'The clean role must run the 1.8 research tools.'
+foreach ($researchArtifact in @('research-tools-evidence.json','research-tools-playwright.json',
+    'research-tools-playwright/**/taxonomy-detectability-proof.json','research-tools-playwright/**/bioacoustics-evidence.json',
+    'research-tools-playwright/**/multispectral-evidence.json','research-tools-playwright/**/underwater-adjustment-evidence.json',
+    'research-tools-playwright/**/domain-shift-evidence.json','research-tools-playwright/**/domain-shift-report.csv')) {
+    Assert-True ($cleanInstallStep.Contains(".artifacts/windows-clean-acceptance-*/$researchArtifact")) "Missing installed evidence retention for $researchArtifact."
 }
 
 $nodeFixtureRoot = Join-Path $env:TEMP ('reefvision-node-selection-' + [guid]::NewGuid().ToString('N'))

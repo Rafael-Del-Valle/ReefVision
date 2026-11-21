@@ -193,3 +193,15 @@ def test_clean_install_requires_the_standard_account_schedule_restart() -> None:
     assert flag in PREFLIGHT._job(WORKFLOW, "windows-clean-install-acceptance")
     changed = WORKFLOW.replace(flag, "")
     assert any("schedule" in error for error in PREFLIGHT.check_workflow(changed, VERSION))
+
+
+def test_clean_install_requires_research_tools_and_their_scoped_receipts() -> None:
+    flag = "-ResearchToolsAcceptance"
+    upload = ".artifacts/windows-clean-acceptance-*/research-tools-evidence.json"
+    clean = PREFLIGHT._job(WORKFLOW, "windows-clean-install-acceptance")
+    assert flag in clean and upload in clean
+    for required in (flag, upload):
+        changed = WORKFLOW.replace(clean, clean.replace(required, ""))
+        assert any(
+            "1.8 research tools" in error for error in PREFLIGHT.check_workflow(changed, VERSION)
+        )

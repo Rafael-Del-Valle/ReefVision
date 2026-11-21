@@ -9,8 +9,10 @@ from PIL import Image
 from reefvision.tests.test_images import create_project, import_one
 
 
-def spectral_fixture(client: TestClient) -> tuple[str, dict[str, Any], list[bytes]]:
-    project = create_project(client)["id"]
+def spectral_fixture(
+    client: TestClient, project: str | None = None
+) -> tuple[str, dict[str, Any], list[bytes]]:
+    project = project or create_project(client)["id"]
     root = f"/api/v1/projects/{project}/multispectral"
     bands = []
     files = []

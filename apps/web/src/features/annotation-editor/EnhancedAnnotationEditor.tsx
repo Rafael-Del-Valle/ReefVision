@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import type { Project } from "../../api/client";
 import { AnnotationEditor } from "./AnnotationEditor";
+import { ImageAdjustments } from "./ImageAdjustments";
+import { adjustmentPin, type AdjustmentView } from "./imageAdjustmentApi";
 import "./annotationTypeVisibility.css";
 import { MaskAnnotationWorkspace } from "./MaskAnnotationWorkspace";
 import "./polygonWorkspace.css";
@@ -69,6 +71,10 @@ export function EnhancedAnnotationEditor({
   >("select");
   const [vertexEditMode, setVertexEditMode] = useState<VertexEditMode>("move");
   const [activeImageId, setActiveImageId] = useState(initialImageId);
+  const activeImageRef = useRef(activeImageId);
+  const [adjustmentView, setAdjustmentView] = useState<AdjustmentView | null>(
+    null,
+  );
   const [toolbarTarget, setToolbarTarget] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -76,6 +82,20 @@ export function EnhancedAnnotationEditor({
     setWorkspace(launchContext?.initialWorkspace ?? "boxes");
     setMaskInitialTool(undefined);
   }, [initialImageId, launchContext?.initialWorkspace]);
+
+  useLayoutEffect(() => {
+    activeImageRef.current = activeImageId;
+    setAdjustmentView((current) =>
+      current?.imageId === activeImageId ? current : null,
+    );
+  }, [activeImageId]);
+
+  useEffect(() => {
+    const url = adjustmentView?.url;
+    return () => {
+      if (url?.startsWith("blob:")) URL.revokeObjectURL(url);
+    };
+  }, [adjustmentView?.url]);
 
   useEffect(() => {
     const findToolbarTarget = () => {
@@ -187,11 +207,29 @@ export function EnhancedAnnotationEditor({
   }, [vertexEditMode, workspace]);
 
   const workspaceContent = useMemo(() => {
+    const activeAdjustment =
+      adjustmentView?.imageId === activeImageId ? adjustmentView : null;
+    const adjustmentControls = (
+      <ImageAdjustments
+        key={activeImageId}
+        imageId={activeImageId}
+        view={activeAdjustment}
+        onChange={(next) => {
+          if (activeImageRef.current === activeImageId) setAdjustmentView(next);
+          else if (next?.url.startsWith("blob:")) URL.revokeObjectURL(next.url);
+        }}
+      />
+    );
+    const renditionUrl = activeAdjustment?.visible
+      ? activeAdjustment.url
+      : undefined;
     if (workspace === "raster") {
       return (
         <RasterMaskWorkspace
           project={project}
           imageId={activeImageId}
+          renditionUrl={renditionUrl}
+          adjustmentControls={adjustmentControls}
           onReturnToMasks={() => setWorkspace("masks")}
           onReturnToBoxes={() => setWorkspace("boxes")}
           onClose={onClose}
@@ -203,6 +241,8 @@ export function EnhancedAnnotationEditor({
         <MaskAnnotationWorkspace
           project={project}
           imageId={activeImageId}
+          renditionUrl={renditionUrl}
+          adjustmentControls={adjustmentControls}
           initialTool={maskInitialTool}
           onToolChange={(tool) => {
             if (
@@ -231,6 +271,14 @@ export function EnhancedAnnotationEditor({
       <AnnotationEditor
         project={project}
         initialImageId={activeImageId}
+        adjustmentImageId={activeImageId}
+        renditionUrl={renditionUrl}
+        adjustmentControls={adjustmentControls}
+        modelAdjustment={
+          activeAdjustment?.recipe
+            ? adjustmentPin(activeAdjustment.recipe)
+            : undefined
+        }
         launchContext={launchContext}
         onClose={onClose}
         onActiveImageChange={setActiveImageId}
@@ -238,6 +286,7 @@ export function EnhancedAnnotationEditor({
     );
   }, [
     activeImageId,
+    adjustmentView,
     launchContext,
     maskInitialTool,
     onClose,

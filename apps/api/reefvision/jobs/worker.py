@@ -768,6 +768,10 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
             from reefvision.services.paired_models_v15 import process_comparison
 
             return process_comparison(settings, factory, job_id)
+        if job_type == "domain_shift_analysis":
+            from reefvision.services.domain_shift_v18 import process_domain_shift
+
+            return process_domain_shift(settings, factory, job_id)
         if job_type == "pose_identity_tracking":
             return process_pose_identity_tracking_job(settings, factory, job_id)
         if job_type == "temporal_reefpose":

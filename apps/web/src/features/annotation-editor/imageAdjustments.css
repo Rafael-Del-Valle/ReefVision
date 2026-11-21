@@ -1,0 +1,24 @@
+.image-adjustment-fields,
+.image-adjustment-digests {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.image-adjustment-fields label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.image-adjustment-digests dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--rv-font-mono, monospace);
+}
+
+.image-adjustment-links,
+.image-adjustment-opt-in {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}

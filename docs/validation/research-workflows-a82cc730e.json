@@ -1,0 +1,103 @@
+{
+  "source_commit": "a82cc730e1bd2ca5df0245171a630f17f06cd2a5",
+  "source_tree": "7579850ac62ccf09f1a58626109488b673a878c0",
+  "surface": "Source desktop backend with ordinary project navigation in Chromium on Windows",
+  "fixture_scope": "Generated survey, stereo PCM, registered spectral bands, asymmetric RGB and a local scratch-trained detector",
+  "owner_artifact_directory": "candidate-review/1.8/checkpoints/a82cc730e/source",
+  "identity": {
+    "file": "identity.json",
+    "sha256": "203e5a148af84614fea0b2fd4730dc7e440d2ea503c8cb502e7b2a82d5ce824c"
+  },
+  "closure": {
+    "file": "closure.json",
+    "sha256": "8a8cdcc4b854c768458ca3d4db66bd52d6cc91cdb308cb3c4e95d0cc5e1fe02d"
+  },
+  "playwright": {
+    "file": "playwright.json",
+    "sha256": "fd6d3af958be0822f1ca6548fe3a29c767ef8698106eae43fbb87b5402857c56",
+    "stats": {
+      "startTime": "2026-11-21T00:03:12.978Z",
+      "duration": 45801.863999999994,
+      "expected": 6,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "workflows": {
+    "rv18-underwater-correction": {
+      "file": "underwater-adjustment-evidence.json",
+      "sha256": "239bae6591c84012029fab24d583491ba3b1725966e58a2af5eec16f2ce22664",
+      "run_ids": [
+        "c6f2e141-1617-4b8b-9473-ee2c6413bedb",
+        "1c51fe48-4ce5-4546-9768-2d73b85939ca"
+      ],
+      "replayed_payload_sha256": "39fa5515cb390a9184b317c24fcde2d86a8a292a6613c9e467c93bf1dde9b2ad",
+      "pending_cpu_proposals": 8
+    },
+    "rv18-taxonomy-detectability": {
+      "file": "taxonomy-detectability-proof.json",
+      "sha256": "f12f4c5d1f12bf9586fa17ca0c672c3b8342edc3399ff2e5ef0a43add7a6ef5c",
+      "run_ids": [
+        "e3c19c08-f4ee-46af-b73a-33d198bcfdf2",
+        "e5e1fc7e-f1f3-4fdc-9960-66ace2f849a0"
+      ],
+      "replayed_payload_sha256": "9c2e6b15086af1ba0f11945afee8d461fa07cc9b9a0ed1ee51afe175390becd7",
+      "independent_fixture_tanks": 5,
+      "effort_seconds": 300,
+      "detections": 5
+    },
+    "rv18-bioacoustics": {
+      "file": "bioacoustics-evidence.json",
+      "sha256": "35440ae84a79eddfe39ecd43dc6fafb9f183b481a63bfdc92ca46846edb76674",
+      "run_ids": [
+        "668ecedc-d851-4fc8-abf3-dccce513609f",
+        "e11e1f63-a7f2-4013-8fba-709f476f886c"
+      ],
+      "replayed_payload_sha256": "d0bd0e0051bc87f5ecbd352311d10b8dc6177569faaec848ce96971ef95aeeb7"
+    },
+    "rv18-multispectral": {
+      "file": "multispectral-evidence.json",
+      "sha256": "63abcc8aa46881a66244603daa2e930e5ff6c1f9400a733f05e9eecfcf221396",
+      "run_ids": [
+        "4d5899d5-bcc0-4cb8-9b20-af952f7e8c99",
+        "a03a1c04-7006-479d-91a4-4f87c189d7cc"
+      ],
+      "replayed_payload_sha256": "648e89a2c4a391e08282615edde60e322ae2bde5b1ad257b3331bb5e4824ccbf",
+      "estimate": {
+        "status": "available",
+        "reasons": [],
+        "reference_pixels": 8,
+        "valid_pixels": 3,
+        "excluded": {
+          "outside_grid": 2,
+          "invalid_band_sample": 1,
+          "zero_denominator": 2
+        },
+        "minimum": 0.5,
+        "maximum": 0.5,
+        "mean": 0.5,
+        "mask_sha256": "e7dbe1ecba66dec122cd24e3e56cccf2ce0c21b27407be689d632d37b04e9008",
+        "float32_le_sha256": "b411c57a97a0f54b57baed32c86fa770044d0d97b3f3f42224d93337390a8782"
+      },
+      "raster": {
+        "file": "spectral-index.tif",
+        "sha256": "92a888b49d0616ea0bcc4756f5573b9faefb97416f5351b7e00d3a1c28708ddd"
+      },
+      "export": {
+        "file": "spectral-index.json",
+        "sha256": "0bf0f2eab32842ecd2406b5a96310f101a3dda542ee41d5f49e5747159809e68"
+      }
+    }
+  },
+  "integration_tests": {
+    "file": "exact-a82-research-backend.xml",
+    "sha256": "5decc8500b9755ef2000f8c8c9b26aa96e1be33bb2f8abbe6661fdcd6279aab8",
+    "tests": 39,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0
+  },
+  "project_transfer": "Two successive archives rebound their live references. Archived spectral indices were recalculated from the original pixels, and altered index or workflow estimates were rejected before database writes. The adjusted local-model graph executed on both restored copies. Its source pixels and original receipt remained intact.",
+  "external_inputs": "Independent underwater and taxonomic references and repeated-survey material, clocked hydrophone recordings and independently calibrated physical bands remain open. See the owner scientific acceptance matrix."
+}

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { request } from "../../api/client";
 import { getApiBaseUrl } from "../../runtime";
 import { saveWorkflowGraph } from "../workflow-graphs/workflowGraphApi";
+import { DomainShiftWorkspace } from "./DomainShiftWorkspace";
 import { useSelections } from "./ReviewedModelRuntime";
 
 const tasks = {
@@ -313,6 +314,7 @@ export function ModelComparisonWorkspace({
   onOpen: OpenSource;
   onWorkflow: () => void;
 }) {
+  const [showDomainShift, setShowDomainShift] = useState(false);
   const [task, setTask] = useState<Task>("detector");
   const [left, setLeft] = useState("");
   const [right, setRight] = useState("");
@@ -424,9 +426,31 @@ export function ModelComparisonWorkspace({
     );
   }
   const choices = sources.data ?? [];
+  if (showDomainShift) {
+    return (
+      <section aria-label="Model comparison">
+        <h2>Model comparison</h2>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => setShowDomainShift(false)}
+        >
+          Paired comparisons
+        </button>
+        <DomainShiftWorkspace projectId={projectId} onWorkflow={onWorkflow} />
+      </section>
+    );
+  }
   return (
     <section aria-label="Model comparison">
       <h2>Model comparison</h2>
+      <button
+        type="button"
+        className="secondary"
+        onClick={() => setShowDomainShift(true)}
+      >
+        Domain shift
+      </button>
       <label>
         Comparison task
         <select

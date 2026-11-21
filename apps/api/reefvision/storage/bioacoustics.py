@@ -79,40 +79,44 @@ def _decode_format(data: bytes) -> tuple[int, int, int]:
 
 
 def inspect_wav(path: Path, size: int) -> PCM:
+    with path.open("rb") as stream:
+        return inspect_wav_stream(stream, size)
+
+
+def inspect_wav_stream(stream: IO[bytes], size: int) -> PCM:
     if size < 44 or size > MAX_AUDIO_BYTES:
         raise ValidationError("WAV original is truncated or exceeds 256 MiB")
-    with path.open("rb") as stream:
-        header = stream.read(12)
-        if len(header) != 12 or header[:4] != b"RIFF" or header[8:] != b"WAVE":
-            raise ValidationError("A little-endian RIFF WAV header is required")
-        declared_size = int.from_bytes(header[4:8], "little") + 8
-        if declared_size != size:
-            raise ValidationError("The WAV bytes are truncated or do not match the RIFF length")
-        format_fields: tuple[int, int, int] | None = None
-        frames: tuple[int, int] | None = None
-        chunks = 0
-        while stream.tell() < size:
-            chunks += 1
-            if chunks > 1024:
-                raise ValidationError("The WAV contains more than 1024 chunks")
-            chunk_header = stream.read(8)
-            if len(chunk_header) != 8:
-                raise ValidationError("The WAV chunk header is truncated")
-            chunk_id, chunk_size = struct.unpack("<4sI", chunk_header)
-            body = stream.tell()
-            end = body + chunk_size
-            if end > size:
-                raise ValidationError("A declared WAV chunk is truncated")
-            if chunk_id == b"fmt ":
-                if format_fields is not None or chunk_size > 128:
-                    raise ValidationError("The WAV format chunk is repeated or unsupported")
-                format_fields = _decode_format(stream.read(chunk_size))
-            elif chunk_id == b"data":
-                if frames is not None or format_fields is None:
-                    raise ValidationError("A WAV needs one data chunk after its PCM format chunk")
-                frames = (body, chunk_size)
-            # Common writers omit the final byte of padding when odd data ends at EOF.
-            stream.seek(end + (chunk_size % 2 if end < size else 0))
+    header = stream.read(12)
+    if len(header) != 12 or header[:4] != b"RIFF" or header[8:] != b"WAVE":
+        raise ValidationError("A little-endian RIFF WAV header is required")
+    declared_size = int.from_bytes(header[4:8], "little") + 8
+    if declared_size != size:
+        raise ValidationError("The WAV bytes are truncated or do not match the RIFF length")
+    format_fields: tuple[int, int, int] | None = None
+    frames: tuple[int, int] | None = None
+    chunks = 0
+    while stream.tell() < size:
+        chunks += 1
+        if chunks > 1024:
+            raise ValidationError("The WAV contains more than 1024 chunks")
+        chunk_header = stream.read(8)
+        if len(chunk_header) != 8:
+            raise ValidationError("The WAV chunk header is truncated")
+        chunk_id, chunk_size = struct.unpack("<4sI", chunk_header)
+        body = stream.tell()
+        end = body + chunk_size
+        if end > size:
+            raise ValidationError("A declared WAV chunk is truncated")
+        if chunk_id == b"fmt ":
+            if format_fields is not None or chunk_size > 128:
+                raise ValidationError("The WAV format chunk is repeated or unsupported")
+            format_fields = _decode_format(stream.read(chunk_size))
+        elif chunk_id == b"data":
+            if frames is not None or format_fields is None:
+                raise ValidationError("A WAV needs one data chunk after its PCM format chunk")
+            frames = (body, chunk_size)
+        # Common writers omit the final byte of padding when odd data ends at EOF.
+        stream.seek(end + (chunk_size % 2 if end < size else 0))
     if format_fields is None or frames is None:
         raise ValidationError("The WAV needs a PCM format and a complete data chunk")
     channels, rate, bits = format_fields

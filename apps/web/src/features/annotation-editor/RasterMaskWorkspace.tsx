@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import {
   getAnnotationSession,
@@ -41,6 +47,8 @@ interface RasterMaskWorkspaceProps {
   onReturnToMasks: () => void;
   onReturnToBoxes: () => void;
   onClose: () => void;
+  renditionUrl?: string;
+  adjustmentControls?: ReactNode;
 }
 
 type MaskAwareAnnotationSession = AnnotationSession & {
@@ -53,6 +61,8 @@ export function RasterMaskWorkspace({
   onReturnToMasks,
   onReturnToBoxes,
   onClose,
+  renditionUrl,
+  adjustmentControls,
 }: RasterMaskWorkspaceProps) {
   const queryClient = useQueryClient();
   const [selectedMaskId, setSelectedMaskId] = useState<string | null>(null);
@@ -324,6 +334,7 @@ export function RasterMaskWorkspace({
       <div className="annotation-editor-body">
         <aside className="annotation-tool-rail" aria-label="Annotation tools" />
         <aside className="annotation-editor-sidebar">
+          {adjustmentControls}
           <section className="annotation-sidebar-section">
             <div className="section-heading">
               <div>
@@ -568,7 +579,7 @@ export function RasterMaskWorkspace({
             label="Raster mask viewport"
           >
             <img
-              src={imageDisplayUrl(image.id)}
+              src={renditionUrl ?? imageDisplayUrl(image.id)}
               alt={image.original_filename}
               draggable={false}
               style={{ display: "block", width: "100%", height: "100%" }}

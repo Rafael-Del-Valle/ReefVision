@@ -32,6 +32,12 @@ def load_band(
         raise ConflictError("Restore the missing spectral band original before replay") from exc
     if len(data) != image.file_size_bytes or sha256(data).hexdigest() != expected_sha256:
         raise ConflictError("The spectral band original failed its byte checksum")
+    return decode_band(data, image.width_px, image.height_px)
+
+
+def decode_band(data: bytes, width: int, height: int) -> tuple[NDArray[np.uint16], Literal[8, 16]]:
+    if width < 1 or height < 1 or width * height > MAX_PIXELS or len(data) > MAX_BYTES:
+        raise ValidationError("A spectral band exceeds the supported raster or file size")
     try:
         with Image.open(BytesIO(data)) as decoded:
             if decoded.format not in {"PNG", "TIFF"} or getattr(decoded, "n_frames", 1) != 1:
@@ -40,7 +46,7 @@ def load_band(
                 raise ValidationError(
                     "The multispectral grid requires bands stored with top-left orientation"
                 )
-            if decoded.size != (image.width_px, image.height_px):
+            if decoded.size != (width, height):
                 raise ConflictError(
                     "The spectral band dimensions differ from its registered original"
                 )

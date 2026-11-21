@@ -1,6 +1,16 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { getDatasetVersions, request, type JobRecord } from "../../api/client";
+import {
+  getDatasetVersions,
+  getImages,
+  request,
+  type JobRecord,
+} from "../../api/client";
+import {
+  adjustmentPin,
+  listAdjustments,
+  type ImageAdjustmentPin,
+} from "../annotation-editor/imageAdjustmentApi";
 import {
   listEcologyAnalyses,
   type EcologyAnalysis,
@@ -47,6 +57,7 @@ const scientificNodes = new Set([
   "mesh_longitudinal_comparison",
   "provider_manifest_snapshot",
   "reviewed_model_runtime",
+  "underwater_adjustment",
 ]);
 
 export const hasScientificNodeControls = (nodeType: string) =>
@@ -58,6 +69,7 @@ type Option = {
   label: string;
   unavailable?: boolean;
   digest?: string;
+  adjustment?: ImageAdjustmentPin;
 };
 const object = (value: unknown): Parameters =>
   value && typeof value === "object" && !Array.isArray(value)
@@ -136,6 +148,17 @@ export function scientificConfigurationIssue(
   parameters: Parameters,
 ): string | undefined {
   const config = object(parameters.configuration);
+  if (
+    nodeType === "underwater_adjustment" &&
+    (!string(parameters.image_id) ||
+      !string(parameters.recipe_id) ||
+      [
+        parameters.content_sha256,
+        parameters.original_sha256,
+        parameters.rendition_sha256,
+      ].some((value) => !/^[a-f0-9]{64}$/.test(string(value))))
+  )
+    return "Choose an original image and a saved adjustment recipe.";
   if (
     nodeType === "research_reproducibility_package" &&
     !/^[0-9a-f]{64}$/.test(string(parameters.proof_sha256))
@@ -1881,6 +1904,65 @@ export function ScientificNodeControls({
   onChange: (value: Parameters) => void;
 }) {
   const base = `/projects/${projectId}`;
+  if (nodeType === "underwater_adjustment") {
+    const imageId = string(parameters.image_id);
+    return (
+      <>
+        <Records
+          queryKey={[base, "adjustment-images"]}
+          load={async (offset, signal) =>
+            (
+              await getImages(
+                projectId,
+                { page: offset / PAGE + 1, pageSize: PAGE },
+                signal,
+              )
+            ).items.map((image) => ({
+              id: image.id,
+              label: image.original_filename,
+            }))
+          }
+          render={(options) => (
+            <SourceSelect
+              label="Original image"
+              value={imageId}
+              options={options}
+              onChange={(image) => onChange({ image_id: image })}
+            />
+          )}
+        />
+        {imageId && (
+          <Records
+            key={imageId}
+            queryKey={[base, "adjustment-recipes", imageId]}
+            load={async (offset, signal) =>
+              (
+                await listAdjustments(imageId, offset / PAGE + 1, signal, PAGE)
+              ).items.map((recipe) => ({
+                id: recipe.id,
+                label: recipe.content_sha256.slice(0, 12),
+                adjustment: adjustmentPin(recipe),
+              }))
+            }
+            render={(options) => (
+              <SourceSelect
+                label="Saved adjustment recipe"
+                value={string(parameters.recipe_id)}
+                options={options}
+                onChange={(recipeId) =>
+                  onChange({
+                    image_id: imageId,
+                    ...options.find((option) => option.id === recipeId)
+                      ?.adjustment,
+                  })
+                }
+              />
+            )}
+          />
+        )}
+      </>
+    );
+  }
   if (nodeType === "reviewed_model_runtime")
     return (
       <ModelSelectionField

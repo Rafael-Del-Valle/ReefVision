@@ -15,6 +15,7 @@ param(
     [switch]$WorkspaceWorkflowAcceptance,
     [switch]$ScheduleWorkflowAcceptance,
     [switch]$MonitoringWorkflowAcceptance,
+    [switch]$ResearchToolsAcceptance,
     [switch]$HostedStandardUserWebView2,
     [switch]$VerifyPreviousInstallerRejectsUpgradedProfile,
     [switch]$PreviousInstallerSupportsIsolatedAcceptance,
@@ -35,6 +36,7 @@ $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'lib\windows-standard-user-webview2.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-scheduler-webview2-acceptance.ps1')
 . (Join-Path $PSScriptRoot 'lib\windows-monitoring-webview2-acceptance.ps1')
+. (Join-Path $PSScriptRoot 'lib\windows-research-tools-webview2-acceptance.ps1')
 
 if (-not $DisposableTest -and -not $PlanOnly) {
     throw 'Refusing destructive MSI acceptance. Supply -DisposableTest on a disposable Windows VM/machine, or use -PlanOnly.'
@@ -56,6 +58,10 @@ if ($ScheduleWorkflowAcceptance -and (-not $HostedStandardUserWebView2 -or -not 
 if ($MonitoringWorkflowAcceptance -and (-not $HostedStandardUserWebView2 -or -not $SkipUpgrade -or
     -not $ExpectedVersion -or -not $ExpectedSchemaRevision)) {
     throw 'Installed acquisition and monitoring acceptance requires a fresh hosted standard-user install with an expected version and schema.'
+}
+if ($ResearchToolsAcceptance -and (-not $HostedStandardUserWebView2 -or -not $SkipUpgrade -or
+    -not $ResearchWorkflowAcceptance -or -not $ExpectedVersion -or -not $ExpectedSchemaRevision)) {
+    throw 'Installed research tools require a fresh hosted standard-user profile, exact version/schema, and the preceding local scratch detector.'
 }
 if ($HostedStandardUserWebView2) {
     if (-not $DisposableTest -or -not $SpatialWorkflowNodePath) {
@@ -172,6 +178,7 @@ $report = [ordered]@{
     workspace_workflow = if ($WorkspaceWorkflowAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Installed workspace acceptance not requested' }
     schedule_workflow = if ($ScheduleWorkflowAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Installed scheduler restart acceptance not requested' }
     monitoring_workflow = if ($MonitoringWorkflowAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Installed acquisition and monitoring acceptance not requested' }
+    research_tools_workflow = if ($ResearchToolsAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Installed 1.8 research tools acceptance not requested' }
     spatial_workflow = if ($SpatialWorkflowNodePath) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Packaged spatial WebView2 acceptance not requested' }
     research_workflow = if ($ResearchWorkflowAcceptance) { New-ReefVisionEvidenceResult } else { New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'Packaged research WebView2 acceptance not requested' }
     schema_migration = New-ReefVisionEvidenceResult
@@ -676,6 +683,25 @@ try {
                             -ExpectedBrowserSid $browserSid -BrowserArtifactsDirectory $browserArtifacts
                     }
                 }
+                if ($ResearchToolsAcceptance) {
+                    try {
+                        if ($report.research_workflow.status -ne 'PASS') {
+                            throw 'The preceding reviewed scratch detector acceptance did not pass.'
+                        }
+                        $researchToolsArgs = @{
+                            NodePath=$SpatialWorkflowNodePath; RepositoryRoot=$RepositoryRoot; EvidenceRoot=$EvidenceRoot
+                            Profile=$SpatialDataRoot; BackendPort=$spatialPort; DebugPort=$debugPort; DesktopProcessId=$spatialDesktop.Id
+                            BrowserSid=$browserSid; BrowserArtifactsDirectory=$browserArtifacts
+                            BackendExecutable=(Join-Path $InstallRoot 'backendeefvision-apieefvision-api.exe')
+                            Version=$ProductVersion; Revision=$ExpectedSchemaRevision
+                        }
+                        $tools = Invoke-ReefVisionInstalledResearchToolsAcceptance @researchToolsArgs
+                        $tools | ConvertTo-Json -Depth 40 | Set-Content -LiteralPath (Join-Path $EvidenceRoot 'research-tools-evidence.json')
+                        $report.research_tools_workflow = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed WebView2 passed $($tools.completed_journeys) 1.8 research tools journeys with retained export and replay evidence."
+                    } catch {
+                        $report.research_tools_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $_.Exception.Message
+                    }
+                }
                 $spatialResult = Invoke-ReefVisionSpatialWebView2Acceptance -NodePath $SpatialWorkflowNodePath -RepositoryRoot $RepositoryRoot `
                     -EvidenceRoot $EvidenceRoot -Api $spatialApi -DebugPort $debugPort -DesktopProcessId $spatialDesktop.Id `
                     -ExpectedBrowserSid $browserSid -BrowserArtifactsDirectory $browserArtifacts
@@ -726,6 +752,9 @@ try {
                     Wait-ReefVisionWebView2DebugClosure -Port $debugPort
                 }
             }
+        }
+        if ($ResearchToolsAcceptance -and $report.research_tools_workflow.status -eq 'NOT RUN') {
+            $report.research_tools_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $report.spatial_workflow.detail
         }
         if ($ResearchWorkflowAcceptance -and $report.research_workflow.status -eq 'NOT RUN') {
             $report.research_workflow = New-ReefVisionEvidenceResult -Status 'FAIL' -Detail $report.spatial_workflow.detail
@@ -1238,6 +1267,9 @@ try {
     }
     if ($report.monitoring_workflow.status -eq 'FAIL') {
         throw $report.monitoring_workflow.detail
+    }
+    if ($report.research_tools_workflow.status -eq 'FAIL') {
+        throw $report.research_tools_workflow.detail
     }
     if ($report.research_workflow.status -eq 'FAIL') {
         throw $report.research_workflow.detail

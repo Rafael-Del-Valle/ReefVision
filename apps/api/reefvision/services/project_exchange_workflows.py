@@ -19,7 +19,9 @@ from reefvision.db.models import (
     WorkflowRun,
 )
 from reefvision.domain.errors import ConflictError, ValidationError
+from reefvision.services.project_exchange_adjustment_v18 import remap_adjustment_parameters
 from reefvision.services.project_exchange_comparison import restore_comparison_artifact
+from reefvision.services.project_exchange_domain_shift_v18 import remap_domain_shift_parameters
 from reefvision.services.project_exchange_field_v15 import FIELD_DATA_TYPE
 from reefvision.services.project_exchange_mesh_v14 import (
     MESH_NODE_TYPES,
@@ -33,6 +35,7 @@ from reefvision.services.project_exchange_paired_growth import (
 from reefvision.services.project_exchange_paired_models_v15 import remap_paired_models_parameters
 from reefvision.services.project_exchange_schedules import restore_schedule_pins
 from reefvision.services.project_exchange_study_v15 import remap_study_parameters
+from reefvision.services.workflow_bioacoustics import NODE as BIOACOUSTIC_REPORT
 from reefvision.services.workflow_provenance import (
     build_workflow_run_provenance,
     verify_succeeded_node_artifacts,
@@ -61,6 +64,9 @@ HISTORICAL_ARTIFACT_TYPES = frozenset(
         "monitoring_assessment",
         "monitoring_project_summary",
         "detectability_assessment",
+        "multispectral_index",
+        "adjusted_image_reference",
+        "domain_shift_report",
         PAIRED_GROWTH_TYPE,
         REVIEWER_LAB_TYPE,
     }
@@ -199,6 +205,10 @@ def restore_workflow_provenance(
                     )
                 elif node_type == "reviewed_study_design":
                     node["parameters"] = remap_study_parameters(source["parameters"], id_map)
+                elif node_type == "underwater_adjustment":
+                    node["parameters"] = remap_adjustment_parameters(source["parameters"], id_map)
+                elif node_type == "domain_shift_report":
+                    node["parameters"] = remap_domain_shift_parameters(source["parameters"], id_map)
                 elif node_type == "paired_model_comparison":
                     node["parameters"] = remap_paired_models_parameters(
                         source["parameters"], id_map
@@ -236,6 +246,14 @@ def restore_workflow_provenance(
                 node.parameters_json = remap_study_parameters(
                     source_nodes[node.id]["parameters_json"], id_map
                 )
+            elif node.node_type == "underwater_adjustment":
+                node.parameters_json = remap_adjustment_parameters(
+                    source_nodes[node.id]["parameters_json"], id_map
+                )
+            elif node.node_type == "domain_shift_report":
+                node.parameters_json = remap_domain_shift_parameters(
+                    source_nodes[node.id]["parameters_json"], id_map
+                )
             elif node.node_type == "paired_model_comparison":
                 node.parameters_json = remap_paired_models_parameters(
                     source_nodes[node.id]["parameters_json"], id_map
@@ -268,8 +286,12 @@ def restore_workflow_provenance(
                     artifact.payload_json = restore_mesh_measurement(
                         original["payload_json"], id_map
                     )
-                elif artifact.data_type not in {"spatial_condition_report", FIELD_DATA_TYPE}:
-                    # Condition and field receipts already use typed remapping during row import.
+                elif artifact.data_type not in {
+                    "spatial_condition_report",
+                    FIELD_DATA_TYPE,
+                    BIOACOUSTIC_REPORT,
+                }:
+                    # The condition, field and audio receipts use typed remapping on row import.
                     artifact.payload_json = map_values(artifact.payload_json, digest_map)
                     if artifact.data_type == "reefpose_validation_report":
                         artifact.payload_json = _restore_report_link(
@@ -319,6 +341,7 @@ def _restore_parameters(
         "acquisition_source_capture": ("source_sha256",),
         "acquisition_capture_replay": ("content_sha256",),
         "monitoring_assessment": ("rule_sha256", "assessment_sha256"),
+        BIOACOUSTIC_REPORT: ("report_sha256",),
     }
     if node_type in portable_pins:
         return {

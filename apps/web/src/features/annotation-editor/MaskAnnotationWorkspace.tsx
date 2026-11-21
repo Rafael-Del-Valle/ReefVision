@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -70,6 +71,8 @@ interface MaskAnnotationWorkspaceProps {
   onReturnToBoxes: () => void;
   onOpenBrush?: () => void;
   onClose: () => void;
+  renditionUrl?: string;
+  adjustmentControls?: ReactNode;
 }
 
 export function MaskAnnotationWorkspace({
@@ -80,6 +83,8 @@ export function MaskAnnotationWorkspace({
   onReturnToBoxes,
   onOpenBrush,
   onClose,
+  renditionUrl,
+  adjustmentControls,
 }: MaskAnnotationWorkspaceProps) {
   const queryClient = useQueryClient();
   const { confirm, confirmationDialog } = useActionConfirmation();
@@ -746,6 +751,7 @@ export function MaskAnnotationWorkspace({
       <div className="annotation-editor-body">
         <aside className="annotation-tool-rail" aria-label="Annotation tools" />
         <aside className="annotation-editor-sidebar">
+          {adjustmentControls}
           <section className="annotation-sidebar-section">
             <div className="section-heading">
               <div>
@@ -992,7 +998,7 @@ export function MaskAnnotationWorkspace({
             label="Polygon mask viewport"
           >
             <img
-              src={imageDisplayUrl(image.id)}
+              src={renditionUrl ?? imageDisplayUrl(image.id)}
               alt={image.original_filename}
               draggable={false}
               style={{
