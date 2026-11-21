@@ -858,7 +858,19 @@ def test_pose_materialization_rejects_unpaired_reviewed_frames(
             destination=destination,
         )
 
-    assert not (destination / "images" / "val").exists()
+    # An incomplete train or independent holdout must not strand the run ID.
+    assert not destination.exists()
+    corrected = materialize_pose_training_exports(
+        training_content=reviewed,
+        validation_content=_pose_export_zip(b"independent-reviewed-validation"),
+        destination=destination,
+    )
+    assert corrected["validation_mode"] == "separate_frozen_pose_dataset"
+    assert (destination / "images/train/frame_00000001.png").read_bytes() == b"reviewed"
+    assert (
+        (destination / "images/val/frame_00000001.png").read_bytes()
+        == b"independent-reviewed-validation"
+    )
 
 
 @pytest.mark.parametrize("altered_split", ("training", "validation"))
