@@ -91,6 +91,93 @@ afterEach(() => {
 });
 
 describe("ClassManagerPanel", () => {
+  it.each([
+    ["Run reassign", "Reassign class", false],
+    ["Run Reassign and Delete", "Reassign and delete class", false],
+    ["Run reassign", "Reassign class", true],
+    ["Run Reassign and Delete", "Reassign and delete class", true],
+  ] as const)(
+    "consumes both reviewed plans after %s (late opposite preview %s %s)",
+    async (runLabel, dialogTitle, latePreview) => {
+      const otherPreview =
+        runLabel === "Run reassign"
+          ? "Preview Reassign and Delete"
+          : "Preview reassign";
+      const otherEndpoint =
+        runLabel === "Run reassign" ? "reassign-delete" : "reassign";
+      let releasePreview: (() => void) | undefined;
+      let holdPreview = false;
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (
+          init?.method !== "POST" ||
+          !url.includes("/classes/class-1/reassign")
+        ) {
+          throw new Error(`Unexpected operation ${init?.method} ${url}`);
+        }
+        const deleteSource = url.includes("reassign-delete");
+        const preview = url.endsWith("/preview");
+        if (holdPreview && url.endsWith(`/${otherEndpoint}/preview`)) {
+          await new Promise<void>((resolve) => {
+            releasePreview = resolve;
+          });
+        }
+        return jsonResponse({
+          id: deleteSource ? "delete-plan" : "reassign-plan",
+          project_id: project.id,
+          source_class_id: "class-1",
+          target_class_id: "class-2",
+          source_class: project.label_classes[0],
+          target_class: project.label_classes[1],
+          operation_type: deleteSource ? "reassign_delete" : "reassign",
+          status: preview ? "previewed" : "completed",
+          preview_checksum: (deleteSource ? "d" : "a").repeat(64),
+          plan: {
+            mutable_records: [],
+            protected_records: [],
+            blocking_records: [],
+            compatibility_impacts: [],
+            blockers: [],
+          },
+          failures: [],
+          warnings: [],
+        });
+      });
+      renderPanel();
+      const row = within(sourceClassRow());
+      const button = (name: string) => row.getByRole("button", { name });
+      await userEvent.click(button("Preview reassign"));
+      await userEvent.click(button("Preview Reassign and Delete"));
+      await waitFor(() => {
+        expect(button("Run reassign")).toBeEnabled();
+        expect(button("Run Reassign and Delete")).toBeEnabled();
+      });
+      if (latePreview) {
+        holdPreview = true;
+        await userEvent.click(button(otherPreview));
+        await waitFor(() => expect(releasePreview).toBeDefined());
+      }
+      await userEvent.click(button(runLabel));
+      const dialog = await screen.findByRole("alertdialog", {
+        name: dialogTitle,
+      });
+      await userEvent.click(
+        within(dialog).getByRole("button", { name: runLabel }),
+      );
+      expect(await row.findByText("Latest operation")).toBeVisible();
+      if (latePreview) {
+        holdPreview = false;
+        releasePreview?.();
+        await waitFor(() => expect(button(otherPreview)).toBeEnabled());
+      }
+      expect(button("Run reassign")).toBeDisabled();
+      expect(button("Run Reassign and Delete")).toBeDisabled();
+      await userEvent.click(button("Preview reassign"));
+      await waitFor(() => expect(button("Run reassign")).toBeEnabled());
+      expect(row.getByText("Latest operation")).toBeVisible();
+    },
+  );
+
   it("previews and executes a reassignment with the reviewed checksum", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const fetchMock = vi

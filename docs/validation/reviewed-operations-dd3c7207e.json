@@ -1,0 +1,65 @@
+{
+  "merged_source": "dd3c7207e1bf7f7938fc9e9ef98fe29e5f53654e",
+  "root_source": "542254b8aa0d896fb630282d70f263a74a65b99f",
+  "classes": {
+    "prior_version": "1.6.0",
+    "donor_pr": 77,
+    "donor": "ab7f33baa123bbe8faeb827e0a4dd92158ad01e9",
+    "fix": "2f3f1b3eded4fd125357d74788d272af2cd43fa9",
+    "before": "Both operation directions retained the other executable preview. In the real Classes workflow, the stale delete preview panel persisted after reassignment.",
+    "after": "Successful execution consumed both approvals. A delayed or subsequent preview preserved the completed receipt and a fresh action required another preview.",
+    "green_component_tests": 10,
+    "public_evidence": {
+      "file": "1.8/checkpoints/dd3c7207e/source/classes/class-lifecycle-evidence.json",
+      "sha256": "938e234b8b64bc42ce7fc938896d7dbadb8dcd87495b7fd9a81208a210637a51"
+    }
+  },
+  "pose": {
+    "source": "61e077128b8020790eb613400b07a5f385195817",
+    "donor_ci_pr": 79,
+    "donor_ci_job": 136658115190,
+    "before": "During a transient offline pause, switching identity runs caused the queued cancellation to cancel the newly selected run when connectivity returned.",
+    "after": "The clicked job and its persisted run became cancelled. The other real run stayed queued and reopening preserved both statuses.",
+    "qualification": "Windows source Chromium with the actual generated video and API. Safe mode held the two jobs in the queue while testing selection.",
+    "green_component_tests": 8,
+    "evidence": {
+      "file": "1.8/checkpoints/dd3c7207e/source/pose/pose-identity-cancel-red-green.json",
+      "sha256": "0c72015cc6d200ab0f42e970e9942cbc79fd9d8d7d2563820a9140f44112724f"
+    }
+  },
+  "area": {
+    "donor_pr": 79,
+    "donor": "3b5ee82da32f2e0ee67d685ca5eb11ab7ae9a21d",
+    "unchanged_product": "542254b8aa0d896fb630282d70f263a74a65b99f",
+    "passed": 6,
+    "scope": "Native square area in the XY, YZ and XZ planes under translated and reflected frames. Standalone measurement and saved replay were checked.",
+    "evidence": {
+      "file": "1.8/checkpoints/dd3c7207e/source/candidate-donor-qualification.json",
+      "sha256": "f16ed9ee467c342398ecd7404b7ef377bcdaf6c446b7ce634c282fc9378d37b6"
+    }
+  },
+  "integrated_checks": {
+    "ordinary_help_qc_classes": {
+      "startTime": "2026-11-21T00:51:52.537Z",
+      "duration": 29594.749,
+      "expected": 3,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "real_browser": {
+      "file": "1.8/checkpoints/dd3c7207e/source/classes/integrated-help-qc-classes.json",
+      "sha256": "dd797aa609373d8fb294201ba19dd8ceed91d55e35fad1f49742fabf4344540e"
+    },
+    "frontend_unit": {
+      "passed": 930,
+      "failed": 0,
+      "log": {
+        "file": "1.8/checkpoints/dd3c7207e/source/dd3-units.log",
+        "sha256": "f1aaa63ea386debec65419aff229a3110caf798ce7494e3eecf711d632092520"
+      }
+    },
+    "typescript": true,
+    "prettier": true
+  }
+}

@@ -1,4 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import {
   fireEvent,
   render,
@@ -430,5 +434,43 @@ describe("PoseIdentityReviewPanel", () => {
     await waitFor(() =>
       expect(identityApi.cancelPoseIdentityJob).toHaveBeenCalledWith("job-1"),
     );
+  });
+
+  it("keeps the clicked queued job when cancellation waits and the selected run changes", async () => {
+    vi.mocked(identityApi.listPoseIdentityRuns).mockResolvedValue([
+      { ...run, status: "queued", completed_at: null },
+      { ...run, id: "other-run", source_job_id: "other-job" },
+    ]);
+    const client = renderPanel();
+    const cancel = await screen.findByRole("button", {
+      name: "Cancel association",
+    });
+    const originallyOnline = onlineManager.isOnline();
+    try {
+      onlineManager.setOnline(false);
+      fireEvent.click(cancel);
+      await waitFor(() =>
+        expect(client.getMutationCache().getAll()[0]?.state.isPaused).toBe(
+          true,
+        ),
+      );
+      expect(identityApi.cancelPoseIdentityJob).not.toHaveBeenCalled();
+
+      fireEvent.change(screen.getByRole("combobox", { name: "Identity run" }), {
+        target: { value: "other-run" },
+      });
+      expect(
+        screen.queryByRole("button", { name: "Cancel association" }),
+      ).not.toBeInTheDocument();
+
+      onlineManager.setOnline(true);
+      await waitFor(() =>
+        expect(
+          identityApi.cancelPoseIdentityJob,
+        ).toHaveBeenCalledExactlyOnceWith("job-1"),
+      );
+    } finally {
+      onlineManager.setOnline(originallyOnline);
+    }
   });
 });

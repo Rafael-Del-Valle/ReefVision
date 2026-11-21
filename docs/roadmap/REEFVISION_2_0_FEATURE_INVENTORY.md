@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T00:20:35Z`
+Updated: `2026-11-21T00:54:14Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -765,6 +765,7 @@ Evidence:
 - `source`: The project API regression imports the tiny closed OBJ, verifies its structural receipt and original, rejects a still-unrepresentable unit-scale measurement and returns the independently calculated positive value at scale 1,000,000. Forty-nine focused backend cases passed. — `https://github.com/Rafael-Del-Valle/ReefVision/blob/1d3942662ba2c4a75c30c59acf37851be51ce3e1/apps/api/reefvision/tests/test_spatial_asset_parse_jobs_v14.py` (`rv14-geometry-import-and-calibration-1d3942662`)
 - `source`: The signed volume matched 448 independently evaluated tetrahedral permutations and a bounded 3,996-face bipyramid. The source fixture covers four vertex origins, both windings, exact planar zero, calibrated recovery of a positive source underflow and a true overflow. — `docs/validation/mesh-volume-8821ed9a1.json` (`rv14-volume-winding-rational-8821`)
 - `source`: The four finite-volume cancellation examples from hourly #79 at e9e8afbd4 passed on the existing exact-sum candidate. All 79 standalone, arithmetic, topology and saved-workflow controls passed on source 93c5faba0. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv14-geometric-measurements-cancelled-shell-volume-bdcec01e3`)
+- `source`: The three additional translated or reflected XY, YZ and XZ frame cases from hourly #79 passed unchanged on the 542254b8a candidate, including standalone and saved area measurements. Six related checks passed. — `docs/validation/reviewed-operations-dd3c7207e.json` (`rv14-geometric-measurements-axis-frames-dd3c7207e`)
 - `browser`: Workflow Builder exposes a project-owned original picker, scale, calibration evidence, uncertainty, specimen/observation/frame context, and an explicit warning that geometric routes are not anatomical branch lengths. — `apps/web/src/features/workflow-graphs/ScientificNodeControls.test.tsx` (`rv14-geometric-guided-ui`)
 - `browser`: The ordinary source desktop imported all three generated OBJs, exercised four calibrated previews, reopened both saved graphs, repeated each and downloaded the Exchange package. All three originals and six typed artifacts verified against the source-browser receipt with SHA-256 c46681c4df9075abb7bbdb17c228b05107fce72174eb236c16255428542ef388. — `docs/REEFVISION_1.5.0_REPORT.md` (`rv14-geometry-project-replay-1d3942662`)
 - `browser`: From the project's 3D assets, the researcher imported the same OBJ, measured both windings, supplied scale uncertainty, reopened the graph, ran it twice and downloaded the project. Both measurements now match the exact volume, the planar control withholds volume, and the exports preserve the three originals and six saved artifacts. — `docs/validation/mesh-volume-8821ed9a1.json` (`rv14-volume-winding-guided-8821`)
@@ -1131,6 +1132,7 @@ Evidence:
 - `source`: Thirty-five backend checks cover class use, archived classes, reassignment and protected historical records. — `docs/validation/research-workflows-1-6.json` (`rv16-class-safe-writes`)
 - `browser`: Classes retained the frozen manifest and exported YOLO mapping after a reviewed reassignment and reopen. Polygon and image-level references prevented deletion. — `docs/validation/research-workflows-1-6.json` (`rv16-class-frozen-export`)
 - `browser`: At reviewed 1.6 source 044e8e2de, editing the destination class withdrew a previously enabled reassignment. The Classes workspace required another preview before confirmation and retained the source-pixel boxes, unrelated masks and labels, original and frozen export. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv16-class-management-class-preview-revision-bdcec01e3`)
+- `browser`: The integrated Classes journey withdrew the other review after reassignment, preserved the completed receipt during a new preview and retained source pixels and frozen exports. Two corresponding unit cases failed on the predecessor, and all ten corrected panel cases passed. — `docs/validation/reviewed-operations-dd3c7207e.json` (`rv16-class-management-single-use-dd3c7207e`)
 - `windows_installed`: On the original 1.6 MSI under an ordinary Windows account, the class lifecycle test passed. The researcher reviewed the reassignment, reopened the project and verified the earlier frozen export. — `https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44768324452/job/136420579045` (`rv16-class-management-original-msi-used-classes`)
 - `windows_installed`: The corrected original MSI passed the standard-user class lifecycle, including explicit reassignment after annotations exist and reopening the frozen export. — `docs/validation/installed-workflows-a580042e8.json` (`rv16-class-management-original-a580042e8`)
 - `physical_hardware`: In native Classes, confirmed reassignment advanced the live annotation from revision 2 to 3. Mask and image-classification references remained protected. The frozen dataset manifest and YOLO mapping survived reopening. — `docs/validation/windows-workflows-83b0a98b2.json` (`rv16-class-management-physical-83b0`)
@@ -1336,7 +1338,9 @@ Acceptance checks:
 Evidence:
 
 - `source`: The source checks exercised immutable audio originals, half-open sample intervals, linked recording clocks, independent decisions and report checksums. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-bioacoustics-a82cc730e-source`)
+- `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-bioacoustics-managed-restore-542254b8a`)
 - `browser`: A stereo PCM recording was played and a source sample range was reviewed and explicitly time-aligned. Two saved graph runs reproduced the same report. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-bioacoustics-a82cc730e-browser`)
+- `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-bioacoustics-frozen-desktop-542254b8a`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1356,7 +1360,10 @@ Acceptance checks:
 Evidence:
 
 - `source`: The frozen roster preserves missing groups and pinning for both registered models, with original or checked adjusted input per eligible image. Numerical tests exercise group-weighted effects, Welch uncertainty, excluded or overlapping units and withheld intervals. A partial source page still finds an eligible older comparison. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv18-domain-shift-group-scores-bdcec01e3`)
+- `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-domain-shift-managed-restore-542254b8a`)
+- `source`: Two real local instance segmenters evaluated six held-out stills in twelve adjusted jobs. Two weight-free archive hops retained the frozen mask and detector reports, CSV and replay hashes. A separate provider-boundary check rejected an omitted mandatory raster before project creation. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-domain-shift-real-mask-exchange-542254b8a`)
 - `browser`: The five-workflow Windows source trial compared two actual locally trained CPU checkpoints across two generated held-out acquisition groups, kept the third group missing, ran six adjusted evaluations on three original images, withheld intervals at one independent unit per domain, exported JSON and CSV and replayed the report twice. — `docs/validation/multimodal-research-bdcec01e3.json` (`rv18-domain-shift-adjusted-evaluation-bdcec01e3`)
+- `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-domain-shift-frozen-desktop-542254b8a`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1376,7 +1383,9 @@ Acceptance checks:
 Evidence:
 
 - `source`: Two successive archives reproduced the analysis from the original band pixels. Import rejected a fabricated index and a changed workflow report before project creation. Calibration, alignment or usable samples can withhold an estimate. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-multispectral-a82cc730e-source`)
+- `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-multispectral-managed-restore-542254b8a`)
 - `browser`: Two aligned generated bands produced the expected composite pixel and a 0.5 normalized reflectance index on three of eight reference pixels. JSON, float TIFF and two saved runs agreed. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-multispectral-a82cc730e-browser`)
+- `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-multispectral-frozen-desktop-542254b8a`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1396,7 +1405,9 @@ Acceptance checks:
 Evidence:
 
 - `source`: Two successive project imports retained the immutable visit and reviewer evidence. The public importer refused a rehashed inconsistent estimate. Concurrent reviews and repeated-original withholding have dedicated regression checks. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-taxonomy-detectability-a82cc730e-source`)
+- `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-taxonomy-detectability-managed-restore-542254b8a`)
 - `browser`: Separate fixture role revisions and five generated tanks yielded ten eligible visits, 300 seconds of effort and 50% detection. The downloaded assessment reopened and two saved runs agreed. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-taxonomy-detectability-a82cc730e-browser`)
+- `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-taxonomy-detectability-frozen-desktop-542254b8a`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1416,7 +1427,9 @@ Acceptance checks:
 Evidence:
 
 - `source`: The saved graph ran against the original image and registered model on two restored project copies. All copies reproduced the rendition bytes and original receipt. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-underwater-correction-a82cc730e-source`)
+- `source`: The public backup restored six generated projects and 212 checked files, including original media and model weights. All ten saved results across the five research workflows reopened with their exact identities and digests. The prior 1.7 packaged reader refused a copied newer database without changing its research files. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-underwater-correction-managed-restore-542254b8a`)
 - `browser`: The editor reopened the original pixel grid in box, polygon and raster annotation. Its explicitly selected CPU detector emitted pending proposals on the saved rendition. Two saved workflow runs reproduced the adjustment receipt. — `docs/validation/research-workflows-a82cc730e.json` (`rv18-underwater-correction-a82cc730e-browser`)
+- `browser`: On the frozen Windows source, two real CPU detector training and registration journeys and all five research workflows passed with zero skips or retries. Each research workflow produced two separately persisted runs with matching outputs. — `docs/validation/multimodal-research-542254b8a.json` (`rv18-underwater-correction-frozen-desktop-542254b8a`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1496,7 +1509,7 @@ Acceptance checks:
 Evidence:
 
 - `source`: none recorded
-- `browser`: none recorded
+- `browser`: In the inherited ReefPose identity workspace, reopening two real queued runs and changing selection during a network interruption cancelled the originally requested job and retained the other run. The same workflow on 542254b8a cancelled the wrong persisted run. Both used generated video and a real local queue. — `docs/validation/reviewed-operations-dd3c7207e.json` (`rv19-performance-resilience-identity-job-reconnect-dd3c7207e`)
 - `windows_installed`: none recorded
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
