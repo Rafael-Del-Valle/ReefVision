@@ -8,7 +8,7 @@ import shutil
 import time
 import zipfile
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 import torch
@@ -53,6 +53,7 @@ from reefvision.schemas.models import RegisterModelFromRunRequest
 from reefvision.services.jobs import JobService
 from reefvision.services.pose_training_exports import PoseTrainingExportService
 from reefvision.services.semantic_models import SemanticModelService
+from reefvision.services.workflow_execution import WorkflowExecutionService
 from reefvision.services.workflow_pose_training import (
     create_pose_workflow_training_result,
 )
@@ -1307,25 +1308,15 @@ def test_completed_native_reefpose_checkpoint_registers_and_runs_inference(
     ]
 
 
-def test_saved_native_reefpose_workflow_executes_and_replays(
-    client: TestClient,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        PoseTrainingExportService,
-        "_extract_exact_frames",
-        staticmethod(_synthetic_exact_frames),
-    )
-    project, dataset = _frozen_dataset(client, monkeypatch)
-    app = cast(FastAPI, client.app)
-    graph: dict[str, object] = {
+def _native_pose_workflow_graph(dataset_id: str) -> dict[str, object]:
+    return {
         "graph_id": "phase2a-native-reefpose",
         "name": "Phase 2A native ReefPose",
         "nodes": [
             {
                 "node_id": "dataset",
                 "node_type": "pose_training_dataset",
-                "parameters": {"dataset_id": dataset["id"]},
+                "parameters": {"dataset_id": dataset_id},
             },
             {
                 "node_id": "train",
@@ -1370,8 +1361,22 @@ def test_saved_native_reefpose_workflow_executes_and_replays(
         ],
     }
 
+
+def test_saved_native_reefpose_workflow_executes_and_replays(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        PoseTrainingExportService,
+        "_extract_exact_frames",
+        staticmethod(_synthetic_exact_frames),
+    )
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
     url = f"/api/v1/projects/{project['id']}"
-    saved = client.post(url + "/workflow-graphs", json={"graph": graph})
+    saved = client.post(
+        url + "/workflow-graphs", json={"graph": _native_pose_workflow_graph(str(dataset["id"]))}
+    )
     assert saved.status_code == 201, saved.text
     models = {}
     for _ in range(2):
@@ -1402,6 +1407,108 @@ def test_saved_native_reefpose_workflow_executes_and_replays(
                 == dataset["pose_schema_content_hash"]
             )
     assert len(models) == len(set(models.values())) == 2
+
+
+@pytest.mark.parametrize(
+    "fault", ["missing", "provider", "artifact", "metrics", "intact", "historical"]
+)
+def test_saved_pose_retry_requires_its_current_experiment_lineage(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    fault: str,
+) -> None:
+    monkeypatch.setattr(
+        PoseTrainingExportService,
+        "_extract_exact_frames",
+        staticmethod(_synthetic_exact_frames),
+    )
+    project, dataset = _frozen_dataset(client, monkeypatch)
+    app = cast(FastAPI, client.app)
+    url = f"/api/v1/projects/{project['id']}"
+    saved = client.post(
+        url + "/workflow-graphs", json={"graph": _native_pose_workflow_graph(str(dataset["id"]))}
+    )
+    assert saved.status_code == 201, saved.text
+    queued = client.post(url + "/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+    assert queued.status_code == 202, queued.text
+    run_id, job_id = queued.json()["id"], queued.json()["job_id"]
+
+    execute = WorkflowExecutionService.execute_node
+
+    def interrupt_after_completed_child(
+        service: WorkflowExecutionService, **kwargs: Any
+    ) -> list[dict[str, Any]]:
+        outputs = execute(service, **kwargs)
+        if kwargs["step"].node_type == "pose_model_training":
+            raise OSError("Synthetic interruption after durable training completion")
+        return outputs
+
+    factory = app.state.session_factory
+    with monkeypatch.context() as interrupted:
+        interrupted.setattr(
+            WorkflowExecutionService, "execute_node", interrupt_after_completed_child
+        )
+        assert not process_workflow_run_job(app.state.settings, factory, job_id)
+    before = client.get(f"/api/v1/workflow-runs/{run_id}").json()
+    assert "interruption after durable training completion" in before["run"]["error_message"]
+    assert "training_result" not in {row["data_type"] for row in before["artifacts"]}
+
+    with factory() as session:
+        child = session.scalar(select(TrainingRun).where(TrainingRun.project_id == project["id"]))
+        assert child is not None and child.status == "completed" and child.result_checkpoint_path
+        child_id = child.id
+        child_job_id = child.job_id
+        checkpoint = resolve_managed_project_path(app.state.settings, child.result_checkpoint_path)
+        sha = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+        experiment = session.scalar(
+            select(ExperimentRecord).where(ExperimentRecord.training_run_id == child_id)
+        )
+        assert experiment is not None
+        experiment_id = experiment.id
+        if fault in {"missing", "historical"}:
+            session.delete(experiment)
+            if fault == "historical":
+                snapshot = dict(child.draft_snapshot_json)
+                snapshot.pop("schema_version")
+                snapshot.pop("pose_training_dataset_manifest_sha256")
+                child.draft_snapshot_json = snapshot
+        elif fault == "provider":
+            experiment.provider_id = "unrelated-provider"
+        elif fault == "artifact":
+            experiment.artifact_manifest_json = {
+                **experiment.artifact_manifest_json,
+                "best_checkpoint_sha256": "0" * 64,
+            }
+        elif fault == "metrics":
+            experiment.summary_metrics_json = {**experiment.summary_metrics_json, "train_loss": -1}
+        session.commit()
+
+    retry = client.post(f"/api/v1/jobs/{job_id}/retry")
+    assert retry.status_code == 200, retry.text
+    processed = process_workflow_run_job(app.state.settings, factory, job_id)
+    detail = client.get(f"/api/v1/workflow-runs/{run_id}").json()
+    training = [
+        row["payload_json"] for row in detail["artifacts"] if row["data_type"] == "training_result"
+    ]
+    with factory() as session:
+        assert session.scalars(select(TrainingRun.id)).all() == [child_id]
+        child_job = session.get(Job, child_job_id)
+        assert child_job is not None and child_job.status == "succeeded"
+    assert hashlib.sha256(checkpoint.read_bytes()).hexdigest() == sha
+    if fault in {"intact", "historical"}:
+        assert processed and detail["run"]["status"] == "succeeded", detail["run"]
+        assert len(training) == 1
+        assert training[0]["experiment_id"] == (experiment_id if fault == "intact" else None)
+        assert training[0]["result_checkpoint_sha256"] == sha
+    else:
+        expected = (
+            "experiment registry record is missing"
+            if fault == "missing"
+            else "experiment provenance changed"
+        )
+        assert not processed, detail["run"]
+        assert detail["run"]["status"] == "failed" and expected in detail["run"]["error_message"]
+        assert training == []
 
 
 @pytest.mark.integration
