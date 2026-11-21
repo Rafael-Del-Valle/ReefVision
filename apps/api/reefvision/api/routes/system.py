@@ -1,5 +1,8 @@
 """System-information and migration-status endpoints."""
 
+import platform
+import sys
+
 from fastapi import APIRouter, Request
 from sqlalchemy.engine import Engine
 
@@ -16,6 +19,7 @@ from reefvision.schemas.system import (
     SystemMigrationStatusResponse,
     SystemVersionResponse,
 )
+from reefvision.schemas.system_machine import SystemMachineCompatibilityResponse
 from reefvision.services.system import SystemService
 
 router = APIRouter(tags=["system"])
@@ -35,6 +39,20 @@ def get_system_version(request: Request) -> SystemVersionResponse:
 @router.get("/system/compatibility", response_model=SystemCompatibilityResponse)
 def get_system_compatibility(request: Request) -> SystemCompatibilityResponse:
     return service(request).compatibility()
+
+
+@router.get(
+    "/system/compatibility/machine",
+    response_model=SystemMachineCompatibilityResponse,
+)
+def get_system_machine_compatibility() -> SystemMachineCompatibilityResponse:
+    return SystemMachineCompatibilityResponse(
+        operating_system=platform.system(),
+        os_release=platform.release(),
+        os_version=platform.version(),
+        architecture=platform.machine(),
+        packaged_backend=bool(getattr(sys, "frozen", False)),
+    )
 
 
 @router.get("/system/logs/location", response_model=SystemLogsLocationResponse)
