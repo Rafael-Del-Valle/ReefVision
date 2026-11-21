@@ -32,6 +32,7 @@ from reefvision.jobs.diagnostics import process_diagnostics_job
 from reefvision.jobs.export import process_export_job
 from reefvision.jobs.inference import process_inference_job
 from reefvision.jobs.model_install import process_model_install_job
+from reefvision.jobs.pose_appearance import process_appearance
 from reefvision.jobs.pose_biological_measurement import process_pose_biological_measurement_job
 from reefvision.jobs.pose_evaluation import process_pose_evaluation_job
 from reefvision.jobs.pose_identity_tracking import process_pose_identity_tracking_job
@@ -772,6 +773,8 @@ def process_next_thumbnail_job(settings: Settings, factory: sessionmaker[Session
             from reefvision.services.domain_shift_v18 import process_domain_shift
 
             return process_domain_shift(settings, factory, job_id)
+        if job_type == "pose_appearance":
+            return process_appearance(settings, factory, job_id)
         if job_type == "pose_identity_tracking":
             return process_pose_identity_tracking_job(settings, factory, job_id)
         if job_type == "temporal_reefpose":

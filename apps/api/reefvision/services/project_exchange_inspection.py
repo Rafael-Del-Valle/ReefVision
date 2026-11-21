@@ -34,13 +34,14 @@ from reefvision.services.project_exchange_field_v15 import (
 )
 from reefvision.services.project_exchange_monitoring_v17 import validate_monitoring_exchange
 from reefvision.services.project_exchange_qc_v16 import QC_FORMATS, validate_qc_exchange
-from reefvision.services.project_exchange_research_v18 import FORMAT as MULTIMODAL_FORMAT
 from reefvision.services.project_exchange_research_v18 import (
+    RESEARCH_FORMATS,
     validate_research_format,
     validate_research_images,
 )
 from reefvision.services.project_exchange_schedules import validate_schedule_exchange
 from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, validate_v15_exchange
+from reefvision.services.project_exchange_v20 import validate_appearance_exchange
 from reefvision.services.static_comparison import STATIC_COMPARISON_JOB
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -340,6 +341,7 @@ def inspect_project_exchange(
                     )
                 validate_exchange_records(project["id"], section_rows, models)
                 validate_integrated_records(project["id"], section_rows, models)
+                validate_appearance_exchange(version, project["id"], section_rows)
                 validate_origin(manifest.get("origin"))
 
             if not errors:
@@ -371,13 +373,13 @@ def inspect_project_exchange(
                         item.get("kind") == FIELD_MEDIA_KIND for item in media
                     ):
                         raise ValidationError("Field originals require the 1.5 exchange format")
-                    if version != MULTIMODAL_FORMAT and (
+                    if version not in RESEARCH_FORMATS and (
                         AUDIO_ORIGIN in manifest
                         or any(item.get("kind") == AUDIO_MEDIA_KIND for item in media)
                     ):
                         raise ValidationError("Bioacoustic originals require Project Exchange 1.8")
                     media_gaps = _integrated_media_gaps(section_rows, ordinary_media)
-                    if version == MULTIMODAL_FORMAT:
+                    if version in RESEARCH_FORMATS:
                         validate_research_images(
                             manifest["project"]["id"], section_rows, manifest, archive
                         )
@@ -508,7 +510,7 @@ def inspect_project_exchange(
                     (manifest.get("origin") or {}).get("id_map", {}),
                     read_raster=read_raster,
                 )
-                if version == MULTIMODAL_FORMAT:
+                if version in RESEARCH_FORMATS:
                     from reefvision.services.project_exchange_domain_shift_v18 import (
                         validate_domain_shift_exchange,
                     )

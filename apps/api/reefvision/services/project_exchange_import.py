@@ -142,8 +142,8 @@ from reefvision.services.project_exchange_qc_v16 import (
     validate_qc_exchange,
 )
 from reefvision.services.project_exchange_reports import remap_report_archive_job
-from reefvision.services.project_exchange_research_v18 import FORMAT as MULTIMODAL_FORMAT
 from reefvision.services.project_exchange_research_v18 import (
+    RESEARCH_FORMATS,
     preserve_research_snapshot,
     validate_research_format,
     validate_research_images,
@@ -502,7 +502,7 @@ def import_project_exchange(
                 section_rows[section_name] = _read_jsonl(archive, member)
 
         field_format = inspection.format_version in FIELD_EXCHANGE_FORMATS
-        research_format = inspection.format_version == MULTIMODAL_FORMAT
+        research_format = inspection.format_version in RESEARCH_FORMATS
         integrated = integrated_models() if inspection.format_version in INTEGRATED_FORMATS else {}
         models = {**SECTION_MODELS, **integrated}
         order = [*SECTION_ORDER, *integrated]

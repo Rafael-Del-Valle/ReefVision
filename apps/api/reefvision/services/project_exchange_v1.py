@@ -120,6 +120,9 @@ from reefvision.services.project_exchange_schedules import SECTIONS as SCHEDULE_
 from reefvision.services.project_exchange_schedules import has_schedules
 from reefvision.services.project_exchange_v15 import FORMAT_VERSION as RESEARCH_FORMAT_VERSION
 from reefvision.services.project_exchange_v15 import INTEGRATED_FORMATS, has_v15_records
+from reefvision.services.project_exchange_v20 import FORMAT as PLATFORM_FORMAT
+from reefvision.services.project_exchange_v20 import SECTIONS as PLATFORM_SECTIONS
+from reefvision.services.project_exchange_v20 import has_v20_records
 from reefvision.services.project_exchange_workflows import has_portable_workflow_inputs
 from reefvision.services.reproducibility_lineage_v15 import project_proofs
 from reefvision.services.spatial_source_assets_v14 import SpatialSourceAssetService
@@ -189,6 +192,8 @@ class ProjectExchangeV1Service(ProjectExchangeService):
     """Project exchange service with executable-workflow provenance included."""
 
     def _format_version(self, project_id: str) -> str:
+        if has_v20_records(self.session, project_id):
+            return PLATFORM_FORMAT
         if has_research_records(self.session, project_id):
             return MULTIMODAL_FORMAT
         if has_monitoring_records(self.session, project_id):
@@ -611,6 +616,9 @@ class ProjectExchangeV1Service(ProjectExchangeService):
         )
 
         integrated = integrated_records(self.session, project.id)
+        if not any(integrated.get(name) for name in PLATFORM_SECTIONS):
+            for name in PLATFORM_SECTIONS:
+                integrated.pop(name, None)
         if not integrated.get(AUDIO_ASSETS):
             for name in AUDIO_SECTION_MODELS:
                 integrated.pop(name, None)
