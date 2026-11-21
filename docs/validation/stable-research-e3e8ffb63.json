@@ -337,5 +337,95 @@
       "file": "1.8/checkpoints/e3e8ffb63/source/predecessors/9cde-original-registered-clean-read.json",
       "sha256": "13c6bda0110caef0f5a0458086046c8f5da383d715f290a04c4249477da772ab"
     }
+  },
+  "local_production": {
+    "source": "e3e8ffb6395c9f2675ffc10397c2401388e63ee8",
+    "origin": "Independent local production build, admin extraction and an ordinary-account native WebView2 session.",
+    "msi_sha256": "faad33eefeef9e263253d6052b6c59568ace9dbf57ea70f2acaf0730e817f9df",
+    "external_cabs": 5,
+    "msi_cab_bytes": 2980018209,
+    "checksum_manifest": {
+      "file": "1.8/checkpoints/e3e8ffb63/local-production/installer/SHA256SUMS.txt",
+      "sha256": "6c866182fa8eece998bc34286189c9dc048f7d7a0545a1e24472aae8bf24d302"
+    },
+    "verified_matching_members": {
+      "file": "1.8/checkpoints/e3e8ffb63/local-production/independent-local-verification.json",
+      "sha256": "3716853a97ac8ed3d9b513cbe77512ec97e8e0fc8a60faac8b767ab84280a003"
+    },
+    "payload_audit": {
+      "distribution_metadata": 59,
+      "entry_point_files": 14,
+      "model_manifest_assets": 0,
+      "model_manifest_provider_assets": 0,
+      "msi_cab_files": 19205,
+      "pyinstaller_outer_entries": 14,
+      "pyinstaller_pyz_archives": 1,
+      "pyinstaller_pyz_entries": 12424,
+      "zip_containers": 1,
+      "zip_members": 155
+    },
+    "unsigned_and_policy": {
+      "state": 0,
+      "edition": "Core",
+      "build": "26300",
+      "requirement": "An enforcing disposable Windows 11 device is still needed.",
+      "signature_observation": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/smart-app-control.json",
+        "sha256": "ab1663806477c21c0264043b8aeed4005ab7f59d17a6dfe854f74c3a88a8cf46"
+      }
+    },
+    "native_workspaces": 7,
+    "cpu_training_controls": 2,
+    "native_research_journeys": 5,
+    "compact_source_box": {
+      "x_min": 20.00333835767664,
+      "y_min": 15.001663871433424,
+      "x_max": 55.004633364470116,
+      "y_max": 40.00259001358695
+    },
+    "fixed_canvas_top_css_px": [
+      335.015625,
+      335.015625
+    ],
+    "real_source_switch_and_mask_proposals": 2,
+    "evidence": {
+      "first-use-geometry": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/first-use-geometry/evidence-index.json",
+        "sha256": "f789cb0ea1c428d4a15b74f3f133b4c43a796b9a9fe87d3c2859945f24e68b57"
+      },
+      "native-workspaces": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/native-workspaces/evidence-index.json",
+        "sha256": "0e5dfb98f29ab565178dd2a26e73a89eaf6c65be2d4d3a522b90c87de0fce732"
+      },
+      "native-segmentation": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/native-segmentation/evidence-index.json",
+        "sha256": "0f44bf0d6dd02c5fa9a1083955b89b58d91686ad70f9081c4c36e43e0a4174cb"
+      },
+      "native-research-tools": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/native-research-tools/evidence-index.json",
+        "sha256": "d201c925c4139dea3038bcf5beceb21e0241fef87452483532c3d468f9bd6bd9"
+      }
+    },
+    "previous_1_8_reopened": {
+      "projects": 6,
+      "original_stills": 37,
+      "nonempty_tables": 40,
+      "stable_saved_results": 10,
+      "prior_backup_members": 229,
+      "prior_backup_bytes": 60624990,
+      "write_reopened": true,
+      "receipt": {
+        "file": "1.8/checkpoints/e3e8ffb63/local-production/evidence/same-version-profile/same-version-profile-reopen.json",
+        "sha256": "931f210255e11169005ed5d041e8b8fbd0b24836c53c7e0d3f1f0f0e8f42549b"
+      }
+    }
+  },
+  "earlier_qualified_registered_suite": {
+    "source": "542254b8aa0d896fb630282d70f263a74a65b99f",
+    "description": "All nine historical upgrade and lineage roles on the original MSI passed. Two corrected driver checks then completed the clean role's 30 ordinary journeys and both scheduler phases on the original executable.",
+    "receipt": {
+      "file": "1.8/checkpoints/542254b8a/official/combined-installed-qualification.json",
+      "sha256": "faa9b84dc0c00792ae615c1e8e54c6b4eab1497b76a2a42f9a1f34db17fe6b27"
+    }
   }
 }

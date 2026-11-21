@@ -2,7 +2,7 @@
 
 > Generated from `REEFVISION_2_0_FEATURE_INVENTORY.json`. Do not edit by hand.
 
-Updated: `2026-11-21T02:19:47Z`
+Updated: `2026-11-21T02:24:19Z`
 Candidate target: `2.0`
 
 ## Status summary
@@ -1355,6 +1355,7 @@ Evidence:
 - `browser`: The corrected locally manufactured 1.8 MSI's ordinary, administratively extracted WebView2 completed two real CPU training controls, all five research journeys and their saved replay checks. The verified Windows profile and all owned listeners closed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-bioacoustics-corrected-local-package-9cde9e6e7`)
 - `browser`: The hosted 1.8 MSI's administratively extracted WebView2 completed all five research workflows and two real CPU training controls on generated fixtures. Corresponding reports and saved runs were independently rehashed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-bioacoustics-official-extracted-9cde9e6e7`)
 - `browser`: On the corrected source, two real CPU training controls and all five research journeys passed with generated data, retained exports and two saved reproductions per workflow. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-bioacoustics-stable-e3e8ffb63`)
+- `browser`: The ordinary-account WebView2 of the corrected local 1.8 MSI completed two CPU training controls and all five research journeys. A second marked profile reopened all ten earlier saved research outputs and verified its 229-file backup. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-bioacoustics-local-webview2-e3e8ffb63`)
 - `windows_installed`: The original 542254b8a MSI completed all five generated research workflows in a registered standard-user Windows desktop, with retained report and saved replay results. The pinned test-driver retest ran 30 journeys plus two scheduler phases. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-bioacoustics-registered-standard-user-542254b8a`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1388,6 +1389,7 @@ Evidence:
 - `browser`: The hosted 1.8 MSI's administratively extracted WebView2 completed all five research workflows and two real CPU training controls on generated fixtures. Corresponding reports and saved runs were independently rehashed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-domain-shift-official-extracted-9cde9e6e7`)
 - `browser`: On the corrected source, two real CPU training controls and all five research journeys passed with generated data, retained exports and two saved reproductions per workflow. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-domain-shift-stable-e3e8ffb63`)
 - `browser`: Two independent normal segmenter clicks on generated held-out stills preserved the frozen reference and existing reviewed masks; the new model outputs stayed pending on their selected originals. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-domain-shift-normal-segmentation-e3e8ffb63`)
+- `browser`: The ordinary-account WebView2 of the corrected local 1.8 MSI completed two CPU training controls and all five research journeys. A second marked profile reopened all ten earlier saved research outputs and verified its 229-file backup. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-domain-shift-local-webview2-e3e8ffb63`)
 - `windows_installed`: The original 542254b8a MSI completed all five generated research workflows in a registered standard-user Windows desktop, with retained report and saved replay results. The pinned test-driver retest ran 30 journeys plus two scheduler phases. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-domain-shift-registered-standard-user-542254b8a`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1418,6 +1420,7 @@ Evidence:
 - `browser`: The corrected locally manufactured 1.8 MSI's ordinary, administratively extracted WebView2 completed two real CPU training controls, all five research journeys and their saved replay checks. The verified Windows profile and all owned listeners closed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-multispectral-corrected-local-package-9cde9e6e7`)
 - `browser`: The hosted 1.8 MSI's administratively extracted WebView2 completed all five research workflows and two real CPU training controls on generated fixtures. Corresponding reports and saved runs were independently rehashed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-multispectral-official-extracted-9cde9e6e7`)
 - `browser`: On the corrected source, two real CPU training controls and all five research journeys passed with generated data, retained exports and two saved reproductions per workflow. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-multispectral-stable-e3e8ffb63`)
+- `browser`: The ordinary-account WebView2 of the corrected local 1.8 MSI completed two CPU training controls and all five research journeys. A second marked profile reopened all ten earlier saved research outputs and verified its 229-file backup. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-multispectral-local-webview2-e3e8ffb63`)
 - `windows_installed`: The original 542254b8a MSI completed all five generated research workflows in a registered standard-user Windows desktop, with retained report and saved replay results. The pinned test-driver retest ran 30 journeys plus two scheduler phases. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-multispectral-registered-standard-user-542254b8a`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1448,6 +1451,7 @@ Evidence:
 - `browser`: The corrected locally manufactured 1.8 MSI's ordinary, administratively extracted WebView2 completed two real CPU training controls, all five research journeys and their saved replay checks. The verified Windows profile and all owned listeners closed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-taxonomy-detectability-corrected-local-package-9cde9e6e7`)
 - `browser`: The hosted 1.8 MSI's administratively extracted WebView2 completed all five research workflows and two real CPU training controls on generated fixtures. Corresponding reports and saved runs were independently rehashed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-taxonomy-detectability-official-extracted-9cde9e6e7`)
 - `browser`: On the corrected source, two real CPU training controls and all five research journeys passed with generated data, retained exports and two saved reproductions per workflow. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-taxonomy-detectability-stable-e3e8ffb63`)
+- `browser`: The ordinary-account WebView2 of the corrected local 1.8 MSI completed two CPU training controls and all five research journeys. A second marked profile reopened all ten earlier saved research outputs and verified its 229-file backup. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-taxonomy-detectability-local-webview2-e3e8ffb63`)
 - `windows_installed`: The original 542254b8a MSI completed all five generated research workflows in a registered standard-user Windows desktop, with retained report and saved replay results. The pinned test-driver retest ran 30 journeys plus two scheduler phases. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-taxonomy-detectability-registered-standard-user-542254b8a`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
@@ -1479,6 +1483,7 @@ Evidence:
 - `browser`: The hosted 1.8 MSI's administratively extracted WebView2 completed all five research workflows and two real CPU training controls on generated fixtures. Corresponding reports and saved runs were independently rehashed. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-underwater-correction-official-extracted-9cde9e6e7`)
 - `browser`: On the corrected source, two real CPU training controls and all five research journeys passed with generated data, retained exports and two saved reproductions per workflow. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-underwater-correction-stable-e3e8ffb63`)
 - `browser`: A real scratch segmenter bound to the new image generated two pending polygons. In a separate adjusted-display case, the unchecked deployment opt-in preserved the original model input. The actual visible and managed pixel digests, source masks and frozen reference were checked. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-underwater-correction-normal-segmentation-e3e8ffb63`)
+- `browser`: The ordinary-account WebView2 of the corrected local 1.8 MSI completed two CPU training controls and all five research journeys. A second marked profile reopened all ten earlier saved research outputs and verified its 229-file backup. — `docs/validation/stable-research-e3e8ffb63.json` (`rv18-underwater-correction-local-webview2-e3e8ffb63`)
 - `windows_installed`: The original 542254b8a MSI completed all five generated research workflows in a registered standard-user Windows desktop, with retained report and saved replay results. The pinned test-driver retest ran 30 journeys plus two scheduler phases. — `docs/validation/research-boundary-9cde9e6e7.json` (`rv18-underwater-correction-registered-standard-user-542254b8a`)
 - `physical_hardware`: none recorded
 - `representative_data`: none recorded
