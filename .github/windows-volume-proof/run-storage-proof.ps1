@@ -106,7 +106,7 @@ try {
     New-Item -ItemType Directory -Path $profile | Out-Null
     Set-Content -LiteralPath (Join-Path $profile '.reefvision-clean-install-acceptance') -Value $nonce
     $account = New-ReefVisionHostedGuiAccount -RunRoot $run
-    $account['quota_root'] = $owned.Root
+    Add-Member -InputObject $account -NotePropertyName quota_root -NotePropertyValue $owned.Root
     $debug = Get-ReefVisionLoopbackDebugPort
     $app = Start-ReefVisionHostedGui -Account $account -Executable $exe -Profile $profile -DebugPort $debug -EvidenceRoot $evidence -LaunchLabel 'storage'
     $portFile = Join-Path $profile 'runtime/backend-port.txt'
