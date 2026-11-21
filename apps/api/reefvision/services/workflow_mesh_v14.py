@@ -78,6 +78,7 @@ def extend_mesh_registry(
                 "coordinate_frame_id": None,
                 "surface_path_vertex_pairs": None,
                 "surface_trace_vertex_paths": None,
+                "preserve_axis_extrema_in_preview": False,
             },
             execution_state="executable_analysis",
             executable=True,
@@ -91,6 +92,7 @@ def extend_mesh_registry(
                 "Optional source SHA-256 binding rejects changed OBJ/PLY/GLB bytes on replay.",
                 "Optional edge routes are not biologically verified branch lengths.",
                 "Caller-selected edge traces are not verified anatomical centerlines.",
+                "Optional extrema pinning changes display sampling only, never measured area.",
             ],
         )
         nodes[POINT_NODE_TYPE] = WorkflowNodeDefinitionResponse(
