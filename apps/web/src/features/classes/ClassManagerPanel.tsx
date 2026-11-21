@@ -13,7 +13,9 @@ import {
   previewLabelClassReassignDelete,
   restoreLabelClass,
   updateLabelClass,
+  type ClassOperationClassSnapshot,
   type ClassOperationRecord,
+  type ClassOperationRecordGroup,
   type LabelClass,
   type Project,
 } from "../../api/client";
@@ -45,18 +47,76 @@ type MergeClassApproval = {
   expectedSourceIdentity: MergeTargetIdentity;
 };
 
-// A preview is not permission to execute while any safety evidence is blocked
-// or absent. The backend also validates the immutable preview checksum.
+function hasReviewText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasReviewTextList(values: unknown): boolean {
+  return Array.isArray(values) && values.every(hasReviewText);
+}
+
+function hasRecordGroups(groups: ClassOperationRecordGroup[]): boolean {
+  return (
+    Array.isArray(groups) &&
+    groups.every(
+      (group) =>
+        hasReviewText(group?.key) &&
+        hasReviewText(group.label) &&
+        hasReviewTextList(group.record_ids) &&
+        group.count === group.record_ids.length,
+    )
+  );
+}
+
+function hasClassSnapshot(
+  snapshot: ClassOperationClassSnapshot | null,
+  id: string,
+): boolean {
+  return (
+    hasReviewText(id) &&
+    snapshot?.id === id &&
+    hasReviewText(snapshot.name) &&
+    Number.isInteger(snapshot.class_index)
+  );
+}
+
+function hasClassReviewReport(operation: ClassOperationRecord): boolean {
+  const plan = operation.plan;
+  return (
+    Boolean(plan) &&
+    hasClassSnapshot(operation.source_class, operation.source_class_id) &&
+    (operation.target_class_id === null
+      ? operation.target_class === null
+      : hasClassSnapshot(operation.target_class, operation.target_class_id)) &&
+    hasRecordGroups(plan.mutable_records) &&
+    hasRecordGroups(plan.protected_records) &&
+    hasRecordGroups(plan.blocking_records) &&
+    Array.isArray(plan.compatibility_impacts) &&
+    plan.compatibility_impacts.every(
+      (impact) =>
+        hasReviewText(impact?.key) &&
+        hasReviewText(impact.label) &&
+        hasReviewText(impact.status) &&
+        hasReviewText(impact.message) &&
+        hasReviewTextList(impact.record_ids),
+    ) &&
+    hasReviewTextList(plan.warnings) &&
+    hasReviewTextList(plan.blockers) &&
+    hasReviewTextList(operation.warnings) &&
+    hasReviewTextList(operation.failures)
+  );
+}
+
 function previewHasNoBlockingEvidence(
   operation: ClassOperationRecord,
 ): boolean {
-  const plan = operation.plan;
   return (
-    Array.isArray(plan?.blockers) &&
-    plan.blockers.length === 0 &&
-    Array.isArray(plan.blocking_records) &&
-    plan.blocking_records.length === 0 &&
-    Array.isArray(operation.failures) &&
+    hasClassReviewReport(operation) &&
+    hasReviewText(operation.id) &&
+    typeof operation.preview_checksum === "string" &&
+    /^[0-9a-f]{64}$/.test(operation.preview_checksum) &&
+    operation.plan.blockers.length === 0 &&
+    operation.plan.blocking_records.length === 0 &&
     operation.failures.length === 0
   );
 }
@@ -206,6 +266,18 @@ function OperationSummary({
   operation: ClassOperationRecord;
   title: string;
 }) {
+  if (!hasClassReviewReport(operation)) {
+    return (
+      <div className="class-usage-card">
+        <strong>{title}</strong>
+        <p className="form-error" role="alert">
+          Operation evidence is incomplete. Request a fresh preview to review
+          the affected records.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="class-usage-card">
       <strong>{title}</strong>
@@ -263,6 +335,13 @@ function OperationSummary({
           {item.label}: {item.status}. {item.message}
         </p>
       ))}
+      {Array.from(
+        new Set([...operation.plan.warnings, ...operation.warnings]),
+      ).map((warning) => (
+        <p key={warning} className="annotation-helper">
+          {warning}
+        </p>
+      ))}
       {(operation.plan.blocking_records ?? []).map((item) => (
         <p key={item.key} className="form-error">
           {item.label}: {item.count}
@@ -281,8 +360,8 @@ function OperationSummary({
       {operation.status === "previewed" &&
         !previewHasNoBlockingEvidence(operation) && (
           <p className="form-error" role="status">
-            Execution disabled: preview contains blockers or incomplete safety
-            evidence. Resolve the issues and preview again.
+            Execution disabled. Resolve any blockers and request a complete
+            preview with its review checksum.
           </p>
         )}
     </div>
