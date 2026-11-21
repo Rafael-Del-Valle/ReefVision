@@ -690,10 +690,14 @@ def _replace_rendition(temporary: Path, destination: Path) -> None:
             # A removable volume may also report EBUSY while WebView2 or
             # antivirus holds a rendition. Retry only these transient cases;
             # never retry a disconnected drive or conceal the original failure.
-            transient_lock = (
-                isinstance(exc, PermissionError)
-                or exc.errno == errno.EBUSY
-                or getattr(exc, "winerror", None) in {32, 33, 170}
+            # A Windows PermissionError with a *different* WinError (for
+            # example 5: access denied, 53: network path unavailable, or
+            # 112: disk full) is not evidence of a transient viewer lock.
+            # Only fall back to errno/classification when no WinError exists.
+            winerror = getattr(exc, "winerror", None)
+            transient_lock = winerror in {32, 33, 170} or (
+                winerror is None
+                and (isinstance(exc, PermissionError) or exc.errno == errno.EBUSY)
             )
             if not transient_lock or attempt == 4:
                 raise
