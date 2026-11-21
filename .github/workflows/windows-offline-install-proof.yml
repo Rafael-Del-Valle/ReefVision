@@ -1,0 +1,130 @@
+name: Windows Offline Original MSI Proof
+
+on:
+  pull_request:
+    branches: [codex/reefvision-1.8-research-qualification]
+    paths:
+      - '.github/workflows/windows-offline-install-proof.yml'
+      - '.github/offline-proof/**'
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Successful original Windows build workflow run ID
+        required: true
+        default: '44847408180'
+      source_sha:
+        description: Exact original build source commit
+        required: true
+        default: '9cde9e6e730d4065f4223ea92baea7091f118b0b'
+      version:
+        description: Exact application and MSI version
+        required: true
+        default: '1.8.0'
+      schema:
+        description: Expected packaged database revision
+        required: true
+        default: 'b18_spectral_0002'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  offline-original-msi:
+    name: Windows offline proof (${{ matrix.scenario }})
+    if: github.repository == 'Rafael-Del-Valle/ReefVision' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: windows-2022
+    timeout-minutes: 85
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [fresh, cached-upgrade]
+    env:
+      RV_PROOF_ROOT: C:/rv-offline-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: proof
+          persist-credentials: false
+      - name: Pin the original installer and first-use source
+        id: pin
+        shell: pwsh
+        env:
+          DISPATCH_BUILD_RUN: ${{ inputs.build_run }}
+          DISPATCH_SOURCE_SHA: ${{ inputs.source_sha }}
+          DISPATCH_VERSION: ${{ inputs.version }}
+          DISPATCH_SCHEMA: ${{ inputs.schema }}
+        run: |
+          $candidate = Get-Content ./proof/.github/offline-proof/candidate.json -Raw | ConvertFrom-Json
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
+            $candidate = [pscustomobject]@{build_run=$env:DISPATCH_BUILD_RUN; source_sha=$env:DISPATCH_SOURCE_SHA; version=$env:DISPATCH_VERSION; schema=$env:DISPATCH_SCHEMA}
+          }
+          if ($candidate.build_run -notmatch '^\d+$' -or $candidate.source_sha -cnotmatch '^[a-f0-9]{40}$' -or
+              $candidate.version -notmatch '^\d+\.\d+\.\d+$' -or $candidate.schema -notmatch '^[a-zA-Z0-9_]+$') {
+            throw 'Invalid proof candidate manifest.'
+          }
+          "source_sha=$($candidate.source_sha)" >> $env:GITHUB_OUTPUT
+          @("RV_BUILD_RUN=$($candidate.build_run)", "RV_SOURCE_SHA=$($candidate.source_sha)",
+            "RV_VERSION=$($candidate.version)", "RV_SCHEMA=$($candidate.schema)") >> $env:GITHUB_ENV
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pin.outputs.source_sha }}
+          path: source
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        if: matrix.scenario == 'cached-upgrade'
+        with:
+          ref: '3e37524e28c4b7dde8ffbe203120d3b8e7fe2ee9'
+          path: previous-source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: source/apps/web/package-lock.json
+      - name: Stage the exact first-use driver and original installer online
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          npm --prefix source/apps/web ci --no-audit --no-fund
+          if ($LASTEXITCODE) { throw 'Could not stage the pinned browser driver.' }
+          ./proof/.github/offline-proof/stage-original.ps1 -RepositoryRoot ./source -RunId $env:RV_BUILD_RUN -SourceCommit $env:RV_SOURCE_SHA -Version $env:RV_VERSION -Root $env:RV_PROOF_ROOT
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            $transport = Get-Content -LiteralPath "$env:RV_PROOF_ROOT/evidence/verified-transport.json" -Raw | ConvertFrom-Json
+            if ($transport.build_job_id -ne 136670423050) { throw 'Transport differs from the pinned #115 manufacturing job.' }
+          }
+      - name: Verify and cache the qualified original 1.7 package online
+        if: matrix.scenario == 'cached-upgrade'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          npm --prefix previous-source/apps/web ci --no-audit --no-fund
+          if ($LASTEXITCODE) { throw 'Could not stage the exact prior first-use driver.' }
+          ./proof/.github/offline-proof/stage-original.ps1 -RepositoryRoot ./previous-source -RunId 44827326113 `
+              -SourceCommit '3e37524e28c4b7dde8ffbe203120d3b8e7fe2ee9' -Version '1.7.0' -Root $env:RV_PROOF_ROOT -Previous
+      - name: Install, launch and reopen reviewed work under hosted outbound deny
+        shell: pwsh
+        env:
+          RV_HOSTED_OFFLINE_PROOF: 'original-msi'
+          RV_PROOF_SCENARIO: ${{ matrix.scenario }}
+        run: |
+          $previous = @{}
+          if ($env:RV_PROOF_SCENARIO -eq 'cached-upgrade') { $previous.PreviousRepositoryRoot = './previous-source' }
+          ./proof/.github/offline-proof/prove-offline.ps1 -RepositoryRoot ./source -SourceCommit $env:RV_SOURCE_SHA -Version $env:RV_VERSION -Schema $env:RV_SCHEMA -Root $env:RV_PROOF_ROOT @previous
+      - name: Preserve proof and diagnostic logs after reconnect
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReefVision-Windows-Offline-MSI-Proof-${{ matrix.scenario }}
+          path: |
+            ${{ env.RV_PROOF_ROOT }}/evidence/*.json
+            ${{ env.RV_PROOF_ROOT }}/evidence/*.jsonl
+            ${{ env.RV_PROOF_ROOT }}/evidence/*.log
+            ${{ env.RV_PROOF_ROOT }}/evidence/first-use-playwright/**/*-evidence.json
+            ${{ env.RV_PROOF_ROOT }}/evidence/previous/*.json
+            ${{ env.RV_PROOF_ROOT }}/evidence/previous/**/*-evidence.json
+            ${{ env.RV_PROOF_ROOT }}/profile/logs/backend.log
+          if-no-files-found: warn
