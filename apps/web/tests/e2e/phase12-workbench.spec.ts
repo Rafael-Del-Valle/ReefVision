@@ -342,7 +342,9 @@ test("finds inspect-only provider manifests through normal project navigation", 
     .getByRole("button", { name: "Open Phase 12 Acceptance Project" })
     .click();
   await page.getByRole("tab", { name: "Models & AI", exact: true }).click();
-  await page.getByRole("tab", { name: "Providers", exact: true }).click();
+  await page
+    .getByRole("tab", { name: "Plugins and providers", exact: true })
+    .click();
 
   const workspace = page.locator("section.feature-workspace").filter({
     hasText:
