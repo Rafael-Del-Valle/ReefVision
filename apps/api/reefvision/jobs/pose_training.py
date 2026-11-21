@@ -216,6 +216,32 @@ def _canonical_pose_export_schema(yaml_text: str) -> tuple[int, int]:
     return len(class_lines), expected_landmarks
 
 
+def _preflight_pose_zip_frame_inventory(archive: zipfile.ZipFile) -> None:
+    """Reject incomplete frozen frame pairs before claiming a saved run directory."""
+
+    images: set[str] = set()
+    labels: set[str] = set()
+    for member in archive.infolist():
+        if member.is_dir():
+            continue
+        name = member.filename.replace("\\", "/")
+        if name.startswith("images/train/"):
+            images.add(name.removeprefix("images/train/"))
+        elif name.startswith("labels/train/"):
+            labels.add(name.removeprefix("labels/train/"))
+
+    if not images:
+        raise ValidationError("Ultralytics pose export is missing images/train")
+    if not labels:
+        raise ValidationError("Ultralytics pose export is missing frame images or labels")
+    if (
+        any("/" in name or not name.endswith(".png") for name in images)
+        or any("/" in name or not name.endswith(".txt") for name in labels)
+        or {name[:-4] for name in images} != {name[:-4] for name in labels}
+    ):
+        raise ValidationError("Ultralytics pose export has unmatched image/label frame sets")
+
+
 def _safe_extract_zip(
     content: bytes,
     destination: Path,
@@ -296,6 +322,7 @@ def _safe_extract_zip(
             _canonical_pose_export_schema(header.decode("utf-8"))
         except UnicodeDecodeError as exc:
             raise ValidationError("Ultralytics pose export has noncanonical data.yaml") from exc
+        _preflight_pose_zip_frame_inventory(archive)
 
         # Invalid or ambiguous archives must not leave even an empty run
         # directory behind: that would block a corrected frozen export retry.
@@ -659,6 +686,10 @@ def materialize_pose_training_exports(
                     raise ValidationError(
                         "Ultralytics pose validation export has incompatible data.yaml"
                     )
+                # Do not create a training directory if the holdout has
+                # incomplete scientist-reviewed frame pairs.
+                _preflight_pose_zip_frame_inventory(training_archive)
+                _preflight_pose_zip_frame_inventory(validation_archive)
         except KeyError as exc:
             raise ValidationError("Ultralytics pose export is missing data.yaml") from exc
         except (zipfile.BadZipFile, EOFError, zlib.error) as exc:
