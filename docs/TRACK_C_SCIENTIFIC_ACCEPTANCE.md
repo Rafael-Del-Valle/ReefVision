@@ -4,6 +4,31 @@ This is a **test plan**, not evidence that ReefVision 1.4 or 1.5 is validated or
 
 ## 1.4: 3D geometry and longitudinal studies
 
+### Point-cloud axis-projected sampling gaps (synthetic; CI pending)
+
+The standalone XYZ/ASCII-PLY point-cloud preview now reports the largest gap
+between adjacent **distinct source-coordinate levels** on each of the X, Y,
+and Z axes. It includes original source endpoints, gap size, fraction of the
+observed axis span, scale-converted gap and a scale-only uncertainty interval
+when numerically representable. Duplicate scan rows and source-row order must
+not change these fields. A constant axis has no adjacent gap and reports
+`null`, not a fabricated zero-length sampling observation. If a positive
+gap or its scale-only interval is below binary64 resolution, the converted
+quantity is `null` and a specific QC warning is required.
+
+**Interpretation:** These are 1D projected sampling diagnostics for possible
+acquisition/reconstruction coverage review, not Euclidean nearest-neighbor
+distances, verified missing 3D regions, coral tissue gaps, biological branch
+lengths, or animal condition. Scale calibration and specimen identity remain
+unverified. The new field is computed by the shared engine and must match
+between standalone API responses and two executions of the same persisted,
+typed `point_cloud_preview` Workflow Builder graph, including artifact
+SHA-256 parity, for both XYZ arrays and imported ASCII PLY. Regression:
+`test_spatial_point_cloud_axis_gaps_v14.py`. These synthetic fixtures do not
+replace representative scans, independent scientific reviewers, or Windows
+installed-GUI/GPU release acceptance.
+
+
 ## Imported point-cloud PLY Unicode boundary (synthetic; CI pending)
 
 The stand-alone and typed persisted Workflow Builder PLY entrypoints must
