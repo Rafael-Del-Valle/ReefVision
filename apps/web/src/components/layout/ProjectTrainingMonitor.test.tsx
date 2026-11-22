@@ -348,7 +348,7 @@ describe("ProjectTrainingMonitor", () => {
     expect(boxRow).toHaveTextContent("prior sample");
     expect(screen.queryByText("train cls loss")).not.toBeInTheDocument();
 
-    const dflRow = screen.getByText("TRAIN DFL LOSS").closest("div");
+    const dflRow = screen.getByText("train dfl loss").closest("div");
     expect(dflRow).toHaveTextContent("0.8");
     expect(dflRow).toHaveTextContent("prior sample");
 
