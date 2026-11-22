@@ -54,7 +54,7 @@ def _inspect(tmp_path: Path, ddl: str, revision: str) -> tuple[int, dict[str, ob
         (
             """
             CREATE TABLE review_queue_item_events (
-              id TEXT, project_id TEXT, review_queue_item_id TEXT,
+              id TEXT, project_id TEXT, review_queue_id TEXT, review_queue_item_id TEXT,
               client_request_id TEXT, event_type TEXT, actor TEXT,
               CONSTRAINT ck_review_queue_item_event_type CHECK (
                 event_type IN ('comment', 'assign', 'unassign',
@@ -89,7 +89,7 @@ def test_refuses_colliding_version_with_hybrid_tables(tmp_path: Path) -> None:
           id TEXT, project_id TEXT, cache_key TEXT, source_url TEXT
         );
         CREATE TABLE review_queue_item_events (
-          id TEXT, project_id TEXT, review_queue_item_id TEXT,
+          id TEXT, project_id TEXT, review_queue_id TEXT, review_queue_item_id TEXT,
           client_request_id TEXT, event_type TEXT, actor TEXT,
           CHECK(event_type IN ('comment', 'assign', 'unassign'))
         );
@@ -106,7 +106,7 @@ def test_qc_lineage_requires_event_check_not_incidental_sql_text(tmp_path: Path)
     # certify the installed QC triage CHECK constraint.
     ddl = """
         CREATE TABLE review_queue_item_events (
-          id TEXT, project_id TEXT, review_queue_item_id TEXT,
+          id TEXT, project_id TEXT, review_queue_id TEXT, review_queue_item_id TEXT,
           client_request_id TEXT, event_type TEXT, actor TEXT,
           note TEXT, -- 'triage_start', 'triage_skip', 'triage_return'
           CHECK(event_type IN ('comment', 'assign', 'unassign'))
@@ -116,3 +116,21 @@ def test_qc_lineage_requires_event_check_not_incidental_sql_text(tmp_path: Path)
     assert status == 2
     assert report["classification"] == "ambiguous"
     assert report["review_event_check"] == "coordination"
+
+
+def test_rejects_qc_event_table_missing_required_review_queue_reference(tmp_path: Path) -> None:
+    # 1.6 migration 0038 requires review_queue_id to link events to review queues.
+    # A lookalike table missing that column must not certify installed lineage.
+    ddl = """
+        CREATE TABLE review_queue_item_events (
+          id TEXT, project_id TEXT, review_queue_item_id TEXT,
+          client_request_id TEXT, event_type TEXT, actor TEXT,
+          CHECK(event_type IN ('comment', 'assign', 'unassign'))
+        );
+    """
+    status, report = _inspect(tmp_path, ddl, "0038")
+    assert status == 2
+    assert report["classification"] == "ambiguous"
+    assert report["table_signatures"]["review_queue_item_events"] is False
+    assert "Incomplete expected table signatures: review_queue_item_events" in report["issues"]
+    assert report["automatic_migration_authorized"] is False
