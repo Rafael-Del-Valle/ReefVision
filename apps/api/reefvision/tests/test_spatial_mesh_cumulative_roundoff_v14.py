@@ -56,9 +56,9 @@ def test_selected_route_cumulative_roundoff_is_exposed_and_replayed(
     exact_total = Fraction(1_000_000_000.0) + Fraction(1e-8)
     assert affected["path_calibrated_edge_sum_exact_fraction_m"] == str(exact_total)
     assert affected["path_cumulative_total_exact_match"] is False
+    assert affected["path_cumulative_roundoff_exact_fraction_m"] == str(-Fraction(1e-8))
     assert (
-        "positive_selected_mesh_segment_lost_in_cumulative_distance"
-        in affected["path_qc_warnings"]
+        "positive_selected_mesh_segment_lost_in_cumulative_distance" in affected["path_qc_warnings"]
     )
     assert (
         "selected_mesh_route_cumulative_roundoff_disagrees_with_exact_edge_sum"
@@ -71,6 +71,7 @@ def test_selected_route_cumulative_roundoff_is_exposed_and_replayed(
     assert unaffected["path_cumulative_lost_positive_segment_indices"] == []
     assert unaffected["path_calibrated_edge_sum_exact_fraction_m"] == "1000000000"
     assert unaffected["path_cumulative_total_exact_match"] is True
+    assert unaffected["path_cumulative_roundoff_exact_fraction_m"] == "0"
     assert (
         "selected_mesh_route_cumulative_roundoff_disagrees_with_exact_edge_sum"
         not in unaffected["path_qc_warnings"]
