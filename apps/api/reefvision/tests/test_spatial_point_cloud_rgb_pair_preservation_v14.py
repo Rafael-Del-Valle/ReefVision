@@ -717,6 +717,7 @@ def test_full_colored_ply_preview_does_not_warn_about_missing_rgb_extrema(
     assert "preview_omits_rgb_channel_extrema" not in payload["qc_warnings"]
     assert payload["provenance"]["calibration_verified"] is False
 
+
 def test_subprecision_preview_centroid_scale_bounds_are_not_false_certainty(
     client: TestClient,
 ) -> None:
