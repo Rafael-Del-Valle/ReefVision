@@ -1317,6 +1317,27 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         # independent sensor acquisitions or biological replicates occurred.
         repeated_source_pair_rows = len(points) - len(source_pairs)
         repeated_preview_pair_rows = len(result["preview_point_indices"]) - len(preview_pairs)
+        # Pair coverage alone obscures sampling bias: a preview can retain
+        # every distinct XYZ/RGB observation while changing its frequency.
+        # Compare full acquisition-row and displayed-row distributions using
+        # integer cross-products, avoiding floating-point equality artifacts.
+        source_pair_counts: dict[tuple[tuple[float, ...], tuple[int, ...]], int] = {}
+        for point, rgb in zip(points, point_colors, strict=True):
+            pair = (tuple(point), tuple(rgb))
+            source_pair_counts[pair] = source_pair_counts.get(pair, 0) + 1
+        preview_pair_counts: dict[tuple[tuple[float, ...], tuple[int, ...]], int] = {}
+        for index in result["preview_point_indices"]:
+            pair = (tuple(points[index]), tuple(point_colors[index]))
+            preview_pair_counts[pair] = preview_pair_counts.get(pair, 0) + 1
+        represented_source_rows = sum(source_pair_counts[pair] for pair in preview_pairs)
+        displayed_row_count = len(result["preview_point_indices"])
+        frequency_shift_numerator = sum(
+            abs(source_count * displayed_row_count - preview_pair_counts.get(pair, 0) * len(points))
+            for pair, source_count in source_pair_counts.items()
+        )
+        frequency_total_variation = frequency_shift_numerator / (
+            2 * len(points) * displayed_row_count
+        )
         palettes: dict[tuple[float, ...], set[tuple[int, ...]]] = {}
         for point, rgb in zip(points, point_colors, strict=True):
             palettes.setdefault(tuple(point), set()).add(tuple(rgb))
@@ -1369,6 +1390,11 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             "preview_distinct_xyz_rgb_pairs": len(preview_pairs),
             "preview_repeated_xyz_rgb_observation_rows": repeated_preview_pair_rows,
             "fraction_of_source_xyz_rgb_pairs_displayed": (len(preview_pairs) / len(source_pairs)),
+            "source_xyz_rgb_observation_rows_represented_in_preview": represented_source_rows,
+            "fraction_of_source_xyz_rgb_observation_rows_represented_in_preview": (
+                represented_source_rows / len(points)
+            ),
+            "preview_vs_source_xyz_rgb_observation_total_variation": frequency_total_variation,
             "source_xyz_loci_with_multiple_rgb_values": differing_color_loci,
             "multi_rgb_xyz_loci_with_complete_preview": (
                 differing_color_loci - incomplete_multi_color_loci
@@ -1388,6 +1414,10 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         }
         if repeated_source_pair_rows:
             result["qc_warnings"].append("source_contains_repeated_xyz_rgb_observations")
+        if frequency_shift_numerator:
+            result["qc_warnings"].append(
+                "preview_shifts_xyz_rgb_observation_frequency_distribution"
+            )
         if differing_color_loci:
             result["qc_warnings"].append("source_xyz_loci_have_multiple_rgb_values")
         if len(preview_pairs) != len(source_pairs):
