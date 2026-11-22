@@ -204,10 +204,15 @@ def test_impossible_subunit_detour_ratio_is_withheld_in_saved_workflows(
     assert affected["path_vertex_indices"] == [0, 1, 2, 3]
     assert affected["length_m"] < affected["endpoint_chord_length_m"]
     assert affected["geometric_detour_ratio"] is None
-    assert affected["geometric_excess_length_m"] == 0.0
+    # A physically impossible negative result must not become a falsely exact
+    # zero-excess measurement or zero-width calibration uncertainty interval.
+    assert affected["geometric_excess_length_m"] is None
+    assert affected["geometric_excess_scale_interval_m"] is None
     assert "endpoint_chord_exceeds_rounded_selected_route" in affected["path_qc_warnings"]
     assert control["path_vertex_indices"] == [0, 1]
     assert control["geometric_detour_ratio"] == 1.0
+    assert control["geometric_excess_length_m"] == 0.0
+    assert control["geometric_excess_scale_interval_m"] == [0.0, 0.0]
     assert "endpoint_chord_exceeds_rounded_selected_route" not in control["path_qc_warnings"]
 
     direct = measure_mesh_preview(**CHORD_ROUNDOFF_GEOMETRY)
