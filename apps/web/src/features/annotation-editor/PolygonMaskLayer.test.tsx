@@ -600,7 +600,6 @@ describe("PolygonMaskLayer", () => {
     expect(polygonMask.points?.[0]).toEqual({ x: 10, y: 10 });
   });
 
-
   it("does not revise scientific geometry for a vertex click or a returned drag", () => {
     const onUpdate = vi.fn();
     render(

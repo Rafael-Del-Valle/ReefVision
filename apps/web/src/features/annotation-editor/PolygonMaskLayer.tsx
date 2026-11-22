@@ -130,7 +130,10 @@ export function removePolygonVertex(
 
 // A click, clamped gesture, or drag returned to its original source-pixel
 // coordinates must not fabricate a new scientific revision or autosave.
-function unchangedPolygonPoints(original: Point[], candidate: Point[]): boolean {
+function unchangedPolygonPoints(
+  original: Point[],
+  candidate: Point[],
+): boolean {
   return (
     original.length === candidate.length &&
     original.every((point, index) => {
