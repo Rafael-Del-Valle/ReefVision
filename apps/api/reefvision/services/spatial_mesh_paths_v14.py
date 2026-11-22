@@ -308,6 +308,7 @@ def mesh_edge_paths(
         path_cumulative_roundoff_exact_fraction_m: str | None = None
         path_nominal_total_vs_edge_sum_exact_fraction_m: str | None = None
         path_nominal_total_exact_match: bool | None = None
+        path_source_edge_sum_minus_chord_exact_fraction: str | None = None
         path_cumulative_length_scale_intervals_m: list[list[float] | None] | None = None
         path_vertices_in_source_frame_m: list[list[float]] | None = None
         path_edge_length_scale_intervals_m: list[list[float] | None] | None = None
@@ -416,15 +417,18 @@ def mesh_edge_paths(
             exact_source_edge_sum = sum(
                 (Fraction(adjacency[a][b]) for a, b in pairwise(route)), Fraction(0)
             )
-            rounded_route_hides_stored_edge_excess = (
-                shortest[end] == chord_mesh_units
-                and exact_source_edge_sum > Fraction(chord_mesh_units)
-            )
+            # Reconcile stored source-edge lengths with the independently
+            # rounded endpoint chord using exact rational arithmetic. A
+            # negative value signals unresolved binary64 geometry evidence,
+            # never negative biological branch or surface distance.
+            stored_chord_delta = exact_source_edge_sum - Fraction(chord_mesh_units)
+            path_source_edge_sum_minus_chord_exact_fraction = str(stored_chord_delta)
+            hidden_excess = shortest[end] == chord_mesh_units and stored_chord_delta > 0
+            impossible_stored_chord = stored_chord_delta < 0
+            chord_ok = shortest[end] >= chord_mesh_units and not impossible_stored_chord
+            usable_excess = chord_ok and not hidden_excess
             geometric_excess_source_units: float | None = None
-            if (
-                shortest[end] >= chord_mesh_units
-                and not rounded_route_hides_stored_edge_excess
-            ):
+            if usable_excess:
                 geometric_excess_source_units = shortest[end] - chord_mesh_units
             geometric_excess_m = (
                 geometric_excess_source_units * scale
@@ -440,12 +444,7 @@ def mesh_edge_paths(
             # A geometric mesh route cannot be shorter than its straight
             # endpoint chord. If binary64 operations violate this invariant,
             # withhold the dimensionless detour rather than reporting < 1.
-            if (
-                chord_mesh_units > 0
-                and chord_m > 0
-                and shortest[end] >= chord_mesh_units
-                and not rounded_route_hides_stored_edge_excess
-            ):
+            if chord_mesh_units > 0 and chord_m > 0 and usable_excess:
                 detour_ratio = shortest[end] / chord_mesh_units
             # A finite nominal route can still overflow when its calibration
             # uncertainty is expanded. Never persist nonfinite scientific JSON.
@@ -470,9 +469,13 @@ def mesh_edge_paths(
             path_qc_warnings = []
             if shortest[end] < chord_mesh_units:
                 path_qc_warnings.append("endpoint_chord_exceeds_rounded_selected_route")
-            if rounded_route_hides_stored_edge_excess:
+            if hidden_excess:
                 path_qc_warnings.append(
                     "selected_mesh_route_roundoff_hides_stored_edge_chord_excess"
+                )
+            if impossible_stored_chord:
+                path_qc_warnings.append(
+                    "selected_mesh_route_stored_edge_sum_below_rounded_chord"
                 )
             if path_cumulative_lost_positive_segment_indices:
                 path_qc_warnings.append(
@@ -619,6 +622,9 @@ def mesh_edge_paths(
                 ),
                 "path_cumulative_total_exact_match": path_cumulative_total_exact_match,
                 "path_nominal_total_exact_match": path_nominal_total_exact_match,
+                "path_source_edge_sum_minus_chord_exact_fraction": (
+                    path_source_edge_sum_minus_chord_exact_fraction
+                ),
                 "path_nominal_total_vs_edge_sum_exact_fraction_m": (
                     path_nominal_total_vs_edge_sum_exact_fraction_m
                 ),
