@@ -74,6 +74,18 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
         with Session(engine) as session:
             run = session.get(WorkflowRun, run_id)
             _require(run is not None and run.status == "succeeded", "Saved run did not succeed")
+            # The durable parent job proves that this saved graph was executed
+            # by the workflow worker for this project, not only marked succeeded.
+            parent_job = session.get(Job, run.job_id)
+            _require(
+                parent_job is not None
+                and parent_job.project_id == run.project_id
+                and parent_job.job_type == "workflow_run"
+                and parent_job.status == "succeeded"
+                and isinstance(parent_job.request_json, dict)
+                and parent_job.request_json.get("workflow_run_id") == run.id,
+                "Saved workflow parent job does not match the completed execution",
+            )
             # Reuse the app's checksum, node-graph, artifact and closeout validators.
             provenance = build_workflow_run_provenance(session, run_id=run_id)
             _require(bool(provenance), "Saved workflow provenance is missing")
@@ -244,6 +256,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             return {
                 "status": "PASS",
                 "workflow_run_id": run.id,
+                "workflow_job_id": parent_job.id,
                 "frozen_dataset_id": dataset.id,
                 "verified_items": dataset.item_count,
                 "dataset_manifest_sha256": dataset.manifest_sha256,
