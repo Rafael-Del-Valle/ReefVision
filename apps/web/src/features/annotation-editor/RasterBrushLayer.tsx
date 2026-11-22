@@ -39,7 +39,8 @@ export function RasterBrushLayer({
 }: RasterBrushLayerProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [pointerId, setPointerId] = useState<number | null>(null);
-  const [strokeSettings, setStrokeSettings] = useState<RasterBrushSettings | null>(null);
+  const [strokeSettings, setStrokeSettings] =
+    useState<RasterBrushSettings | null>(null);
   const [points, setPoints] = useState<Point[]>([]);
   const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
 
@@ -80,7 +81,11 @@ export function RasterBrushLayer({
     if (pointerId !== event.pointerId) return;
     setPoints((current) => {
       const last = current[current.length - 1];
-      if (last && distance(last, point) < Math.max(1, (strokeSettings?.brushRadius ?? brushRadius) * 0.2)) {
+      if (
+        last &&
+        distance(last, point) <
+          Math.max(1, (strokeSettings?.brushRadius ?? brushRadius) * 0.2)
+      ) {
         return current;
       }
       return [...current, point];
@@ -116,7 +121,9 @@ export function RasterBrushLayer({
   const previewMode = strokeSettings?.mode ?? mode;
   const previewRadius = strokeSettings?.brushRadius ?? brushRadius;
   const previewFill =
-    previewMode === "paint" ? "rgba(87, 204, 153, 0.35)" : "rgba(244, 96, 108, 0.35)";
+    previewMode === "paint"
+      ? "rgba(87, 204, 153, 0.35)"
+      : "rgba(244, 96, 108, 0.35)";
   const previewStroke = previewMode === "paint" ? "#57cc99" : "#f4606c";
 
   return (
