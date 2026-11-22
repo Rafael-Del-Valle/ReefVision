@@ -199,6 +199,23 @@ Builder replay must continue matching complete scientific artifacts and
 SHA-256 fingerprints. This proves source-input integrity only, not calibrated
 color, coral health, verified specimen identity or independent replicates.
 
+### Raw RGB channel-extrema completeness (not biological condition)
+
+For imported colored ASCII PLY point clouds, compare the minimum and maximum
+of each validated uint8 red/green/blue channel across **all source rows** with
+the displayed 512-point-or-smaller sample. Report both sets of ranges as
+`source_rgb_channel_ranges_uint8` and
+`preview_rgb_channel_ranges_uint8`, and list missing source extrema in
+`preview_omitted_source_rgb_channel_extrema` using explicit labels such as
+`red_max`. Emit `preview_omits_rgb_channel_extrema` when the display omits
+an observed source-channel limit; do not warn when all limits survive. The
+comparison is independent of XYZ geometry coverage, and is available in
+standalone point-cloud analysis and saved executable typed Workflow Builder
+runs, with complete artifact equality and deterministic SHA-256 replay tests.
+Source extrema reveal only bounded sampling of raw sensor observations:
+they do **not** measure calibrated reflectance, coral bleaching, disease,
+living tissue, illumination quality, or biological identity.
+
 ### Complete colored PLY observation preservation in bounded previews
 
 The strict-boolean `preserve_distinct_xyz_rgb_pairs_in_preview` is an opt-in
