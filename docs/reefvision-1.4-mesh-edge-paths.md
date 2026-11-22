@@ -1230,3 +1230,32 @@ the direct service, standalone project API, and twice-replayed persisted typed
 Workflow Builder graph with identical complete artifacts and SHA-256 digests.
 Representative coral scans, independent human review and installed Windows
 validation are still required.
+
+### Exact stored-edge versus independently rounded chord audit
+
+Connected selected routes now retain
+`path_source_edge_sum_minus_chord_exact_fraction`, the exact rational sum
+of their stored binary64 **source-unit** edge lengths minus the independently
+rounded binary64 endpoint chord. This quantity is deliberately in source
+units, not calibrated meters. A positive value means the stored edge sum
+exceeds the rounded chord; `"0"` is equality of stored values. A negative
+value is a *numerical triangle-inequality conflict* between separately
+rounded representations, not negative geometric distance. Disconnected and
+unreferenced pairs report `null`, not an invented zero.
+
+If that exact stored-edge difference is negative, ReefVision emits
+`selected_mesh_route_stored_edge_sum_below_rounded_chord` and withholds
+`geometric_detour_ratio`, `geometric_excess_length_m`, and its scale-only
+uncertainty interval. This additional guard matters even when the separately
+accumulated Dijkstra distance **equals** the rounded chord and thus does
+not trip the earlier nominal shorter-than-chord check. Original route
+vertices, selected edges, calibrated measurements, exact fractions, source
+provenance, and human-review requirements remain unchanged.
+
+A synthetic 4-vertex two-triangle reference uses stored edges whose exact
+sum falls 1/33554432 source units below the independently rounded chord
+while the rounded Dijkstra route equals that chord. The regression checks
+the direct scientific engine, standalone project API, and two executions
+of a saved typed Workflow Builder graph with full artifact equality and
+matching SHA-256 fingerprints. This is a reproducibility/numerical-integrity
+guard only; physical calibration and coral anatomy are still provisional.
