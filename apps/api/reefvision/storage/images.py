@@ -389,6 +389,15 @@ def inspect_staged_image(path: Path, sha256: str, file_size_bytes: int) -> Inspe
             width, height = image.size
             if width <= 0 or height <= 0:
                 raise InvalidImageError("Image dimensions must be greater than zero")
+            # Pillow emits only a warning between MAX_IMAGE_PIXELS and twice
+            # that budget. A camera import must fail closed before image.load()
+            # instead of accepting a potentially memory-exhausting pixel grid.
+            # Respect an explicitly disabled Pillow limit (None).
+            max_pixels = Image.MAX_IMAGE_PIXELS
+            if max_pixels is not None and width * height > max_pixels:
+                raise InvalidImageError(
+                    "Image pixel count exceeds the configured safe decode limit"
+                )
             # A valid container/header does not guarantee decodable pixels:
             # TIFF, BMP, and GIF can pass verify() with truncated image data.
             # Never commit a scientific image that cannot produce a rendition.
