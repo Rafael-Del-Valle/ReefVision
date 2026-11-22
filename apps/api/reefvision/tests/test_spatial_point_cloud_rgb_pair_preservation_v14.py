@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import cast
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.spatial_point_cloud_v14 import measure_point_cloud_preview
@@ -174,7 +174,7 @@ def test_rgb_pair_preservation_strict_source_and_capacity(
     assert "display budget" in over_budget.text
 
     # A repeated final acquisition row is not a distinct RGB observation.
-    exact_rows = rows[:512] + [rows[0]]
+    exact_rows = [*rows[:512], rows[0]]
     feasible = client.post(
         base,
         json={
@@ -193,3 +193,40 @@ def test_rgb_pair_preservation_strict_source_and_capacity(
         "last_row_displayed": False,
     }
     assert "preview_omits_acquisition_endpoint_row" in sample["qc_warnings"]
+
+@pytest.mark.parametrize(
+    "invalid_rgb",
+    [
+        [[0, 0, 0]],
+        [[0, 0, 0], [256, 0, 0]],
+        [[0, 0, 0], [True, 0, 0]],
+        [[0, 0, 0], [1.5, 0, 0]],
+        [[0, 0, 0], "not-an-rgb-triplet"],
+    ],
+)
+@pytest.mark.parametrize("pin_rgb_pairs", [False, True])
+def test_direct_rgb_rows_require_valid_uint8_triplets(
+    invalid_rgb: list[object], pin_rgb_pairs: bool
+) -> None:
+    """Service callers cannot introduce unvalidated synthetic RGB evidence."""
+    with pytest.raises(ValueError, match="one uint8 RGB triplet per source row"):
+        measure_point_cloud_preview(
+            points=[[0, 0, 0], [1, 0, 0]],
+            **CALIBRATION,
+            point_colors=invalid_rgb,  # type: ignore[arg-type]
+            preserve_distinct_xyz_rgb_pairs_in_preview=pin_rgb_pairs,
+        )
+
+
+def test_direct_rgb_rows_accept_uint8_endpoints() -> None:
+    """Color limits are valid; RGB support never validates coral condition."""
+    measured = measure_point_cloud_preview(
+        points=[[0, 0, 0], [1, 0, 0]],
+        **CALIBRATION,
+        point_colors=[[0, 0, 0], [255, 255, 255]],
+        preserve_distinct_xyz_rgb_pairs_in_preview=True,
+    )
+    assert measured["preview_distinct_xyz_rgb_pairs_preservation_requested"] is True
+    assert measured["preview_point_indices"] == [0, 1]
+    assert measured["provenance"]["calibration_verified"] is False
+    assert measured["provenance"]["specimen_identity_verified"] is False
