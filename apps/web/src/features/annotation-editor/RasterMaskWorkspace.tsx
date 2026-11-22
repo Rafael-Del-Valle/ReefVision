@@ -629,7 +629,11 @@ export function RasterMaskWorkspace({
                 onFill={(point) => {
                   const context = captureEditContext();
                   if (context) {
-                    editMutation.mutate({ ...context, mode: "fill", points: [point] });
+                    editMutation.mutate({
+                      ...context,
+                      mode: "fill",
+                      points: [point],
+                    });
                   }
                 }}
               />
