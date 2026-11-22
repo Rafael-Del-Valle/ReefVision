@@ -181,7 +181,9 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--db", type=Path, required=True, help="Existing local ReefVision SQLite DB")
+    parser.add_argument(
+        "--db", type=Path, required=True, help="Existing local ReefVision SQLite DB"
+    )
     parser.add_argument("--run-id", required=True, help="Completed saved Workflow Builder run ID")
     parser.add_argument(
         "--data-dir", type=Path, required=True, help="Local ReefVision data root"
