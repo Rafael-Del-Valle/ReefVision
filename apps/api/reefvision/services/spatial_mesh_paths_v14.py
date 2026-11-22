@@ -417,12 +417,11 @@ def mesh_edge_paths(
             # A geometric mesh route cannot be shorter than its straight
             # endpoint chord. If binary64 operations violate this invariant,
             # withhold the dimensionless detour rather than reporting < 1.
-            chord_compatible = (
-                chord_mesh_units > 0
-                and chord_m > 0
-                and shortest[end] >= chord_mesh_units
+            detour_ratio = (
+                shortest[end] / chord_mesh_units
+                if chord_mesh_units > 0 and chord_m > 0 and shortest[end] >= chord_mesh_units
+                else None
             )
-            detour_ratio = shortest[end] / chord_mesh_units if chord_compatible else None
             # A finite nominal route can still overflow when its calibration
             # uncertainty is expanded. Never persist nonfinite scientific JSON.
             if scale_uncertainty is not None:
