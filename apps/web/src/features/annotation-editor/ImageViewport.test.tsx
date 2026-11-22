@@ -284,7 +284,11 @@ describe("ImageViewport", () => {
 
   it("ignores horizontal-only and invalid wheel input without shifting scientific overlays", () => {
     render(
-      <ImageViewport width={1600} height={1200} label="Wheel integrity viewport">
+      <ImageViewport
+        width={1600}
+        height={1200}
+        label="Wheel integrity viewport"
+      >
         <svg aria-label="Original scientific polygon">
           <polygon points="10,10 30,10 20,30" />
         </svg>
@@ -383,9 +387,7 @@ describe("ImageViewport", () => {
     });
     expect(transform.style.transform).not.toBe(initial);
     expect(
-      screen
-        .getByLabelText("Original coral coordinates")
-        .querySelector("rect"),
+      screen.getByLabelText("Original coral coordinates").querySelector("rect"),
     ).toHaveAttribute("x", "4");
   });
 });
