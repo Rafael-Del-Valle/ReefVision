@@ -237,7 +237,10 @@ describe("ClassManagerPanel", () => {
     ["missing identity inventory", { reference_fingerprint: null }],
     ["malformed identity inventory", { reference_fingerprint: "bad" }],
     ["unsafe summed mutable reference count", unsafeAggregateUsage(false)],
-    ["unsafe summed cross-modality reference count", unsafeAggregateUsage(true)],
+    [
+      "unsafe summed cross-modality reference count",
+      unsafeAggregateUsage(true),
+    ],
   ] as const)("rejects %s before merging", async (_reason, invalidFields) => {
     const confirmation = vi.spyOn(window, "confirm").mockReturnValue(true);
     const fetchMock = vi
