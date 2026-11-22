@@ -284,11 +284,7 @@ def require_existing_desktop_schema(settings: Settings) -> None:
     database_url = make_url(settings.resolved_database_url)
     if database_url.get_backend_name() == "sqlite":
         database_name = database_url.database
-        if (
-            not database_name
-            or database_name == ":memory:"
-            or not Path(database_name).is_file()
-        ):
+        if not database_name or database_name == ":memory:" or not Path(database_name).is_file():
             raise RuntimeError(
                 "ReefVision --skip-migrations requires an existing on-disk "
                 "SQLite database; refusing to create or serve an unverified schema."
@@ -300,9 +296,7 @@ def require_existing_desktop_schema(settings: Settings) -> None:
     config.set_main_option("script_location", str(migrations_dir))
     expected_revision = ScriptDirectory.from_config(config).get_current_head()
     if expected_revision is None:
-        raise RuntimeError(
-            "ReefVision --skip-migrations cannot verify the packaged Alembic head."
-        )
+        raise RuntimeError("ReefVision --skip-migrations cannot verify the packaged Alembic head.")
 
     engine = create_database_engine(settings)
     try:
