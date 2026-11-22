@@ -203,6 +203,20 @@ jobs:
       - name: Install pinned frontend dependencies
         working-directory: apps/web
         run: npm ci
+      - name: Enforce Prettier for first-image and gallery regression files
+        working-directory: apps/web
+        run: |
+          # Keep this focused suite aligned with general CI: a dedicated
+          # camera/gallery green must not hide malformed frontend test files.
+          npx prettier --check \
+            src/App.test.tsx \
+            src/features/annotation-editor/ImageViewport.tsx \
+            src/features/annotation-editor/ImageViewport.test.tsx \
+            src/features/gallery/Gallery.tsx \
+            src/features/gallery/Gallery.test.tsx \
+            src/features/gallery/galleryNavigation.ts \
+            src/features/gallery/galleryNavigation.test.ts \
+            tests/e2e/gallery-viewport-103.spec.ts
       - name: Validate gallery and image viewport regressions
         working-directory: apps/web
         run: |
