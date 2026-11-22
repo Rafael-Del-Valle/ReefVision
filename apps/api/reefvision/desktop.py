@@ -282,6 +282,11 @@ def require_existing_desktop_schema(settings: Settings) -> None:
     from reefvision.db.session import create_database_engine
 
     database_url = make_url(settings.resolved_database_url)
+    if database_url.get_backend_name() != "sqlite":
+        raise RuntimeError(
+            "ReefVision --skip-migrations requires an existing local SQLite database; "
+            "external database backends are unsupported for offline desktop startup."
+        )
     sqlite_path: Path | None = None
     if database_url.get_backend_name() == "sqlite":
         database_name = database_url.database
