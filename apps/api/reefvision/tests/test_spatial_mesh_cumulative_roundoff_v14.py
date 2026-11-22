@@ -57,6 +57,14 @@ def test_selected_route_cumulative_roundoff_is_exposed_and_replayed(
     assert affected["path_calibrated_edge_sum_exact_fraction_m"] == str(exact_total)
     assert affected["path_cumulative_total_exact_match"] is False
     assert affected["path_cumulative_roundoff_exact_fraction_m"] == str(-Fraction(1e-8))
+    assert affected["path_nominal_total_vs_edge_sum_exact_fraction_m"] == str(
+        -Fraction(1e-8)
+    )
+    assert affected["path_nominal_total_exact_match"] is False
+    assert (
+        "selected_mesh_route_nominal_total_disagrees_with_exact_edge_sum"
+        in affected["path_qc_warnings"]
+    )
     assert (
         "positive_selected_mesh_segment_lost_in_cumulative_distance" in affected["path_qc_warnings"]
     )
@@ -72,6 +80,12 @@ def test_selected_route_cumulative_roundoff_is_exposed_and_replayed(
     assert unaffected["path_calibrated_edge_sum_exact_fraction_m"] == "1000000000"
     assert unaffected["path_cumulative_total_exact_match"] is True
     assert unaffected["path_cumulative_roundoff_exact_fraction_m"] == "0"
+    assert unaffected["path_nominal_total_vs_edge_sum_exact_fraction_m"] == "0"
+    assert unaffected["path_nominal_total_exact_match"] is True
+    assert (
+        "selected_mesh_route_nominal_total_disagrees_with_exact_edge_sum"
+        not in unaffected["path_qc_warnings"]
+    )
     assert (
         "selected_mesh_route_cumulative_roundoff_disagrees_with_exact_edge_sum"
         not in unaffected["path_qc_warnings"]
@@ -136,3 +150,20 @@ def test_selected_route_cumulative_roundoff_is_exposed_and_replayed(
         digests.append(artifact["payload_sha256"])
     assert len(set(digests)) == 1
     assert len(digests[0]) == 64
+
+
+def test_unreferenced_route_has_no_nominal_exact_audit() -> None:
+    """Absent mesh path evidence must not be represented as an exact match."""
+    results = mesh_edge_paths(
+        points=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (9.0, 9.0, 9.0)],
+        faces=[[0, 1, 2]],
+        pairs=[[0, 3]],
+        scale=1.0,
+        scale_uncertainty=0.01,
+    )
+    assert results is not None
+    missing = results[0]
+    assert missing["status"] == "unreferenced_endpoint"
+    assert missing["path_nominal_total_exact_match"] is None
+    assert missing["path_nominal_total_vs_edge_sum_exact_fraction_m"] is None
+    assert missing["path_qc_warnings"] is None
