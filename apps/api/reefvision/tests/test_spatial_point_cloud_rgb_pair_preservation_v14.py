@@ -80,7 +80,6 @@ def test_ordered_rgb_acquisition_fingerprint_catches_hidden_observations(
     assert before["provenance"]["specimen_identity_verified"] is False
 
 
-
 def test_ply_channel_reordering_preserves_semantic_rgb_hash_and_saved_workflow(
     client: TestClient,
 ) -> None:
@@ -141,7 +140,9 @@ def test_ply_channel_reordering_preserves_semantic_rgb_hash_and_saved_workflow(
     assert original["preview_sample_geometry_sha256"] == (
         normalized["preview_sample_geometry_sha256"]
     )
-    assert original["preview_rgb_variant_support"] == normalized["preview_rgb_variant_support"]
+    assert original["preview_rgb_variant_support"] == (
+        normalized["preview_rgb_variant_support"]
+    )
 
     graph = {
         "graph_id": "canonical-point-cloud-rgb-v14",
