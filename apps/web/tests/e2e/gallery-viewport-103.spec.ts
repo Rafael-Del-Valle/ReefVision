@@ -928,7 +928,9 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
   }
   await expect
     .poll(() =>
-      page.locator("#rv-native-touch-positive-control").evaluate((element) => element.scrollTop),
+      page
+        .locator("#rv-native-touch-positive-control")
+        .evaluate((element) => element.scrollTop),
     )
     .toBeGreaterThan(40);
   await page.evaluate(() =>
