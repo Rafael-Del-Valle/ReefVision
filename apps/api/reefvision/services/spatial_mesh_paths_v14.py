@@ -377,7 +377,9 @@ def mesh_edge_paths(
             # Sum the *stored calibrated binary64 segment lengths* exactly for
             # a reproducible numerical-integrity reference. This does not
             # recover the unknown true geometry or calibration accuracy.
-            exact_edge_sum = sum((Fraction(length) for length in path_edge_lengths_m), Fraction(0))
+            exact_edge_sum = sum(
+                (Fraction(length) for length in path_edge_lengths_m), Fraction(0)
+            )
             path_calibrated_edge_sum_exact_fraction_m = str(exact_edge_sum)
             path_cumulative_total_exact_match = (
                 Fraction(path_cumulative_lengths_m[-1]) == exact_edge_sum
@@ -428,7 +430,9 @@ def mesh_edge_paths(
                     "positive_selected_mesh_segment_lost_in_cumulative_distance"
                 )
             if path_cumulative_total_exact_match is False:
-                path_qc_warnings.append("selected_mesh_route_cumulative_roundoff_disagrees_with_exact_edge_sum")
+                path_qc_warnings.append(
+                    "selected_mesh_route_cumulative_roundoff_disagrees_with_exact_edge_sum"
+                )
             if scale_uncertainty is not None:
                 path_edge_length_scale_intervals_m = [
                     _scale_only_length_interval(length, scale_uncertainty)
