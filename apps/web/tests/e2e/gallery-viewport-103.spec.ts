@@ -313,6 +313,18 @@ test("initial image and gallery scrolling", async ({ page }) => {
   ).toHaveAttribute("aria-current", "true");
   // This first-open check must be capable of failing when the browser scrolls.
   await enableDocumentScrollProbe(page);
+  // A tall document is not enough evidence that a real wheel event can
+  // scroll it. Positively verify native Chromium wheel movement OUTSIDE the
+  // workbench, then reset before asserting containment over the first image.
+  // Without this control, a browser input regression could silently make the
+  // first-image wheel test pass without exercising the scroll pathway.
+  await page.mouse.move(4, 4);
+  await page.mouse.wheel(0, 280);
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY))
+    .toBeGreaterThan(40);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   // Synthetic WheelEvent assertions below only prove that preventDefault was
   // called. Exercise real mouse-wheel input over the *first* loaded image to
   // catch compositor scrolling that partially displaces the camera preview.
