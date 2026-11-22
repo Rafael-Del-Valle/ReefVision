@@ -741,8 +741,7 @@ def measure_point_cloud_preview(
         # a scientifically feasible 512-locus preview as "over budget".
         protected = (
             distinct_locus_indices | distinct_rgb_pair_indices
-            if preserve_distinct_xyz_loci_in_preview
-            or preserve_distinct_xyz_rgb_pairs_in_preview
+            if preserve_distinct_xyz_loci_in_preview or preserve_distinct_xyz_rgb_pairs_in_preview
             else {0, len(vertices) - 1}
         )
         if preserve_axis_extrema_in_preview:
@@ -756,8 +755,7 @@ def measure_point_cloud_preview(
         # locus. Preserve the last row when a display slot remains, but never
         # sacrifice a distinct observed locus to retain a duplicate endpoint.
         if (
-            preserve_distinct_xyz_loci_in_preview
-            or preserve_distinct_xyz_rgb_pairs_in_preview
+            preserve_distinct_xyz_loci_in_preview or preserve_distinct_xyz_rgb_pairs_in_preview
         ) and len(protected) < preview_count:
             protected.add(len(vertices) - 1)
         # Fill remaining slots evenly across the entire source index range.
@@ -914,8 +912,7 @@ def measure_point_cloud_preview(
         centroid
         if len(preview_indices) == len(vertices)
         else [
-            fsum(vertices[index][axis] * scale for index in preview_indices)
-            / len(preview_indices)
+            fsum(vertices[index][axis] * scale for index in preview_indices) / len(preview_indices)
             for axis in range(3)
         ]
     )
@@ -967,6 +964,17 @@ def measure_point_cloud_preview(
     preview_centroid_separation_fraction = (
         preview_centroid_separation / diagonal if diagonal > 0.0 else None
     )
+    # Fingerprint every normalized, ordered XYZ/RGB acquisition row, including
+    # color observations omitted from the 512-point preview. This supplements
+    # geometry-only and exact-import-text hashes; it is not color calibration.
+    source_ordered_xyz_rgb_sha256: str | None = None
+    if point_colors is not None:
+        ordered_rgb_rows = [
+            [*xyz, *rgb] for xyz, rgb in zip(vertices, point_colors, strict=True)
+        ]
+        source_ordered_xyz_rgb_sha256 = hashlib.sha256(
+            json.dumps(ordered_rgb_rows, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
     return {
         "schema_version": "point-cloud-preview-0001",
         "point_count": len(vertices),
@@ -1227,6 +1235,7 @@ def measure_point_cloud_preview(
                 json.dumps(vertices, separators=(",", ":")).encode("utf-8")
             ).hexdigest(),
             "source_label": source_label,
+            "source_ordered_xyz_rgb_sha256": source_ordered_xyz_rgb_sha256,
             "meters_per_mesh_unit": scale,
             "calibration_method": calibration_method,
             "calibration_evidence": calibration_evidence.strip(),
