@@ -211,6 +211,31 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 "Checkpoint bytes differ from saved workflow provenance",
             )
 
+            # Scientific acceptance covers *all* checkpoint files frozen by
+            # the worker, not just the selected checkpoint registered as a model.
+            # Non-selected best/last weights are independent research artifacts.
+            checkpoint_manifest = training.artifact_manifest_json
+            for path_key, sha_key in (
+                ("best_checkpoint_path", "best_checkpoint_sha256"),
+                ("last_checkpoint_path", "last_checkpoint_sha256"),
+            ):
+                advertised_path = checkpoint_manifest.get(path_key)
+                advertised_sha = checkpoint_manifest.get(sha_key)
+                if advertised_path is None and advertised_sha is None:
+                    continue
+                _require(
+                    isinstance(advertised_path, str)
+                    and bool(advertised_path)
+                    and isinstance(advertised_sha, str)
+                    and len(advertised_sha) == 64
+                    and all(char in "0123456789abcdef" for char in advertised_sha),
+                    f"{path_key} and {sha_key} must be paired and valid",
+                )
+                _require(
+                    _digest(_managed_file(root, advertised_path)) == advertised_sha,
+                    f"{path_key} bytes differ from saved training manifest",
+                )
+
             model = session.get(ModelRegistration, registered.get("model_id"))
             _require(
                 model is not None and model.project_id == run.project_id,
