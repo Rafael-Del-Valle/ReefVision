@@ -515,7 +515,9 @@ describe("ImageViewport", () => {
     render(
       <ImageViewport width={1600} height={1200} label="Keyboard-safe viewport">
         <div contentEditable suppressContentEditableWarning>
-          <span data-testid="editable-biological-note">Swiftia observation</span>
+          <span data-testid="editable-biological-note">
+            Swiftia observation
+          </span>
         </div>
         <div role="textbox" tabIndex={0} data-testid="qc-textbox">
           Reviewer notes
@@ -559,7 +561,9 @@ describe("ImageViewport", () => {
     fireEvent.keyDown(screen.getByTestId("qc-textbox"), { key: "f" });
     expect(transform.style.transform).toBe(zoomed);
     expect(
-      screen.getByLabelText("Unmodified annotation geometry").querySelector("polygon"),
+      screen
+        .getByLabelText("Unmodified annotation geometry")
+        .querySelector("polygon"),
     ).toHaveAttribute("points", "10,10 20,10 20,20");
 
     const plainFit = createEvent.keyDown(frame, { key: "f" });
