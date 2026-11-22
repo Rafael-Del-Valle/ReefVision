@@ -165,3 +165,104 @@ def test_unreferenced_route_has_no_nominal_exact_audit() -> None:
     assert missing["path_nominal_total_exact_match"] is None
     assert missing["path_nominal_total_vs_edge_sum_exact_fraction_m"] is None
     assert missing["path_qc_warnings"] is None
+
+# These exact binary64 source vertices give a three-edge route whose
+# floating-point sum falls two ULPs below the direct endpoint chord.
+# That is numerical roundoff, not a physically shorter-than-straight path.
+CHORD_ROUNDOFF_GEOMETRY = {
+    "vertices": [
+        [0.0, 0.0, 0.0],
+        [-37065.674321059916, 10247.450897058909, -1333.5982486606838],
+        [-37412.33252442518, 10343.290591928018, -1346.0707796845995],
+        [-115608.26686859324, 31961.91785877955, -4159.508360517106],
+        [1_000_000.0, 0.0, 0.0],
+    ],
+    "faces": [[0, 1, 4], [1, 2, 4], [2, 3, 4]],
+    "meters_per_unit": 1.0,
+    "calibration_method": "ruler",
+    "calibration_evidence": "Synthetic numeric chord invariant, not verified coral geometry",
+    "relative_scale_uncertainty": 0.02,
+    "surface_path_vertex_pairs": [[0, 3], [0, 1]],
+}
+
+
+def test_impossible_subunit_detour_ratio_is_withheld_in_saved_workflows(
+    client: TestClient,
+) -> None:
+    """A numerically shorter route must not masquerade as biological geometry."""
+    direct_paths = mesh_edge_paths(
+        points=[tuple(vertex) for vertex in CHORD_ROUNDOFF_GEOMETRY["vertices"]],
+        faces=CHORD_ROUNDOFF_GEOMETRY["faces"],
+        pairs=CHORD_ROUNDOFF_GEOMETRY["surface_path_vertex_pairs"],
+        scale=1.0,
+        scale_uncertainty=0.02,
+    )
+    assert direct_paths is not None
+    affected, control = direct_paths
+    assert affected["status"] == "connected"
+    assert affected["path_vertex_indices"] == [0, 1, 2, 3]
+    assert affected["length_m"] < affected["endpoint_chord_length_m"]
+    assert affected["geometric_detour_ratio"] is None
+    assert affected["geometric_excess_length_m"] == 0.0
+    assert "endpoint_chord_exceeds_rounded_selected_route" in affected["path_qc_warnings"]
+    assert control["path_vertex_indices"] == [0, 1]
+    assert control["geometric_detour_ratio"] == 1.0
+    assert "endpoint_chord_exceeds_rounded_selected_route" not in control["path_qc_warnings"]
+
+    direct = measure_mesh_preview(**CHORD_ROUNDOFF_GEOMETRY)
+    assert direct["surface_edge_paths"] == direct_paths
+    assert direct["provenance"]["calibration_verified"] is False
+
+    project_id = str(create_project(client, "Chord triangle inequality scientific QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=CHORD_ROUNDOFF_GEOMETRY)
+    assert standalone.status_code == 200, standalone.text
+    measured = standalone.json()
+    assert measured["surface_edge_paths"] == direct_paths
+
+    graph = {
+        "graph_id": "chord-roundoff-typed-v14",
+        "name": "Provisional mesh path chord roundoff QC",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {
+                "node_id": "mesh",
+                "node_type": "mesh_surface_preview",
+                "parameters": CHORD_ROUNDOFF_GEOMETRY,
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    digests: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        )
+        assert artifact["payload_json"] == measured
+        digests.append(artifact["payload_sha256"])
+    assert len(set(digests)) == 1
+    assert len(digests[0]) == 64
