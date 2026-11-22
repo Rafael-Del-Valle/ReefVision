@@ -964,6 +964,15 @@ function GalleryContent({
       }
     }
     window.addEventListener("resize", alignFocusedThumbnail);
+    // Embedded WebView2 may only signal visualViewport.resize after display
+    // scaling or docking changes. Re-align the selected scientific image's
+    // filmstrip button without changing the source image or document scroll.
+    const visualViewport = window.visualViewport;
+    try {
+      visualViewport?.addEventListener("resize", alignFocusedThumbnail);
+    } catch {
+      // A partial VisualViewport implementation must not block gallery startup.
+    }
     return () => {
       try {
         observer?.disconnect();
@@ -971,6 +980,11 @@ function GalleryContent({
         // Broken embedded observer cleanup must not crash gallery teardown.
       }
       window.removeEventListener("resize", alignFocusedThumbnail);
+      try {
+        visualViewport?.removeEventListener("resize", alignFocusedThumbnail);
+      } catch {
+        // The desktop view can be torn down while WebView2 is unavailable.
+      }
     };
   }, [focusedImage?.id, filmstripOrderKey]);
 
