@@ -302,6 +302,7 @@ def mesh_edge_paths(
         path_qc_warnings: list[str] | None = None
         path_edge_lengths_m: list[float] | None = None
         path_cumulative_lengths_m: list[float] | None = None
+        path_cumulative_lost_positive_segment_indices: list[int] | None = None
         path_cumulative_length_scale_intervals_m: list[list[float] | None] | None = None
         path_vertices_in_source_frame_m: list[list[float]] | None = None
         path_edge_length_scale_intervals_m: list[list[float] | None] | None = None
@@ -361,6 +362,16 @@ def mesh_edge_paths(
             path_cumulative_lengths_m = [0.0, *accumulate(path_edge_lengths_m)]
             if any(not isfinite(length) for length in path_cumulative_lengths_m):
                 raise ValueError("Calibrated cumulative mesh path length overflowed")
+            # A real positive segment can be too small to advance a large
+            # floating-point cumulative distance. Preserve the segment itself
+            # and expose precisely which selected route edges lost resolution.
+            # These are zero-based segment positions, not biological landmarks.
+            path_cumulative_lost_positive_segment_indices = [
+                index
+                for index, segment_length in enumerate(path_edge_lengths_m)
+                if segment_length > 0
+                and path_cumulative_lengths_m[index + 1] == path_cumulative_lengths_m[index]
+            ]
             meters = shortest[end] * scale
             if not isfinite(meters):
                 raise ValueError("Calibrated mesh path length overflowed")
@@ -402,6 +413,8 @@ def mesh_edge_paths(
             # Route flags are topology evidence, not biological branch validation.
             route_edges = [(min(a, b), max(a, b)) for a, b in pairwise(route)]
             path_qc_warnings = []
+            if path_cumulative_lost_positive_segment_indices:
+                path_qc_warnings.append("positive_selected_mesh_segment_lost_in_cumulative_distance")
             if scale_uncertainty is not None:
                 path_edge_length_scale_intervals_m = [
                     _scale_only_length_interval(length, scale_uncertainty)
@@ -517,6 +530,9 @@ def mesh_edge_paths(
                 "maximum_turn_angle_deg": maximum_turn_angle_deg,
                 "total_absolute_geometric_turn_deg": total_absolute_geometric_turn_deg,
                 "path_cumulative_lengths_m": path_cumulative_lengths_m,
+                "path_cumulative_lost_positive_segment_indices": (
+                    path_cumulative_lost_positive_segment_indices
+                ),
                 "path_cumulative_length_scale_intervals_m": (
                     path_cumulative_length_scale_intervals_m
                 ),
