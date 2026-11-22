@@ -1405,7 +1405,7 @@ it("requires destination class visibility before reclassifying an existing raste
       />
     </QueryClientProvider>,
   );
-  await screen.findByRole("button", { name: /Coral \\| r1/i });
+  await screen.findByRole("button", { name: /Coral \| r1/i });
   await waitFor(() =>
     expect(screen.getByTestId("raster-visibility-source")).toHaveTextContent(
       "My Preference",
