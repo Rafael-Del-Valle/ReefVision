@@ -20,14 +20,16 @@ function metricLabel(value: string): string {
   return value.replaceAll("/", " ").replaceAll("_", " ");
 }
 
-function isPlausibleMetricObservation(key: string, value: unknown): value is number {
+function isPlausibleMetricObservation(
+  key: string,
+  value: unknown,
+): value is number {
   if (typeof value !== "number" || !Number.isFinite(value)) return false;
   // Standard YOLO component losses are nonnegative. Corrupt live samples
   // must not be presented as scientific measurements. Do not impose that
   // constraint on deliberately signed custom objectives or other metrics.
   return (
-    value >= 0 ||
-    !/^(?:train|val)\/(?:box|cls|dfl|seg|mask)_loss$/i.test(key)
+    value >= 0 || !/^(?:train|val)\/(?:box|cls|dfl|seg|mask)_loss$/i.test(key)
   );
 }
 
