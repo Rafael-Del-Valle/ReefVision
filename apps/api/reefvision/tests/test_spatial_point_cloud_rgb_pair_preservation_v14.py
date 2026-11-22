@@ -268,22 +268,24 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
             int(rare_index in indices),
         ]
         displayed_frequencies = [Fraction(count, len(indices)) for count in displayed_counts]
-        reference_tv = sum(
-            (
-                abs(before - after)
-                for before, after in zip(
-                    source_frequencies, displayed_frequencies, strict=True
-                )
-            ),
-            Fraction(0, 1),
-        ) / 2
+        reference_tv = (
+            sum(
+                (
+                    abs(before - after)
+                    for before, after in zip(source_frequencies, displayed_frequencies, strict=True)
+                ),
+                Fraction(0, 1),
+            )
+            / 2
+        )
         observed = artifact["preview_rgb_variant_support"]
         assert observed["preview_vs_source_xyz_rgb_observation_total_variation"] == (
             pytest.approx(float(reference_tv))
         )
-        assert observed[
-            "preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction"
-        ] == [reference_tv.numerator, reference_tv.denominator]
+        assert observed["preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction"] == [
+            reference_tv.numerator,
+            reference_tv.denominator,
+        ]
         assert reference_tv > 0
         assert (
             "preview_shifts_xyz_rgb_observation_frequency_distribution" in artifact["qc_warnings"]
