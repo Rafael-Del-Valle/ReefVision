@@ -103,3 +103,20 @@ def test_refuses_colliding_version_with_hybrid_tables(tmp_path: Path) -> None:
     assert report["classification"] == "ambiguous"
     assert report["automatic_migration_authorized"] is False
     assert report["issues"]
+
+
+def test_qc_lineage_requires_event_check_not_incidental_sql_text(tmp_path: Path) -> None:
+    # A colliding revision plus words in an unrelated SQL comment cannot
+    # certify the installed QC triage CHECK constraint.
+    ddl = """
+        CREATE TABLE review_queue_item_events (
+          id TEXT, project_id TEXT, review_queue_item_id TEXT,
+          client_request_id TEXT, event_type TEXT, actor TEXT,
+          CHECK(event_type IN ('comment', 'assign', 'unassign')),
+          note TEXT -- 'triage_start', 'triage_skip', 'triage_return'
+        );
+    """
+    status, report = _inspect(tmp_path, ddl, "0039")
+    assert status == 2
+    assert report["classification"] == "ambiguous"
+    assert report["review_event_check"] == "coordination"
