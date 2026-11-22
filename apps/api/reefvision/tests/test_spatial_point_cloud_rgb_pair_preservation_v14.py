@@ -285,7 +285,9 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
             "preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction"
         ] == [reference_tv.numerator, reference_tv.denominator]
         assert reference_tv > 0
-        assert "preview_shifts_xyz_rgb_observation_frequency_distribution" in artifact["qc_warnings"]
+        assert (
+            "preview_shifts_xyz_rgb_observation_frequency_distribution" in artifact["qc_warnings"]
+        )
     assert normal["preview_rgb_variant_support"]["preview_distinct_xyz_rgb_pairs"] == 2
     normal_rgb = normal["preview_rgb_variant_support"]
     assert normal_rgb["source_repeated_xyz_rgb_observation_rows"] == 597
