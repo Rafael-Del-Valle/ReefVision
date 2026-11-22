@@ -333,7 +333,8 @@ describe("RasterBrushLayer", () => {
     });
     fireEvent.pointerUp(canvas, { pointerId: 44 });
     expect(onStrokeCancel).not.toHaveBeenCalled();
-    expect(onStroke).toHaveBeenCalledExactlyOnceWith(
+    expect(onStroke).toHaveBeenCalledTimes(1);
+    expect(onStroke).toHaveBeenCalledWith(
       [{ x: 200, y: 150 }],
       { mode: "paint", brushRadius: 10 },
     );
