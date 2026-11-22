@@ -507,8 +507,46 @@ def mesh_edge_paths(
                     if geometric_excess_m is not None
                     else None
                 )
+                # A positive distance in the imported source frame can become
+                # binary64 zero after applying a tiny physical scale. Such a
+                # calibrated zero is not a genuinely zero-length mesh edge,
+                # endpoint chord, route, or positive detour. Preserve nominal
+                # underflow QC but never publish a false [0, 0] scale bound.
+                calibration_underflow = (
+                    (shortest[end] > 0 and meters == 0)
+                    or (chord_mesh_units > 0 and chord_m == 0)
+                    or (
+                        geometric_excess_source_units is not None
+                        and geometric_excess_source_units > 0
+                        and geometric_excess_m == 0
+                    )
+                    or any(
+                        adjacency[a][b] > 0 and length == 0
+                        for (a, b), length in zip(
+                            pairwise(route), path_edge_lengths_m, strict=True
+                        )
+                    )
+                )
+                if shortest[end] > 0 and meters == 0:
+                    length_scale_interval_m = None
+                if chord_mesh_units > 0 and chord_m == 0:
+                    endpoint_chord_scale_interval_m = None
+                if (
+                    geometric_excess_source_units is not None
+                    and geometric_excess_source_units > 0
+                    and geometric_excess_m == 0
+                ):
+                    geometric_excess_scale_interval_m = None
+                positive_source_prefix = False
+                for index, (a, b) in enumerate(pairwise(route)):
+                    if adjacency[a][b] > 0 and path_edge_lengths_m[index] == 0:
+                        path_edge_length_scale_intervals_m[index] = None
+                    positive_source_prefix = positive_source_prefix or adjacency[a][b] > 0
+                    if positive_source_prefix and path_cumulative_lengths_m[index + 1] == 0:
+                        path_cumulative_length_scale_intervals_m[index + 1] = None
                 unresolved = (
-                    (meters > 0 and length_scale_interval_m is None)
+                    calibration_underflow
+                    or (meters > 0 and length_scale_interval_m is None)
                     or (chord_m > 0 and endpoint_chord_scale_interval_m is None)
                     or (
                         geometric_excess_m is not None
