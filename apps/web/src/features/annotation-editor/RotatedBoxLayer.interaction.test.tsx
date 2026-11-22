@@ -472,5 +472,4 @@ describe("RotatedBoxLayer pointer integrity", () => {
     expect(onUpdate.mock.calls[0][0].points).not.toEqual(original.points);
     expect(original.points).toHaveLength(4);
   });
-
 });
