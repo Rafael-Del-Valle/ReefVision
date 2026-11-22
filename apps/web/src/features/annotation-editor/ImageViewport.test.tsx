@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -305,16 +305,22 @@ describe("ImageViewport", () => {
       clientX: 100,
       clientY: 100,
     });
-    fireEvent.wheel(frame, {
-      deltaY: Infinity,
+    // Override an already-created DOM event: WebIDL constructors can reject
+    // nonfinite numeric initialization before the React handler sees it.
+    const invalidDelta = createEvent.wheel(frame, {
+      deltaY: -100,
       clientX: 100,
       clientY: 100,
     });
-    fireEvent.wheel(frame, {
+    Object.defineProperty(invalidDelta, "deltaY", { value: Infinity });
+    fireEvent(frame, invalidDelta);
+    const invalidFocus = createEvent.wheel(frame, {
       deltaY: -100,
-      clientX: Infinity,
+      clientX: 100,
       clientY: 100,
     });
+    Object.defineProperty(invalidFocus, "clientX", { value: Infinity });
+    fireEvent(frame, invalidFocus);
     expect(transform.style.transform).toBe(original);
     expect(polygon).toHaveAttribute("points", "10,10 30,10 20,30");
 
@@ -341,12 +347,14 @@ describe("ImageViewport", () => {
     const transform = screen.getByTestId("image-viewport-transform");
     const initial = transform.style.transform;
 
-    fireEvent.pointerDown(frame, {
+    const invalidStart = createEvent.pointerDown(frame, {
       pointerId: 1,
       button: 1,
-      clientX: Infinity,
+      clientX: 10,
       clientY: 10,
     });
+    Object.defineProperty(invalidStart, "clientX", { value: Infinity });
+    fireEvent(frame, invalidStart);
     fireEvent.pointerMove(window, {
       pointerId: 1,
       clientX: 40,
@@ -360,11 +368,13 @@ describe("ImageViewport", () => {
       clientX: 10,
       clientY: 20,
     });
-    fireEvent.pointerMove(window, {
+    const invalidMove = createEvent.pointerMove(window, {
       pointerId: 2,
-      clientX: NaN,
+      clientX: 30,
       clientY: 40,
     });
+    Object.defineProperty(invalidMove, "clientX", { value: NaN });
+    fireEvent(window, invalidMove);
     expect(transform.style.transform).toBe(initial);
     fireEvent.pointerMove(window, {
       pointerId: 2,
@@ -378,5 +388,4 @@ describe("ImageViewport", () => {
         .querySelector("rect"),
     ).toHaveAttribute("x", "4");
   });
-
 });
