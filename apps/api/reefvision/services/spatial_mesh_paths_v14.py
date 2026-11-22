@@ -414,9 +414,15 @@ def mesh_edge_paths(
             # cancels, and dividing two tiny calibrated lengths loses precision.
             # An underflowed calibrated chord is not a usable physical endpoint
             # distance, however, so do not report a ratio against zero meters.
-            detour_ratio = (
-                shortest[end] / chord_mesh_units if chord_mesh_units > 0 and chord_m > 0 else None
+            # A geometric mesh route cannot be shorter than its straight
+            # endpoint chord. If binary64 operations violate this invariant,
+            # withhold the dimensionless detour rather than reporting < 1.
+            chord_compatible = (
+                chord_mesh_units > 0
+                and chord_m > 0
+                and shortest[end] >= chord_mesh_units
             )
+            detour_ratio = shortest[end] / chord_mesh_units if chord_compatible else None
             # A finite nominal route can still overflow when its calibration
             # uncertainty is expanded. Never persist nonfinite scientific JSON.
             if scale_uncertainty is not None:
@@ -436,6 +442,8 @@ def mesh_edge_paths(
             # Route flags are topology evidence, not biological branch validation.
             route_edges = [(min(a, b), max(a, b)) for a, b in pairwise(route)]
             path_qc_warnings = []
+            if shortest[end] < chord_mesh_units:
+                path_qc_warnings.append("endpoint_chord_exceeds_rounded_selected_route")
             if path_cumulative_lost_positive_segment_indices:
                 path_qc_warnings.append(
                     "positive_selected_mesh_segment_lost_in_cumulative_distance"
