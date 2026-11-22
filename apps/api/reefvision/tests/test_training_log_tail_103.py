@@ -666,6 +666,30 @@ def test_log_tail_quarantines_adjacent_terminal_strings_inside_loss_tokens(
     assert log.read_bytes() == original
 
 
+
+@pytest.mark.parametrize(
+    "tampered_record",
+    [
+        b"train/box_loss=0.2\x1b]0;title\x07\x1b[32m5",
+        b"train/cls_loss=0.\x1b[31m\x1bPgraphics\x1b\\30",
+        b"train/dfl_loss=0.1\x1b]0;first\x07\x1b[35m\x1b]0;second\x070",
+    ],
+)
+def test_log_tail_quarantines_interleaved_terminal_strings_and_sgr(
+    tmp_path: Path, tampered_record: bytes
+) -> None:
+    """Mixed invisible controls cannot join loss digits into fabricated measurements."""
+    log = tmp_path / "training.log"
+    original = tampered_record + b"\ntrain/box_loss=0.22\n"
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "[terminal-edited training log record omitted]\ntrain/box_loss=0.22\n",
+    }
+    assert log.read_bytes() == original
+
+
 @pytest.mark.parametrize(
     "spliced_record",
     [
