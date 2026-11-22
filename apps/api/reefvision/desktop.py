@@ -271,6 +271,54 @@ def preload_frozen_windows_scipy_native() -> None:
     LOGGER.info("SciPy ARPACK preloaded: %s", eigsh.__name__)
 
 
+def require_existing_desktop_schema(settings: Settings) -> None:
+    """Fail closed when --skip-migrations would serve an unverified local database.
+
+    Inspect only: never stamp, upgrade, create a missing SQLite database or
+    reinterpret a foreign 1.1/1.6 revision-0038 lineage as an accepted schema.
+    """
+    from sqlalchemy.engine import make_url
+
+    from reefvision.db.session import create_database_engine
+
+    database_url = make_url(settings.resolved_database_url)
+    if database_url.get_backend_name() == "sqlite":
+        database_name = database_url.database
+        if (
+            not database_name
+            or database_name == ":memory:"
+            or not Path(database_name).is_file()
+        ):
+            raise RuntimeError(
+                "ReefVision --skip-migrations requires an existing on-disk "
+                "SQLite database; refusing to create or serve an unverified schema."
+            )
+
+    alembic_ini, migrations_dir = resolve_alembic_paths()
+    config = Config(str(alembic_ini))
+    config.attributes["configure_logger"] = False
+    config.set_main_option("script_location", str(migrations_dir))
+    expected_revision = ScriptDirectory.from_config(config).get_current_head()
+    if expected_revision is None:
+        raise RuntimeError(
+            "ReefVision --skip-migrations cannot verify the packaged Alembic head."
+        )
+
+    engine = create_database_engine(settings)
+    try:
+        with engine.connect() as connection:
+            assert_compatible_revision_0038(connection)
+            actual_revision = MigrationContext.configure(connection).get_current_revision()
+    finally:
+        engine.dispose()
+    if actual_revision != expected_revision:
+        raise RuntimeError(
+            "ReefVision --skip-migrations refused an outdated or unknown "
+            "database revision; preserve the database and use a reviewed "
+            "migration/backup procedure before starting the desktop API."
+        )
+
+
 def run_pending_migrations(settings: Settings) -> None:
     alembic_ini, migrations_dir = resolve_alembic_paths()
     config = Config(str(alembic_ini))
@@ -595,11 +643,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure_logging(options.log_file)
     try:
         settings = build_settings(options)
-        settings.ensure_directories()
-        LOGGER.info("Starting ReefVision desktop API on %s:%s", options.host, options.port)
         if options.run_migrations:
+            settings.ensure_directories()
             LOGGER.info("Applying pending Alembic migrations")
             run_pending_migrations(settings)
+        else:
+            LOGGER.info("Checking existing desktop schema without migration")
+            require_existing_desktop_schema(settings)
+            settings.ensure_directories()
+        LOGGER.info("Starting ReefVision desktop API on %s:%s", options.host, options.port)
         if options.self_test:
             LOGGER.info("Running packaged ReefVision desktop self-test")
             return run_self_test(settings)
