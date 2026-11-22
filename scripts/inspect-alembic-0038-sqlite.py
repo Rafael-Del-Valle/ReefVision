@@ -62,6 +62,12 @@ def inspect_database(path: Path) -> dict[str, object]:
     with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as connection:
         connection.execute("PRAGMA query_only=ON")
         version_rows = connection.execute("SELECT version_num FROM alembic_version").fetchall()
+        # A valid revision marker and FK graph cannot certify persisted CHECK
+        # violations or damaged SQLite structures. This is read-only.
+        # Do not expose raw SQLite diagnostics or private scientific values.
+        sqlite_quick_check_passed = (
+            connection.execute("PRAGMA quick_check(1)").fetchone() == ("ok",)
+        )
         # A revision marker can survive corrupted cross-table relationships.
         # Check declared FKs even if the original writer disabled enforcement.
         # Aggregate offending child/parent table pairs without exposing row IDs
@@ -220,6 +226,8 @@ def inspect_database(path: Path) -> dict[str, object]:
         count for event_type, count in qc_event_type_counts if event_type not in allowed
     )
     issues = []
+    if not sqlite_quick_check_passed:
+        issues.append("SQLite quick_check detected persisted integrity violations")
     if foreign_key_violations:
         issues.append(f"Database has {foreign_key_violations} foreign-key violations")
     if qc_event_type_violations:
@@ -276,6 +284,7 @@ def inspect_database(path: Path) -> dict[str, object]:
         "qc_event_type_violations": qc_event_type_violations,
         "qc_request_key_unique": qc_request_key_unique,
         "qc_required_columns_not_null": qc_required_columns_not_null,
+        "sqlite_quick_check_passed": sqlite_quick_check_passed,
         "foreign_key_violations": foreign_key_violations,
         "foreign_key_violation_sources": foreign_key_violation_sources,
         "classification": classification,

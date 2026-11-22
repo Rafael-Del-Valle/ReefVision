@@ -393,3 +393,34 @@ def test_refuses_nullable_qc_request_ids_despite_a_real_unique_constraint(
     assert report["qc_event_type_violations"] == 0
     assert report["automatic_migration_authorized"] is False
     assert any("missing or nullable" in issue for issue in report["issues"])
+
+
+def test_refuses_persisted_scientific_check_violation_outside_fk_audit(
+    tmp_path: Path,
+) -> None:
+    # A saved 1.1 scientific record can violate its table's CHECK if a
+    # historical importer disabled enforcement. FK checks and column
+    # signatures alone would incorrectly certify its Alembic lineage.
+    ddl = """
+        CREATE TABLE scientific_records (
+          id TEXT, project_id TEXT,
+          variable TEXT CHECK (variable IN ('temperature', 'salinity')),
+          content_sha256 TEXT
+        );
+        CREATE TABLE environmental_cache_entries (
+          id TEXT, project_id TEXT, cache_key TEXT, source_url TEXT
+        );
+        PRAGMA ignore_check_constraints=ON;
+        INSERT INTO scientific_records VALUES (
+          'record-1', 'project-1', 'not-a-measured-variable', 'frozen-hash'
+        );
+        PRAGMA ignore_check_constraints=OFF;
+    """
+    status, report = _inspect(tmp_path, ddl, "0038")
+    assert status == 2
+    assert report["classification"] == "ambiguous"
+    assert report["table_signatures"]["scientific_records"] is True
+    assert report["foreign_key_violations"] == 0
+    assert report["sqlite_quick_check_passed"] is False
+    assert report["automatic_migration_authorized"] is False
+    assert any("quick_check" in issue for issue in report["issues"])
