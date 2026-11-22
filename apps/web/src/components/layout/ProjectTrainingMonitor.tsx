@@ -20,6 +20,17 @@ function metricLabel(value: string): string {
   return value.replaceAll("/", " ").replaceAll("_", " ");
 }
 
+function isPlausibleMetricObservation(key: string, value: unknown): value is number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return false;
+  // Standard YOLO component losses are nonnegative. Corrupt live samples
+  // must not be presented as scientific measurements. Do not impose that
+  // constraint on deliberately signed custom objectives or other metrics.
+  return (
+    value >= 0 ||
+    !/^(?:train|val)\/(?:box|cls|dfl|seg|mask)_loss$/i.test(key)
+  );
+}
+
 function metricEntries(run: TrainingRun): Array<[string, number, string]> {
   // Training summaries can lag behind per-epoch history. Prefer the last
   // finite observed loss for live box/cls/dfl reporting, while keeping the
@@ -33,7 +44,7 @@ function metricEntries(run: TrainingRun): Array<[string, number, string]> {
     // of making the box/cls/dfl metric disappear from the live monitor.
     for (let index = values.length - 1; index >= 0; index -= 1) {
       const value = values[index];
-      if (typeof value === "number" && Number.isFinite(value)) {
+      if (isPlausibleMetricObservation(key, value)) {
         const source = `history entry ${index + 1}/${values.length}`;
         const prior = index < values.length - 1 ? "; prior sample" : "";
         latest.set(key, {
@@ -45,7 +56,7 @@ function metricEntries(run: TrainingRun): Array<[string, number, string]> {
     }
   }
   for (const [key, value] of Object.entries(run.metrics ?? {})) {
-    if (typeof value === "number" && Number.isFinite(value)) {
+    if (isPlausibleMetricObservation(key, value)) {
       if (!key.startsWith("train/") || !latest.has(key)) {
         const history = run.metrics_history?.[key];
         latest.set(key, {

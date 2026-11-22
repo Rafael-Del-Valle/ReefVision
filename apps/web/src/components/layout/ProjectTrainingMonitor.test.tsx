@@ -320,6 +320,48 @@ describe("ProjectTrainingMonitor", () => {
     expect(screen.queryByText("NaN")).not.toBeInTheDocument();
   });
 
+  it("excludes negative standard YOLO losses while retaining valid prior samples and signed objectives", async () => {
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([
+      {
+        ...activeRun,
+        metrics: {
+          "train/box_loss": -0.6,
+          "train/cls_loss": -0.8,
+          "train/seg_loss": 0.7,
+          "VAL/CLS_LOSS": -0.5,
+          "train/custom_signed_objective": -0.25,
+        },
+        metrics_history: {
+          "train/box_loss": [0.4, -0.1],
+          "train/cls_loss": [-0.8],
+          "TRAIN/DFL_LOSS": [0.8, -0.2],
+          "train/seg_loss": [-0.3],
+        },
+      },
+    ]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector");
+
+    const boxRow = screen.getByText("train box loss").closest("div");
+    expect(boxRow).toHaveTextContent("0.4");
+    expect(boxRow).toHaveTextContent("prior sample");
+    expect(screen.queryByText("train cls loss")).not.toBeInTheDocument();
+
+    const dflRow = screen.getByText("TRAIN DFL LOSS").closest("div");
+    expect(dflRow).toHaveTextContent("0.8");
+    expect(dflRow).toHaveTextContent("prior sample");
+
+    const segRow = screen.getByText("train seg loss").closest("div");
+    expect(segRow).toHaveTextContent("0.7");
+    expect(segRow).toHaveTextContent("summary fallback");
+    expect(screen.queryByText("VAL CLS LOSS")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("train custom signed objective").closest("div"),
+    ).toHaveTextContent("-0.25");
+    expect(api.cancelTrainingRun).not.toHaveBeenCalled();
+  });
+
   it("labels stale loss samples and summary fallbacks without claiming current-epoch measurements", async () => {
     vi.mocked(api.getTrainingRuns).mockResolvedValue([
       {
