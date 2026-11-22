@@ -365,12 +365,8 @@ test("initial image and gallery scrolling", async ({ page }) => {
   const horizontalTouchSession = await page.context().newCDPSession(page);
   try {
     await horizontalTouchSession.send("Input.synthesizeScrollGesture", {
-      x: Math.round(
-        horizontalTouchStart!.x + horizontalTouchStart!.width / 2,
-      ),
-      y: Math.round(
-        horizontalTouchStart!.y + horizontalTouchStart!.height / 2,
-      ),
+      x: Math.round(horizontalTouchStart!.x + horizontalTouchStart!.width / 2),
+      y: Math.round(horizontalTouchStart!.y + horizontalTouchStart!.height / 2),
       xDistance: -380,
       gestureSourceType: "touch",
       speed: 800,
