@@ -107,15 +107,17 @@ def inspect_database(path: Path) -> dict[str, object]:
                     missing
                 )
             else:
+                # SQLite's != yields NULL for a missing parent scope, so
+                # use NULL-safe IS NOT to catch corrupted legacy relationships.
                 qc_scope_violations = connection.execute(
                     "SELECT COUNT(*) FROM review_queue_item_events AS event "
                     "LEFT JOIN review_queues AS queue ON queue.id = event.review_queue_id "
                     "LEFT JOIN review_queue_items AS item ON item.id = event.review_queue_item_id "
                     "LEFT JOIN projects AS project ON project.id = event.project_id "
                     "WHERE queue.id IS NULL OR item.id IS NULL OR project.id IS NULL "
-                    "OR item.review_queue_id != event.review_queue_id "
-                    "OR item.project_id != event.project_id "
-                    "OR queue.project_id != event.project_id"
+                    "OR item.review_queue_id IS NOT event.review_queue_id "
+                    "OR item.project_id IS NOT event.project_id "
+                    "OR queue.project_id IS NOT event.project_id"
                 ).fetchone()[0]
 
     versions = [row[0] for row in version_rows]

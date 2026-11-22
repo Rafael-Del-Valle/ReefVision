@@ -244,3 +244,40 @@ def test_rejects_historical_qc_event_types_outside_installed_check(
     assert report["qc_event_type_violations"] == 1
     assert report["automatic_migration_authorized"] is False
     assert any("disallowed event types" in issue for issue in report["issues"])
+
+
+def test_rejects_nullable_historical_qc_parent_queue_link(tmp_path: Path) -> None:
+    # An imported or legacy parent table can retain nullable references.
+    # SQL "!=" ignores NULL and previously certified this corrupt event
+    # even though its item no longer belongs to the recorded review queue.
+    ddl = """
+        CREATE TABLE projects (id TEXT PRIMARY KEY);
+        CREATE TABLE review_queues (
+          id TEXT PRIMARY KEY, project_id TEXT NOT NULL
+        );
+        CREATE TABLE review_queue_items (
+          id TEXT PRIMARY KEY, review_queue_id TEXT, project_id TEXT NOT NULL
+        );
+        CREATE TABLE review_queue_item_events (
+          id TEXT, project_id TEXT, review_queue_id TEXT, review_queue_item_id TEXT,
+          client_request_id TEXT, event_type TEXT, actor TEXT,
+          CHECK(event_type IN (
+            'comment', 'assign', 'unassign',
+            'triage_start', 'triage_skip', 'triage_return'
+          ))
+        );
+        INSERT INTO projects VALUES ('project-1');
+        INSERT INTO review_queues VALUES ('queue-1', 'project-1');
+        INSERT INTO review_queue_items VALUES ('item-1', NULL, 'project-1');
+        INSERT INTO review_queue_item_events VALUES (
+          'event-1', 'project-1', 'queue-1', 'item-1',
+          'request-1', 'comment', 'scientist'
+        );
+    """
+    status, report = _inspect(tmp_path, ddl, "0039")
+    assert status == 2
+    assert report["classification"] == "ambiguous"
+    assert report["review_event_check"] == "triage"
+    assert report["qc_event_scope_violations"] == 1
+    assert report["automatic_migration_authorized"] is False
+    assert any("orphaned or cross-project links" in issue for issue in report["issues"])
