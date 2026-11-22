@@ -390,4 +390,127 @@ describe("ImageViewport", () => {
       screen.getByLabelText("Original coral coordinates").querySelector("rect"),
     ).toHaveAttribute("x", "4");
   });
+
+  it.each([
+    [0, 1200],
+    [1600, 0],
+    [-1, 1200],
+    [1.5, 1200],
+    [Number.NaN, 1200],
+    [1600, Number.POSITIVE_INFINITY],
+  ])(
+    "does not expose editable biological overlays for invalid image size %s x %s",
+    (width, height) => {
+      render(
+        <ImageViewport
+          width={width}
+          height={height}
+          label="Invalid metadata viewport"
+        >
+          <svg data-testid="source-pixel-annotations">
+            <rect x="4" y="7" width="9" height="12" />
+          </svg>
+        </ImageViewport>,
+      );
+      const frame = screen.getByRole("region", {
+        name: "Invalid metadata viewport",
+      });
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Annotation editing is paused",
+      );
+      expect(screen.queryByTestId("source-pixel-annotations")).toBeNull();
+      expect(screen.queryByTestId("image-viewport-transform")).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Fit to View" }),
+      ).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: "Actual Size (100%)" }),
+      ).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: "Reset View" }),
+      ).toBeDisabled();
+      fireEvent.wheel(frame, {
+        deltaY: -100,
+        clientX: 100,
+        clientY: 100,
+      });
+      fireEvent.pointerDown(frame, {
+        pointerId: 23,
+        button: 1,
+        clientX: 10,
+        clientY: 10,
+      });
+      fireEvent.pointerMove(window, {
+        pointerId: 23,
+        clientX: 100,
+        clientY: 100,
+      });
+      expect(screen.queryByTestId("image-viewport-transform")).toBeNull();
+    },
+  );
+
+  it("recovers only after valid image metadata and discards stale pan state", () => {
+    const source = (
+      <svg aria-label="Unchanged source coordinates">
+        <polygon points="10,10 30,10 20,30" />
+      </svg>
+    );
+    const { rerender } = render(
+      <ImageViewport width={1600} height={1200} label="Metadata recovery">
+        {source}
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", { name: "Metadata recovery" });
+    fireEvent.pointerDown(frame, {
+      pointerId: 45,
+      button: 1,
+      clientX: 20,
+      clientY: 20,
+    });
+    rerender(
+      <ImageViewport width={0} height={1200} label="Metadata recovery">
+        {source}
+      </ImageViewport>,
+    );
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Unchanged source coordinates")).toBeNull();
+    fireEvent.pointerMove(window, {
+      pointerId: 45,
+      clientX: 100,
+      clientY: 200,
+    });
+
+    rerender(
+      <ImageViewport width={1600} height={1200} label="Metadata recovery">
+        {source}
+      </ImageViewport>,
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    const transform = screen.getByTestId("image-viewport-transform");
+    const restored = transform.style.transform;
+    expect(restored).not.toMatch(/NaN|Infinity/);
+    expect(
+      screen
+        .getByLabelText("Unchanged source coordinates")
+        .querySelector("polygon"),
+    ).toHaveAttribute("points", "10,10 30,10 20,30");
+    fireEvent.pointerMove(window, {
+      pointerId: 45,
+      clientX: 200,
+      clientY: 400,
+    });
+    expect(transform.style.transform).toBe(restored);
+    fireEvent.wheel(frame, {
+      deltaY: -100,
+      clientX: 100,
+      clientY: 100,
+    });
+    expect(transform.style.transform).not.toBe(restored);
+    expect(
+      screen
+        .getByLabelText("Unchanged source coordinates")
+        .querySelector("polygon"),
+    ).toHaveAttribute("points", "10,10 30,10 20,30");
+  });
+
 });
