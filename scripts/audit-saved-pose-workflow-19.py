@@ -136,6 +136,27 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 job is not None and job.status == "succeeded",
                 "Pose training job did not succeed",
             )
+            # Check the actual queued worker request independently of the
+            # checksum-valid Workflow Builder artifact: a succeeded job from
+            # another node or frozen dataset cannot prove this experiment.
+            training_nodes = [node for node in nodes if node.node_type == "pose_model_training"]
+            _require(len(training_nodes) == 1, "Saved pose training node is ambiguous")
+            training_node_id = training_nodes[0].id
+            request = job.request_json
+            _require(
+                job.project_id == run.project_id
+                and job.job_type == "training"
+                and isinstance(request, dict)
+                and request.get("created_by_workflow") is True
+                and request.get("workflow_run_id") == run_id
+                and request.get("workflow_node_run_id") == training_node_id
+                and request.get("training_run_id") == training.id
+                and request.get("pose_training_dataset_id") == dataset.id
+                and request.get("pose_training_dataset_manifest_sha256") == dataset.manifest_sha256
+                and result.get("workflow_node_run_id") == training_node_id
+                and result.get("training_job_id") == job.id,
+                "Saved pose-training job request or producer lineage changed",
+            )
             checkpoint = _managed_file(root, training.result_checkpoint_path)
             checkpoint_sha = _digest(checkpoint)
             _require(
