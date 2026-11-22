@@ -494,34 +494,37 @@ describe("RotatedBoxLayer pointer integrity", () => {
       start: { x: 400, y: 300 },
       end: { x: 200, y: 150 },
     },
-  ])("persists canonical source-pixel winding when drawing $name", ({ start, end }) => {
-    const onCreate = vi.fn();
-    const canvas = renderLayer([], onCreate);
-    const saved = rotatedBoxFromDrag(start, end, "class-1", "canonical");
-    expect(saved.points).toEqual([
-      { x: 200, y: 150 },
-      { x: 400, y: 150 },
-      { x: 400, y: 300 },
-      { x: 200, y: 300 },
-    ]);
-    expect(saved.area_pixels).toBe(30000);
+  ])(
+    "persists canonical source-pixel winding when drawing $name",
+    ({ start, end }) => {
+      const onCreate = vi.fn();
+      const canvas = renderLayer([], onCreate);
+      const saved = rotatedBoxFromDrag(start, end, "class-1", "canonical");
+      expect(saved.points).toEqual([
+        { x: 200, y: 150 },
+        { x: 400, y: 150 },
+        { x: 400, y: 300 },
+        { x: 200, y: 300 },
+      ]);
+      expect(saved.area_pixels).toBe(30000);
 
-    fireEvent.pointerDown(canvas, {
-      button: 0,
-      pointerId: 100,
-      clientX: start.x / 2,
-      clientY: start.y / 2,
-    });
-    fireEvent.pointerMove(canvas, {
-      pointerId: 100,
-      clientX: end.x / 2,
-      clientY: end.y / 2,
-    });
-    fireEvent.pointerUp(canvas, { pointerId: 100 });
-    expect(onCreate).toHaveBeenCalledTimes(1);
-    expect(onCreate.mock.calls[0][0].points).toEqual(saved.points);
-    expect(onCreate.mock.calls[0][0].area_pixels).toBe(30000);
-  });
+      fireEvent.pointerDown(canvas, {
+        button: 0,
+        pointerId: 100,
+        clientX: start.x / 2,
+        clientY: start.y / 2,
+      });
+      fireEvent.pointerMove(canvas, {
+        pointerId: 100,
+        clientX: end.x / 2,
+        clientY: end.y / 2,
+      });
+      fireEvent.pointerUp(canvas, { pointerId: 100 });
+      expect(onCreate).toHaveBeenCalledTimes(1);
+      expect(onCreate.mock.calls[0][0].points).toEqual(saved.points);
+      expect(onCreate.mock.calls[0][0].area_pixels).toBe(30000);
+    },
+  );
 
   it("keeps historical counter-wound rectangle rotation in its original vertex order", () => {
     const original = rotatedBoxMaskFromPoints(
@@ -556,15 +559,12 @@ describe("RotatedBoxLayer pointer integrity", () => {
     fireEvent.pointerUp(canvas, { pointerId: 101 });
     expect(onUpdate).not.toHaveBeenCalled();
 
-    fireEvent.pointerDown(
-      canvas.querySelector("circle") as SVGCircleElement,
-      {
-        button: 0,
-        pointerId: 102,
-        clientX: 150,
-        clientY: 165,
-      },
-    );
+    fireEvent.pointerDown(canvas.querySelector("circle") as SVGCircleElement, {
+      button: 0,
+      pointerId: 102,
+      clientX: 150,
+      clientY: 165,
+    });
     fireEvent.pointerMove(canvas, {
       pointerId: 102,
       clientX: 195,
