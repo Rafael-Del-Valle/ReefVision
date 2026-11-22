@@ -36,9 +36,7 @@ from reefvision.tests.test_environmental_context import noaa_fixture
         "whole_payload_not_object",
     ],
 )
-def test_scientific_record_listing_flags_malformed_rehashed_cache_as_not_current(
-    client, damage
-):
+def test_scientific_record_listing_flags_malformed_rehashed_cache_as_not_current(client, damage):
     """No false currentness or 500s; original scientific rows remain immutable."""
     project = create_project(client, "Cache integrity audit")
     record_url = f"/api/v1/projects/{project['id']}/scientific-records"
