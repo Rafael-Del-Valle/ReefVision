@@ -260,6 +260,29 @@ function Assert-ReefVisionNoReparseAncestors {
     }
 }
 
+# Select only a known driver-path executable without following linked files or
+# directories. The caller controls Candidates; this helper must never discover
+# or launch a PATH-resolved executable from a scientific workspace.
+# A missing/linked tool means GPU inventory is unavailable, NOT GPU acceptance.
+function Get-ReefVisionTrustedGpuTool {
+    param([Parameter(Mandatory = $true)][string[]]$Candidates)
+    foreach ($candidate in $Candidates) {
+        if ([string]::IsNullOrWhiteSpace($candidate) -or
+            -not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            continue
+        }
+        try {
+            Assert-ReefVisionNoReparseAncestors -Path $candidate
+        } catch {
+            # Never launch a reparse-linked binary or one reached through a
+            # linked parent. Continue to the next known driver location.
+            continue
+        }
+        return $candidate
+    }
+    return $null
+}
+
 function Assert-ReefVisionSafeAcceptanceRoot {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
