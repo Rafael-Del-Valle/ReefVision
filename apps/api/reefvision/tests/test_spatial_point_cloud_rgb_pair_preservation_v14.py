@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import cast
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.spatial_point_cloud_v14 import measure_point_cloud_preview
@@ -253,6 +253,123 @@ def test_direct_rgb_rows_accept_uint8_endpoints() -> None:
     assert measured["preview_point_indices"] == [0, 1]
     assert measured["provenance"]["calibration_verified"] is False
     assert measured["provenance"]["specimen_identity_verified"] is False
+
+
+def test_preview_centroid_sampling_displacement_standalone_and_saved_workflow(
+    client: TestClient,
+) -> None:
+    """A rare omitted observation changes display centering, not coral movement."""
+    pid = str(create_project(client, "Point sampling centroid provenance")["id"])
+    base = f"/api/v1/projects/{pid}"
+    default_indices = {i * 599 // 511 for i in range(512)}
+    rare_index = next(i for i in range(1, 300) if i not in default_indices)
+    points = [[0, 0, 0] if i < 300 else [1, 0, 0] for i in range(600)]
+    points[rare_index] = [20, 0, 0]
+    params = {**CALIBRATION, "points": points}
+    direct = measure_point_cloud_preview(points=points, **CALIBRATION)
+    source_x = sum(point[0] for point in points) * 0.01 / len(points)
+    display_x = (
+        sum(points[i][0] for i in direct["preview_point_indices"])
+        * 0.01
+        / len(direct["preview_point_indices"])
+    )
+    assert rare_index not in direct["preview_point_indices"]
+    assert direct["arithmetic_centroid_in_source_frame_m"][0] == pytest.approx(source_x)
+    assert direct["preview_row_centroid_in_source_frame_m"][0] == pytest.approx(display_x)
+    separation = abs(display_x - source_x)
+    assert separation > 0
+    assert direct["preview_vs_source_row_centroid_separation_m"] == pytest.approx(separation)
+    assert direct["preview_vs_source_row_centroid_separation_scale_interval_m"] == (
+        pytest.approx([separation * 0.9, separation * 1.1])
+    )
+    assert direct[
+        "preview_vs_source_row_centroid_separation_fraction_of_bbox_diagonal"
+    ] == pytest.approx(separation / 0.2)
+    assert direct["surface_area_m2"] is None
+    assert direct["branch_length_m"] is None
+
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    measured = response.json()
+    for key in (
+        "preview_row_centroid_in_source_frame_m",
+        "preview_vs_source_row_centroid_separation_m",
+        "preview_vs_source_row_centroid_separation_scale_interval_m",
+        "preview_vs_source_row_centroid_separation_fraction_of_bbox_diagonal",
+    ):
+        assert measured[key] == direct[key]
+    assert measured["provenance"]["calibration_verified"] is False
+    assert measured["provenance"]["specimen_identity_verified"] is False
+
+    graph = {
+        "graph_id": "source-versus-preview-centroid-v14",
+        "name": "Source versus sampled point-cloud centroid",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "c", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "c",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(
+            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+        )
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        )
+        assert artifact["payload_json"] == measured
+        hashes.append(artifact["payload_sha256"])
+    assert len(set(hashes)) == 1
+    assert len(hashes[0]) == 64
+
+
+def test_preview_centroid_has_no_false_bias_for_complete_or_coincident_source() -> None:
+    complete = measure_point_cloud_preview(
+        points=[[0, 0, 0], [1, 0, 0]], **CALIBRATION
+    )
+    assert complete["preview_vs_source_row_centroid_separation_m"] == 0
+    assert complete["preview_vs_source_row_centroid_separation_scale_interval_m"] == [
+        0,
+        0,
+    ]
+    assert complete[
+        "preview_vs_source_row_centroid_separation_fraction_of_bbox_diagonal"
+    ] == 0
+
+    coincident = measure_point_cloud_preview(
+        points=[[7, 7, 7]] * 600, **CALIBRATION
+    )
+    assert coincident["preview_vs_source_row_centroid_separation_m"] == 0
+    assert coincident[
+        "preview_vs_source_row_centroid_separation_fraction_of_bbox_diagonal"
+    ] is None
+    assert coincident["surface_area_m2"] is None
+    assert coincident["branch_length_m"] is None
+
 
 def test_full_colored_ply_preview_does_not_warn_about_missing_rgb_extrema(
     client: TestClient,
