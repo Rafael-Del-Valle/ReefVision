@@ -599,8 +599,7 @@ def test_rgb_ply_duplicate_xyz_color_variants_are_audited_in_saved_graph(
     # are displayed. A loss of RGB evidence is not a diagnosis of tissue loss.
     points = [[0.0 if i < 300 else 100.0, 0.0, 0.0] for i in range(600)]
     rgb = [
-        [255, 0, 0] if i == 34 else [20, 20, 20] if i < 300 else [230, 230, 230]
-        for i in range(600)
+        [255, 0, 0] if i == 34 else [20, 20, 20] if i < 300 else [230, 230, 230] for i in range(600)
     ]
     ply = (
         "ply\nformat ascii 1.0\nelement vertex 600\n"
@@ -630,6 +629,8 @@ def test_rgb_ply_duplicate_xyz_color_variants_are_audited_in_saved_graph(
         "preview_distinct_xyz_rgb_pairs": 2,
         "fraction_of_source_xyz_rgb_pairs_displayed": pytest.approx(2 / 3),
         "source_xyz_loci_with_multiple_rgb_values": 1,
+        "multi_rgb_xyz_loci_with_complete_preview": 0,
+        "multi_rgb_xyz_loci_with_incomplete_preview": 1,
         "preview_sample_xyz_rgb_sha256": expected["preview_rgb_variant_support"][
             "preview_sample_xyz_rgb_sha256"
         ],
@@ -637,6 +638,7 @@ def test_rgb_ply_duplicate_xyz_color_variants_are_audited_in_saved_graph(
     assert len(expected["preview_rgb_variant_support"]["preview_sample_xyz_rgb_sha256"]) == 64
     assert "source_xyz_loci_have_multiple_rgb_values" in expected["qc_warnings"]
     assert "preview_omits_distinct_xyz_rgb_observations" in expected["qc_warnings"]
+    assert "preview_omits_multi_rgb_locus_variants" in expected["qc_warnings"]
     assert [255, 0, 0] not in expected["preview_point_colors_rgb_uint8"]
     assert expected["provenance"]["calibration_verified"] is False
     assert expected["provenance"]["specimen_identity_verified"] is False
@@ -650,13 +652,87 @@ def test_rgb_ply_duplicate_xyz_color_variants_are_audited_in_saved_graph(
     )
     assert xyz_response.status_code == 200, xyz_response.text
     assert xyz_response.json()["preview_rgb_variant_support"] is None
-    assert (
-        "preview_omits_distinct_xyz_rgb_observations"
-        not in xyz_response.json()["qc_warnings"]
-    )
+    assert "preview_omits_distinct_xyz_rgb_observations" not in xyz_response.json()["qc_warnings"]
     graph = {
         "graph_id": f"point-cloud-rgb-variants-{preserve_distinct_loci}-v14",
         "name": "Audit RGB display evidence without tissue-condition inference",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-to-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    hashes = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            artifact
+            for artifact in detail.json()["artifacts"]
+            if artifact["data_type"] == "point_cloud_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == expected
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
+
+
+def test_complete_multi_rgb_locus_stays_distinct_from_biological_condition(
+    client: TestClient,
+) -> None:
+    # A small imported scan retains both acquisition colors at one XYZ locus.
+    # This proves visualization evidence coverage, not calibrated color or health.
+    ply = (
+        "ply\nformat ascii 1.0\nelement vertex 3\n"
+        "property double x\nproperty double y\nproperty double z\n"
+        "property uchar red\nproperty uchar green\nproperty uchar blue\nend_header\n"
+        "0 0 0 10 20 30\n"
+        "0 0 0 200 100 50\n"
+        "1 0 0 10 20 30\n"
+    )
+    project_id = str(create_project(client, "Complete RGB acquisition preview QC")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = {**PARAMS, "ply_text": ply}
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    support = expected["preview_rgb_variant_support"]
+    assert support["source_distinct_xyz_rgb_pairs"] == 3
+    assert support["preview_distinct_xyz_rgb_pairs"] == 3
+    assert support["fraction_of_source_xyz_rgb_pairs_displayed"] == 1.0
+    assert support["source_xyz_loci_with_multiple_rgb_values"] == 1
+    assert support["multi_rgb_xyz_loci_with_complete_preview"] == 1
+    assert support["multi_rgb_xyz_loci_with_incomplete_preview"] == 0
+    assert "source_xyz_loci_have_multiple_rgb_values" in expected["qc_warnings"]
+    assert "preview_omits_distinct_xyz_rgb_observations" not in expected["qc_warnings"]
+    assert "preview_omits_multi_rgb_locus_variants" not in expected["qc_warnings"]
+    assert expected["provenance"]["calibration_verified"] is False
+    assert expected["provenance"]["specimen_identity_verified"] is False
+
+    graph = {
+        "graph_id": "point-cloud-complete-rgb-preview-v14",
+        "name": "Retained color observations are not validated biology",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
             {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
