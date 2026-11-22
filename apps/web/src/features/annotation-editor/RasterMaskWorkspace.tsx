@@ -143,6 +143,7 @@ export function RasterMaskWorkspace({
     if (
       mutationInFlightRef.current ||
       !session ||
+      !visibilityReady ||
       !activeClassId ||
       targetClassIsHidden
     ) {
@@ -170,6 +171,10 @@ export function RasterMaskWorkspace({
     visibilityQuery.data?.project_id === project.id
       ? visibilityQuery.data
       : undefined;
+  // Unknown, failed or cross-project preferences are not permission to
+  // paint a class that may actually be hidden on this scientific image.
+  const visibilityReady =
+    visibilityQuery.isSuccess && visibilityBundle !== undefined;
   const segmentationVisibility = resolveClassVisibilityState(
     "segmentation_overlays",
     visibilityBundle,
@@ -328,6 +333,23 @@ export function RasterMaskWorkspace({
   });
 
   const requestEdit = (command: RasterEditCommand) => {
+    const sourceMaskClassId = command.maskAnnotationId
+      ? rasterMasks.find((mask) => mask.id === command.maskAnnotationId)
+          ?.label_class_id
+      : null;
+    // Re-check persisted visibility when a stroke ends: settings may have
+    // changed while the pointer was down. Never submit a hidden target.
+    if (
+      !visibilityReady ||
+      command.imageId !== currentImageIdRef.current ||
+      (command.maskAnnotationId !== null && !sourceMaskClassId) ||
+      segmentationVisibility.hiddenClassIds.includes(command.labelClassId) ||
+      (sourceMaskClassId !== null &&
+        sourceMaskClassId !== undefined &&
+        segmentationVisibility.hiddenClassIds.includes(sourceMaskClassId))
+    ) {
+      return;
+    }
     if (acquireMutation()) editMutation.mutate(command);
   };
   const requestClassChange = (labelClassId: string) => {
@@ -435,7 +457,8 @@ export function RasterMaskWorkspace({
   }
 
   const image = session.image;
-  const canErase = selectedMask !== null && !targetClassIsHidden;
+  const canErase =
+    selectedMask !== null && visibilityReady && !targetClassIsHidden;
 
   return (
     <div
@@ -565,11 +588,33 @@ export function RasterMaskWorkspace({
             >
               Segmentation overlay visibility:{" "}
               {visibilityQuery.isPending
-                ? "Loading saved settings"
+                ? "Loading saved settings (editing paused)"
                 : visibilityQuery.isError
-                  ? "Settings unavailable (showing all)"
-                  : visibilitySourceLabel(segmentationVisibility.source)}
+                  ? "Settings unavailable (editing paused)"
+                  : !visibilityReady
+                    ? "Project settings mismatch (editing paused)"
+                    : visibilitySourceLabel(segmentationVisibility.source)}
             </p>
+            {!visibilityReady && (
+              <p
+                className="annotation-helper"
+                data-testid="raster-visibility-pending-notice"
+                role="status"
+              >
+                Painting and filling are paused until the saved class visibility
+                for this project is verified. Existing masks and revisions are
+                unchanged.
+              </p>
+            )}
+            {!visibilityReady && !visibilityQuery.isPending && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => void visibilityQuery.refetch()}
+              >
+                Retry visibility settings
+              </button>
+            )}
             {targetClassIsHidden && (
               <p
                 className="annotation-helper"
@@ -746,7 +791,7 @@ export function RasterMaskWorkspace({
               draggable={false}
               style={{ display: "block", width: "100%", height: "100%" }}
             />
-            {selectedMask && !selectedMaskClassIsHidden && (
+            {selectedMask && visibilityReady && !selectedMaskClassIsHidden && (
               <div
                 data-testid="selected-raster-mask-overlay"
                 aria-label="Selected raster mask"
@@ -774,7 +819,10 @@ export function RasterMaskWorkspace({
                 width={image.width_px}
                 height={image.height_px}
                 disabled={
-                  mutationBusy || activeClassId === null || targetClassIsHidden
+                  mutationBusy ||
+                  !visibilityReady ||
+                  activeClassId === null ||
+                  targetClassIsHidden
                 }
                 onFill={(point) => {
                   const context = captureEditContext();
@@ -795,7 +843,10 @@ export function RasterMaskWorkspace({
                 mode={mode}
                 brushRadius={brushRadius}
                 disabled={
-                  mutationBusy || activeClassId === null || targetClassIsHidden
+                  mutationBusy ||
+                  !visibilityReady ||
+                  activeClassId === null ||
+                  targetClassIsHidden
                 }
                 onStrokeStart={() => {
                   strokeContextRef.current = captureEditContext();
