@@ -28,7 +28,7 @@ $script:active = @'
   "stage": "fit",
   "progress_epoch": 2,
   "progress_total_epochs": 3,
-  "metrics": {"train/box_loss": 0.99, "metrics/mAP50(B)": 0.75},
+  "metrics": {"train/box_loss": 0.99, "train/seg_loss": -0.31, "metrics/mAP50(B)": 0.75, "metrics/signed_objective": -1.5},
   "metrics_history": {
     "train/box_loss": [0.50, 0.25, null],
     "train/cls_loss": [0.60, 0.30, null],
@@ -56,7 +56,7 @@ $script:completed = @'
     "train/box_loss": [0.50, 0.25, 0.20, null],
     "train/cls_loss": [0.60, 0.30, 0.24, null],
     "train/dfl_loss": [0.20, 0.10, 0.08, null],
-    "val/seg_loss": [null, null]
+    "val/seg_loss": [-0.20, null]
   }
 }
 '@ | ConvertFrom-Json
@@ -223,6 +223,17 @@ if ($output -notmatch 'train/seg_loss\s+unavailable \[awaiting first measurement
 }
 if ($output -match 'train/seg_loss\s+0(?:\.0+)?\s' -or $output -match 'val/box_loss\s+0(?:\.0+)?\s') {
   throw 'Read-only monitor fabricated numeric losses for unmeasured histories.'
+}
+# Negative YOLO segmentation component losses cannot be claimed as valid
+# measurements. Null and negative histories must not turn the active
+# negative summary into a valid value; nor override a later positive summary.
+# Other signed scientific objectives remain visible with source uncertainty.
+if ($output -match '(?m)^\s*train/seg_loss\s+-0\.31' -or
+    $output -match '(?m)^\s*val/seg_loss\s+-0\.2(?:0)?') {
+  throw 'Monitor presented an invalid negative YOLO segmentation component loss.'
+}
+if ($output -notmatch 'metrics/signed_objective\s+-1\.5 \[summary metric; epoch association unverified\]') {
+  throw 'Monitor incorrectly rejected a legitimately signed non-loss objective.'
 }
 # A fully invalid persisted epoch series cannot validate the summary loss.
 # Display the actual summary with its source uncertainty, not a new value.
