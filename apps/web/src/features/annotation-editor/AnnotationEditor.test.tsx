@@ -1784,7 +1784,6 @@ describe("AnnotationEditor", () => {
     ).toHaveLength(0);
   });
 
-
   it("reveals QC-linked masks only on their source image and restores visibility on navigation", async () => {
     const savedVisibility = buildVisibilityBundle({
       userPreferences: {

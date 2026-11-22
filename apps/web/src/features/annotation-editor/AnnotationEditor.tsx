@@ -859,14 +859,18 @@ export function AnnotationEditor({
   const highlightedAnnotationIds = useMemo(
     () =>
       new Set(
-        reviewEvidenceApplies ? (launchContext?.highlightAnnotationIds ?? []) : [],
+        reviewEvidenceApplies
+          ? (launchContext?.highlightAnnotationIds ?? [])
+          : [],
       ),
     [launchContext?.highlightAnnotationIds, reviewEvidenceApplies],
   );
   const highlightedPredictionIds = useMemo(
     () =>
       new Set(
-        reviewEvidenceApplies ? (launchContext?.highlightPredictionIds ?? []) : [],
+        reviewEvidenceApplies
+          ? (launchContext?.highlightPredictionIds ?? [])
+          : [],
       ),
     [launchContext?.highlightPredictionIds, reviewEvidenceApplies],
   );
