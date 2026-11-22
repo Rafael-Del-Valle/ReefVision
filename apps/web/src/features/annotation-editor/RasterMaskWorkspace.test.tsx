@@ -1007,7 +1007,7 @@ it.each([
         />
       </QueryClientProvider>,
     );
-    await screen.findByRole("button", { name: /Coral \\| r1/i });
+    await screen.findByRole("button", { name: /Coral \| r1/i });
     await waitFor(() =>
       expect(screen.getByTestId("raster-visibility-source")).toHaveTextContent(
         source,
@@ -1158,7 +1158,7 @@ it("pauses painting before project visibility loads and honors a hidden class on
       />
     </QueryClientProvider>,
   );
-  await screen.findByRole("button", { name: /Coral \\| r1/i });
+  await screen.findByRole("button", { name: /Coral \| r1/i });
   await screen.findByTestId("raster-visibility-pending-notice");
   const brush = screen.getByTestId("raster-brush-layer");
   expect(brush).toHaveStyle({ cursor: "not-allowed" });
@@ -1211,7 +1211,7 @@ it("recovers editing only after a failed visibility fetch is explicitly retried"
       />
     </QueryClientProvider>,
   );
-  await screen.findByRole("button", { name: /Coral \\| r1/i });
+  await screen.findByRole("button", { name: /Coral \| r1/i });
   await waitFor(() =>
     expect(screen.getByTestId("raster-visibility-source")).toHaveTextContent(
       "Settings unavailable (editing paused)",
