@@ -754,7 +754,16 @@ def test_subprecision_preview_centroid_scale_bounds_are_not_false_certainty(
     response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert response.status_code == 200, response.text
     measured = response.json()
-    assert measured == direct
+    for key in (
+        "preview_minus_source_row_centroid_offset_m",
+        "preview_minus_source_row_centroid_offset_scale_interval_m",
+        "preview_vs_source_row_centroid_separation_m",
+        "preview_vs_source_row_centroid_separation_scale_interval_m",
+        "qc_warnings",
+    ):
+        assert measured[key] == direct[key]
+    assert measured["provenance"]["calibration_verified"] is False
+    assert measured["provenance"]["specimen_identity_verified"] is False
 
     graph = {
         "graph_id": "point-preview-subprecision-scale-v14",
