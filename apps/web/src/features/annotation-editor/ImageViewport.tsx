@@ -25,9 +25,21 @@ export function ImageViewport({
   label: string;
   children: ReactNode;
 }) {
+  // An imported image with missing, fractional or nonfinite pixel dimensions
+  // cannot safely map annotations to the displayed source-image coordinate frame.
+  // Keep its overlays unmounted until valid metadata is supplied; never infer
+  // biological coordinates from the fallback viewport size.
+  const hasValidImageSize =
+    Number.isSafeInteger(width) &&
+    Number.isSafeInteger(height) &&
+    width > 0 &&
+    height > 0;
   const frameRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<ViewportTransform>(
-    fitTransform({ width, height }, FALLBACK_SIZE),
+    fitTransform(
+      hasValidImageSize ? { width, height } : FALLBACK_SIZE,
+      FALLBACK_SIZE,
+    ),
   );
   const dragRef = useRef<{
     pointerId: number;
@@ -54,13 +66,15 @@ export function ImageViewport({
 
   const fit = useCallback(() => {
     dragRef.current = null;
+    if (!hasValidImageSize) return;
     updateView(fitTransform({ width, height }, frameSize));
-  }, [frameSize, height, updateView, width]);
+  }, [frameSize, hasValidImageSize, height, updateView, width]);
 
   const actualSize = useCallback(() => {
     dragRef.current = null;
+    if (!hasValidImageSize) return;
     updateView(actualSizeTransform({ width, height }, frameSize));
-  }, [frameSize, height, updateView, width]);
+  }, [frameSize, hasValidImageSize, height, updateView, width]);
 
   useEffect(() => {
     fit();
@@ -147,6 +161,7 @@ export function ImageViewport({
       return;
     }
     if (
+      !hasValidImageSize ||
       dragRef.current ||
       !Number.isFinite(event.clientX) ||
       !Number.isFinite(event.clientY)
@@ -165,6 +180,7 @@ export function ImageViewport({
   function handleWheel(event: WheelEvent<HTMLDivElement>) {
     // Horizontal-only/zero-delta wheel events are not zoom commands.
     if (
+      !hasValidImageSize ||
       !Number.isFinite(event.deltaY) ||
       event.deltaY === 0 ||
       !Number.isFinite(event.clientX) ||
@@ -187,7 +203,7 @@ export function ImageViewport({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key.toLowerCase() !== "f") return;
+    if (!hasValidImageSize || event.key.toLowerCase() !== "f") return;
     if (
       event.target instanceof HTMLElement &&
       event.target.closest("input, textarea, select, button")
@@ -201,13 +217,28 @@ export function ImageViewport({
   return (
     <div className="annotation-image-viewport">
       <div className="annotation-viewport-controls">
-        <button type="button" className="secondary" onClick={fit}>
+        <button
+          type="button"
+          className="secondary"
+          onClick={fit}
+          disabled={!hasValidImageSize}
+        >
           Fit to View
         </button>
-        <button type="button" className="secondary" onClick={actualSize}>
+        <button
+          type="button"
+          className="secondary"
+          onClick={actualSize}
+          disabled={!hasValidImageSize}
+        >
           Actual Size (100%)
         </button>
-        <button type="button" className="secondary" onClick={fit}>
+        <button
+          type="button"
+          className="secondary"
+          onClick={fit}
+          disabled={!hasValidImageSize}
+        >
           Reset View
         </button>
         <span>Alt+drag or middle-drag to pan · Wheel to zoom</span>
@@ -223,20 +254,27 @@ export function ImageViewport({
         onWheel={handleWheel}
         onContextMenu={(event) => event.preventDefault()}
         onDoubleClick={(event) => {
-          if (event.target === event.currentTarget) fit();
+          if (hasValidImageSize && event.target === event.currentTarget) fit();
         }}
       >
-        <div
-          data-testid="image-viewport-transform"
-          className="annotation-transform-content"
-          style={{
-            width,
-            height,
-            transform: `translate(${view.offsetX}px, ${view.offsetY}px) scale(${view.scale})`,
-          }}
-        >
-          {children}
-        </div>
+        {hasValidImageSize ? (
+          <div
+            data-testid="image-viewport-transform"
+            className="annotation-transform-content"
+            style={{
+              width,
+              height,
+              transform: `translate(${view.offsetX}px, ${view.offsetY}px) scale(${view.scale})`,
+            }}
+          >
+            {children}
+          </div>
+        ) : (
+          <p role="alert">
+            Image pixel dimensions are invalid. Annotation editing is paused
+            until the original image metadata is corrected.
+          </p>
+        )}
       </div>
     </div>
   );
