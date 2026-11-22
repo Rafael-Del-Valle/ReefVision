@@ -382,6 +382,7 @@ export function RasterMaskWorkspace({
       session.image.id !== currentImageIdRef.current ||
       !visibilityReady ||
       !sourceMask ||
+      !sourceMask.label_class_id ||
       segmentationVisibility.hiddenClassIds.includes(
         sourceMask.label_class_id,
       ) ||
