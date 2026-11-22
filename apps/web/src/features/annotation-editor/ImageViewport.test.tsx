@@ -510,4 +510,93 @@ describe("ImageViewport", () => {
         .querySelector("polygon"),
     ).toHaveAttribute("points", "10,10 30,10 20,30");
   });
+
+  it("does not intercept browser Find or text editing while fitting with plain F", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Keyboard-safe viewport">
+        <div contentEditable suppressContentEditableWarning>
+          <span data-testid="editable-biological-note">Swiftia observation</span>
+        </div>
+        <div role="textbox" tabIndex={0} data-testid="qc-textbox">
+          Reviewer notes
+        </div>
+        <svg aria-label="Unmodified annotation geometry">
+          <polygon points="10,10 20,10 20,20" />
+        </svg>
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", {
+      name: "Keyboard-safe viewport",
+    });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const fitted = transform.style.transform;
+    fireEvent.wheel(frame, {
+      deltaY: -100,
+      clientX: 100,
+      clientY: 100,
+    });
+    const zoomed = transform.style.transform;
+    expect(zoomed).not.toBe(fitted);
+
+    for (const modifier of [
+      { ctrlKey: true },
+      { metaKey: true },
+      { altKey: true },
+      { shiftKey: true },
+    ]) {
+      const shortcut = createEvent.keyDown(frame, {
+        key: "f",
+        ...modifier,
+      });
+      fireEvent(frame, shortcut);
+      expect(shortcut.defaultPrevented).toBe(false);
+      expect(transform.style.transform).toBe(zoomed);
+    }
+
+    fireEvent.keyDown(screen.getByTestId("editable-biological-note"), {
+      key: "f",
+    });
+    fireEvent.keyDown(screen.getByTestId("qc-textbox"), { key: "f" });
+    expect(transform.style.transform).toBe(zoomed);
+    expect(
+      screen.getByLabelText("Unmodified annotation geometry").querySelector("polygon"),
+    ).toHaveAttribute("points", "10,10 20,10 20,20");
+
+    const plainFit = createEvent.keyDown(frame, { key: "f" });
+    fireEvent(frame, plainFit);
+    expect(plainFit.defaultPrevented).toBe(true);
+    expect(transform.style.transform).toBe(fitted);
+  });
+
+  it("respects prehandled and composing F events without changing scientific coordinates", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Composing viewport">
+        <svg aria-label="Original polyp">
+          <rect x="8" y="9" width="15" height="12" />
+        </svg>
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", { name: "Composing viewport" });
+    const transform = screen.getByTestId("image-viewport-transform");
+    fireEvent.wheel(frame, {
+      deltaY: -100,
+      clientX: 120,
+      clientY: 120,
+    });
+    const zoomed = transform.style.transform;
+
+    const handled = createEvent.keyDown(frame, { key: "f" });
+    handled.preventDefault();
+    fireEvent(frame, handled);
+    expect(transform.style.transform).toBe(zoomed);
+
+    const composing = createEvent.keyDown(frame, { key: "f" });
+    Object.defineProperty(composing, "isComposing", { value: true });
+    fireEvent(frame, composing);
+    expect(composing.defaultPrevented).toBe(false);
+    expect(transform.style.transform).toBe(zoomed);
+    expect(
+      screen.getByLabelText("Original polyp").querySelector("rect"),
+    ).toHaveAttribute("x", "8");
+  });
 });

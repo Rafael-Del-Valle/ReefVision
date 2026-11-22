@@ -203,10 +203,25 @@ export function ImageViewport({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (!hasValidImageSize || event.key.toLowerCase() !== "f") return;
+    // The unmodified F key fits the viewport, but browser/system Find,
+    // IME composition and annotation/QC text editing must take priority.
     if (
-      event.target instanceof HTMLElement &&
-      event.target.closest("input, textarea, select, button")
+      !hasValidImageSize ||
+      event.defaultPrevented ||
+      event.isComposing ||
+      event.key.toLowerCase() !== "f" ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      event.shiftKey
+    ) {
+      return;
+    }
+    if (
+      event.target instanceof Element &&
+      event.target.closest(
+        'input, textarea, select, button, [contenteditable], [role="textbox"], [role="searchbox"], [role="combobox"]',
+      )
     ) {
       return;
     }

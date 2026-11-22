@@ -1,5 +1,11 @@
 # ReefVision 1.6.0 Report
 
+## 2026-11-22 — Scientific viewport keyboard shortcut isolation (Track D; RELEASE HOLD)
+
+- Audit of existing 1.0–1.5 annotation commands, 1.6 dense overlays, persisted visibility, QC, executable typed saved Workflow Builder and prior exact-head CI: no new scientific workflow operation or migration is needed. The image viewport handled every F key even with Ctrl/Meta/Alt/Shift modifiers, and did not recognize contenteditable descendants or ARIA textboxes. A Ctrl+F/browser Find or an editable biological/QC note could unexpectedly reset the scientific viewport and swallow a researcher keystroke.
+- Fit-to-view now handles **only an unmodified, not-yet-handled, non-IME F keystroke outside editing controls**. Browser/system shortcuts and descendant contenteditable or textbox editing keep their original behavior. The source image, annotation coordinates, visibility, approval events, saved typed graphs/runs, units, provenance and retries are unchanged.
+- Added two React regressions covering browser/OS shortcut modifiers, nested rich-text biological notes, ARIA QC textbox, prehandled events, IME composition, plain-F recovery and unchanged polygon/bounding-box coordinates. These new regressions and final exact-head CI are pending GitHub Actions verification. Real MSI/CAB installed-GUI validation, full scientific acceptance, 1.1/1.6 Alembic-0038 lineage reconciliation and explicit researcher approval remain release blockers.
+
 ## 2026-11-22 — QC evidence scoped to source image, including polygon masks (Track D; RELEASE HOLD)
 
 - Overlap audit: existing 1.6 saved per-user/project visibility, isolated QC evidence highlighting, polygon masks and typed executable saved QC Workflow Builder already work; no new class service, approval node or migration is needed. A QC review opened from a specific image could continue advertising exceptional visibility while the researcher navigated to another image. QC-linked polygon-mask evidence was not included in the existing temporary highlight exception.
