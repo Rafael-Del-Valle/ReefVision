@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   getAnnotationSession,
@@ -47,6 +47,19 @@ type MaskAwareAnnotationSession = AnnotationSession & {
   mask_annotations?: MaskAnnotationRecord[];
 };
 
+interface RasterEditCommand {
+  imageId: string;
+  baseRevision: number;
+  maskAnnotationId: string | null;
+  labelClassId: string;
+  mode: RasterEditMode;
+  brushRadius: number;
+  fillTolerance: number;
+  points: Point[];
+}
+
+type RasterEditContext = Omit<RasterEditCommand, "points">;
+
 export function RasterMaskWorkspace({
   project,
   imageId,
@@ -56,6 +69,7 @@ export function RasterMaskWorkspace({
 }: RasterMaskWorkspaceProps) {
   const queryClient = useQueryClient();
   const [selectedMaskId, setSelectedMaskId] = useState<string | null>(null);
+  const strokeContextRef = useRef<RasterEditContext | null>(null);
   const [createAnotherMaskRequested, setCreateAnotherMaskRequested] =
     useState(false);
   const [activeClassId, setActiveClassId] = useState<string | null>(null);
@@ -81,6 +95,21 @@ export function RasterMaskWorkspace({
   );
   const selectedMask =
     rasterMasks.find((mask) => mask.id === selectedMaskId) ?? null;
+
+  // An in-progress gesture belongs to the image, class and mask selected
+  // when its initiating pointer went down, not whatever is selected at release.
+  function captureEditContext(): RasterEditContext | null {
+    if (!session || !activeClassId) return null;
+    return {
+      imageId,
+      baseRevision: session.image.annotation_revision,
+      maskAnnotationId: selectedMask?.id ?? null,
+      labelClassId: activeClassId,
+      mode,
+      brushRadius,
+      fillTolerance,
+    };
+  }
   const selectedSkeletonMask = useMemo(
     () => (selectedMask ? toEditorMaskAnnotation(selectedMask) : null),
     [selectedMask],
@@ -91,6 +120,7 @@ export function RasterMaskWorkspace({
       ?.display_color ?? "#2a9d8f";
 
   useEffect(() => {
+    strokeContextRef.current = null;
     setSelectedMaskId(null);
     setCreateAnotherMaskRequested(false);
     setMode("paint");
@@ -121,20 +151,16 @@ export function RasterMaskWorkspace({
   }, [createAnotherMaskRequested, selectedMaskClassId]);
 
   const editMutation = useMutation({
-    mutationFn: (points: Point[]) => {
-      if (!session || !activeClassId) {
-        throw new Error("Choose an active class before painting");
-      }
-      return editRasterMask(imageId, {
-        base_revision: session.image.annotation_revision,
-        mask_annotation_id: selectedMask?.id ?? null,
-        label_class_id: activeClassId,
-        mode,
-        brush_radius: brushRadius,
-        fill_tolerance: fillTolerance,
-        strokes: [{ points }],
-      });
-    },
+    mutationFn: (command: RasterEditCommand) =>
+      editRasterMask(command.imageId, {
+        base_revision: command.baseRevision,
+        mask_annotation_id: command.maskAnnotationId,
+        label_class_id: command.labelClassId,
+        mode: command.mode,
+        brush_radius: command.brushRadius,
+        fill_tolerance: command.fillTolerance,
+        strokes: [{ points: command.points }],
+      }),
     onSuccess: async (response) => {
       setActiveClassId(response.mask_annotation.label_class_id);
       const deleted = response.mask_annotation.deleted_at !== null;
@@ -600,16 +626,39 @@ export function RasterMaskWorkspace({
                 width={image.width_px}
                 height={image.height_px}
                 disabled={editMutation.isPending || activeClassId === null}
-                onFill={(point) => editMutation.mutate([point])}
+                onFill={(point) => {
+                  const context = captureEditContext();
+                  if (context) {
+                    editMutation.mutate({ ...context, mode: "fill", points: [point] });
+                  }
+                }}
               />
             ) : (
               <RasterBrushLayer
+                key={imageId}
                 width={image.width_px}
                 height={image.height_px}
                 mode={mode}
                 brushRadius={brushRadius}
                 disabled={editMutation.isPending || activeClassId === null}
-                onStroke={(points) => editMutation.mutate(points)}
+                onStrokeStart={() => {
+                  strokeContextRef.current = captureEditContext();
+                }}
+                onStrokeCancel={() => {
+                  strokeContextRef.current = null;
+                }}
+                onStroke={(points, settings) => {
+                  const context = strokeContextRef.current;
+                  strokeContextRef.current = null;
+                  if (context) {
+                    editMutation.mutate({
+                      ...context,
+                      mode: settings.mode,
+                      brushRadius: settings.brushRadius,
+                      points,
+                    });
+                  }
+                }}
               />
             )}
             {skeletonOverlay && (
