@@ -297,7 +297,21 @@ def require_existing_desktop_schema(settings: Settings) -> None:
             )
         sqlite_path = Path(database_name)
 
+    initial_file_state: tuple[int, int, int, int] | None = None
     if sqlite_path is not None:
+        try:
+            initial_stat = sqlite_path.stat()
+        except OSError as exc:
+            raise RuntimeError(
+                "ReefVision --skip-migrations cannot verify the existing database file; "
+                "preserve the research data and review the local database path."
+            ) from exc
+        initial_file_state = (
+            initial_stat.st_dev,
+            initial_stat.st_ino,
+            initial_stat.st_size,
+            initial_stat.st_mtime_ns,
+        )
         # A valid Alembic stamp alone cannot prove that SQLite storage,
         # index/UNIQUE constraints, or biological/reviewer parent links
         # survived an interrupted restore.
@@ -332,6 +346,32 @@ def require_existing_desktop_schema(settings: Settings) -> None:
     if expected_revision is None:
         raise RuntimeError("ReefVision --skip-migrations cannot verify the packaged Alembic head.")
 
+    def require_unchanged_sqlite_file() -> None:
+        # A replaced/restored file can have the same valid 0041 stamp and
+        # different observations. Do not mix integrity evidence from one
+        # database with Alembic/schema evidence from another.
+        if sqlite_path is None or initial_file_state is None:
+            return
+        try:
+            current = sqlite_path.stat()
+        except OSError as exc:
+            raise RuntimeError(
+                "ReefVision --skip-migrations database file disappeared during validation; "
+                "preserve the original research database and investigate the change."
+            ) from exc
+        if (
+            current.st_dev,
+            current.st_ino,
+            current.st_size,
+            current.st_mtime_ns,
+        ) != initial_file_state:
+            raise RuntimeError(
+                "ReefVision --skip-migrations database file changed during validation; "
+                "refusing to combine unrelated integrity and migration evidence. "
+                "Stop other writers and review a verified research backup."
+            )
+
+    require_unchanged_sqlite_file()
     engine = create_database_engine(settings)
     try:
         with engine.connect() as connection:
@@ -339,6 +379,7 @@ def require_existing_desktop_schema(settings: Settings) -> None:
             actual_revision = MigrationContext.configure(connection).get_current_revision()
     finally:
         engine.dispose()
+    require_unchanged_sqlite_file()
     if actual_revision != expected_revision:
         raise RuntimeError(
             "ReefVision --skip-migrations refused an outdated or unknown "
