@@ -387,9 +387,7 @@ def test_rounded_equal_route_with_impossible_exact_stored_chord_is_withheld(
     app = cast(FastAPI, client.app)
     hashes: list[str] = []
     for _ in range(2):
-        run = client.post(
-            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-        )
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         assert process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
@@ -406,3 +404,113 @@ def test_rounded_equal_route_with_impossible_exact_stored_chord_is_withheld(
         hashes.append(artifact["payload_sha256"])
     assert len(set(hashes)) == 1
     assert len(hashes[0]) == 64
+
+
+# A positive 1e-170 source edge collapses to binary64 zero at 1e-155
+# meters per unit. A larger adjacent triangle keeps total calibrated area
+# representable for the complete mesh-preview and persisted workflow.
+TINY_CALIBRATED_EDGE_GEOMETRY = {
+    "vertices": [
+        [0.0, 0.0, 0.0],
+        [1e-170, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [1.0, 0.0, 0.0],
+    ],
+    "faces": [[0, 1, 2], [0, 2, 3]],
+    "meters_per_unit": 1e-155,
+    "calibration_method": "ruler",
+    "calibration_evidence": "Synthetic underflow, not a measured coral scale",
+    "relative_scale_uncertainty": 0.05,
+    "surface_path_vertex_pairs": [[0, 1], [0, 2]],
+}
+
+
+def test_positive_source_edge_underflow_withholds_false_zero_intervals(
+    client: TestClient,
+) -> None:
+    """Calibrated zero from underflow is not a verified zero-length segment."""
+    geometry = TINY_CALIBRATED_EDGE_GEOMETRY
+    paths = mesh_edge_paths(
+        points=[tuple(vertex) for vertex in geometry["vertices"]],
+        faces=geometry["faces"],
+        pairs=geometry["surface_path_vertex_pairs"],
+        scale=1e-155,
+        scale_uncertainty=0.05,
+    )
+    assert paths is not None
+    underflowed, control = paths
+    assert underflowed["status"] == "connected"
+    assert underflowed["path_vertex_indices"] == [0, 1]
+    assert underflowed["length_m"] == 0.0
+    assert underflowed["endpoint_chord_length_m"] == 0.0
+    assert underflowed["path_edge_lengths_m"] == [0.0]
+    assert underflowed["length_scale_interval_m"] is None
+    assert underflowed["endpoint_chord_scale_interval_m"] is None
+    assert underflowed["path_edge_length_scale_intervals_m"] == [None]
+    assert underflowed["path_cumulative_length_scale_intervals_m"] == [[0.0, 0.0], None]
+    assert underflowed["scale_uncertainty_m"] is None
+    assert underflowed["endpoint_chord_scale_uncertainty_m"] is None
+    assert "calibrated_path_length_underflow" in underflowed["path_qc_warnings"]
+    assert "calibrated_path_segment_underflow" in underflowed["path_qc_warnings"]
+    assert "path_scale_interval_below_numeric_resolution" in underflowed["path_qc_warnings"]
+    assert control["status"] == "connected"
+    assert control["path_vertex_indices"] == [0, 2]
+    assert control["length_m"] == 1e-155
+    assert control["length_scale_interval_m"] == [1e-155 * 0.95, 1e-155 * 1.05]
+    assert control["path_edge_length_scale_intervals_m"] == [
+        [1e-155 * 0.95, 1e-155 * 1.05]
+    ]
+    assert "calibrated_path_length_underflow" not in control["path_qc_warnings"]
+
+    direct = measure_mesh_preview(**geometry)
+    assert direct["surface_edge_paths"] == paths
+    assert direct["provenance"]["calibration_verified"] is False
+    project_id = str(create_project(client, "Calibrated edge underflow evidence")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/mesh-preview", json=geometry)
+    assert response.status_code == 200, response.text
+    measured = response.json()
+    assert measured["surface_edge_paths"] == paths
+
+    graph = {
+        "graph_id": "mesh-underflow-scale-interval-v14",
+        "name": "Withhold false zero intervals from provisional calibrated paths",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": geometry},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    digests: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        )
+        assert artifact["payload_json"] == measured
+        digests.append(artifact["payload_sha256"])
+    assert len(set(digests)) == 1
+    assert len(digests[0]) == 64
