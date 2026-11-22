@@ -57,9 +57,7 @@ def test_selected_route_cumulative_roundoff_is_exposed_and_replayed(
     assert affected["path_calibrated_edge_sum_exact_fraction_m"] == str(exact_total)
     assert affected["path_cumulative_total_exact_match"] is False
     assert affected["path_cumulative_roundoff_exact_fraction_m"] == str(-Fraction(1e-8))
-    assert affected["path_nominal_total_vs_edge_sum_exact_fraction_m"] == str(
-        -Fraction(1e-8)
-    )
+    assert affected["path_nominal_total_vs_edge_sum_exact_fraction_m"] == str(-Fraction(1e-8))
     assert affected["path_nominal_total_exact_match"] is False
     assert (
         "selected_mesh_route_nominal_total_disagrees_with_exact_edge_sum"
