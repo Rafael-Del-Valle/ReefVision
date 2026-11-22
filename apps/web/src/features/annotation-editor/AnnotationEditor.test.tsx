@@ -1880,6 +1880,16 @@ describe("AnnotationEditor", () => {
         />
       </QueryClientProvider>,
     );
+    // Assert the persisted hidden-class policy has arrived before testing
+    // the exceptional QC reveal, so network timing cannot mask a regression.
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData<ClassVisibilityBundle>([
+          "class-visibility",
+          project.id,
+        ]),
+      ).toEqual(savedVisibility),
+    );
     expect(
       await screen.findByTestId("annotation-annotation-1"),
     ).toBeInTheDocument();
