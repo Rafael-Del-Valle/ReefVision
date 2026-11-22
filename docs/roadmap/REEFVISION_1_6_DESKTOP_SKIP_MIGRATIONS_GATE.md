@@ -69,6 +69,8 @@ requires:
 
 - SQLite `PRAGMA quick_check(1)` to return exactly `ok`. An unreadable/corrupt
   file is refused without creating a replacement database.
+- Refuse non-SQLite backends **before** opening a connection: an external
+  PostgreSQL/MySQL URL is not an offline desktop research database.
 - `PRAGMA foreign_key_check` to report **no** orphaned references, including
   historical links whose parent rows could have been lost while foreign-key
   enforcement was disabled during an external restore.
@@ -78,6 +80,8 @@ parent, delete a child, rewrite reviews, checkpoint an archive on purpose, or
 approve any QC evidence. A missing database remains a hard error. The original
 1.1/1.6 revision-0038 lineage collision remains unresolved and blocked.
 
+Regression tests also reject external PostgreSQL/MySQL database URLs before
+any connector opens a connection or the study data directory is created.
 Disposable SQLite regression fixtures cover an unreadable source file, a
 genuinely migrated 0041 schema containing an orphaned reference and original
 biological note, and the existing intact migrated 0041 success case with no
