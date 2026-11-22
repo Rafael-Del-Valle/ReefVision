@@ -533,7 +533,11 @@ def mesh_edge_paths(
                 path_qc_warnings.append("coincident_route_endpoints")
             if chord_mesh_units > 0 and chord_m == 0:
                 path_qc_warnings.append("calibrated_endpoint_chord_underflow")
-            if geometric_excess_source_units is not None and geometric_excess_source_units > 0 and geometric_excess_m == 0:
+            if (
+                geometric_excess_source_units is not None
+                and geometric_excess_source_units > 0
+                and geometric_excess_m == 0
+            ):
                 path_qc_warnings.append("calibrated_geometric_excess_underflow")
             if detour_ratio is not None and not isfinite(detour_ratio):
                 detour_ratio = None
