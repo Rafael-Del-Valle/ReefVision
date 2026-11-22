@@ -101,7 +101,6 @@ def test_parse_args_enables_packaged_provider_hardware_acceptance() -> None:
     assert options.data_dir == Path("C:/reefvision-provider-acceptance")
 
 
-
 @pytest.mark.parametrize(
     "host",
     ["0.0.0.0", "::", "192.168.1.9", "research.example", ""],
@@ -149,8 +148,7 @@ def test_desktop_server_rejects_remote_settings_before_app_creation(tmp_path: Pa
     )
     with pytest.raises(ValueError, match="loopback"):
         asyncio.run(run_api_server(settings, options))
-    assert not options.context_file.exists()
-
+    assert not (tmp_path / "published-port.txt").exists()
 
 
 def test_scale_assistant_marker_runtime_accepts_opencv_contrib(
