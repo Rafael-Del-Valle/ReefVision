@@ -234,6 +234,13 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             )
             model_sha = _digest(_managed_file(root, model.managed_path))
             _require(model_sha == model.sha256, "Registered local model file digest changed")
+            # Registration copies the exact finalized training checkpoint. Two
+            # independently self-consistent hashes are not enough to prove
+            # this local model was produced by the audited training job.
+            _require(
+                model_sha == checkpoint_sha,
+                "Registered local model bytes differ from the trained checkpoint",
+            )
             return {
                 "status": "PASS",
                 "workflow_run_id": run.id,
