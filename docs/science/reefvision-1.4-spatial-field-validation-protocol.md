@@ -341,3 +341,29 @@ Neither digest proves the submitted text matches an original sensor file,
 establishes color calibration or verifies biological condition/identity.
 Review, physical calibration and representative coral references remain
 release gates.
+
+### Repeated raw XYZ/RGB acquisition observations
+
+For imported colored ASCII PLY, report
+`preview_rgb_variant_support.source_repeated_xyz_rgb_observation_rows` as
+**total acquisition rows minus distinct normalized (XYZ, R, G, B) pairs**,
+with `source_repeated_xyz_rgb_observation_fraction` using the full row count as
+denominator. Report `preview_repeated_xyz_rgb_observation_rows` separately,
+using displayed rows and displayed distinct pairs. Emit
+`source_contains_repeated_xyz_rgb_observations` QC when the full-source
+repeated-row count is nonzero, regardless of how the 512-point preview was
+sampled. A complete preview may still contain repeated observations, and
+preservation of distinct color pairs does not preserve every original row.
+
+Validate on a 600-row two-locus, three-color reference: the source has 597
+repeated rows; default display has 510 repeated rows, while opt-in pair
+preservation displays the third color and has 509 repeated rows. Independently
+check a 513-row acquisition containing exactly 512 distinct pairs (1 repeated
+source row, zero repeated displayed rows) and a fully unique three-row
+negative control (zero repeated rows and no warning). Check **standalone
+project API output and twice-executed persisted typed Workflow Builder
+artifacts**, comparing the complete payload and saved SHA-256. These counts
+measure exact duplicate coordinate/color *records*, not sampling independence,
+repeat measurements, organism abundance, colony condition, color calibration,
+or independent biological replication. Do not turn duplicate-row counts into
+experimental units; human QC and field reference validation are required.
