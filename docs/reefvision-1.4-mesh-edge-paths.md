@@ -1186,3 +1186,19 @@ an anatomical centerline, a biological growth measurement, nor independent
 validation of specimen identity. Regression tests compare the direct engine,
 standalone project endpoint and twice-replayed persisted typed Workflow Builder
 artifacts, including source provenance and stable artifact hashes.
+
+### Triangle-inequality guard for geometric detour ratios
+
+A connected selected edge route must not be physically shorter than the
+straight chord joining its endpoints. Binary64 addition of multiple edge
+lengths can nevertheless round below the independently computed endpoint
+chord. When `length_m` is less than `endpoint_chord_length_m` at the source
+geometry level, ReefVision emits
+`endpoint_chord_exceeds_rounded_selected_route` and withholds
+`geometric_detour_ratio` (`null`) rather than publishing a misleading ratio
+below one. The original path, chord, segment trace, calibration bounds and
+provisional provenance remain visible for review. A displayed zero detour
+excess in this case is only a clamped numerical value, not evidence of a
+verified straight biological branch. A synthetic three-edge regression checks
+a two-ULP discrepancy, standalone API parity, and full artifact/hash parity
+over two executions of a persisted typed Workflow Builder graph.
