@@ -169,7 +169,11 @@ describe("ImageViewport", () => {
     try {
       const dimensions = { width: 940, height: 620 };
       const { unmount } = render(
-        <ImageViewport width={1600} height={1200} label="Broken viewport getter">
+        <ImageViewport
+          width={1600}
+          height={1200}
+          label="Broken viewport getter"
+        >
           <svg data-testid="getter-overlay" viewBox="0 0 1600 1200">
             <polygon points="10,20 40,20 40,60" />
           </svg>
