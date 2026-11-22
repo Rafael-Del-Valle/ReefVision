@@ -1197,8 +1197,13 @@ geometry level, ReefVision emits
 `endpoint_chord_exceeds_rounded_selected_route` and withholds
 `geometric_detour_ratio` (`null`) rather than publishing a misleading ratio
 below one. The original path, chord, segment trace, calibration bounds and
-provisional provenance remain visible for review. A displayed zero detour
-excess in this case is only a clamped numerical value, not evidence of a
-verified straight biological branch. A synthetic three-edge regression checks
-a two-ULP discrepancy, standalone API parity, and full artifact/hash parity
-over two executions of a persisted typed Workflow Builder graph.
+provisional provenance remain visible for review. The nominal
+`geometric_excess_length_m` and its
+`geometric_excess_scale_interval_m` are also `null`: a negative
+floating-point discrepancy must not become an apparently exact zero excess
+or a zero-width calibration interval. An unaffected exactly straight route
+retains genuine zero excess and its `[0.0, 0.0]` scale interval.
+A synthetic three-edge regression checks the two-ULP discrepancy,
+standalone API parity, and full artifact/hash parity over two executions
+of a persisted typed Workflow Builder graph. No physical calibration,
+anatomical branch, or biological condition is verified by this guard.
