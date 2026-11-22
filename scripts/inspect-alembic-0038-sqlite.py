@@ -25,6 +25,7 @@ TABLE_COLUMNS = {
     "review_queue_item_events": {
         "id",
         "project_id",
+        "review_queue_id",
         "review_queue_item_id",
         "client_request_id",
         "event_type",
