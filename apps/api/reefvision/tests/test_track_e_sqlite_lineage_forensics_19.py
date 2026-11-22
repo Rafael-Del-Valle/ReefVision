@@ -207,3 +207,40 @@ def test_refuses_populated_qc_lineage_with_cross_project_event(
     assert report["qc_event_scope_violations"] == 1
     assert report["automatic_migration_authorized"] is False
     assert any("cross-project links" in issue for issue in report["issues"])
+
+def test_rejects_historical_qc_event_types_outside_installed_check(
+    tmp_path: Path,
+) -> None:
+    # Exercise a persisted real SQLite record produced with CHECK enforcement
+    # disabled. A valid-looking 1.6/0038 schema is not sufficient evidence if
+    # its scientific review history violates the migration's event contract.
+    ddl = """
+        CREATE TABLE projects (id TEXT PRIMARY KEY);
+        CREATE TABLE review_queues (id TEXT PRIMARY KEY, project_id TEXT NOT NULL);
+        CREATE TABLE review_queue_items (
+          id TEXT PRIMARY KEY, review_queue_id TEXT NOT NULL, project_id TEXT NOT NULL
+        );
+        CREATE TABLE review_queue_item_events (
+          id TEXT, project_id TEXT, review_queue_id TEXT, review_queue_item_id TEXT,
+          client_request_id TEXT, event_type TEXT, actor TEXT,
+          CHECK(event_type IN ('comment', 'assign', 'unassign'))
+        );
+        INSERT INTO projects VALUES ('project-1');
+        INSERT INTO review_queues VALUES ('queue-1', 'project-1');
+        INSERT INTO review_queue_items VALUES ('item-1', 'queue-1', 'project-1');
+        PRAGMA ignore_check_constraints=ON;
+        INSERT INTO review_queue_item_events VALUES (
+          'event-1', 'project-1', 'queue-1', 'item-1',
+          'request-1', 'triage_start', 'scientist'
+        );
+        PRAGMA ignore_check_constraints=OFF;
+    """
+    status, report = _inspect(tmp_path, ddl, "0038")
+    assert status == 2
+    assert report["classification"] == "ambiguous"
+    assert report["review_event_check"] == "coordination"
+    assert report["qc_event_scope_violations"] == 0
+    assert report["qc_event_type_violations"] == 1
+    assert report["automatic_migration_authorized"] is False
+    assert any("disallowed event types" in issue for issue in report["issues"])
+
