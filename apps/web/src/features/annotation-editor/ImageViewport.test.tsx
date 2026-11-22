@@ -426,9 +426,7 @@ describe("ImageViewport", () => {
       expect(
         screen.getByRole("button", { name: "Actual Size (100%)" }),
       ).toBeDisabled();
-      expect(
-        screen.getByRole("button", { name: "Reset View" }),
-      ).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Reset View" })).toBeDisabled();
       fireEvent.wheel(frame, {
         deltaY: -100,
         clientX: 100,
@@ -512,5 +510,4 @@ describe("ImageViewport", () => {
         .querySelector("polygon"),
     ).toHaveAttribute("points", "10,10 30,10 20,30");
   });
-
 });
