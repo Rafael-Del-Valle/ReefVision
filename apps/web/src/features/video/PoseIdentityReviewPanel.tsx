@@ -222,7 +222,9 @@ export function PoseIdentityReviewPanel({
       ),
   });
   const cancelMutation = useMutation({
-    mutationFn: () => cancelPoseIdentityJob(cancellableJobId ?? ""),
+    // Capture the displayed persisted job ID at click time. Query refreshes
+    // must not turn a valid cancellation into a request for an empty job ID.
+    mutationFn: (jobId: string) => cancelPoseIdentityJob(jobId),
     onSuccess: () => setMessage("Identity association cancellation requested."),
     onError: (error) =>
       setMessage(
@@ -322,7 +324,11 @@ export function PoseIdentityReviewPanel({
           Associate individuals
         </button>
         {cancellableJobId && (
-          <button type="button" onClick={() => cancelMutation.mutate()}>
+          <button
+            type="button"
+            disabled={cancelMutation.isPending}
+            onClick={() => cancelMutation.mutate(cancellableJobId)}
+          >
             Cancel association
           </button>
         )}
