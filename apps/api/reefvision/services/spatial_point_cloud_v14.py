@@ -1206,6 +1206,9 @@ def measure_point_cloud_preview(
             "calibration_verified": False,
             "relative_scale_uncertainty": relative_scale_uncertainty,
             "coordinate_registration_verified": False,
+            # A raw point-cloud service call has no identity-review evidence;
+            # higher-level request metadata must not promote it implicitly.
+            "specimen_identity_verified": False,
         },
     }
 
