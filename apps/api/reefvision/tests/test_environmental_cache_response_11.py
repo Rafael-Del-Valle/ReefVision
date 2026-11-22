@@ -1,4 +1,4 @@
-"""Scientific record reads fail closed on malformed rehashed environmental caches."""
+"""Historical scientific records stay auditable when environmental caches are corrupt."""
 
 from __future__ import annotations
 
@@ -36,7 +36,9 @@ from reefvision.tests.test_environmental_context import noaa_fixture
         "whole_payload_not_object",
     ],
 )
-def test_scientific_record_listing_rejects_malformed_rehashed_cache(client, damage):
+def test_scientific_record_listing_flags_malformed_rehashed_cache_as_not_current(
+    client, damage
+):
     """No false currentness or 500s; original scientific rows remain immutable."""
     project = create_project(client, "Cache integrity audit")
     record_url = f"/api/v1/projects/{project['id']}/scientific-records"
@@ -93,10 +95,13 @@ def test_scientific_record_listing_rejects_malformed_rehashed_cache(client, dama
         entry.content_sha256 = content_hash(payload)
         session.commit()
 
-    # Record reads must return a controlled conflict, not a 500 or a false
-    # claim that tampered provider evidence remains scientifically current.
+    # History remains independently auditable; a tampered provider cache
+    # cannot be presented as current environmental evidence.
     invalid = client.get(record_url)
-    assert invalid.status_code == 409, invalid.text
+    assert invalid.status_code == 200, invalid.text
+    listed = invalid.json()["items"]
+    assert {item["id"] for item in listed} == original_ids
+    assert all(item["environmental_snapshot_current"] is False for item in listed)
     with client.app.state.session_factory() as session:
         rows = session.scalars(
             select(ScientificRecord).where(ScientificRecord.project_id == project["id"])

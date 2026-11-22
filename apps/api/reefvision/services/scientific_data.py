@@ -224,7 +224,7 @@ class ScientificDataService:
                     )
                 except ValidationError:
                     verified = False
-                if verified:
+                if verified and isinstance(record_ids, list):
                     snapshot_current = row.id in record_ids
         if row.payload_json.get("calibration_sha256"):
             image = self.session.get(ImageAsset, row.image_id) if row.image_id else None
