@@ -87,11 +87,28 @@ def inspect_database(path: Path) -> dict[str, object]:
     }
     # Match the actual event_type CHECK, not coincidental words elsewhere in
     # CREATE TABLE SQL (for example, a comment or an unrelated constraint).
-    match = re.search(
-        r"""CHECK\s*\(\s*"?event_type"?\s+IN\s*\(([^)]*)\)\s*\)""",
-        _without_sql_comments(tables.get(REVIEW_TABLE, "")),
-        flags=re.IGNORECASE,
-    )
+    review_ddl = _without_sql_comments(tables.get(REVIEW_TABLE, ""))
+    # A column name or DEFAULT string may itself contain a complete-looking
+    # CHECK. Only count CHECK expressions starting outside SQL quoted tokens.
+    quoted_spans = [
+        (token.start(), token.end())
+        for token in re.finditer(
+            r"""'(?:''|[^'])*'|"(?:[^"]|"")*"|\x60(?:[^\x60]|\x60\x60)*\x60|\[[^]]*\]""",
+            review_ddl,
+        )
+    ]
+    matches = [
+        candidate
+        for candidate in re.finditer(
+            r"""CHECK\s*\(\s*"?event_type"?\s+IN\s*\(([^)]*)\)\s*\)""",
+            review_ddl,
+            flags=re.IGNORECASE,
+        )
+        if not any(start <= candidate.start() < end for start, end in quoted_spans)
+    ]
+    # Multiple independent constraints may be narrower than either one.
+    # Conservatively refuse lineage certification unless the CHECK is unique.
+    match = matches[0] if len(matches) == 1 else None
     allowed: set[str] = set()
     if match:
         tokens = [token.strip() for token in match.group(1).split(",")]
