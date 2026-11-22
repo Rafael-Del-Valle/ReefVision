@@ -377,7 +377,9 @@ test("initial image and gallery scrolling", async ({ page }) => {
   // WheelEvent path. First prove the page *can* scroll sideways; otherwise a
   // broken gesture policy could pass merely because there is no overflow.
   await page.evaluate(() => window.scrollTo(120, window.scrollY));
-  await expect.poll(() => page.evaluate(() => window.scrollX)).toBeGreaterThan(50);
+  await expect
+    .poll(() => page.evaluate(() => window.scrollX))
+    .toBeGreaterThan(50);
   await page.evaluate(() => window.scrollTo(0, window.scrollY));
   await expect.poll(() => page.evaluate(() => window.scrollX)).toBe(0);
   await assertDecodedAndContained(1600, 1200);
