@@ -1259,3 +1259,34 @@ the direct scientific engine, standalone project API, and two executions
 of a saved typed Workflow Builder graph with full artifact equality and
 matching SHA-256 fingerprints. This is a reproducibility/numerical-integrity
 guard only; physical calibration and coral anatomy are still provisional.
+
+## Calibration underflow and scientifically unknown zero-width intervals (1.4)
+
+A positive imported mesh-edge distance can become the binary64 value `0.0`
+when multiplied by a very small caller-supplied meters-per-unit scale. That
+number is a **numerical underflow**, not an observed absence of length. For a
+connected selected path with this condition, a nominal underflowed length is
+retained for audit, but the scale-only uncertainty interval is **null** rather
+than the false precision `[0, 0]`. The same rule applies independently to
+positive source-frame endpoint chords, selected edge segments, subsequent
+positive-source cumulative prefixes, and positive source geometric detours.
+A genuinely zero-length source edge or the initial zero cumulative waypoint
+still retains a legitimate `[0, 0]` scale interval when uncertainty is supplied.
+
+Affected results retain the existing explicit
+`calibrated_path_length_underflow`, `calibrated_endpoint_chord_underflow`,
+`calibrated_path_segment_underflow`, and
+`path_scale_interval_below_numeric_resolution` QC warnings as appropriate.
+Neither the resulting null interval nor the surviving source-geometry fields
+assert reliable calibration, anatomy, growth, health, or individual identity.
+The original geometry and provisional review status are preserved.
+
+A synthetic two-triangle fixture combines a tiny positive 1e-170 source edge
+with 1e-155 meters per unit, while retaining representable *aggregate*
+calibrated surface area through a larger adjacent triangle. Its independent
+normal-scale edge is an unaffected control. The direct scientific engine,
+project-scoped API, and twice-replayed persisted executable typed
+`mesh_surface_preview` Workflow Builder graph check identical complete
+artifacts and reproducible fingerprints. These tests do not substitute for
+coral reconstruction review, physical calibration, or installed Windows/GPU
+acceptance.
