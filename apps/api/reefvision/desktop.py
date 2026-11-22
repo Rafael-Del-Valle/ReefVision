@@ -13,6 +13,7 @@ import threading
 from collections.abc import Sequence
 from contextlib import suppress
 from dataclasses import dataclass
+from ipaddress import ip_address
 from pathlib import Path
 from typing import Protocol, TextIO, cast
 
@@ -48,6 +49,26 @@ class DesktopLaunchOptions:
     provider_hardware_acceptance: bool = False
     video_tracking_job: str | None = None
     annotated_video_export_job: str | None = None
+
+
+def require_local_desktop_host(host: str) -> None:
+    """Reject remote bind addresses for the unauthenticated offline desktop API.
+
+    Local desktop access is intentionally limited to literal loopback IP
+    addresses or the conventional localhost hostname. Do not resolve arbitrary
+    DNS names: they can later point to an externally reachable interface.
+    """
+    if host.lower() == "localhost":
+        return
+    try:
+        if ip_address(host).is_loopback:
+            return
+    except ValueError:
+        pass
+    raise ValueError(
+        "ReefVision desktop API must bind to a loopback address "
+        "(127.0.0.1, ::1 or localhost); remote exposure is unsupported"
+    )
 
 
 def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
@@ -91,6 +112,10 @@ def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
         help="Process one queued annotated-video export job and exit",
     )
     namespace = parser.parse_args(argv)
+    try:
+        require_local_desktop_host(namespace.host)
+    except ValueError as exc:
+        parser.error(str(exc))
     return DesktopLaunchOptions(
         host=namespace.host,
         port=namespace.port,
@@ -168,8 +193,12 @@ def apply_desktop_environment(options: DesktopLaunchOptions) -> None:
 
 
 def build_settings(options: DesktopLaunchOptions) -> Settings:
+    # Validate before changing process environment or touching a data directory.
+    require_local_desktop_host(options.host)
     apply_desktop_environment(options)
-    return get_settings()
+    settings = get_settings()
+    require_local_desktop_host(settings.api_host)
+    return settings
 
 
 def write_runtime_port(context_file: Path | None, port: int) -> None:
@@ -528,6 +557,8 @@ async def publish_runtime_port_when_ready(
 
 
 async def run_api_server(settings: Settings, options: DesktopLaunchOptions) -> int:
+    # Defense in depth for callers bypassing the desktop CLI/settings builder.
+    require_local_desktop_host(settings.api_host)
     from reefvision.main import create_app
 
     LOGGER.info("Creating FastAPI application instance")
