@@ -181,6 +181,22 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 == dataset.manifest_sha256,
                 "Registered model no longer identifies the frozen training lineage",
             )
+            # A model with matching checkpoint bytes can still have its persisted
+            # registration relinked to another run. Verify the durable registry
+            # metadata, not only the checksum-valid Workflow Builder reference.
+            metadata = model.metadata_json
+            _require(
+                isinstance(metadata, dict)
+                and metadata.get("registered_from") == "training_run"
+                and metadata.get("source_training_run_id") == training.id
+                and metadata.get("source_pose_training_dataset_id") == dataset.id
+                and metadata.get("source_pose_training_dataset_manifest_sha256")
+                == dataset.manifest_sha256
+                and metadata.get("source_split_manifest_sha256") == training.split_manifest_sha256
+                and metadata.get("source_result_checkpoint_path") == training.result_checkpoint_path
+                and metadata.get("source_experiment_id") == result.get("experiment_id"),
+                "Registered model database provenance no longer matches completed training",
+            )
             model_sha = _digest(_managed_file(root, model.managed_path))
             _require(model_sha == model.sha256, "Registered local model file digest changed")
             return {
