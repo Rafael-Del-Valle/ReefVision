@@ -198,7 +198,7 @@ describe("ImageViewport", () => {
       );
       fireEvent.wheel(frame, { deltaY: -120, clientX: 470, clientY: 310 });
       const manuallyZoomedScale =
-        transform.style.transform.match(/scale\\(([^)]+)\\)/)?.[1];
+        transform.style.transform.match(/scale\(([^)]+)\)/)?.[1];
       expect(manuallyZoomedScale).toBeDefined();
       dimensions.width = 1120;
       dimensions.height = 740;
