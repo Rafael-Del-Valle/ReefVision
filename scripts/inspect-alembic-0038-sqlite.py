@@ -14,6 +14,7 @@ import json
 import re
 import sqlite3
 import sys
+from collections import Counter
 from contextlib import closing
 from pathlib import Path
 
@@ -63,7 +64,17 @@ def inspect_database(path: Path) -> dict[str, object]:
         version_rows = connection.execute("SELECT version_num FROM alembic_version").fetchall()
         # A revision marker can survive corrupted cross-table relationships.
         # Check declared FKs even if the original writer disabled enforcement.
-        foreign_key_violations = sum(1 for _ in connection.execute("PRAGMA foreign_key_check"))
+        # Aggregate offending child/parent table pairs without exposing row IDs
+        # or private scientific values in a shareable migration audit report.
+        violation_sources = Counter(
+            (child, parent)
+            for child, _row_id, parent, _fk_id in connection.execute("PRAGMA foreign_key_check")
+        )
+        foreign_key_violations = sum(violation_sources.values())
+        foreign_key_violation_sources = [
+            {"table": child, "parent_table": parent, "count": count}
+            for (child, parent), count in sorted(violation_sources.items())
+        ]
         tables = {
             name: ddl or ""
             for name, ddl in connection.execute(
@@ -224,6 +235,7 @@ def inspect_database(path: Path) -> dict[str, object]:
         "qc_event_scope_violations": qc_scope_violations,
         "qc_event_type_violations": qc_event_type_violations,
         "foreign_key_violations": foreign_key_violations,
+        "foreign_key_violation_sources": foreign_key_violation_sources,
         "classification": classification,
         "issues": issues,
         "manual_migration_reconciliation_required": True,

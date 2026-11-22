@@ -306,5 +306,8 @@ def test_rejects_persisted_scientific_lineage_with_orphaned_foreign_key(
     assert report["classification"] == "ambiguous"
     assert report["table_signatures"]["scientific_records"] is True
     assert report["foreign_key_violations"] == 1
+    assert report["foreign_key_violation_sources"] == [
+        {"table": "scientific_records", "parent_table": "projects", "count": 1}
+    ]
     assert report["automatic_migration_authorized"] is False
     assert any("foreign-key violations" in issue for issue in report["issues"])
