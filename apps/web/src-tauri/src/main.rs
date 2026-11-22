@@ -286,14 +286,15 @@ function Test-FiniteMetricValue {
   }
   return -not [double]::IsNaN($number) -and -not [double]::IsInfinity($number)
 }
-# Standard YOLO box, classification and distribution-focal losses are
-# nonnegative. A negative persisted component is unusable evidence, not a
-# valid measurement. Other scientific model metrics may be signed.
+# Standard YOLO box, classification, distribution-focal and segmentation
+# component losses are nonnegative. A negative persisted component is unusable
+# evidence, not a valid measurement. Keep generic train/loss and other model
+# metrics signed: their objective functions may legitimately be negative.
 function Test-ValidScientificMetricValue {
   param([string]$Name, [AllowNull()][object]$Value)
   if (-not (Test-FiniteMetricValue -Value $Value)) { return $false }
-  if ($Name -cin @('train/box_loss', 'train/cls_loss', 'train/dfl_loss',
-                    'val/box_loss', 'val/cls_loss', 'val/dfl_loss')) {
+  if ($Name -cin @('train/box_loss', 'train/cls_loss', 'train/dfl_loss', 'train/seg_loss',
+                    'val/box_loss', 'val/cls_loss', 'val/dfl_loss', 'val/seg_loss')) {
     return [Convert]::ToDouble($Value, [Globalization.CultureInfo]::InvariantCulture) -ge 0
   }
   return $true
