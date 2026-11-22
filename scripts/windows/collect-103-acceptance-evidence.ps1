@@ -224,9 +224,10 @@ $trustedNvidiaSmiPaths = @(
     (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::System)) 'nvidia-smi.exe')
     (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)) 'NVIDIA Corporation\NVSMI\nvidia-smi.exe')
 )
-$nvidiaSmi = $trustedNvidiaSmiPaths |
-    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
-    Select-Object -First 1
+# Even a literal system/driver path can be a reparse point, redirecting the
+# supposedly read-only collector to an arbitrary executable. Reject links in
+# both the executable and all parent directories before running GPU inventory.
+$nvidiaSmi = Get-ReefVisionTrustedGpuTool -Candidates $trustedNvidiaSmiPaths
 if ($null -ne $nvidiaSmi) {
     try {
         $output = @(& $nvidiaSmi --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>&1 | ForEach-Object { [string]$_ })
