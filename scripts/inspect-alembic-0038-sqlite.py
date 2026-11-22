@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sqlite3
 import sys
 from contextlib import closing
@@ -73,14 +74,23 @@ def inspect_database(path: Path) -> dict[str, object]:
         "scientific_0039": all(signatures[t] for t in SCIENTIFIC_39),
         "review_0038": signatures[REVIEW_TABLE],
     }
-    check_sql = tables.get(REVIEW_TABLE, "").lower()
-    triage = ("triage_start", "triage_skip", "triage_return")
-    coordination = ("comment", "assign", "unassign")
-    if all(f"'{item}'" in check_sql for item in triage):
+    # Match the actual event_type CHECK, not coincidental words elsewhere in
+    # CREATE TABLE SQL (for example, a comment or an unrelated constraint).
+    match = re.search(
+        r"""CHECK\s*\(\s*"?event_type"?\s+IN\s*\(([^)]*)\)\s*\)""",
+        tables.get(REVIEW_TABLE, ""),
+        flags=re.IGNORECASE,
+    )
+    allowed: set[str] = set()
+    if match:
+        tokens = [token.strip() for token in match.group(1).split(",")]
+        if all(len(token) >= 2 and token[0] == token[-1] == "'" for token in tokens):
+            allowed = {token[1:-1] for token in tokens}
+    coordination = {"comment", "assign", "unassign"}
+    triage = {"triage_start", "triage_skip", "triage_return"}
+    if allowed == coordination | triage:
         review_check = "triage"
-    elif all(f"'{item}'" in check_sql for item in coordination) and not any(
-        f"'{item}'" in check_sql for item in triage
-    ):
+    elif allowed == coordination:
         review_check = "coordination"
     else:
         review_check = "unknown"
