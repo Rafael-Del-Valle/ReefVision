@@ -1,5 +1,12 @@
 # ReefVision 1.6.0 Report
 
+## 2026-11-22 — QC evidence scoped to source image, including polygon masks (Track D; RELEASE HOLD)
+
+- Overlap audit: existing 1.6 saved per-user/project visibility, isolated QC evidence highlighting, polygon masks and typed executable saved QC Workflow Builder already work; no new class service, approval node or migration is needed. A QC review opened from a specific image could continue advertising exceptional visibility while the researcher navigated to another image. QC-linked polygon-mask evidence was not included in the existing temporary highlight exception.
+- Exceptional QC highlighting now applies **only while the reviewed source image is active and loaded**, to matching bounding boxes, prediction proposals and polygon-mask annotation IDs. Navigating to a different image restores its ordinary saved class visibility and removes the source QC header; returning to the originating image restores only that session's highlight. No visibility preferences, annotation records, source images, approval decisions, graph state or provenance are rewritten.
+- Added browser regression for a hidden QC-linked box and polygon mask, adjacent-image navigation with deliberately reused legacy IDs, return navigation, unchanged saved preferences and zero mutation requests. The existing typed executable saved QC workflows, review gates, retries and scientific units are preserved. Complete exact-head frontend/backend/E2E, representative biological saved-workflow and real Windows installer/installed-GUI acceptance are unverified until execution. HOLD remains for 1.1/1.6 Alembic-0038 reconciliation and explicit researcher approval.
+
+
 ## 2026-11-22 — Fail-closed visibility for raster reassignment and duplication (Track D; RELEASE HOLD)
 
 - Audited prior 1.0–1.5 raster editing and existing 1.6 saved per-user/project segmentation visibility, class management, manual QC and typed executable saved Workflow Builder. The brush already refused painting/filling when a class was hidden or visibility was unresolved, but its reclassification, duplication and keyboard-paste routes could still revise or create invisible scientific masks. This violated the editing-paused and original-revision notices.

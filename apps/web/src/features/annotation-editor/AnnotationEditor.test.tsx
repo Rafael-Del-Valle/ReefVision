@@ -1784,6 +1784,143 @@ describe("AnnotationEditor", () => {
     ).toHaveLength(0);
   });
 
+
+  it("reveals QC-linked masks only on their source image and restores visibility on navigation", async () => {
+    const savedVisibility = buildVisibilityBundle({
+      userPreferences: {
+        annotations: ["class-1"],
+        segmentation_overlays: ["class-1"],
+      },
+    });
+    const mask = {
+      id: "mask-1",
+      image_id: session.image.id,
+      label_class_id: "class-1",
+      geometry_kind: "polygon",
+      mask_path: null,
+      polygon_json: [
+        [320, 320],
+        [420, 320],
+        [420, 420],
+        [320, 420],
+      ],
+      x_min: 320,
+      y_min: 320,
+      x_max: 420,
+      y_max: 420,
+      area_pixels: 10000,
+      source_type: "human",
+      provenance_json: null,
+      status: "verified",
+      created_by: "local_user",
+      created_at: "2026-07-08T00:00:00Z",
+      updated_at: "2026-07-08T00:00:00Z",
+      deleted_at: null,
+      revision: 1,
+    };
+    const firstSession = {
+      ...session,
+      next_image_id: "image-2",
+      mask_annotations: [mask],
+    } as AnnotationSession;
+    // Reused fixture IDs test that source-image scope, not ID coincidence,
+    // controls an exceptional reveal even with malformed legacy imports.
+    const secondSession = {
+      ...firstSession,
+      image: {
+        ...session.image,
+        id: "image-2",
+        original_filename: "swiftia-next.png",
+        annotation_revision: 0,
+      },
+      annotations: [{ ...session.annotations[0], image_id: "image-2" }],
+      mask_annotations: [{ ...mask, image_id: "image-2" }],
+      previous_image_id: session.image.id,
+      next_image_id: null,
+    } as AnnotationSession;
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/images/image-1/annotations")) {
+          return jsonResponse(firstSession);
+        }
+        if (url.endsWith("/images/image-2/annotations")) {
+          return jsonResponse(secondSession);
+        }
+        if (
+          url.endsWith(`/projects/${project.id}/class-visibility`) &&
+          (!init?.method || init.method === "GET")
+        ) {
+          return jsonResponse(savedVisibility);
+        }
+        if (url.includes("/prediction-proposals")) {
+          return jsonResponse({ items: [], counts: { pending: 0 } });
+        }
+        const fallback = handleDefaultEditorRequests(url, init);
+        if (fallback) return fallback;
+        throw new Error(`Unhandled request: ${init?.method ?? "GET"} ${url}`);
+      });
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AnnotationEditor
+          project={project}
+          initialImageId={session.image.id}
+          launchContext={{
+            returnLabel: "Back to QC",
+            contextTitle: "QC source evidence",
+            highlightAnnotationIds: ["annotation-1", "mask-1"],
+          }}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    expect(
+      await screen.findByTestId("annotation-annotation-1"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("mask-annotation-mask-1"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("review-evidence-reveal")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Next image (D)" }),
+    );
+    await screen.findByRole("heading", { name: "swiftia-next.png" });
+    await waitFor(() => {
+      expect(screen.queryByTestId("annotation-annotation-1")).toBeNull();
+      expect(screen.queryByTestId("mask-annotation-mask-1")).toBeNull();
+      expect(screen.queryByTestId("review-evidence-reveal")).toBeNull();
+      expect(screen.queryByText("QC source evidence")).toBeNull();
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Previous image (A)" }),
+    );
+    await screen.findByRole("heading", { name: "swiftia-frame.png" });
+    expect(
+      await screen.findByTestId("mask-annotation-mask-1"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("review-evidence-reveal")).toBeInTheDocument();
+    expect(
+      queryClient.getQueryData<ClassVisibilityBundle>([
+        "class-visibility",
+        project.id,
+      ]),
+    ).toEqual(savedVisibility);
+    expect(
+      fetchMock.mock.calls.filter(([, init]) =>
+        ["POST", "PUT", "PATCH", "DELETE"].includes(init?.method ?? "GET"),
+      ),
+    ).toHaveLength(0);
+  });
+
   it("updates class visibility locally without refetching annotations", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

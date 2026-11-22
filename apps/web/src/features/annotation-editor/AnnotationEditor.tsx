@@ -851,13 +851,24 @@ export function AnnotationEditor({
     () => countByClass(state.document.annotations, labelClasses),
     [labelClasses, state.document.annotations],
   );
+  // A QC handoff is evidence for its originating image, not a blanket
+  // permission to reveal hidden classes on adjacent images during navigation.
+  const reviewEvidenceApplies =
+    currentImageId === initialImageId &&
+    sessionQuery.data?.image.id === currentImageId;
   const highlightedAnnotationIds = useMemo(
-    () => new Set(launchContext?.highlightAnnotationIds ?? []),
-    [launchContext?.highlightAnnotationIds],
+    () =>
+      new Set(
+        reviewEvidenceApplies ? (launchContext?.highlightAnnotationIds ?? []) : [],
+      ),
+    [launchContext?.highlightAnnotationIds, reviewEvidenceApplies],
   );
   const highlightedPredictionIds = useMemo(
-    () => new Set(launchContext?.highlightPredictionIds ?? []),
-    [launchContext?.highlightPredictionIds],
+    () =>
+      new Set(
+        reviewEvidenceApplies ? (launchContext?.highlightPredictionIds ?? []) : [],
+      ),
+    [launchContext?.highlightPredictionIds, reviewEvidenceApplies],
   );
 
   const renderedAnnotations = useMemo(() => {
@@ -1039,10 +1050,15 @@ export function AnnotationEditor({
       state.document.maskAnnotations.filter(
         (mask) =>
           mask != null &&
-          (!mask.label_class_id ||
+          (highlightedAnnotationIds.has(mask.id) ||
+            !mask.label_class_id ||
             !segmentationHiddenClassSet.has(mask.label_class_id)),
       ),
-    [segmentationHiddenClassSet, state.document.maskAnnotations],
+    [
+      highlightedAnnotationIds,
+      segmentationHiddenClassSet,
+      state.document.maskAnnotations,
+    ],
   );
   const viewportMasks = useMemo(
     () => cullViewportMasks(visibleMasks, viewportBounds),
@@ -2898,7 +2914,7 @@ export function AnnotationEditor({
           <p className="annotation-editor-subtitle">
             {project.name} | {image.width_px} x {image.height_px} px
           </p>
-          {launchContext?.contextTitle && (
+          {reviewEvidenceApplies && launchContext?.contextTitle && (
             <div className="annotation-editor-context">
               <strong>{launchContext.contextTitle}</strong>
               {launchContext.contextDescription && (
