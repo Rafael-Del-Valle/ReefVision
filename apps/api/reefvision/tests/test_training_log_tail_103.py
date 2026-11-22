@@ -666,7 +666,6 @@ def test_log_tail_quarantines_adjacent_terminal_strings_inside_loss_tokens(
     assert log.read_bytes() == original
 
 
-
 @pytest.mark.parametrize(
     "tampered_record",
     [
