@@ -1,3 +1,10 @@
+## 2026-11-21 — Fail closed on damaged imported rotated-box edits (Track D)
+
+- **Scope audit:** Prior 1.0–1.5 box/mask tools and 1.6 class/QC, executable saved typed Workflow Builder, migration/installer gates and draft PR #77 were inspected. The rotated layer trusted any four-point restored geometry, even with nonfinite, out-of-image or zero-area source coordinates while stale cached area metadata remained positive.
+- **Change:** Reject move, rotation and resize capture on malformed restored rotated boxes; hide invalid rotation/resize handles without removing original observations or selection. Preserve scientific source coordinates, saved runs and reviewer decisions. Normal rotated masks and creation remain editable. No separate Workflow Builder node is warranted for an editor gesture; existing typed inputs/outputs, units, saved graphs/runs, provenance, retries and explicit researcher approval remain intact.
+- **Regressions:** Four React cases for NaN, infinity, out-of-image vertices and collapsed-area imported geometry, asserting no revision and successful recovery by new creation. Also fixed the exact extra blank line from frontend Prettier failure in CI #44962499207; that predecessor's backend and native-Windows preservation jobs passed.
+- **HOLD:** complete exact-head lint/type/backend/frontend/E2E/scientific saved-workflow CI, independent 1.1/1.6 Alembic-0038 reconciliation, representative biology, genuine Windows MSI/CAB install/upgrade/rollback and installed GUI, explicit owner approval. No merge, release, paid hosting, unapproved pretrained weights or research-asset deletion.
+
 ## 2026-11-21 — No-op rotated-mask scientific revisions (Track D)
 
 - **Overlap/scope audit:** earlier 1.0–1.5 annotation tools and the current 1.6 class/QC editor already support genuine geometry edits, with saved, executable typed QC Workflow Builder and human approval gates. The rotated-box tool still dispatched `onUpdate` on selecting an existing box or releasing a rotation/resize with unchanged source coordinates, producing unnecessary biological revision and autosave activity.

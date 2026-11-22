@@ -145,6 +145,56 @@ function inside(points: Point[], width: number, height: number): boolean {
   );
 }
 
+// Restored biological observations may contain damaged four-point geometry
+// even when cached area metadata claims a valid rotated box. Never turn that
+// input into a new scientific revision through an editor gesture.
+function editableRotatedBox(
+  mask: EditorMaskAnnotation,
+  width: number,
+  height: number,
+): boolean {
+  const points = mask.points;
+  if (
+    !points ||
+    points.length !== 4 ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return false;
+  }
+  for (let index = 0; index < 4; index += 1) {
+    const point = points[index];
+    if (
+      !point ||
+      !Number.isFinite(point.x) ||
+      !Number.isFinite(point.y) ||
+      point.x < 0 ||
+      point.x > width ||
+      point.y < 0 ||
+      point.y > height
+    ) {
+      return false;
+    }
+  }
+  const topEdge = Math.hypot(
+    points[1].x - points[0].x,
+    points[1].y - points[0].y,
+  );
+  const sideEdge = Math.hypot(
+    points[2].x - points[1].x,
+    points[2].y - points[1].y,
+  );
+  if (!(topEdge > 0) || !(sideEdge > 0)) return false;
+  let signedDoubleArea = 0;
+  for (let index = 0; index < 4; index += 1) {
+    const next = points[(index + 1) % 4];
+    signedDoubleArea += points[index].x * next.y - next.x * points[index].y;
+  }
+  return Number.isFinite(signedDoubleArea) && Math.abs(signedDoubleArea) > 1e-9;
+}
+
 function translate(
   mask: EditorMaskAnnotation,
   dx: number,
@@ -307,10 +357,18 @@ export function RotatedBoxLayer({
     state: Omit<DragState, "pointerId">,
   ): void {
     event.stopPropagation();
-    if (drag !== null || event.button !== 0) return;
+    if (
+      drag !== null ||
+      event.button !== 0 ||
+      !state.mask ||
+      !editableRotatedBox(state.mask, width, height)
+    ) {
+      return;
+    }
     const svg = event.currentTarget.ownerSVGElement;
     if (!svg) return;
     svg.setPointerCapture(event.pointerId);
+    setPreview(state.mask);
     setDrag({ ...state, pointerId: event.pointerId });
   }
 
@@ -414,7 +472,9 @@ export function RotatedBoxLayer({
         if (!mask.points || mask.label_class_id === null) return null;
         const color = classColors[mask.label_class_id] ?? "#2a9d8f";
         const isSelected = selected.has(mask.id) || preview?.id === mask.id;
-        const handle = rotationHandle(mask.points);
+        const handle = editableRotatedBox(mask, width, height)
+          ? rotationHandle(mask.points)
+          : null;
         const points = mask.points
           .map((point) => `${point.x},${point.y}`)
           .join(" ");
@@ -436,7 +496,6 @@ export function RotatedBoxLayer({
                 const svg = event.currentTarget.ownerSVGElement;
                 if (!svg) return;
                 onSelectionChange([mask.id]);
-                setPreview(mask);
                 beginFromElement(event, {
                   kind: "move",
                   start: sourcePoint(
@@ -450,7 +509,7 @@ export function RotatedBoxLayer({
                 });
               }}
             />
-            {isSelected && (
+            {isSelected && handle && (
               <>
                 <line
                   x1={(mask.points[0].x + mask.points[1].x) / 2}
@@ -478,7 +537,6 @@ export function RotatedBoxLayer({
                     }
                     const svg = event.currentTarget.ownerSVGElement;
                     if (!svg) return;
-                    setPreview(mask);
                     beginFromElement(event, {
                       kind: "rotate",
                       start: sourcePoint(
@@ -511,7 +569,6 @@ export function RotatedBoxLayer({
                       }
                       const svg = event.currentTarget.ownerSVGElement;
                       if (!svg) return;
-                      setPreview(mask);
                       beginFromElement(event, {
                         kind: "resize",
                         start: sourcePoint(

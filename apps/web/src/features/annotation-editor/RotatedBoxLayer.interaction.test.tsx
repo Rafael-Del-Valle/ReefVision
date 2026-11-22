@@ -179,7 +179,6 @@ describe("RotatedBoxLayer pointer integrity", () => {
     expect(onUpdate.mock.calls[0][0].points).not.toEqual(original.points);
   });
 
-
   it("does not revise selected rotated boxes for clicks on move, rotation or resize handles", () => {
     const original = rotatedBoxFromDrag(
       { x: 200, y: 150 },
@@ -333,4 +332,84 @@ describe("RotatedBoxLayer pointer integrity", () => {
       original.points?.map((point) => `${point.x},${point.y}`).join(" "),
     );
   });
+
+  it.each([
+    {
+      name: "NaN vertex",
+      damage: (points: Array<{ x: number; y: number }>) => {
+        points[0].x = Number.NaN;
+      },
+    },
+    {
+      name: "infinite vertex",
+      damage: (points: Array<{ x: number; y: number }>) => {
+        points[2].y = Number.POSITIVE_INFINITY;
+      },
+    },
+    {
+      name: "out-of-image vertex",
+      damage: (points: Array<{ x: number; y: number }>) => {
+        points[1].x = 801;
+      },
+    },
+    {
+      name: "zero-area restored box",
+      damage: (points: Array<{ x: number; y: number }>) => {
+        points[2] = { ...points[1] };
+        points[3] = { ...points[0] };
+      },
+    },
+  ])("rejects corrupt $name and allows recovery", ({ damage }) => {
+    const original = rotatedBoxFromDrag(
+      { x: 200, y: 150 },
+      { x: 400, y: 300 },
+      "class-1",
+      "imported-box",
+    );
+    const points = original.points!.map((point) => ({ ...point }));
+    damage(points);
+    const imported = { ...original, points };
+    const onCreate = vi.fn();
+    const onUpdate = vi.fn();
+    const canvas = renderLayer([imported], onCreate, onUpdate);
+    const polygon = canvas.querySelector("polygon") as SVGPolygonElement;
+    const originalMarkup = polygon.getAttribute("points");
+
+    fireEvent.pointerDown(polygon, {
+      button: 0,
+      pointerId: 81,
+      clientX: 150,
+      clientY: 100,
+    });
+    fireEvent.pointerMove(canvas, {
+      pointerId: 81,
+      clientX: 200,
+      clientY: 125,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 81 });
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(onCreate).not.toHaveBeenCalled();
+    expect(canvas.querySelector("polygon")?.getAttribute("points")).toBe(
+      originalMarkup,
+    );
+    expect(imported.points).toEqual(points);
+    expect(imported.area_pixels).toBeGreaterThan(4);
+
+    // Only edits to the damaged record are blocked, not intentional new work.
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      pointerId: 82,
+      clientX: 150,
+      clientY: 100,
+    });
+    fireEvent.pointerMove(canvas, {
+      pointerId: 82,
+      clientX: 220,
+      clientY: 160,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 82 });
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
 });
