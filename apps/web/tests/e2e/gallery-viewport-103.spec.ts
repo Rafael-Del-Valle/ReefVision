@@ -15,6 +15,18 @@ const enableDocumentScrollProbe = async (
     probe.style.height = "1600px";
     probe.style.pointerEvents = "none";
     document.body.appendChild(probe);
+    // The horizontal touch check also needs a document that can genuinely
+    // scroll sideways. Otherwise scrollX === 0 is a vacuous passing result.
+    // Keep this separate and absolutely positioned so app layout is unchanged.
+    const horizontalProbe = document.createElement("div");
+    horizontalProbe.setAttribute("aria-hidden", "true");
+    horizontalProbe.style.position = "absolute";
+    horizontalProbe.style.left = "calc(100vw + 800px)";
+    horizontalProbe.style.top = "1500px";
+    horizontalProbe.style.width = "1px";
+    horizontalProbe.style.height = "1px";
+    horizontalProbe.style.pointerEvents = "none";
+    document.body.appendChild(horizontalProbe);
   });
   const remainingScroll = () =>
     page.evaluate(() => {
@@ -23,6 +35,14 @@ const enableDocumentScrollProbe = async (
       return document.scrollHeight - document.clientHeight - document.scrollTop;
     });
   await expect.poll(remainingScroll).toBeGreaterThan(400);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const root = document.scrollingElement;
+        return root ? root.scrollWidth - root.clientWidth : 0;
+      }),
+    )
+    .toBeGreaterThan(400);
 };
 
 // Browser-generated JPEG bytes exercise the real camera-image decoder path
@@ -354,8 +374,15 @@ test("initial image and gallery scrolling", async ({ page }) => {
   await assertDecodedAndContained(1600, 1200);
 
   // Horizontal finger-panning uses Chromium's compositor, not the synthetic
-  // WheelEvent path. A panorama or wide camera frame must not drag the page
-  // sideways when a scientist pans over the initial fixed preview.
+  // WheelEvent path. First prove the page *can* scroll sideways; otherwise a
+  // broken gesture policy could pass merely because there is no overflow.
+  await page.evaluate(() => window.scrollTo(120, window.scrollY));
+  await expect
+    .poll(() => page.evaluate(() => window.scrollX))
+    .toBeGreaterThan(50);
+  await page.evaluate(() => window.scrollTo(0, window.scrollY));
+  await expect.poll(() => page.evaluate(() => window.scrollX)).toBe(0);
+  await assertDecodedAndContained(1600, 1200);
   const horizontalTouchStart = await focused.boundingBox();
   expect(horizontalTouchStart).not.toBeNull();
   const pageBeforeHorizontalTouch = await page.evaluate(() => ({
