@@ -289,13 +289,7 @@ function rotate(
   const angle =
     Math.atan2(pointer.y - d.center.y, pointer.x - d.center.x) +
     (winding * Math.PI) / 2;
-  const points = orientedBoxPoints(
-    d.center,
-    d.width,
-    d.height,
-    angle,
-    winding,
-  );
+  const points = orientedBoxPoints(d.center, d.width, d.height, angle, winding);
   if (!inside(points, width, height)) return mask;
   return rotatedBoxMaskFromPoints(
     points,
