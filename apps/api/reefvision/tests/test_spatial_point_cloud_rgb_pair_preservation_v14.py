@@ -39,13 +39,12 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
     base = f"/api/v1/projects/{pid}"
     default_indices = {i * 599 // 511 for i in range(512)}
     rare_index = next(i for i in range(1, 300) if i not in default_indices)
-    rows = [
-        (
-            f"{0 if i < 300 else 1} 0 0 "
-            + ("80 90 100" if i == rare_index else "10 20 30" if i < 300 else "40 50 60")
+    rows = []
+    for i in range(600):
+        rgb = "80 90 100" if i == rare_index else (
+            "10 20 30" if i < 300 else "40 50 60"
         )
-        for i in range(600)
-    ]
+        rows.append(f"{0 if i < 300 else 1} 0 0 {rgb}")
     params = {**CALIBRATION, "ply_text": _colored_ply(rows)}
     normal_response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     pinned_params = {**params, "preserve_distinct_xyz_rgb_pairs_in_preview": True}
@@ -84,7 +83,9 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
         n for n in registry.json() if n["node_type"] == "point_cloud_preview"
     )
     assert node["executable"] is True
-    assert node["optional_parameters"]["preserve_distinct_xyz_rgb_pairs_in_preview"] is False
+    assert (
+        node["optional_parameters"]["preserve_distinct_xyz_rgb_pairs_in_preview"] is False
+    )
     graph = {
         "graph_id": "color-observation-retention-v14",
         "name": "Retain imported PLY RGB observations",
@@ -184,8 +185,9 @@ def test_rgb_pair_preservation_strict_source_and_capacity(
     )
     assert feasible.status_code == 200, feasible.text
     sample = feasible.json()
-    assert sample["preview_rgb_variant_support"]["source_distinct_xyz_rgb_pairs"] == 512
-    assert sample["preview_rgb_variant_support"]["preview_distinct_xyz_rgb_pairs"] == 512
+    support = sample["preview_rgb_variant_support"]
+    assert support["source_distinct_xyz_rgb_pairs"] == 512
+    assert support["preview_distinct_xyz_rgb_pairs"] == 512
     assert sample["preview_source_acquisition_endpoint_support"] == {
         "first_row_displayed": True,
         "last_row_displayed": False,
