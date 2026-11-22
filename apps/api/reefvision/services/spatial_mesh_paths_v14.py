@@ -306,6 +306,8 @@ def mesh_edge_paths(
         path_calibrated_edge_sum_exact_fraction_m: str | None = None
         path_cumulative_total_exact_match: bool | None = None
         path_cumulative_roundoff_exact_fraction_m: str | None = None
+        path_nominal_total_vs_edge_sum_exact_fraction_m: str | None = None
+        path_nominal_total_exact_match: bool | None = None
         path_cumulative_length_scale_intervals_m: list[list[float] | None] | None = None
         path_vertices_in_source_frame_m: list[list[float]] | None = None
         path_edge_length_scale_intervals_m: list[list[float] | None] | None = None
@@ -388,6 +390,14 @@ def mesh_edge_paths(
             meters = shortest[end] * scale
             if not isfinite(meters):
                 raise ValueError("Calibrated mesh path length overflowed")
+            # The displayed nominal shortest-path length is computed from
+            # source-unit Dijkstra totals, whereas the trace accumulates each
+            # independently calibrated segment. Neither order of operations
+            # is ground truth. Audit their difference against the exact sum
+            # of the *stored* calibrated binary64 edge lengths.
+            nominal_total_error = Fraction(meters) - exact_edge_sum
+            path_nominal_total_vs_edge_sum_exact_fraction_m = str(nominal_total_error)
+            path_nominal_total_exact_match = nominal_total_error == 0
             chord_mesh_units = dist(points[start], points[end])
             chord_m = chord_mesh_units * scale
             if not isfinite(chord_m):
@@ -433,6 +443,10 @@ def mesh_edge_paths(
             if path_cumulative_total_exact_match is False:
                 path_qc_warnings.append(
                     "selected_mesh_route_cumulative_roundoff_disagrees_with_exact_edge_sum"
+                )
+            if path_nominal_total_exact_match is False:
+                path_qc_warnings.append(
+                    "selected_mesh_route_nominal_total_disagrees_with_exact_edge_sum"
                 )
             if scale_uncertainty is not None:
                 path_edge_length_scale_intervals_m = [
@@ -556,6 +570,10 @@ def mesh_edge_paths(
                     path_calibrated_edge_sum_exact_fraction_m
                 ),
                 "path_cumulative_total_exact_match": path_cumulative_total_exact_match,
+                "path_nominal_total_exact_match": path_nominal_total_exact_match,
+                "path_nominal_total_vs_edge_sum_exact_fraction_m": (
+                    path_nominal_total_vs_edge_sum_exact_fraction_m
+                ),
                 "path_cumulative_roundoff_exact_fraction_m": (
                     path_cumulative_roundoff_exact_fraction_m
                 ),
