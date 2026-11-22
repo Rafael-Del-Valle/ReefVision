@@ -60,9 +60,7 @@ def test_ordered_rgb_acquisition_fingerprint_catches_hidden_observations(
     rows = [f"{i} 0 0 10 20 30" for i in range(600)]
     changed_rows = rows.copy()
     changed_rows[hidden_index] = f"{hidden_index} 0 0 11 20 30"
-    first = client.post(
-        endpoint, json={**CALIBRATION, "ply_text": _colored_ply(rows)}
-    )
+    first = client.post(endpoint, json={**CALIBRATION, "ply_text": _colored_ply(rows)})
     second = client.post(
         endpoint, json={**CALIBRATION, "ply_text": _colored_ply(changed_rows)}
     )
