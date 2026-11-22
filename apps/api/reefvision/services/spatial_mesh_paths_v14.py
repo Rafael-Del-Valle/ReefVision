@@ -305,6 +305,7 @@ def mesh_edge_paths(
         path_cumulative_lost_positive_segment_indices: list[int] | None = None
         path_calibrated_edge_sum_exact_fraction_m: str | None = None
         path_cumulative_total_exact_match: bool | None = None
+        path_cumulative_roundoff_exact_fraction_m: str | None = None
         path_cumulative_length_scale_intervals_m: list[list[float] | None] | None = None
         path_vertices_in_source_frame_m: list[list[float]] | None = None
         path_edge_length_scale_intervals_m: list[list[float] | None] | None = None
@@ -377,13 +378,13 @@ def mesh_edge_paths(
             # Sum the *stored calibrated binary64 segment lengths* exactly for
             # a reproducible numerical-integrity reference. This does not
             # recover the unknown true geometry or calibration accuracy.
-            exact_edge_sum = sum(
-                (Fraction(length) for length in path_edge_lengths_m), Fraction(0)
-            )
+            exact_edge_sum = sum((Fraction(length) for length in path_edge_lengths_m), Fraction(0))
             path_calibrated_edge_sum_exact_fraction_m = str(exact_edge_sum)
-            path_cumulative_total_exact_match = (
-                Fraction(path_cumulative_lengths_m[-1]) == exact_edge_sum
-            )
+            # Signed displayed-minus-exact difference is lossless and auditable.
+            # It quantifies binary64 accumulation error, not physical error.
+            cumulative_error = Fraction(path_cumulative_lengths_m[-1]) - exact_edge_sum
+            path_cumulative_roundoff_exact_fraction_m = str(cumulative_error)
+            path_cumulative_total_exact_match = cumulative_error == 0
             meters = shortest[end] * scale
             if not isfinite(meters):
                 raise ValueError("Calibrated mesh path length overflowed")
@@ -555,6 +556,9 @@ def mesh_edge_paths(
                     path_calibrated_edge_sum_exact_fraction_m
                 ),
                 "path_cumulative_total_exact_match": path_cumulative_total_exact_match,
+                "path_cumulative_roundoff_exact_fraction_m": (
+                    path_cumulative_roundoff_exact_fraction_m
+                ),
                 "path_cumulative_length_scale_intervals_m": (
                     path_cumulative_length_scale_intervals_m
                 ),
