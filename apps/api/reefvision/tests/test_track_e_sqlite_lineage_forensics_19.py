@@ -99,7 +99,6 @@ def test_classifies_conflicting_real_sqlite_schema_without_writing(
     assert report["manual_migration_reconciliation_required"] is True
 
 
-
 def test_rejects_qc_lineage_with_wrong_cascade_foreign_key(
     tmp_path: Path,
 ) -> None:
