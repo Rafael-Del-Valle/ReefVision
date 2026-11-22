@@ -61,6 +61,9 @@ def inspect_database(path: Path) -> dict[str, object]:
     with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as connection:
         connection.execute("PRAGMA query_only=ON")
         version_rows = connection.execute("SELECT version_num FROM alembic_version").fetchall()
+        # A revision marker can survive corrupted cross-table relationships.
+        # Check declared FKs even if the original writer disabled enforcement.
+        foreign_key_violations = sum(1 for _ in connection.execute("PRAGMA foreign_key_check"))
         tables = {
             name: ddl or ""
             for name, ddl in connection.execute(
@@ -170,6 +173,8 @@ def inspect_database(path: Path) -> dict[str, object]:
         count for event_type, count in qc_event_type_counts if event_type not in allowed
     )
     issues = []
+    if foreign_key_violations:
+        issues.append(f"Database has {foreign_key_violations} foreign-key violations")
     if qc_event_type_violations:
         issues.append(
             f"QC review events contain {qc_event_type_violations} disallowed event types"
@@ -218,6 +223,7 @@ def inspect_database(path: Path) -> dict[str, object]:
         "review_event_check": review_check if groups["review_0038"] else None,
         "qc_event_scope_violations": qc_scope_violations,
         "qc_event_type_violations": qc_event_type_violations,
+        "foreign_key_violations": foreign_key_violations,
         "classification": classification,
         "issues": issues,
         "manual_migration_reconciliation_required": True,

@@ -281,3 +281,30 @@ def test_rejects_nullable_historical_qc_parent_queue_link(tmp_path: Path) -> Non
     assert report["qc_event_scope_violations"] == 1
     assert report["automatic_migration_authorized"] is False
     assert any("orphaned or cross-project links" in issue for issue in report["issues"])
+
+
+def test_rejects_persisted_scientific_lineage_with_orphaned_foreign_key(
+    tmp_path: Path,
+) -> None:
+    # A valid-looking 1.1/0038 table signature cannot certify science with
+    # a broken persisted project FK, even if SQLite enforcement was disabled.
+    ddl = """
+        CREATE TABLE projects (id TEXT PRIMARY KEY);
+        CREATE TABLE scientific_records (
+          id TEXT, project_id TEXT REFERENCES projects(id),
+          variable TEXT, content_sha256 TEXT
+        );
+        CREATE TABLE environmental_cache_entries (
+          id TEXT, project_id TEXT, cache_key TEXT, source_url TEXT
+        );
+        INSERT INTO scientific_records VALUES (
+          'record-1', 'missing-project', 'temperature', 'frozen-digest'
+        );
+    """
+    status, report = _inspect(tmp_path, ddl, "0038")
+    assert status == 2
+    assert report["classification"] == "ambiguous"
+    assert report["table_signatures"]["scientific_records"] is True
+    assert report["foreign_key_violations"] == 1
+    assert report["automatic_migration_authorized"] is False
+    assert any("foreign-key violations" in issue for issue in report["issues"])
