@@ -1236,6 +1236,11 @@ def measure_point_cloud_preview(
             ).hexdigest(),
             "source_label": source_label,
             "source_ordered_xyz_rgb_sha256": source_ordered_xyz_rgb_sha256,
+            "source_ordered_xyz_rgb_canonicalization": (
+                "ordered_normalized_float64_xyz_uint8_rgb_compact_json_utf8_v1"
+                if point_colors is not None
+                else None
+            ),
             "meters_per_mesh_unit": scale,
             "calibration_method": calibration_method,
             "calibration_evidence": calibration_evidence.strip(),
