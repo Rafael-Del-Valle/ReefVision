@@ -382,7 +382,32 @@ try {
         Remove-Item Function:\Get-Command -ErrorAction SilentlyContinue
         $env:PATH = $oldPath
     }
-    Write-Output 'PASS: SHA validation, five/six-CAB manifest coverage, duplicate/tampered CAB rejection, MSI/CAB headers, stable handle hashes, mutable-writer rejection, linked paths where supported, safe GPU discovery, and evidence limitations.'
+    # Exercise the same driver-path selector used by the real evidence collector.
+    # Disposable MZ bytes are never executed: they only test path selection.
+    $gpuFixture = Join-Path $fixture 'fixture-nvidia-smi.exe'
+    [System.IO.File]::WriteAllBytes($gpuFixture, [byte[]](77, 90, 0, 0))
+    $missingGpu = Join-Path $fixture 'missing-nvidia-smi.exe'
+    if ((Get-ReefVisionTrustedGpuTool -Candidates @($missingGpu, $gpuFixture)) -cne $gpuFixture) {
+        throw 'GPU tool selector did not choose an existing regular file.'
+    }
+    if ($null -ne (Get-ReefVisionTrustedGpuTool -Candidates @($missingGpu))) {
+        throw 'Missing GPU tool was treated as available.'
+    }
+    if ($linkCreated) {
+        if ($null -ne (Get-ReefVisionTrustedGpuTool -Candidates @($fileLink))) {
+            throw 'A linked GPU tool was selected for read-only evidence execution.'
+        }
+        if ((Get-ReefVisionTrustedGpuTool -Candidates @($fileLink, $gpuFixture)) -cne $gpuFixture) {
+            throw 'GPU selector did not skip a linked candidate and choose a regular file.'
+        }
+    }
+    if ($folderLinkCreated) {
+        $linkedGpuParent = Join-Path $folderLink 'fixture-nvidia-smi.exe'
+        if ($null -ne (Get-ReefVisionTrustedGpuTool -Candidates @($linkedGpuParent))) {
+            throw 'GPU executable through a linked parent was selected for execution.'
+        }
+    }
+    Write-Output 'PASS: SHA validation, five/six-CAB manifest coverage, duplicate/tampered CAB rejection, MSI/CAB headers, stable handle hashes, mutable-writer rejection, linked paths where supported, safe reparse-free GPU discovery, and evidence limitations.'
 } finally {
     Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction SilentlyContinue
 }
