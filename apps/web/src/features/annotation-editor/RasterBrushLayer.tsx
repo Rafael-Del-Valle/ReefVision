@@ -3,13 +3,20 @@ import { useMemo, useRef, useState, type PointerEvent } from "react";
 import type { RasterEditMode } from "./rasterMaskApi";
 import type { Point } from "./types";
 
+export interface RasterBrushSettings {
+  mode: Exclude<RasterEditMode, "fill">;
+  brushRadius: number;
+}
+
 interface RasterBrushLayerProps {
   width: number;
   height: number;
   mode: Exclude<RasterEditMode, "fill">;
   brushRadius: number;
   disabled?: boolean;
-  onStroke: (points: Point[]) => void;
+  onStroke: (points: Point[], settings: RasterBrushSettings) => void;
+  onStrokeStart?: () => void;
+  onStrokeCancel?: () => void;
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -27,9 +34,12 @@ export function RasterBrushLayer({
   brushRadius,
   disabled = false,
   onStroke,
+  onStrokeStart,
+  onStrokeCancel,
 }: RasterBrushLayerProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [pointerId, setPointerId] = useState<number | null>(null);
+  const [strokeSettings, setStrokeSettings] = useState<RasterBrushSettings | null>(null);
   const [points, setPoints] = useState<Point[]>([]);
   const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
 
@@ -57,6 +67,8 @@ export function RasterBrushLayer({
     const point = sourcePoint(event);
     event.currentTarget.setPointerCapture(event.pointerId);
     setPointerId(event.pointerId);
+    setStrokeSettings({ mode, brushRadius });
+    onStrokeStart?.();
     setPoints([point]);
     setHoverPoint(point);
   }
@@ -68,7 +80,7 @@ export function RasterBrushLayer({
     if (pointerId !== event.pointerId) return;
     setPoints((current) => {
       const last = current[current.length - 1];
-      if (last && distance(last, point) < Math.max(1, brushRadius * 0.2)) {
+      if (last && distance(last, point) < Math.max(1, (strokeSettings?.brushRadius ?? brushRadius) * 0.2)) {
         return current;
       }
       return [...current, point];
@@ -82,8 +94,11 @@ export function RasterBrushLayer({
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     setPointerId(null);
+    setStrokeSettings(null);
     setPoints([]);
-    if (completed.length > 0) onStroke(completed);
+    if (completed.length > 0 && strokeSettings) {
+      onStroke(completed, strokeSettings);
+    }
   }
 
   function cancelStroke(event: PointerEvent<SVGSVGElement>) {
@@ -93,12 +108,16 @@ export function RasterBrushLayer({
     }
     // Browser cancellation or capture loss must never paint an unapproved mask.
     setPointerId(null);
+    setStrokeSettings(null);
     setPoints([]);
+    onStrokeCancel?.();
   }
 
+  const previewMode = strokeSettings?.mode ?? mode;
+  const previewRadius = strokeSettings?.brushRadius ?? brushRadius;
   const previewFill =
-    mode === "paint" ? "rgba(87, 204, 153, 0.35)" : "rgba(244, 96, 108, 0.35)";
-  const previewStroke = mode === "paint" ? "#57cc99" : "#f4606c";
+    previewMode === "paint" ? "rgba(87, 204, 153, 0.35)" : "rgba(244, 96, 108, 0.35)";
+  const previewStroke = previewMode === "paint" ? "#57cc99" : "#f4606c";
 
   return (
     <svg
@@ -128,7 +147,7 @@ export function RasterBrushLayer({
         <circle
           cx={points[0].x}
           cy={points[0].y}
-          r={brushRadius}
+          r={previewRadius}
           fill={previewFill}
           pointerEvents="none"
         />
@@ -138,7 +157,7 @@ export function RasterBrushLayer({
           points={strokeText}
           fill="none"
           stroke={previewStroke}
-          strokeWidth={brushRadius * 2}
+          strokeWidth={previewRadius * 2}
           strokeLinecap="round"
           strokeLinejoin="round"
           opacity={0.5}
