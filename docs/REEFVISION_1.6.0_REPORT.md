@@ -458,3 +458,25 @@ gates remain preserved. Actual exact-head frontend/backend/E2E and native
 Windows installed-GUI validation still require CI and manual acceptance.
 Independent 1.1/1.6 Alembic-0038 reconciliation and researcher release
 approval remain HOLD.
+
+## 2026-11-21 — Polygon no-op scientific revision and lost-capture safeguard (Track D)
+
+The 1.6 polygon editor already supported pointer-owned edits and cancellation, but
+clicking an unchanged vertex, returning a moved vertex/whole polygon to its
+original source-pixel position, or dragging a mask against its boundary could
+still call the persistence callback and fabricate a biological annotation
+revision. The prior whole-drag historical `moved` flag could not distinguish
+an accepted change from a returned gesture. Accepted geometry now compares all
+source-pixel vertices (finite, 1e-9-pixel tolerance) against the original mask
+at pointer-up and writes only actual changes. Unexpected pointer-capture loss
+also cancels unapproved previews; subsequent genuine edits remain possible.
+
+Three React regression cases cover vertex click/return/recovery, whole-mask
+boundary clamp/return/recovery and foreign/own capture loss/recovery. Historical
+biological masks, class visibility, QC decisions and typed saved executable
+Workflow Builder graphs, provenance, dimensionless priority units, retries and
+researcher review gates are unchanged. This editor-only integrity correction
+adds no duplicate workflow node or database migration. Full exact-head CI,
+representative scientific workflow acceptance, 1.1/1.6 Alembic-0038 lineage,
+real MSI/CAB installed-GUI clean install/upgrade/rollback and investigator
+release approval remain HOLD.

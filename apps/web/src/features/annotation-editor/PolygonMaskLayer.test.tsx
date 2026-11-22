@@ -600,6 +600,200 @@ describe("PolygonMaskLayer", () => {
     expect(polygonMask.points?.[0]).toEqual({ x: 10, y: 10 });
   });
 
+
+  it("does not revise scientific geometry for a vertex click or a returned drag", () => {
+    const onUpdate = vi.fn();
+    render(
+      <PolygonMaskLayer
+        width={400}
+        height={300}
+        masks={[polygonMask]}
+        classColors={{ "class-1": "#2a9d8f" }}
+        activeClassId="class-1"
+        tool="select"
+        selectedMaskIds={[polygonMask.id]}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onSelectionChange={vi.fn()}
+      />,
+    );
+    const layer = maskLayer();
+    mockLayerBounds(layer);
+    const vertex = () => screen.getByTestId(`mask-vertex-${polygonMask.id}-0`);
+
+    fireEvent.pointerDown(vertex(), { pointerId: 21, button: 0 });
+    fireEvent.pointerUp(layer, { pointerId: 21 });
+    expect(onUpdate).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(vertex(), { pointerId: 22, button: 0 });
+    fireEvent.pointerMove(layer, {
+      pointerId: 22,
+      clientX: 80,
+      clientY: 90,
+    });
+    fireEvent.pointerMove(layer, {
+      pointerId: 22,
+      clientX: 10,
+      clientY: 10,
+    });
+    fireEvent.pointerUp(layer, { pointerId: 22 });
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(polygonMask.points?.[0]).toEqual({ x: 10, y: 10 });
+
+    fireEvent.pointerDown(vertex(), { pointerId: 23, button: 0 });
+    fireEvent.pointerMove(layer, {
+      pointerId: 23,
+      clientX: 16,
+      clientY: 19,
+    });
+    fireEvent.pointerUp(layer, { pointerId: 23 });
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate.mock.calls[0][0]).toMatchObject({
+      id: polygonMask.id,
+      revision: polygonMask.revision,
+      area_pixels: 243,
+    });
+    expect(onUpdate.mock.calls[0][0].points[0]).toEqual({ x: 16, y: 19 });
+  });
+
+  it("skips whole-polygon updates for returned and boundary-clamped moves", () => {
+    const edgeMask = polygonMaskFromPoints(
+      [
+        { x: 0, y: 0 },
+        { x: 20, y: 0 },
+        { x: 20, y: 15 },
+        { x: 0, y: 15 },
+      ],
+      "class-1",
+      "at-image-edge",
+    );
+    const onUpdate = vi.fn();
+    render(
+      <PolygonMaskLayer
+        width={400}
+        height={300}
+        masks={[edgeMask]}
+        classColors={{ "class-1": "#2a9d8f" }}
+        activeClassId="class-1"
+        tool="select"
+        selectedMaskIds={[edgeMask.id]}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onSelectionChange={vi.fn()}
+      />,
+    );
+    const layer = maskLayer();
+    mockLayerBounds(layer);
+    const polygon = () => layer.querySelector("polygon") as SVGPolygonElement;
+
+    fireEvent.pointerDown(polygon(), {
+      pointerId: 30,
+      clientX: 10,
+      clientY: 10,
+      button: 0,
+    });
+    fireEvent.pointerMove(layer, {
+      pointerId: 30,
+      clientX: -100,
+      clientY: -100,
+    });
+    fireEvent.pointerUp(layer, { pointerId: 30 });
+    expect(onUpdate).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(polygon(), {
+      pointerId: 31,
+      clientX: 10,
+      clientY: 10,
+      button: 0,
+    });
+    fireEvent.pointerMove(layer, {
+      pointerId: 31,
+      clientX: 50,
+      clientY: 40,
+    });
+    fireEvent.pointerMove(layer, {
+      pointerId: 31,
+      clientX: 10,
+      clientY: 10,
+    });
+    fireEvent.pointerUp(layer, { pointerId: 31 });
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(edgeMask.points?.[0]).toEqual({ x: 0, y: 0 });
+
+    fireEvent.pointerDown(polygon(), {
+      pointerId: 32,
+      clientX: 10,
+      clientY: 10,
+      button: 0,
+    });
+    fireEvent.pointerMove(layer, {
+      pointerId: 32,
+      clientX: 15,
+      clientY: 20,
+    });
+    fireEvent.pointerUp(layer, { pointerId: 32 });
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate.mock.calls[0][0].points[0]).toEqual({ x: 5, y: 10 });
+  });
+
+  it("discards lost pointer capture and accepts a later intentional edit", () => {
+    const onUpdate = vi.fn();
+    render(
+      <PolygonMaskLayer
+        width={400}
+        height={300}
+        masks={[polygonMask]}
+        classColors={{ "class-1": "#2a9d8f" }}
+        activeClassId="class-1"
+        tool="select"
+        selectedMaskIds={[polygonMask.id]}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onSelectionChange={vi.fn()}
+      />,
+    );
+    const layer = maskLayer();
+    mockLayerBounds(layer);
+    const polygon = () => layer.querySelector("polygon") as SVGPolygonElement;
+
+    fireEvent.pointerDown(polygon(), {
+      pointerId: 40,
+      clientX: 20,
+      clientY: 20,
+      button: 0,
+    });
+    fireEvent.pointerMove(layer, {
+      pointerId: 40,
+      clientX: 100,
+      clientY: 110,
+    });
+    fireEvent.lostPointerCapture(layer, { pointerId: 99 });
+    fireEvent.pointerUp(layer, { pointerId: 99 });
+    expect(onUpdate).not.toHaveBeenCalled();
+    fireEvent.lostPointerCapture(layer, { pointerId: 40 });
+    fireEvent.pointerUp(layer, { pointerId: 40 });
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(polygon()).toHaveAttribute(
+      "points",
+      "10,10 30,10 30,25 10,25",
+    );
+
+    fireEvent.pointerDown(polygon(), {
+      pointerId: 41,
+      clientX: 20,
+      clientY: 20,
+      button: 0,
+    });
+    fireEvent.pointerMove(layer, {
+      pointerId: 41,
+      clientX: 25,
+      clientY: 30,
+    });
+    fireEvent.pointerUp(layer, { pointerId: 41 });
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate.mock.calls[0][0].points[0]).toEqual({ x: 15, y: 20 });
+  });
+
   it("keeps the first vertex class through selection changes and clear, then uses the next class", () => {
     const onCreate = vi.fn();
     const view = (activeClassId: string | null) => (

@@ -38,7 +38,6 @@ interface PolygonDrag {
   pointerId: number;
   origin: Point;
   points: Point[];
-  moved: boolean;
 }
 
 interface PolygonMetrics {
@@ -127,6 +126,25 @@ export function removePolygonVertex(
   return points
     .filter((_, index) => index !== pointIndex)
     .map((point) => ({ ...point }));
+}
+
+// A click, clamped gesture, or drag returned to its original source-pixel
+// coordinates must not fabricate a new scientific revision or autosave.
+function unchangedPolygonPoints(original: Point[], candidate: Point[]): boolean {
+  return (
+    original.length === candidate.length &&
+    original.every((point, index) => {
+      const next = candidate[index];
+      return (
+        Number.isFinite(point.x) &&
+        Number.isFinite(point.y) &&
+        Number.isFinite(next.x) &&
+        Number.isFinite(next.y) &&
+        Math.abs(point.x - next.x) <= 1e-9 &&
+        Math.abs(point.y - next.y) <= 1e-9
+      );
+    })
+  );
 }
 
 export function polygonMetrics(points: Point[]): PolygonMetrics {
@@ -350,17 +368,6 @@ export function PolygonMaskLayer({
         x: existingPoint.x + deltaX,
         y: existingPoint.y + deltaY,
       }));
-      setPolygonDrag((current) =>
-        current
-          ? {
-              ...current,
-              moved:
-                current.moved ||
-                Math.abs(deltaX) > Number.EPSILON ||
-                Math.abs(deltaY) > Number.EPSILON,
-            }
-          : current,
-      );
       setDragPreview(updatedMask(sourceMask, nextPoints));
       return;
     }
@@ -377,11 +384,14 @@ export function PolygonMaskLayer({
     if (!matchingVertexDrag && !matchingPolygonDrag) {
       return;
     }
-    if (
-      dragPreview !== null &&
-      (matchingVertexDrag || (matchingPolygonDrag && polygonDrag?.moved))
-    ) {
-      onUpdate(dragPreview);
+    if (dragPreview?.points) {
+      const originalMask = masks.find((mask) => mask.id === dragPreview.id);
+      if (
+        originalMask?.points &&
+        !unchangedPolygonPoints(originalMask.points, dragPreview.points)
+      ) {
+        onUpdate(dragPreview);
+      }
     }
     setVertexDrag(null);
     setPolygonDrag(null);
@@ -487,6 +497,7 @@ export function PolygonMaskLayer({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
+      onLostPointerCapture={handlePointerCancel}
       onKeyDown={handleKeyDown}
       style={{
         position: "absolute",
@@ -599,7 +610,6 @@ export function PolygonMaskLayer({
                     pointerId: event.pointerId,
                     origin: sourcePoint(svg, event.clientX, event.clientY),
                     points: mask.points.map((point) => ({ ...point })),
-                    moved: false,
                   });
                   setDragPreview(mask);
                 }
