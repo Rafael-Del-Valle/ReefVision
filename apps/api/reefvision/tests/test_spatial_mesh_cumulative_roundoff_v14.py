@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from fractions import Fraction
 from typing import cast
 
 from fastapi import FastAPI
@@ -52,8 +53,15 @@ def test_selected_route_cumulative_roundoff_is_exposed_and_replayed(
         1_000_000_000.0,
     ]
     assert affected["path_cumulative_lost_positive_segment_indices"] == [1]
+    exact_total = Fraction(1_000_000_000.0) + Fraction(1e-8)
+    assert affected["path_calibrated_edge_sum_exact_fraction_m"] == str(exact_total)
+    assert affected["path_cumulative_total_exact_match"] is False
     assert (
         "positive_selected_mesh_segment_lost_in_cumulative_distance"
+        in affected["path_qc_warnings"]
+    )
+    assert (
+        "selected_mesh_route_cumulative_roundoff_disagrees_with_exact_edge_sum"
         in affected["path_qc_warnings"]
     )
     assert affected["path_edge_length_scale_intervals_m"][1] == [
@@ -61,6 +69,12 @@ def test_selected_route_cumulative_roundoff_is_exposed_and_replayed(
         1e-8 * 1.01,
     ]
     assert unaffected["path_cumulative_lost_positive_segment_indices"] == []
+    assert unaffected["path_calibrated_edge_sum_exact_fraction_m"] == "1000000000"
+    assert unaffected["path_cumulative_total_exact_match"] is True
+    assert (
+        "selected_mesh_route_cumulative_roundoff_disagrees_with_exact_edge_sum"
+        not in unaffected["path_qc_warnings"]
+    )
     assert (
         "positive_selected_mesh_segment_lost_in_cumulative_distance"
         not in unaffected["path_qc_warnings"]
