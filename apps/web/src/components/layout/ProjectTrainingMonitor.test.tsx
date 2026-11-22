@@ -362,6 +362,40 @@ describe("ProjectTrainingMonitor", () => {
     expect(api.cancelTrainingRun).not.toHaveBeenCalled();
   });
 
+  it("reconciles mixed-case YOLO loss aliases without replacing observed epochs with stale summaries", async () => {
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([
+      {
+        ...activeRun,
+        metrics: {
+          "train/box_loss": 0.99,
+          "TRAIN/CLS_LOSS": 0.88,
+          "Train/DFL_Loss": 0.77,
+        },
+        metrics_history: {
+          "TRAIN/BOX_LOSS": [0.41, 0.25, null],
+          "train/cls_loss": [0.52, 0.3, null],
+          "TRAIN/dfl_loss": [0.18, 0.1, null],
+        },
+      },
+    ]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector");
+
+    for (const [label, observed, stale] of [
+      ["train box loss", "0.25", "0.99"],
+      ["train cls loss", "0.3", "0.88"],
+      ["train dfl loss", "0.1", "0.77"],
+    ]) {
+      const row = screen.getByText(label).closest("div");
+      expect(row).toHaveTextContent(observed);
+      expect(row).toHaveTextContent("prior sample");
+      expect(row).not.toHaveTextContent(stale);
+    }
+    expect(screen.queryByText("TRAIN CLS LOSS")).not.toBeInTheDocument();
+    expect(api.cancelTrainingRun).not.toHaveBeenCalled();
+  });
+
   it("labels stale loss samples and summary fallbacks without claiming current-epoch measurements", async () => {
     vi.mocked(api.getTrainingRuns).mockResolvedValue([
       {

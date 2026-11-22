@@ -33,14 +33,27 @@ function isPlausibleMetricObservation(
   );
 }
 
+// Standard training-loss aliases are semantically identical even when a
+// provider changes capitalization between epoch history and run summaries.
+// Keep other metric names intact so arbitrary signed objectives retain their
+// original scientific identity.
+function canonicalTrainingLossKey(key: string): string {
+  return /^(?:train|val)\/(?:box|cls|dfl|seg|mask)_loss$/i.test(key)
+    ? key.toLowerCase()
+    : key;
+}
+
 function metricEntries(run: TrainingRun): Array<[string, number, string]> {
   // Training summaries can lag behind per-epoch history. Prefer the last
   // finite observed loss for live box/cls/dfl reporting, while keeping the
   // summary authoritative for non-training metrics such as validation mAP.
   // Show the persisted source, and flag stale epoch samples as older evidence.
   const latest = new Map<string, { value: number; provenance: string }>();
+  const histories = new Map<string, unknown[]>();
   for (const [key, values] of Object.entries(run.metrics_history ?? {})) {
     if (!Array.isArray(values)) continue;
+    const canonicalKey = canonicalTrainingLossKey(key);
+    histories.set(canonicalKey, values);
     // An in-progress epoch can append a missing or non-finite sample before
     // the next loss is available. Retain the last real observation instead
     // of making the box/cls/dfl metric disappear from the live monitor.
@@ -49,7 +62,7 @@ function metricEntries(run: TrainingRun): Array<[string, number, string]> {
       if (isPlausibleMetricObservation(key, value)) {
         const source = `history entry ${index + 1}/${values.length}`;
         const prior = index < values.length - 1 ? "; prior sample" : "";
-        latest.set(key, {
+        latest.set(canonicalKey, {
           value,
           provenance: `${source}${prior}; epoch association unverified`,
         });
@@ -59,9 +72,10 @@ function metricEntries(run: TrainingRun): Array<[string, number, string]> {
   }
   for (const [key, value] of Object.entries(run.metrics ?? {})) {
     if (isPlausibleMetricObservation(key, value)) {
-      if (!key.startsWith("train/") || !latest.has(key)) {
-        const history = run.metrics_history?.[key];
-        latest.set(key, {
+      const canonicalKey = canonicalTrainingLossKey(key);
+      if (!canonicalKey.startsWith("train/") || !latest.has(canonicalKey)) {
+        const history = histories.get(canonicalKey);
+        latest.set(canonicalKey, {
           value,
           provenance:
             Array.isArray(history) && history.length > 0
