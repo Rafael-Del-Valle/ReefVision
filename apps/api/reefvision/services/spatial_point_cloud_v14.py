@@ -931,6 +931,27 @@ def measure_point_cloud_preview(
     preview_centroid_separation = dist(centroid, preview_row_centroid)
     if unique_count == 1:
         preview_centroid_separation = 0.0
+    # Signed per-axis sampling displacement has the same shared calibration
+    # scale uncertainty as its magnitude, but negative components reverse
+    # interval endpoints. A zero offset remains a genuine [0, 0] interval.
+    # This is scale-only uncertainty, not sampling or registration uncertainty.
+    preview_centroid_offset_scale_intervals: list[list[float] | None] | None = None
+    preview_centroid_offset_interval_unresolved = False
+    if relative_scale_uncertainty is not None:
+        preview_centroid_offset_scale_intervals = []
+        for offset in preview_minus_source_centroid_offset:
+            candidates = (
+                offset * (1 - relative_scale_uncertainty),
+                offset * (1 + relative_scale_uncertainty),
+            )
+            lower, upper = min(candidates), max(candidates)
+            if _scale_interval_unresolved(
+                offset, relative_scale_uncertainty, lower, upper
+            ):
+                preview_centroid_offset_interval_unresolved = True
+                preview_centroid_offset_scale_intervals.append(None)
+            else:
+                preview_centroid_offset_scale_intervals.append([lower, upper])
     preview_centroid_scale_interval: list[float] | None = None
     preview_centroid_interval_unresolved = False
     if relative_scale_uncertainty is not None:
@@ -1072,6 +1093,9 @@ def measure_point_cloud_preview(
             preview_row_centroid
         ),
         "preview_minus_source_row_centroid_offset_m": preview_minus_source_centroid_offset,
+        "preview_minus_source_row_centroid_offset_scale_interval_m": (
+            preview_centroid_offset_scale_intervals
+        ),
         "preview_vs_source_row_centroid_separation_m": preview_centroid_separation,
         "preview_vs_source_row_centroid_separation_scale_interval_m": (
             preview_centroid_scale_interval
@@ -1104,6 +1128,11 @@ def measure_point_cloud_preview(
             + (
                 ["preview_centroid_separation_uncertainty_interval_below_numeric_resolution"]
                 if preview_centroid_interval_unresolved
+                else []
+            )
+            + (
+                ["preview_centroid_offset_uncertainty_interval_below_numeric_resolution"]
+                if preview_centroid_offset_interval_unresolved
                 else []
             )
             + (
