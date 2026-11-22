@@ -154,6 +154,71 @@ describe("ImageViewport", () => {
     }
   });
 
+  it("refits on VisualViewport resize without losing manual zoom or scientific pixel geometry", () => {
+    // Embedded WebView2 may emit only visualViewport.resize after a desktop
+    // scale change. A registered but silent ResizeObserver cannot help.
+    class SilentResizeObserver {
+      constructor(_callback: ResizeObserverCallback) {}
+      observe() {}
+      disconnect() {}
+    }
+    const visualViewport = new EventTarget();
+    const removeListener = vi.spyOn(visualViewport, "removeEventListener");
+    vi.stubGlobal("visualViewport", visualViewport);
+    vi.stubGlobal("ResizeObserver", SilentResizeObserver);
+    try {
+      const dimensions = { width: 940, height: 620 };
+      const { unmount } = render(
+        <ImageViewport width={1600} height={1200} label="Visual viewport camera">
+          <svg data-testid="visual-viewport-overlay" viewBox="0 0 1600 1200">
+            <polygon points="10,20 40,20 40,60" />
+          </svg>
+        </ImageViewport>,
+      );
+      const frame = screen.getByRole("region", {
+        name: "Visual viewport camera",
+      });
+      Object.defineProperty(frame, "clientWidth", {
+        configurable: true,
+        get: () => dimensions.width,
+      });
+      Object.defineProperty(frame, "clientHeight", {
+        configurable: true,
+        get: () => dimensions.height,
+      });
+      const transform = screen.getByTestId("image-viewport-transform");
+      const polygon = screen
+        .getByTestId("visual-viewport-overlay")
+        .querySelector("polygon");
+      const sourcePoints = polygon?.getAttribute("points");
+
+      // No window.resize event: VisualViewport alone must refit first-open.
+      act(() => {
+        visualViewport.dispatchEvent(new Event("resize"));
+      });
+      expect(transform.style.transform).toContain(
+        `scale(${fitTransform({ width: 1600, height: 1200 }, dimensions).scale})`,
+      );
+      fireEvent.wheel(frame, { deltaY: -120, clientX: 470, clientY: 310 });
+      const manualScale = transform.style.transform.match(/scale\(([^)]+)\)/)?.[1];
+      expect(manualScale).toBeDefined();
+
+      dimensions.width = 1120;
+      dimensions.height = 740;
+      act(() => {
+        visualViewport.dispatchEvent(new Event("resize"));
+      });
+      expect(transform.style.transform).toContain(`scale(${manualScale})`);
+      expect(polygon).toHaveAttribute("points", sourcePoints);
+
+      unmount();
+      expect(removeListener).toHaveBeenCalledWith("resize", expect.any(Function));
+    } finally {
+      removeListener.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("falls back to window resizing when WebView2 exposes no usable ResizeObserver", () => {
     // A property-existence check is insufficient: some desktop webviews
     // expose ResizeObserver as undefined while starting the first image.
