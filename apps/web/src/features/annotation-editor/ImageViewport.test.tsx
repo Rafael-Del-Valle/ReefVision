@@ -673,4 +673,62 @@ describe("ImageViewport", () => {
     expect(transform.style.transform).not.toBe(fitted);
   });
 
+  it("leaves browser zoom and review-control scrolling native while retaining image zoom", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Native wheel viewport">
+        <input aria-label="Polyp class filter" />
+        <textarea aria-label="Reviewer annotation note" />
+        <div role="textbox" tabIndex={0} aria-label="QC note editor">
+          Review comment
+        </div>
+        <svg aria-label="Original source-pixel annotation">
+          <polygon points="10,10 30,10 20,30" />
+        </svg>
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", {
+      name: "Native wheel viewport",
+    });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const original = transform.style.transform;
+    const wheel = { deltaY: -100, clientX: 100, clientY: 100 };
+
+    for (const modifier of [
+      { ctrlKey: true },
+      { metaKey: true },
+      { altKey: true },
+      { shiftKey: true },
+    ]) {
+      const event = createEvent.wheel(frame, { ...wheel, ...modifier });
+      fireEvent(frame, event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(transform.style.transform).toBe(original);
+    }
+
+    for (const control of [
+      screen.getByLabelText("Polyp class filter"),
+      screen.getByLabelText("Reviewer annotation note"),
+      screen.getByLabelText("QC note editor"),
+    ]) {
+      const event = createEvent.wheel(control, wheel);
+      fireEvent(control, event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(transform.style.transform).toBe(original);
+    }
+
+    const handled = createEvent.wheel(frame, wheel);
+    handled.preventDefault();
+    fireEvent(frame, handled);
+    expect(transform.style.transform).toBe(original);
+
+    const image = screen.getByLabelText("Original source-pixel annotation");
+    const imageEvent = createEvent.wheel(image, wheel);
+    fireEvent(image, imageEvent);
+    expect(imageEvent.defaultPrevented).toBe(true);
+    expect(transform.style.transform).not.toBe(original);
+    expect(image.querySelector("polygon")).toHaveAttribute(
+      "points",
+      "10,10 30,10 20,30",
+    );
+  });
 });
