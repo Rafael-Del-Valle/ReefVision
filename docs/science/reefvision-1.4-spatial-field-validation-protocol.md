@@ -185,6 +185,20 @@ request types remain HTTP **422** schema validation errors. These are synthetic
 acceptance references, not representative coral, human-review, installed
 Windows, or physical GPU validation.
 
+### Direct service RGB row contract
+
+The direct point-cloud measurement service validates optional RGB acquisition
+rows even when color-pair preservation is disabled. For each input row, require
+exactly three built-in integer channels in the unsigned-byte range 0–255.
+Reject booleans, floats, incomplete or surplus triplets, mismatched acquisition
+counts and malformed row shapes before publishing any scientific preview.
+Test direct service rejection with and without preservation; accept valid
+0/255 boundary values. Imported colored ASCII PLY already parses uint8
+channels; its standalone API and twice-executed persisted typed Workflow
+Builder replay must continue matching complete scientific artifacts and
+SHA-256 fingerprints. This proves source-input integrity only, not calibrated
+color, coral health, verified specimen identity or independent replicates.
+
 ### Complete colored PLY observation preservation in bounded previews
 
 The strict-boolean `preserve_distinct_xyz_rgb_pairs_in_preview` is an opt-in
