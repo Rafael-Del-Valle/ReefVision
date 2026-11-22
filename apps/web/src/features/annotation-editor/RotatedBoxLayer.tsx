@@ -22,6 +22,7 @@ interface DragState {
   start: Point;
   mask?: EditorMaskAnnotation;
   cornerIndex?: number;
+  creationClassId?: string;
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -455,7 +456,14 @@ export function RotatedBoxLayer({
       return;
     const start = pointFor(event);
     event.currentTarget.setPointerCapture(event.pointerId);
-    setDrag({ kind: "create", pointerId: event.pointerId, start });
+    // Freeze the biological class chosen when the gesture began, so toolbar
+    // changes while dragging cannot silently relabel the observation.
+    setDrag({
+      kind: "create",
+      pointerId: event.pointerId,
+      start,
+      creationClassId: activeClassId,
+    });
     setPreview(rotatedBoxFromDrag(start, start, activeClassId));
   }
 
@@ -463,8 +471,8 @@ export function RotatedBoxLayer({
     if (!drag || drag.pointerId !== event.pointerId) return;
     const point = pointFor(event);
     if (drag.kind === "create") {
-      if (activeClassId)
-        setPreview(rotatedBoxFromDrag(drag.start, point, activeClassId));
+      if (drag.creationClassId)
+        setPreview(rotatedBoxFromDrag(drag.start, point, drag.creationClassId));
     } else if (drag.mask && drag.kind === "move") {
       setPreview(
         translate(

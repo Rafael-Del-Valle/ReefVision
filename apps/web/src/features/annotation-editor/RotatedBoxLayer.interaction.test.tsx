@@ -674,53 +674,51 @@ describe("RotatedBoxLayer pointer integrity", () => {
       ],
       expectedArea: 400,
     },
-  ])("clamps $name without reflecting the saved box", ({
-    reverse,
-    pointer,
-    expectedPoints,
-    expectedArea,
-  }) => {
-    const canonical = rotatedBoxFromDrag(
-      { x: 200, y: 150 },
-      { x: 400, y: 300 },
-      "class-1",
-      "crossing-corner",
-    );
-    const original = reverse
-      ? rotatedBoxMaskFromPoints(
-          [...canonical.points!].reverse(),
-          "class-1",
-          "crossing-corner",
-          true,
-          9,
-        )
-      : canonical;
-    const originalPoints = original.points!.map((point) => ({ ...point }));
-    const onUpdate = vi.fn();
-    const canvas = renderLayer([original], vi.fn(), onUpdate);
-    const corner = canvas.querySelector("rect") as SVGRectElement;
-    fireEvent.pointerDown(corner, {
-      button: 0,
-      pointerId: 104,
-      clientX: originalPoints[0].x / 2,
-      clientY: originalPoints[0].y / 2,
-    });
-    fireEvent.pointerMove(canvas, {
-      pointerId: 104,
-      clientX: pointer.x / 2,
-      clientY: pointer.y / 2,
-    });
-    fireEvent.pointerUp(canvas, { pointerId: 104 });
+  ])(
+    "clamps $name without reflecting the saved box",
+    ({ reverse, pointer, expectedPoints, expectedArea }) => {
+      const canonical = rotatedBoxFromDrag(
+        { x: 200, y: 150 },
+        { x: 400, y: 300 },
+        "class-1",
+        "crossing-corner",
+      );
+      const original = reverse
+        ? rotatedBoxMaskFromPoints(
+            [...canonical.points!].reverse(),
+            "class-1",
+            "crossing-corner",
+            true,
+            9,
+          )
+        : canonical;
+      const originalPoints = original.points!.map((point) => ({ ...point }));
+      const onUpdate = vi.fn();
+      const canvas = renderLayer([original], vi.fn(), onUpdate);
+      const corner = canvas.querySelector("rect") as SVGRectElement;
+      fireEvent.pointerDown(corner, {
+        button: 0,
+        pointerId: 104,
+        clientX: originalPoints[0].x / 2,
+        clientY: originalPoints[0].y / 2,
+      });
+      fireEvent.pointerMove(canvas, {
+        pointerId: 104,
+        clientX: pointer.x / 2,
+        clientY: pointer.y / 2,
+      });
+      fireEvent.pointerUp(canvas, { pointerId: 104 });
 
-    expect(onUpdate).toHaveBeenCalledTimes(1);
-    const revised = onUpdate.mock.calls[0][0];
-    expect(revised.points).toEqual(expectedPoints);
-    expect(revised.area_pixels).toBeCloseTo(expectedArea, 5);
-    expect(revised.id).toBe(original.id);
-    expect(revised.persisted).toBe(original.persisted);
-    expect(revised.revision).toBe(original.revision);
-    expect(original.points).toEqual(originalPoints);
-  });
+      expect(onUpdate).toHaveBeenCalledTimes(1);
+      const revised = onUpdate.mock.calls[0][0];
+      expect(revised.points).toEqual(expectedPoints);
+      expect(revised.area_pixels).toBeCloseTo(expectedArea, 5);
+      expect(revised.id).toBe(original.id);
+      expect(revised.persisted).toBe(original.persisted);
+      expect(revised.revision).toBe(original.revision);
+      expect(original.points).toEqual(originalPoints);
+    },
+  );
 
   it("preserves scientific revision when a corner crosses its anchor and returns", () => {
     const original = rotatedBoxFromDrag(
@@ -756,4 +754,92 @@ describe("RotatedBoxLayer pointer integrity", () => {
       { x: 200, y: 300 },
     ]);
   });
+  it("retains the draw-start biological class across toolbar changes and clearing", () => {
+    const onCreate = vi.fn();
+    const onSelectionChange = vi.fn();
+    const editorFor = (activeClassId: string | null) => (
+      <RotatedBoxLayer
+        width={800}
+        height={600}
+        masks={[]}
+        classColors={{ "class-1": "#2a9d8f", "class-2": "#264653" }}
+        activeClassId={activeClassId}
+        selectedMaskIds={[]}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onSelectionChange={onSelectionChange}
+      />
+    );
+    const { rerender } = render(editorFor("class-1"));
+    const canvas = screen.getByTestId(
+      "rotated-box-layer",
+    ) as unknown as SVGSVGElement;
+    vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 400,
+      bottom: 300,
+      width: 400,
+      height: 300,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      pointerId: 111,
+      clientX: 100,
+      clientY: 75,
+    });
+    rerender(editorFor("class-2"));
+    fireEvent.pointerMove(canvas, {
+      pointerId: 111,
+      clientX: 200,
+      clientY: 150,
+    });
+    rerender(editorFor(null));
+    fireEvent.pointerUp(canvas, { pointerId: 111 });
+
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(onCreate.mock.calls[0][0]).toMatchObject({
+      label_class_id: "class-1",
+      area_pixels: 30000,
+      geometry_kind: "rotated_box",
+    });
+    expect(onSelectionChange).toHaveBeenCalledWith([
+      onCreate.mock.calls[0][0].id,
+    ]);
+
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      pointerId: 112,
+      clientX: 100,
+      clientY: 75,
+    });
+    fireEvent.pointerMove(canvas, {
+      pointerId: 112,
+      clientX: 200,
+      clientY: 150,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 112 });
+    expect(onCreate).toHaveBeenCalledTimes(1);
+
+    rerender(editorFor("class-2"));
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      pointerId: 113,
+      clientX: 100,
+      clientY: 75,
+    });
+    fireEvent.pointerMove(canvas, {
+      pointerId: 113,
+      clientX: 200,
+      clientY: 150,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 113 });
+    expect(onCreate).toHaveBeenCalledTimes(2);
+    expect(onCreate.mock.calls[1][0].label_class_id).toBe("class-2");
+  });
+
 });

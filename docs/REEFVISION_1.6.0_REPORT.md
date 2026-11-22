@@ -411,3 +411,26 @@ provenance, retry and researcher-review gates are unchanged. Independent
 1.1/1.6 Alembic-0038 reconciliation, representative biological saved-workflow
 acceptance, genuine MSI/CAB installation/upgrade/rollback and explicit
 researcher approval remain release holds.
+
+## 2026-11-21 — Frozen draw-time class snapshot during annotation creation
+
+Audited existing 1.0–1.5 editor capabilities and 1.6 class/visibility and QC.
+A rotated-box creation gesture previously used the live active class at every
+pointer movement: a researcher switching classes or clearing the selection
+could unexpectedly relabel a drawn coral or discard the intended observation.
+The editor now captures the biological label class at pointer-down and retains
+it until that gesture ends. Subsequent gestures use the current class; clearing
+class selection still prevents starting a new annotation. Original observations,
+persisted visibility settings and reviewer evidence are unchanged.
+
+Added React coverage for a mid-draw class switch, clearing the active class,
+accepted geometry and scientific area, refusing a classless new drawing, and
+subsequent creation with a newly selected class. Also applied the exact
+Prettier restructuring identified in [CI #44976810681](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44976810681),
+whose backend and native-Windows preservation jobs passed. This local editor
+safeguard has no new scientific Workflow Builder operation or migration;
+existing typed executable saved QC workflows, approval gates, retries,
+provenance and units remain unchanged. The independent Alembic-0038 collision,
+full exact-head CI, representative biological/saved-workflow acceptance,
+genuine installed MSI/CAB and GUI upgrade/rollback, and researcher release
+approval remain HOLD.
