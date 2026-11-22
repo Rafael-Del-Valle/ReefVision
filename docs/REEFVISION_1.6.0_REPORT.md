@@ -385,3 +385,29 @@ native installed Windows GUI large-image usability validation are required.
 **RELEASE HOLD:** separate 1.1/1.6 Alembic-0038 histories, representative
 biological/saved-workflow acceptance, MSI clean install/upgrade/rollback and
 explicit researcher approval remain outstanding.
+
+
+## 2026-11-21 — Rotated-mask corner crossing stays on the fixed anchor side
+
+Audited the earlier 1.0–1.5 annotation primitives against the isolated 1.6
+rotated-box editor and existing typed saved QC Workflow Builder. Dragging a
+rotated rectangle corner across its fixed opposite vertex previously used
+absolute projected edge lengths. That reflected the edited box back across
+its anchor instead of preserving the grabbed corner's source-pixel side,
+potentially revising a coral measurement unintentionally. Resize now uses
+winding-aware signed projections for the existing two-pixel minimum width
+and height. Original source images and existing annotation records are
+unchanged until an intentional accepted edit.
+
+Added interaction regressions for horizontal/vertical crossing, historical
+reverse-wound geometry, preservation of record identity and revision metadata,
+and a cross-and-return gesture that must not create a scientific revision.
+An isolated arithmetic check confirms three clamped outcomes; repository
+Vitest, Playwright, backend, migrations and Windows installed-MSI/GUI
+acceptance remain subject to exact-head verification. This editor-only
+scientific integrity change does not introduce a duplicate Workflow Builder
+node or migration. Previously implemented executable typed QC saved graphs,
+provenance, retry and researcher-review gates are unchanged. Independent
+1.1/1.6 Alembic-0038 reconciliation, representative biological saved-workflow
+acceptance, genuine MSI/CAB installation/upgrade/rollback and explicit
+researcher approval remain release holds.
