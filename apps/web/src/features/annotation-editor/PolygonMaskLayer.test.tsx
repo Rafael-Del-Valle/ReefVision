@@ -772,10 +772,7 @@ describe("PolygonMaskLayer", () => {
     fireEvent.lostPointerCapture(layer, { pointerId: 40 });
     fireEvent.pointerUp(layer, { pointerId: 40 });
     expect(onUpdate).not.toHaveBeenCalled();
-    expect(polygon()).toHaveAttribute(
-      "points",
-      "10,10 30,10 30,25 10,25",
-    );
+    expect(polygon()).toHaveAttribute("points", "10,10 30,10 30,25 10,25");
 
     fireEvent.pointerDown(polygon(), {
       pointerId: 41,
