@@ -102,7 +102,10 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
 
             dataset = session.get(PoseTrainingDataset, frozen.get("dataset_id"))
             _require(dataset is not None, "Frozen pose training dataset was not found")
-            _require(dataset.project_id == run.project_id, "Frozen dataset belongs to another project")
+            _require(
+                dataset.project_id == run.project_id,
+                "Frozen dataset belongs to another project",
+            )
             _require(
                 frozen.get("manifest_sha256") == dataset.manifest_sha256,
                 "Workflow dataset manifest fingerprint changed",
@@ -112,18 +115,27 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             PoseTrainingDatasetService(session).manifest(dataset.id)
 
             training = session.get(TrainingRun, result.get("training_run_id"))
-            _require(training is not None and training.status == "completed", "Training is incomplete")
+            _require(
+                training is not None and training.status == "completed",
+                "Training is incomplete",
+            )
             _require(training.task == "pose", "Training result is not a pose model")
             _require(training.project_id == run.project_id, "Training belongs to another project")
             _require(result.get("workflow_run_id") == run_id, "Training run provenance changed")
-            _require(result.get("pose_training_dataset_id") == dataset.id, "Training used another dataset")
+            _require(
+                result.get("pose_training_dataset_id") == dataset.id,
+                "Training used another dataset",
+            )
             _require(
                 training.artifact_manifest_json.get("pose_training_dataset_manifest_sha256")
                 == dataset.manifest_sha256,
                 "Training's frozen dataset digest is missing or mismatched",
             )
             job = session.get(Job, training.job_id)
-            _require(job is not None and job.status == "succeeded", "Pose training job did not succeed")
+            _require(
+                job is not None and job.status == "succeeded",
+                "Pose training job did not succeed",
+            )
             checkpoint = _managed_file(root, training.result_checkpoint_path)
             checkpoint_sha = _digest(checkpoint)
             _require(
@@ -132,9 +144,15 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             )
 
             model = session.get(ModelRegistration, registered.get("model_id"))
-            _require(model is not None and model.project_id == run.project_id, "Model is not registered")
+            _require(
+                model is not None and model.project_id == run.project_id,
+                "Model is not registered",
+            )
             _require(model.task == "pose", "Registered model is not a pose model")
-            _require(model.sha256 == registered.get("model_sha256"), "Model registration digest changed")
+            _require(
+                model.sha256 == registered.get("model_sha256"),
+                "Model registration digest changed",
+            )
             _require(
                 registered.get("source_training_run_id") == training.id
                 and registered.get("source_pose_training_dataset_id") == dataset.id
@@ -165,7 +183,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, required=True, help="Existing local ReefVision SQLite DB")
     parser.add_argument("--run-id", required=True, help="Completed saved Workflow Builder run ID")
-    parser.add_argument("--data-dir", type=Path, required=True, help="Local ReefVision data root")
+    parser.add_argument(
+        "--data-dir", type=Path, required=True, help="Local ReefVision data root"
+    )
     args = parser.parse_args()
     try:
         evidence = inspect(args.db, args.run_id, args.data_dir)
