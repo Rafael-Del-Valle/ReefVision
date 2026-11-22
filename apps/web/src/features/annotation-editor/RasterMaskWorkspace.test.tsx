@@ -1022,9 +1022,9 @@ it.each([
       expect(
         screen.queryByTestId("selected-raster-mask-overlay"),
       ).not.toBeInTheDocument();
-      expect(screen.getByTestId("raster-hidden-class-notice")).toHaveTextContent(
-        "original pixels and revision remain unchanged",
-      );
+      expect(
+        screen.getByTestId("raster-hidden-class-notice"),
+      ).toHaveTextContent("original pixels and revision remain unchanged");
       expect(brush).toHaveStyle({ cursor: "not-allowed" });
       fireEvent.pointerDown(brush, { button: 0, pointerId: 12 });
       fireEvent.pointerUp(brush, { pointerId: 12 });
@@ -1120,6 +1120,10 @@ it("does not apply another project's stale visibility bundle to a raster mask", 
       "Visible by default",
     ),
   );
-  expect(screen.getByTestId("selected-raster-mask-overlay")).toBeInTheDocument();
-  expect(screen.queryByTestId("raster-hidden-class-notice")).not.toBeInTheDocument();
+  expect(
+    screen.getByTestId("selected-raster-mask-overlay"),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByTestId("raster-hidden-class-notice"),
+  ).not.toBeInTheDocument();
 });

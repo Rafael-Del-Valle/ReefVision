@@ -29,7 +29,10 @@ import {
   readInternalAnnotationClipboard,
   writeInternalAnnotationClipboard,
 } from "./annotationClipboard";
-import { resolveClassVisibilityState, visibilitySourceLabel } from "./classVisibility";
+import {
+  resolveClassVisibilityState,
+  visibilitySourceLabel,
+} from "./classVisibility";
 import { resolveRasterMaskSelection } from "./rasterMaskSelection";
 import {
   toEditorMaskAnnotation,
@@ -770,7 +773,9 @@ export function RasterMaskWorkspace({
               <RasterFillLayer
                 width={image.width_px}
                 height={image.height_px}
-                disabled={mutationBusy || activeClassId === null || targetClassIsHidden}
+                disabled={
+                  mutationBusy || activeClassId === null || targetClassIsHidden
+                }
                 onFill={(point) => {
                   const context = captureEditContext();
                   if (context) {
@@ -789,7 +794,9 @@ export function RasterMaskWorkspace({
                 height={image.height_px}
                 mode={mode}
                 brushRadius={brushRadius}
-                disabled={mutationBusy || activeClassId === null || targetClassIsHidden}
+                disabled={
+                  mutationBusy || activeClassId === null || targetClassIsHidden
+                }
                 onStrokeStart={() => {
                   strokeContextRef.current = captureEditContext();
                 }}
