@@ -472,4 +472,168 @@ describe("RotatedBoxLayer pointer integrity", () => {
     expect(onUpdate.mock.calls[0][0].points).not.toEqual(original.points);
     expect(original.points).toHaveLength(4);
   });
+
+  it.each([
+    {
+      name: "right and down",
+      start: { x: 200, y: 150 },
+      end: { x: 400, y: 300 },
+    },
+    {
+      name: "left and down",
+      start: { x: 400, y: 150 },
+      end: { x: 200, y: 300 },
+    },
+    {
+      name: "right and up",
+      start: { x: 200, y: 300 },
+      end: { x: 400, y: 150 },
+    },
+    {
+      name: "left and up",
+      start: { x: 400, y: 300 },
+      end: { x: 200, y: 150 },
+    },
+  ])("persists canonical source-pixel winding when drawing $name", ({ start, end }) => {
+    const onCreate = vi.fn();
+    const canvas = renderLayer([], onCreate);
+    const saved = rotatedBoxFromDrag(start, end, "class-1", "canonical");
+    expect(saved.points).toEqual([
+      { x: 200, y: 150 },
+      { x: 400, y: 150 },
+      { x: 400, y: 300 },
+      { x: 200, y: 300 },
+    ]);
+    expect(saved.area_pixels).toBe(30000);
+
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      pointerId: 100,
+      clientX: start.x / 2,
+      clientY: start.y / 2,
+    });
+    fireEvent.pointerMove(canvas, {
+      pointerId: 100,
+      clientX: end.x / 2,
+      clientY: end.y / 2,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 100 });
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(onCreate.mock.calls[0][0].points).toEqual(saved.points);
+    expect(onCreate.mock.calls[0][0].area_pixels).toBe(30000);
+  });
+
+  it("keeps historical counter-wound rectangle rotation in its original vertex order", () => {
+    const original = rotatedBoxMaskFromPoints(
+      rotatedBoxFromDrag(
+        { x: 200, y: 150 },
+        { x: 400, y: 300 },
+        "class-1",
+        "legacy",
+      ).points!.reverse(),
+      "class-1",
+      "legacy",
+      true,
+      4,
+    );
+    const originalPoints = original.points!.map((point) => ({ ...point }));
+    const onUpdate = vi.fn();
+    const canvas = renderLayer([original], vi.fn(), onUpdate);
+    const rotation = canvas.querySelector("circle") as SVGCircleElement;
+    expect(rotation.getAttribute("cy")).toBe("330");
+
+    fireEvent.pointerDown(rotation, {
+      button: 0,
+      pointerId: 101,
+      clientX: 150,
+      clientY: 165,
+    });
+    fireEvent.pointerMove(canvas, {
+      pointerId: 101,
+      clientX: 150,
+      clientY: 165,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 101 });
+    expect(onUpdate).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(
+      canvas.querySelector("circle") as SVGCircleElement,
+      {
+        button: 0,
+        pointerId: 102,
+        clientX: 150,
+        clientY: 165,
+      },
+    );
+    fireEvent.pointerMove(canvas, {
+      pointerId: 102,
+      clientX: 195,
+      clientY: 165,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 102 });
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const updated = onUpdate.mock.calls[0][0];
+    expect(updated).toMatchObject({
+      id: "legacy",
+      label_class_id: "class-1",
+      persisted: true,
+      revision: 4,
+    });
+    expect(updated.points).not.toEqual(originalPoints);
+    expect(updated.area_pixels).toBeCloseTo(30000, 5);
+    const winding = (points: typeof originalPoints) =>
+      (points[1].x - points[0].x) * (points[3].y - points[0].y) -
+      (points[1].y - points[0].y) * (points[3].x - points[0].x);
+    expect(winding(originalPoints)).toBeLessThan(0);
+    expect(winding(updated.points)).toBeLessThan(0);
+    expect(original.points).toEqual(originalPoints);
+  });
+
+  it("resizes historical reversed-winding masks about the fixed opposite source vertex", () => {
+    const canonical = rotatedBoxFromDrag(
+      { x: 200, y: 150 },
+      { x: 400, y: 300 },
+      "class-1",
+      "legacy-resize",
+    );
+    const points = canonical.points!.slice().reverse();
+    const original = rotatedBoxMaskFromPoints(
+      points,
+      "class-1",
+      "legacy-resize",
+      true,
+      7,
+    );
+    const onUpdate = vi.fn();
+    const canvas = renderLayer([original], vi.fn(), onUpdate);
+    const corner = canvas.querySelector("rect") as SVGRectElement;
+
+    fireEvent.pointerDown(corner, {
+      button: 0,
+      pointerId: 103,
+      clientX: 100,
+      clientY: 150,
+    });
+    fireEvent.pointerMove(canvas, {
+      pointerId: 103,
+      clientX: 90,
+      clientY: 160,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 103 });
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate.mock.calls[0][0]).toMatchObject({
+      id: "legacy-resize",
+      persisted: true,
+      revision: 7,
+      points: [
+        { x: 180, y: 320 },
+        { x: 400, y: 320 },
+        { x: 400, y: 150 },
+        { x: 180, y: 150 },
+      ],
+    });
+    expect(original.points).toEqual(points);
+  });
 });
