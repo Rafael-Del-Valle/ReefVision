@@ -112,7 +112,12 @@ export function RasterBrushLayer({
   }
 
   function cancelStroke(event: PointerEvent<SVGSVGElement>) {
-    if (pointerId !== event.pointerId || finishingPointerRef.current === event.pointerId) return;
+    if (
+      pointerId !== event.pointerId ||
+      finishingPointerRef.current === event.pointerId
+    ) {
+      return;
+    }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
