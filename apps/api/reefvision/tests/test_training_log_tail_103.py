@@ -644,6 +644,29 @@ def test_log_tail_quarantines_terminal_strings_inside_loss_tokens(
 
 
 @pytest.mark.parametrize(
+    "tampered_record",
+    [
+        b"train/box_loss=0.2\x1b]0;first\x07\x1b]0;second\x075",
+        b"train/cls_loss=0.\x1bPfirst\x1b\\\x1b]0;second\x0730",
+        b"train/dfl_loss=0.1\x9d0;first\x9c\x1b]0;second\x9c0",
+    ],
+)
+def test_log_tail_quarantines_adjacent_terminal_strings_inside_loss_tokens(
+    tmp_path: Path, tampered_record: bytes
+) -> None:
+    """Consecutive invisible terminal strings cannot join separate loss digits."""
+    log = tmp_path / "training.log"
+    original = tampered_record + b"\ntrain/box_loss=0.22\n"
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "[terminal-edited training log record omitted]\ntrain/box_loss=0.22\n",
+    }
+    assert log.read_bytes() == original
+
+
+@pytest.mark.parametrize(
     "spliced_record",
     [
         b"train/box_loss=0.25\x1b[31m99",
