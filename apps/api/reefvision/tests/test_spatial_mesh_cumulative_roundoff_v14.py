@@ -59,6 +59,7 @@ def test_selected_route_cumulative_roundoff_is_exposed_and_replayed(
     assert affected["path_cumulative_roundoff_exact_fraction_m"] == str(-Fraction(1e-8))
     assert affected["path_nominal_total_vs_edge_sum_exact_fraction_m"] == str(-Fraction(1e-8))
     assert affected["path_nominal_total_exact_match"] is False
+    assert affected["path_source_edge_sum_minus_chord_exact_fraction"] == str(Fraction(1e-8))
     # The exact stored binary64 source-edge sum exceeds the rounded chord,
     # although Dijkstra's displayed route total equals that chord. A nominal
     # detour ratio of 1 or exact zero excess would conceal a positive segment.
@@ -91,6 +92,7 @@ def test_selected_route_cumulative_roundoff_is_exposed_and_replayed(
     assert unaffected["path_cumulative_roundoff_exact_fraction_m"] == "0"
     assert unaffected["path_nominal_total_vs_edge_sum_exact_fraction_m"] == "0"
     assert unaffected["path_nominal_total_exact_match"] is True
+    assert unaffected["path_source_edge_sum_minus_chord_exact_fraction"] == "0"
     assert unaffected["geometric_detour_ratio"] == 1.0
     assert unaffected["geometric_excess_length_m"] == 0.0
     assert unaffected["geometric_excess_scale_interval_m"] == [0.0, 0.0]
@@ -182,6 +184,7 @@ def test_unreferenced_route_has_no_nominal_exact_audit() -> None:
     assert missing["status"] == "unreferenced_endpoint"
     assert missing["path_nominal_total_exact_match"] is None
     assert missing["path_nominal_total_vs_edge_sum_exact_fraction_m"] is None
+    assert missing["path_source_edge_sum_minus_chord_exact_fraction"] is None
     assert missing["path_qc_warnings"] is None
 
 
@@ -221,6 +224,8 @@ def test_impossible_subunit_detour_ratio_is_withheld_in_saved_workflows(
     assert affected["status"] == "connected"
     assert affected["path_vertex_indices"] == [0, 1, 2, 3]
     assert affected["length_m"] < affected["endpoint_chord_length_m"]
+    assert Fraction(affected["path_source_edge_sum_minus_chord_exact_fraction"]) < 0
+    assert "selected_mesh_route_stored_edge_sum_below_rounded_chord" in affected["path_qc_warnings"]
     assert affected["geometric_detour_ratio"] is None
     # A physically impossible negative result must not become a falsely exact
     # zero-excess measurement or zero-width calibration uncertainty interval.
@@ -228,6 +233,7 @@ def test_impossible_subunit_detour_ratio_is_withheld_in_saved_workflows(
     assert affected["geometric_excess_scale_interval_m"] is None
     assert "endpoint_chord_exceeds_rounded_selected_route" in affected["path_qc_warnings"]
     assert control["path_vertex_indices"] == [0, 1]
+    assert control["path_source_edge_sum_minus_chord_exact_fraction"] == "0"
     assert control["geometric_detour_ratio"] == 1.0
     assert control["geometric_excess_length_m"] == 0.0
     assert control["geometric_excess_scale_interval_m"] == [0.0, 0.0]
@@ -290,3 +296,110 @@ def test_impossible_subunit_detour_ratio_is_withheld_in_saved_workflows(
         digests.append(artifact["payload_sha256"])
     assert len(set(digests)) == 1
     assert len(digests[0]) == 64
+
+# The exact sum of these *stored* binary64 edges is 1/33554432 source
+# units smaller than the independently rounded endpoint chord, although
+# Dijkstra's displayed cumulative total exactly equals that chord.
+# It is a numerical ambiguity, not evidence for physically negative detour.
+STORED_CHORD_DEFICIT_GEOMETRY = {
+    "vertices": [
+        [0.0, 0.0, 0.0],
+        [188063144.80011293, 79404438.93980448, 43881400.37769399],
+        [900000000.0, 380000000.0, 210000000.0],
+        [0.0, 100000000.0, 300000000.0],
+    ],
+    "faces": [[0, 1, 3], [1, 2, 3]],
+    "meters_per_unit": 1.0,
+    "calibration_method": "ruler",
+    "calibration_evidence": "Synthetic stored-edge/chord precision case, unverified",
+    "relative_scale_uncertainty": 0.02,
+    "surface_path_vertex_pairs": [[0, 2], [0, 1]],
+}
+
+
+def test_rounded_equal_route_with_impossible_exact_stored_chord_is_withheld(
+    client: TestClient,
+) -> None:
+    """A rounded Dijkstra/chord equality must not conceal a stored-edge deficit."""
+    geometry = STORED_CHORD_DEFICIT_GEOMETRY
+    paths = mesh_edge_paths(
+        points=[tuple(vertex) for vertex in geometry["vertices"]],
+        faces=geometry["faces"],
+        pairs=geometry["surface_path_vertex_pairs"],
+        scale=1.0,
+        scale_uncertainty=0.02,
+    )
+    assert paths is not None
+    affected, control = paths
+    assert affected["status"] == "connected"
+    assert affected["path_vertex_indices"] == [0, 1, 2]
+    assert affected["length_m"] == affected["endpoint_chord_length_m"]
+    assert affected["path_source_edge_sum_minus_chord_exact_fraction"] == (
+        "-1/33554432"
+    )
+    assert "selected_mesh_route_stored_edge_sum_below_rounded_chord" in affected[
+        "path_qc_warnings"
+    ]
+    assert affected["geometric_detour_ratio"] is None
+    assert affected["geometric_excess_length_m"] is None
+    assert affected["geometric_excess_scale_interval_m"] is None
+    assert control["path_vertex_indices"] == [0, 1]
+    assert control["path_source_edge_sum_minus_chord_exact_fraction"] == "0"
+    assert control["geometric_detour_ratio"] == 1.0
+    assert "selected_mesh_route_stored_edge_sum_below_rounded_chord" not in control[
+        "path_qc_warnings"
+    ]
+
+    direct = measure_mesh_preview(**geometry)
+    assert direct["surface_edge_paths"] == paths
+    assert direct["provenance"]["calibration_verified"] is False
+    project_id = str(create_project(client, "Stored-edge chord deficit integrity")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/mesh-preview", json=geometry)
+    assert response.status_code == 200, response.text
+    measured = response.json()
+    assert measured["surface_edge_paths"] == paths
+    assert measured["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": "mesh-source-chord-exact-audit-v14",
+        "name": "Source edge/chord exact-fraction scientific integrity",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": geometry},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        )
+        assert artifact["payload_json"] == measured
+        hashes.append(artifact["payload_sha256"])
+    assert len(set(hashes)) == 1
+    assert len(hashes[0]) == 64
