@@ -1311,3 +1311,173 @@ it("discards a stroke when saved visibility hides its source class mid-gesture",
   expect(rasterApi.editRasterMask).not.toHaveBeenCalled();
   expect(session.image.annotation_revision).toBe(0);
 });
+
+it("blocks hidden-source duplicate, paste, and class changes without new biological revisions", async () => {
+  vi.mocked(getAnnotationSession).mockResolvedValue({
+    ...session,
+    label_classes: [
+      session.label_classes[0],
+      {
+        id: "class-2",
+        name: "Sponge",
+        display_color: "#e76f51",
+        is_active: true,
+      },
+    ],
+    mask_annotations: [savedRasterMask],
+  } as never);
+  vi.mocked(getClassVisibilityBundle).mockResolvedValue(
+    visibilityBundle("project-1", {
+      userSaved: true,
+      userHidden: ["class-1"],
+    }),
+  );
+  const rasterApi = (await import("./rasterMaskApi")) as unknown as {
+    duplicateRasterMask: ReturnType<typeof vi.fn>;
+    reclassifyRasterMask: ReturnType<typeof vi.fn>;
+  };
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RasterMaskWorkspace
+        project={{ id: "project-1", name: "Reef" } as Project}
+        imageId="image-1"
+        onReturnToMasks={vi.fn()}
+        onReturnToBoxes={vi.fn()}
+        onClose={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  await screen.findByTestId("raster-hidden-class-notice");
+  expect(screen.getByRole("button", { name: "Duplicate" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Paste" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Sponge" })).toBeDisabled();
+  // Copy remains a read-only action, but pasting its hidden pixels cannot
+  // silently create another scientific observation.
+  fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+  fireEvent.keyDown(document.body, { key: "d", ctrlKey: true });
+  fireEvent.keyDown(document.body, { key: "v", ctrlKey: true });
+  expect(rasterApi.duplicateRasterMask).not.toHaveBeenCalled();
+  expect(rasterApi.reclassifyRasterMask).not.toHaveBeenCalled();
+  expect(savedRasterMask.revision).toBe(1);
+  expect(savedRasterMask.area_pixels).toBe(900);
+});
+
+it("requires destination class visibility before reclassifying an existing raster mask", async () => {
+  vi.mocked(getAnnotationSession).mockResolvedValue({
+    ...session,
+    label_classes: [
+      session.label_classes[0],
+      {
+        id: "class-2",
+        name: "Sponge",
+        display_color: "#e76f51",
+        is_active: true,
+      },
+    ],
+    mask_annotations: [savedRasterMask],
+  } as never);
+  vi.mocked(getClassVisibilityBundle).mockResolvedValue(
+    visibilityBundle("project-1", {
+      userSaved: true,
+      userHidden: ["class-2"],
+    }),
+  );
+  const rasterApi = (await import("./rasterMaskApi")) as unknown as {
+    reclassifyRasterMask: ReturnType<typeof vi.fn>;
+  };
+  rasterApi.reclassifyRasterMask.mockImplementation(
+    () => new Promise(() => {}),
+  );
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RasterMaskWorkspace
+        project={{ id: "project-1", name: "Reef" } as Project}
+        imageId="image-1"
+        onReturnToMasks={vi.fn()}
+        onReturnToBoxes={vi.fn()}
+        onClose={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  await screen.findByRole("button", { name: /Coral \\| r1/i });
+  await waitFor(() =>
+    expect(screen.getByTestId("raster-visibility-source")).toHaveTextContent(
+      "My Preference",
+    ),
+  );
+  const sponge = screen.getByRole("button", { name: "Sponge" });
+  expect(sponge).toBeDisabled();
+  fireEvent.click(sponge);
+  expect(rasterApi.reclassifyRasterMask).not.toHaveBeenCalled();
+
+  await act(async () => {
+    queryClient.setQueryData(
+      ["class-visibility", "project-1"],
+      visibilityBundle("project-1", { userSaved: true, userHidden: [] }),
+    );
+  });
+  await waitFor(() => expect(sponge).toBeEnabled());
+  fireEvent.click(sponge);
+  await waitFor(() =>
+    expect(rasterApi.reclassifyRasterMask).toHaveBeenCalledWith(
+      "image-1",
+      "mask-1",
+      { base_revision: 0, label_class_id: "class-2" },
+    ),
+  );
+});
+
+it("does not duplicate a mask while project visibility is unresolved", async () => {
+  vi.mocked(getAnnotationSession).mockResolvedValue({
+    ...session,
+    mask_annotations: [savedRasterMask],
+  } as never);
+  let resolveVisibility!: (bundle: ClassVisibilityBundle) => void;
+  vi.mocked(getClassVisibilityBundle).mockImplementation(
+    () =>
+      new Promise<ClassVisibilityBundle>((resolve) => {
+        resolveVisibility = resolve;
+      }),
+  );
+  const rasterApi = (await import("./rasterMaskApi")) as unknown as {
+    duplicateRasterMask: ReturnType<typeof vi.fn>;
+  };
+  rasterApi.duplicateRasterMask.mockImplementation(
+    () => new Promise(() => {}),
+  );
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RasterMaskWorkspace
+        project={{ id: "project-1", name: "Reef" } as Project}
+        imageId="image-1"
+        onReturnToMasks={vi.fn()}
+        onReturnToBoxes={vi.fn()}
+        onClose={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  await screen.findByTestId("raster-visibility-pending-notice");
+  expect(screen.getByRole("button", { name: "Duplicate" })).toBeDisabled();
+  fireEvent.keyDown(document.body, { key: "d", ctrlKey: true });
+  expect(rasterApi.duplicateRasterMask).not.toHaveBeenCalled();
+
+  await act(async () => {
+    resolveVisibility(visibilityBundle("project-1"));
+  });
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Duplicate" })).toBeEnabled(),
+  );
+  fireEvent.keyDown(document.body, { key: "d", ctrlKey: true });
+  await waitFor(() =>
+    expect(rasterApi.duplicateRasterMask).toHaveBeenCalledTimes(1),
+  );
+});

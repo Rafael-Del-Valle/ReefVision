@@ -1,5 +1,12 @@
 # ReefVision 1.6.0 Report
 
+## 2026-11-22 — Fail-closed visibility for raster reassignment and duplication (Track D; RELEASE HOLD)
+
+- Audited prior 1.0–1.5 raster editing and existing 1.6 saved per-user/project segmentation visibility, class management, manual QC and typed executable saved Workflow Builder. The brush already refused painting/filling when a class was hidden or visibility was unresolved, but its reclassification, duplication and keyboard-paste routes could still revise or create invisible scientific masks. This violated the editing-paused and original-revision notices.
+- Reclassification now requires the correct project's resolved visibility, a visible source mask and a visible destination class. Duplication and keyboard paste validate the **source mask's** class rather than only the currently selected mask. The UI disables invalid mutating controls while preserving read-only copy and existing mask selection. Unresolved settings refuse all mask mutations; navigation-scoped checks prevent stale-image operations.
+- Three React regressions cover hidden-source duplication/paste/reclassification, hidden-destination class changes with live visibility recovery, and pending-visibility shortcut refusal/recovery. Existing source pixels, revisions, immutable datasets, manual QC events, typed saved Workflow Builder graphs/runs, units, provenance, retry semantics and researcher approval gates remain unchanged. This editor guard creates no new workflow operation, migration, pretrained model or hosted service.
+- **RELEASE HOLD:** exact-head frontend/backend/E2E and native-Windows CI confirmation, independent Alembic-0038 1.1/1.6 reconciliation, representative biological/saved-workflow acceptance, real Windows MSI/CAB installed-GUI clean install/upgrade/rollback, and explicit researcher approval. Versions 1.7 and revised 1.8 untouched.
+
 ## 2026-11-22 — Saved segmentation visibility in the separate brush editor (Track D; RELEASE HOLD)
 
 - Audited already-existing 1.0–1.5 segmentation tools, 1.6 per-user/project class visibility and typed saved executable QC Workflow Builder. The main annotation editor already resolves `segmentation_overlays` preferences, but the separate raster brush workspace still drew selected mask overlays without consulting those saved settings.

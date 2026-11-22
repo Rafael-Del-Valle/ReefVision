@@ -353,7 +353,19 @@ export function RasterMaskWorkspace({
     if (acquireMutation()) editMutation.mutate(command);
   };
   const requestClassChange = (labelClassId: string) => {
-    if (!session || !selectedMask || !acquireMutation()) return;
+    // Saved visibility is a display guard, not an authorization to silently
+    // change a hidden biological mask or reclassify into an invisible class.
+    if (
+      !session ||
+      session.image.id !== currentImageIdRef.current ||
+      !selectedMask ||
+      !visibilityReady ||
+      selectedMaskClassIsHidden ||
+      segmentationVisibility.hiddenClassIds.includes(labelClassId) ||
+      !acquireMutation()
+    ) {
+      return;
+    }
     classMutation.mutate({
       imageId: session.image.id,
       baseRevision: session.image.annotation_revision,
@@ -362,9 +374,15 @@ export function RasterMaskWorkspace({
     });
   };
   const requestDuplicate = (maskId: string) => {
+    // Paste and keyboard shortcuts share this path. Check the copied source
+    // mask, not merely the currently selected mask, before creating pixels.
+    const sourceMask = rasterMasks.find((mask) => mask.id === maskId);
     if (
       !session ||
-      !rasterMasks.some((mask) => mask.id === maskId) ||
+      session.image.id !== currentImageIdRef.current ||
+      !visibilityReady ||
+      !sourceMask ||
+      segmentationVisibility.hiddenClassIds.includes(sourceMask.label_class_id) ||
       !acquireMutation()
     ) {
       return;
@@ -601,9 +619,9 @@ export function RasterMaskWorkspace({
                 data-testid="raster-visibility-pending-notice"
                 role="status"
               >
-                Painting and filling are paused until the saved class visibility
-                for this project is verified. Existing masks and revisions are
-                unchanged.
+                Painting, reclassification and duplication are paused until
+                saved class visibility for this project is verified. Existing
+                masks and revisions are unchanged.
               </p>
             )}
             {!visibilityReady && !visibilityQuery.isPending && (
@@ -623,7 +641,7 @@ export function RasterMaskWorkspace({
               >
                 This paint target is hidden by saved segmentation visibility.
                 Its original pixels and revision remain unchanged. Show its
-                class in the main annotation editor before painting or filling.
+                class in the main annotation editor before editing or duplicating.
               </p>
             )}
           </section>
@@ -644,7 +662,12 @@ export function RasterMaskWorkspace({
                   <button
                     type="button"
                     className="annotation-class-button"
-                    disabled={mutationBusy}
+                    disabled={
+                      mutationBusy ||
+                      !visibilityReady ||
+                      selectedMaskClassIsHidden ||
+                      segmentationVisibility.hiddenClassIds.includes(labelClass.id)
+                    }
                     onClick={() => {
                       if (
                         selectedMask &&
@@ -704,7 +727,12 @@ export function RasterMaskWorkspace({
                 className="secondary"
                 title="Duplicate raster mask (Ctrl/Cmd+D)"
                 aria-keyshortcuts="Control+D Meta+D"
-                disabled={!selectedMask || mutationBusy}
+                disabled={
+                  !selectedMask ||
+                  mutationBusy ||
+                  !visibilityReady ||
+                  selectedMaskClassIsHidden
+                }
                 onClick={() =>
                   selectedMask && requestDuplicate(selectedMask.id)
                 }
@@ -716,7 +744,9 @@ export function RasterMaskWorkspace({
                 className="secondary"
                 title="Paste compatible raster mask (Ctrl/Cmd+V)"
                 aria-keyshortcuts="Control+V Meta+V"
-                disabled={mutationBusy}
+                disabled={
+                  mutationBusy || !visibilityReady || selectedMaskClassIsHidden
+                }
                 onClick={pasteRaster}
               >
                 Paste
