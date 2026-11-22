@@ -79,6 +79,42 @@ def inspect_database(path: Path) -> dict[str, object]:
             if not signatures[table]:
                 incomplete.append(table)
 
+        qc_scope_violations: int | None = None
+        qc_scope_error: str | None = None
+        if signatures[REVIEW_TABLE] and connection.execute(
+            f'SELECT 1 FROM "{REVIEW_TABLE}" LIMIT 1'
+        ).fetchone() is not None:
+            # The real 1.6/0039 migration refuses orphaned or cross-project
+            # events before recreating the table. Inspect that same invariant
+            # for existing populated databases, without changing any records.
+            parent_columns = {
+                "review_queues": {"id", "project_id"},
+                "review_queue_items": {"id", "review_queue_id", "project_id"},
+                "projects": {"id"},
+            }
+            missing = [
+                name
+                for name, required in parent_columns.items()
+                if name not in tables
+                or not required
+                <= {row[1] for row in connection.execute(f'PRAGMA table_info("{name}")')}
+            ]
+            if missing:
+                qc_scope_error = "QC event parent tables missing required columns: " + ", ".join(
+                    missing
+                )
+            else:
+                qc_scope_violations = connection.execute(
+                    "SELECT COUNT(*) FROM review_queue_item_events AS event "
+                    "LEFT JOIN review_queues AS queue ON queue.id = event.review_queue_id "
+                    "LEFT JOIN review_queue_items AS item ON item.id = event.review_queue_item_id "
+                    "LEFT JOIN projects AS project ON project.id = event.project_id "
+                    "WHERE queue.id IS NULL OR item.id IS NULL OR project.id IS NULL "
+                    "OR item.review_queue_id != event.review_queue_id "
+                    "OR item.project_id != event.project_id "
+                    "OR queue.project_id != event.project_id"
+                ).fetchone()[0]
+
     versions = [row[0] for row in version_rows]
     groups = {
         "scientific_0038": all(signatures[t] for t in SCIENTIFIC_38),
@@ -125,6 +161,12 @@ def inspect_database(path: Path) -> dict[str, object]:
     issues = []
     if incomplete:
         issues.append("Incomplete expected table signatures: " + ", ".join(incomplete))
+    if qc_scope_error:
+        issues.append(qc_scope_error)
+    if qc_scope_violations:
+        issues.append(
+            f"QC review events contain {qc_scope_violations} orphaned or cross-project links"
+        )
     if len(versions) != 1 or versions[0] not in ("0038", "0039"):
         issues.append("Alembic revision is not exactly one of 0038 or 0039")
     if any(signatures[t] for t in SCIENTIFIC_39) and not groups["scientific_0039"]:
@@ -159,6 +201,7 @@ def inspect_database(path: Path) -> dict[str, object]:
         "alembic_versions": versions,
         "table_signatures": signatures,
         "review_event_check": review_check if groups["review_0038"] else None,
+        "qc_event_scope_violations": qc_scope_violations,
         "classification": classification,
         "issues": issues,
         "manual_migration_reconciliation_required": True,

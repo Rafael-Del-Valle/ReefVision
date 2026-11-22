@@ -165,3 +165,45 @@ def test_quoted_sql_identifier_cannot_impersonate_qc_triage_check(
     assert report["review_event_check"] == "coordination"
     assert report["automatic_migration_authorized"] is False
     assert "Cannot safely attribute the colliding revision" in " ".join(report["issues"])
+
+
+def test_refuses_populated_qc_lineage_with_cross_project_event(
+    tmp_path: Path,
+) -> None:
+    # The actual 1.6/0039 migration refuses this historical data even when
+    # every foreign-key parent exists. A version marker and a valid event
+    # CHECK cannot certify a database whose append-only audit scope is broken.
+    ddl = """
+        CREATE TABLE projects (id TEXT PRIMARY KEY);
+        CREATE TABLE review_queues (
+          id TEXT PRIMARY KEY, project_id TEXT NOT NULL
+        );
+        CREATE TABLE review_queue_items (
+          id TEXT PRIMARY KEY, review_queue_id TEXT NOT NULL, project_id TEXT NOT NULL
+        );
+        CREATE TABLE review_queue_item_events (
+          id TEXT, project_id TEXT, review_queue_id TEXT, review_queue_item_id TEXT,
+          client_request_id TEXT, event_type TEXT, actor TEXT,
+          FOREIGN KEY (review_queue_id) REFERENCES review_queues(id),
+          FOREIGN KEY (review_queue_item_id) REFERENCES review_queue_items(id),
+          FOREIGN KEY (project_id) REFERENCES projects(id),
+          CHECK(event_type IN (
+            'comment', 'assign', 'unassign',
+            'triage_start', 'triage_skip', 'triage_return'
+          ))
+        );
+        INSERT INTO projects VALUES ('project-a'), ('project-b');
+        INSERT INTO review_queues VALUES ('queue-1', 'project-a');
+        INSERT INTO review_queue_items VALUES ('item-1', 'queue-1', 'project-b');
+        INSERT INTO review_queue_item_events VALUES (
+          'event-1', 'project-a', 'queue-1', 'item-1',
+          'request-1', 'comment', 'scientist'
+        );
+    """
+    status, report = _inspect(tmp_path, ddl, "0039")
+    assert status == 2
+    assert report["classification"] == "ambiguous"
+    assert report["review_event_check"] == "triage"
+    assert report["qc_event_scope_violations"] == 1
+    assert report["automatic_migration_authorized"] is False
+    assert any("cross-project links" in issue for issue in report["issues"])
