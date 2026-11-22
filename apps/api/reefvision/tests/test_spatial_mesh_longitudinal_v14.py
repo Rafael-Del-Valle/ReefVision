@@ -110,6 +110,20 @@ def test_longitudinal_scale_only_area_difference_sign(
     after["project_id"] = "p1"
     comparison = compare_mesh_observations(before, after)
     assert comparison["surface_area_difference_sign_under_scale_only_bounds"] == expected_sign
+    assert comparison["axis_aligned_extent_difference_sign_under_scale_only_bounds"] == (
+        expected_sign
+    )
+    extent_lower, extent_upper = comparison[
+        "delta_axis_aligned_bounding_box_diagonal_scale_interval_m"
+    ]
+    if expected_sign == "positive":
+        assert extent_lower > 0
+    elif expected_sign == "negative":
+        assert extent_upper < 0
+    else:
+        assert extent_lower <= 0 <= extent_upper
+    extent_warning = "axis_aligned_extent_difference_scale_bounds_include_zero"
+    assert (extent_warning in comparison["qc_warnings"]) == (expected_sign == "includes_zero")
     lower, upper = comparison["delta_surface_area_scale_interval_m2"]
     if expected_sign == "positive":
         assert lower > 0
@@ -138,6 +152,10 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(client: TestClie
     assert expected["delta_surface_area_m2"] == pytest.approx(0.05)
     assert expected["surface_area_difference_sign_under_scale_only_bounds"] == "includes_zero"
     assert "surface_area_difference_scale_bounds_include_zero" in expected["qc_warnings"]
+    assert expected["axis_aligned_extent_difference_sign_under_scale_only_bounds"] == (
+        "includes_zero"
+    )
+    assert "axis_aligned_extent_difference_scale_bounds_include_zero" in expected["qc_warnings"]
     assert expected["provenance"]["specimen_identity_verified"] is False
     graph = {
         "graph_id": "area-scale-only-overlap-v14",
@@ -346,6 +364,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["delta_surface_area_m2"] == pytest.approx(0.5)
     assert expected["delta_surface_area_scale_interval_m2"] == pytest.approx([0.205, 0.805])
     assert expected["surface_area_difference_sign_under_scale_only_bounds"] == "positive"
+    assert expected["axis_aligned_extent_difference_sign_under_scale_only_bounds"] == "positive"
     assert "surface_area_difference_scale_bounds_include_zero" not in expected["qc_warnings"]
     assert expected["relative_surface_area_change_percent"] == pytest.approx(100)
     assert expected["scale_normalized_surface_area_ratio_after_to_before"] == (pytest.approx(2))
@@ -739,6 +758,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert identity_result["before_surface_area_m2"] == pytest.approx(0.5)
     assert identity_result["after_surface_area_m2"] == pytest.approx(1.0)
     assert identity_result["delta_surface_area_m2"] is None
+    assert identity_result["axis_aligned_extent_difference_sign_under_scale_only_bounds"] is None
     assert identity_result["average_surface_area_change_m2_per_day"] is None
     assert identity_result["registered_surface_centroid_separation_m"] is None
     assert identity_result["registration_translation_magnitude_m"] == pytest.approx(0.1)
@@ -1469,6 +1489,7 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
     assert result["delta_surface_area_m2"] == 1
     assert result["delta_surface_area_scale_interval_m2"] is None
     assert result["surface_area_difference_sign_under_scale_only_bounds"] is None
+    assert result["axis_aligned_extent_difference_sign_under_scale_only_bounds"] is None
     assert result["delta_axis_aligned_bounding_box_diagonal_m"] is None
     assert result["relative_axis_aligned_bounding_box_diagonal_change_percent"] is None
     assert result["relative_axis_aligned_bounding_box_diagonal_scale_interval_percent"] is None
@@ -1506,6 +1527,7 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
         compare_mesh_observations(early_extent, late_extent)
     early_extent["axis_aligned_bounding_box_diagonal_scale_interval_m"] = None
     extent_result = compare_mesh_observations(early_extent, late_extent)
+    assert extent_result["axis_aligned_extent_difference_sign_under_scale_only_bounds"] is None
     assert extent_result["delta_axis_aligned_bounding_box_diagonal_m"] == pytest.approx(1)
     assert extent_result["relative_axis_aligned_bounding_box_diagonal_change_percent"] == (
         pytest.approx(100)
