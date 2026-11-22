@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import pytest
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.spatial_point_cloud_v14 import measure_point_cloud_preview
@@ -278,6 +278,10 @@ def test_preview_centroid_sampling_displacement_standalone_and_saved_workflow(
     assert direct["preview_row_centroid_in_source_frame_m"][0] == pytest.approx(display_x)
     separation = abs(display_x - source_x)
     assert separation > 0
+    assert direct["preview_minus_source_row_centroid_offset_m"] == pytest.approx(
+        [display_x - source_x, 0.0, 0.0]
+    )
+    assert direct["preview_minus_source_row_centroid_offset_m"][0] < 0
     assert direct["preview_vs_source_row_centroid_separation_m"] == pytest.approx(separation)
     assert direct["preview_vs_source_row_centroid_separation_scale_interval_m"] == (
         pytest.approx([separation * 0.9, separation * 1.1])
@@ -293,6 +297,7 @@ def test_preview_centroid_sampling_displacement_standalone_and_saved_workflow(
     measured = response.json()
     for key in (
         "preview_row_centroid_in_source_frame_m",
+        "preview_minus_source_row_centroid_offset_m",
         "preview_vs_source_row_centroid_separation_m",
         "preview_vs_source_row_centroid_separation_scale_interval_m",
         "preview_vs_source_row_centroid_separation_fraction_of_bbox_diagonal",
@@ -351,6 +356,7 @@ def test_preview_centroid_has_no_false_bias_for_complete_or_coincident_source() 
     complete = measure_point_cloud_preview(
         points=[[0, 0, 0], [1, 0, 0]], **CALIBRATION
     )
+    assert complete["preview_minus_source_row_centroid_offset_m"] == [0.0, 0.0, 0.0]
     assert complete["preview_vs_source_row_centroid_separation_m"] == 0
     assert complete["preview_vs_source_row_centroid_separation_scale_interval_m"] == [
         0,
@@ -363,12 +369,39 @@ def test_preview_centroid_has_no_false_bias_for_complete_or_coincident_source() 
     coincident = measure_point_cloud_preview(
         points=[[7, 7, 7]] * 600, **CALIBRATION
     )
+    assert coincident["preview_minus_source_row_centroid_offset_m"] == [0.0, 0.0, 0.0]
     assert coincident["preview_vs_source_row_centroid_separation_m"] == 0
     assert coincident[
         "preview_vs_source_row_centroid_separation_fraction_of_bbox_diagonal"
     ] is None
     assert coincident["surface_area_m2"] is None
     assert coincident["branch_length_m"] is None
+
+
+def test_preview_centroid_signed_offset_tracks_direction_on_all_three_axes() -> None:
+    """Preview bias direction is measured, not registered specimen movement."""
+    default_indices = {i * 599 // 511 for i in range(512)}
+    rare_index = next(i for i in range(1, 300) if i not in default_indices)
+    points = [[0, 0, 0] if i < 300 else [1, 2, 3] for i in range(600)]
+    points[rare_index] = [20, -30, 40]
+    measured = measure_point_cloud_preview(points=points, **CALIBRATION)
+    indices = measured["preview_point_indices"]
+    assert rare_index not in indices
+    source = [sum(row[axis] for row in points) * 0.01 / len(points) for axis in range(3)]
+    shown = [
+        sum(points[i][axis] for i in indices) * 0.01 / len(indices)
+        for axis in range(3)
+    ]
+    expected = [shown[axis] - source[axis] for axis in range(3)]
+    offset = measured["preview_minus_source_row_centroid_offset_m"]
+    assert offset == pytest.approx(expected)
+    assert offset[0] < 0
+    assert offset[1] > 0
+    assert offset[2] < 0
+    assert measured["preview_vs_source_row_centroid_separation_m"] == pytest.approx(
+        sum(value * value for value in expected) ** 0.5
+    )
+    assert measured["provenance"]["coordinate_registration_verified"] is False
 
 
 def test_full_colored_ply_preview_does_not_warn_about_missing_rgb_extrema(
