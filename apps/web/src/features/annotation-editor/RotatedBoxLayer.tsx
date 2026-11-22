@@ -187,6 +187,32 @@ function editableRotatedBox(
     points[2].y - points[1].y,
   );
   if (!(topEdge > 0) || !(sideEdge > 0)) return false;
+
+  // Four finite, positive-area points need not describe a rectangle:
+  // corrupted imports can be sheared, concave or nonorthogonal. Rotation and
+  // resize reconstruct a rectangle, which would silently change that evidence.
+  const right = {
+    x: points[1].x - points[0].x,
+    y: points[1].y - points[0].y,
+  };
+  const down = {
+    x: points[3].x - points[0].x,
+    y: points[3].y - points[0].y,
+  };
+  const downEdge = Math.hypot(down.x, down.y);
+  const symmetryError = Math.hypot(
+    points[2].x - points[1].x - down.x,
+    points[2].y - points[1].y - down.y,
+  );
+  if (
+    !(downEdge > 0) ||
+    symmetryError > 1e-8 * Math.max(topEdge, downEdge, 1) ||
+    Math.abs(right.x * down.x + right.y * down.y) >
+      1e-8 * topEdge * downEdge
+  ) {
+    return false;
+  }
+
   let signedDoubleArea = 0;
   for (let index = 0; index < 4; index += 1) {
     const next = points[(index + 1) % 4];
