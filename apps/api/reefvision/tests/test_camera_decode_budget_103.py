@@ -13,7 +13,11 @@ import warnings
 import pytest
 from PIL import Image
 
-from reefvision.storage.images import InvalidImageError, inspect_staged_image
+from reefvision.storage.images import (
+    InvalidImageError,
+    ensure_supported_extension,
+    inspect_staged_image,
+)
 
 
 @pytest.mark.parametrize(
@@ -57,10 +61,45 @@ def test_camera_decode_budget_respects_explicit_pillow_disable(
     Image.new("RGB", (11, 10), (40, 75, 130)).save(source, format="JPEG")
     original = source.read_bytes()
 
-    inspected = inspect_staged_image(
-        source, hashlib.sha256(original).hexdigest(), len(original)
-    )
+    inspected = inspect_staged_image(source, hashlib.sha256(original).hexdigest(), len(original))
     assert inspected.width_px == 11
     assert inspected.height_px == 10
     assert inspected.sha256 == hashlib.sha256(original).hexdigest()
+    assert source.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "extension",
+    [
+        ".jpg",
+        ".JPG",
+        ".jpeg",
+        ".JPEG",
+        ".jpe",
+        ".JPE",
+        ".jfif",
+        ".JFIF",
+        ".jfi",
+        ".JFI",
+        ".jif",
+        ".JIF",
+    ],
+)
+def test_camera_jpeg_aliases_preserve_original_and_canonical_format(
+    tmp_path, extension: str
+) -> None:
+    """Common camera JPEG aliases must share one verified scientific pixel frame."""
+    source = tmp_path / f"DSC_0442{extension}"
+    Image.new("RGB", (17, 13), (24, 90, 180)).save(source, format="JPEG")
+    original = source.read_bytes()
+    digest = hashlib.sha256(original).hexdigest()
+
+    ensure_supported_extension(source.name)
+    inspected = inspect_staged_image(source, digest, len(original))
+
+    assert (inspected.width_px, inspected.height_px) == (17, 13)
+    assert inspected.media_type == "image/jpeg"
+    assert inspected.extension == ".jpg"
+    assert inspected.sha256 == digest
+    assert inspected.file_size_bytes == len(original)
     assert source.read_bytes() == original
