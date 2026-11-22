@@ -37,6 +37,16 @@ SCIENTIFIC_39 = ("computed_metric_definitions", "computed_metric_results")
 REVIEW_TABLE = "review_queue_item_events"
 
 
+def _without_sql_comments(ddl: str) -> str:
+    """Discard SQL comments without stripping quoted literals or identifiers."""
+    tokens = re.compile(
+        r"""('(?:''|[^'])*'|"(?:[^"]|"")*"|\x60(?:[^\x60]|\x60\x60)*\x60|\[[^]]*\])"""
+        r"""|(--[^\r\n]*|/\*.*?\*/)""",
+        flags=re.DOTALL,
+    )
+    return tokens.sub(lambda match: match.group(1) or " ", ddl)
+
+
 def inspect_database(path: Path) -> dict[str, object]:
     """Read the schema only; never write, repair, or import Alembic migrations."""
     database = path.resolve(strict=True)
@@ -79,7 +89,7 @@ def inspect_database(path: Path) -> dict[str, object]:
     # CREATE TABLE SQL (for example, a comment or an unrelated constraint).
     match = re.search(
         r"""CHECK\s*\(\s*"?event_type"?\s+IN\s*\(([^)]*)\)\s*\)""",
-        tables.get(REVIEW_TABLE, ""),
+        _without_sql_comments(tables.get(REVIEW_TABLE, "")),
         flags=re.IGNORECASE,
     )
     allowed: set[str] = set()
