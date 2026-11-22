@@ -1132,3 +1132,22 @@ coral branch length, biological growth, reidentification, calibration
 verification, or source acquisition uncertainty. The installed Windows GUI,
 physical GPU, human review, and representative coral validation gates remain
 open.
+
+### Exact audit of calibrated route-segment accumulation
+
+Connected selected routes also persist
+`path_calibrated_edge_sum_exact_fraction_m`, a base-10 integer or rational
+numerator/denominator representing the **exact sum of the stored binary64
+calibrated segment lengths** (using their exact rational values), and
+`path_cumulative_total_exact_match`. A `false` result emits
+`selected_mesh_route_cumulative_roundoff_disagrees_with_exact_edge_sum`.
+Disconnected/unreferenced pairs retain `null` for both diagnostics. A route
+with a positive segment rounded away from its displayed cumulative trace
+therefore retains auditable evidence of the omitted contribution, while an
+exactly representable route reports an exact match. The exact fraction is
+*not* an estimate of latent physical precision, a new shortest path, a
+statistical uncertainty interval, or a biological centerline. It summarizes
+only already-rounded calibrated segment floats, and requires the same
+independent calibration, specimen identity and scientist review as other
+mesh geometry products. Direct, standalone API and twice-replayed saved typed
+Workflow Builder tests require complete artifact parity and stable hashes.
