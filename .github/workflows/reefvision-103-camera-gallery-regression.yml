@@ -29,6 +29,8 @@ on:
       - scripts/test-training-console-readonly.ps1
       - scripts/test-training-console-sanitizer.ps1
       - scripts/test-windows-clean-install-harness.ps1
+      - scripts/windows/collect-103-acceptance-evidence.ps1
+      - scripts/windows/test-103-acceptance-evidence.ps1
       - scripts/acceptance-windows-clean-install.ps1
       - scripts/lib/windows-clean-acceptance.ps1
       - scripts/verify-windows-msi.ps1
@@ -144,6 +146,12 @@ jobs:
           # This harness tests protected paths, junctions, immutable JPEG
           # evidence and report semantics; it never invokes msiexec.
           ./scripts/test-windows-clean-install-harness.ps1
+      - name: Verify typed MSI/CAB provenance and read-only evidence inventory
+        shell: pwsh
+        run: |
+          # Disposable signatures and manifests only; do not install software,
+          # inspect protected scientific source directories, or mark release-ready.
+          ./scripts/windows/test-103-acceptance-evidence.ps1
       - name: Verify Tauri desktop Rust lifecycle and training-run ID safety
         shell: pwsh
         run: |
