@@ -1225,7 +1225,35 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             for locus, colors in palettes.items()
             if len(colors) > 1 and not colors.issubset(preview_palettes.get(locus, set()))
         )
+        # Raw sensor-channel minima/maxima provide a bounded-preview loss
+        # diagnostic. These ranges are neither calibrated colors nor coral
+        # condition metrics; compare against all validated source RGB rows.
+        rgb_channels = ("red", "green", "blue")
+        source_rgb_ranges = {
+            channel: [
+                min(rgb[axis] for rgb in point_colors),
+                max(rgb[axis] for rgb in point_colors),
+            ]
+            for axis, channel in enumerate(rgb_channels)
+        }
+        sampled_rgb = [point_colors[i] for i in result["preview_point_indices"]]
+        preview_rgb_ranges = {
+            channel: [
+                min(rgb[axis] for rgb in sampled_rgb),
+                max(rgb[axis] for rgb in sampled_rgb),
+            ]
+            for axis, channel in enumerate(rgb_channels)
+        }
+        omitted_rgb_channel_extrema = [
+            f"{channel}_{bound}"
+            for channel in rgb_channels
+            for offset, bound in enumerate(("min", "max"))
+            if preview_rgb_ranges[channel][offset] != source_rgb_ranges[channel][offset]
+        ]
         result["preview_rgb_variant_support"] = {
+            "source_rgb_channel_ranges_uint8": source_rgb_ranges,
+            "preview_rgb_channel_ranges_uint8": preview_rgb_ranges,
+            "preview_omitted_source_rgb_channel_extrema": omitted_rgb_channel_extrema,
             "source_distinct_xyz_rgb_pairs": len(source_pairs),
             "preview_distinct_xyz_rgb_pairs": len(preview_pairs),
             "fraction_of_source_xyz_rgb_pairs_displayed": (len(preview_pairs) / len(source_pairs)),
@@ -1252,6 +1280,8 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             result["qc_warnings"].append("preview_omits_distinct_xyz_rgb_observations")
         if incomplete_multi_color_loci:
             result["qc_warnings"].append("preview_omits_multi_rgb_locus_variants")
+        if omitted_rgb_channel_extrema:
+            result["qc_warnings"].append("preview_omits_rgb_channel_extrema")
     else:
         result["preview_rgb_variant_support"] = None
     result["provenance"]["source_format"] = source_format
