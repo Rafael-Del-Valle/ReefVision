@@ -8,6 +8,13 @@
 - This is display/editor safety, not a new biological processing node. Existing typed executable QC Workflow Builder graphs/runs, units, provenance, retries and explicit researcher review gates are unchanged; no migration or pretrained weight is involved.
 - **RELEASE HOLD:** independently reconcile the 1.1/1.6 Alembic-0038 collision, complete exact-head science/saved-workflow CI, native Windows MSI/CAB installed-GUI clean install and upgrade/rollback, and obtain researcher approval before merging or releasing. Versions 1.7 and revised 1.8 remain untouched.
 
+## 2026-11-22 — Fail-closed saved visibility handshake for raster brush (Track D; RELEASE HOLD)
+
+- Overlap audit: 1.0–1.5 raster editing and 1.6 persisted per-user/project segmentation visibility already exist, including a recent brush workspace integration. This iteration addresses a remaining integrity gap rather than adding another class service or scientific node: while saved visibility was loading, unavailable, or returned for another project, the brush treated all classes as visible and allowed strokes. It could also commit a captured stroke after the matching class became hidden in the query cache.
+- Raster painting and filling now require a **successful visibility response for the current project**; pending, failed, or mismatched responses pause edits and suppress the selected-mask overlay. A visible retry control permits recovery without reinstalling or overwriting user preferences. At stroke completion the class and existing source mask are checked against current visibility again, so a class hidden mid-gesture cannot be edited by an older captured command.
+- Three targeted React regressions cover delayed hidden-preference resolution, explicit retry after local settings failure, and a live class visibility change during a stroke; the existing cross-project response regression now verifies edits remain paused. All preexisting mask pixels, revision records, class IDs, QC decisions and source images remain unchanged when a gesture is refused.
+- This is an editor-side protection. Existing typed, executable and saved QC Workflow Builder graphs/runs, units, provenance, retries and mandatory researcher review remain intact. No new node, database migration, hosted service or pretrained weights are required. **Exact-head frontend/backend/E2E and real Windows installed-GUI tests remain unverified** until CI/acceptance evidence is available; independent Alembic-0038 reconciliation and explicit researcher approval remain release blockers.
+
 ## Completed In This Pass
 
 - Preserved the earlier project-loading, training-draft, and image-loading improvements.
