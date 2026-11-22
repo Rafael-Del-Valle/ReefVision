@@ -207,8 +207,7 @@ function editableRotatedBox(
   if (
     !(downEdge > 0) ||
     symmetryError > 1e-8 * Math.max(topEdge, downEdge, 1) ||
-    Math.abs(right.x * down.x + right.y * down.y) >
-      1e-8 * topEdge * downEdge
+    Math.abs(right.x * down.x + right.y * down.y) > 1e-8 * topEdge * downEdge
   ) {
     return false;
   }
