@@ -73,7 +73,6 @@ export function RasterMaskWorkspace({
   // Late saves from a previous image must not reselect its class or mask in
   // the newly opened image. Pending mutations can outlive navigation.
   const currentImageIdRef = useRef(imageId);
-  currentImageIdRef.current = imageId;
   const [createAnotherMaskRequested, setCreateAnotherMaskRequested] =
     useState(false);
   const [activeClassId, setActiveClassId] = useState<string | null>(null);
@@ -124,6 +123,7 @@ export function RasterMaskWorkspace({
       ?.display_color ?? "#2a9d8f";
 
   useEffect(() => {
+    currentImageIdRef.current = imageId;
     strokeContextRef.current = null;
     setSelectedMaskId(null);
     setActiveClassId(null);
