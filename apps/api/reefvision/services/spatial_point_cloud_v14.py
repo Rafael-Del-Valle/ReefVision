@@ -905,6 +905,40 @@ def measure_point_cloud_preview(
     preview_points = []
     for index in preview_indices:
         preview_points.append([coordinate * scale for coordinate in vertices[index]])
+    # Compare the display sample's row-weighted centroid with the complete
+    # acquisition's row-weighted centroid. This diagnoses preview sampling
+    # displacement, NOT organism movement, tissue geometry or registration.
+    # Reuse the full-source result when every acquisition row is displayed to
+    # avoid numerical differences caused only by summation order.
+    preview_row_centroid = (
+        centroid
+        if len(preview_indices) == len(vertices)
+        else [
+            fsum(vertices[index][axis] * scale for index in preview_indices)
+            / len(preview_indices)
+            for axis in range(3)
+        ]
+    )
+    preview_centroid_separation = dist(centroid, preview_row_centroid)
+    if unique_count == 1:
+        preview_centroid_separation = 0.0
+    preview_centroid_scale_interval: list[float] | None = None
+    preview_centroid_interval_unresolved = False
+    if relative_scale_uncertainty is not None:
+        lower = preview_centroid_separation * (1 - relative_scale_uncertainty)
+        upper = preview_centroid_separation * (1 + relative_scale_uncertainty)
+        if _scale_interval_unresolved(
+            preview_centroid_separation, relative_scale_uncertainty, lower, upper
+        ):
+            preview_centroid_interval_unresolved = True
+        else:
+            preview_centroid_scale_interval = [lower, upper]
+    # The dimensionless fraction is valid only for a nonzero source envelope.
+    # Shared scale uncertainty cancels; reconstruction and sampling uncertainty
+    # are not evaluated by this ratio.
+    preview_centroid_separation_fraction = (
+        preview_centroid_separation / diagonal if diagonal > 0.0 else None
+    )
     return {
         "schema_version": "point-cloud-preview-0001",
         "point_count": len(vertices),
@@ -1024,6 +1058,17 @@ def measure_point_cloud_preview(
         "arithmetic_centroid_in_source_frame_scale_interval_m": coordinate_scale_intervals(
             centroid
         ),
+        "preview_row_centroid_in_source_frame_m": preview_row_centroid,
+        "preview_row_centroid_in_source_frame_scale_interval_m": coordinate_scale_intervals(
+            preview_row_centroid
+        ),
+        "preview_vs_source_row_centroid_separation_m": preview_centroid_separation,
+        "preview_vs_source_row_centroid_separation_scale_interval_m": (
+            preview_centroid_scale_interval
+        ),
+        "preview_vs_source_row_centroid_separation_fraction_of_bbox_diagonal": (
+            preview_centroid_separation_fraction
+        ),
         "unique_coordinate_centroid_in_source_frame_m": unique_coordinate_centroid,
         "unique_coordinate_centroid_in_source_frame_scale_interval_m": (
             coordinate_scale_intervals(unique_coordinate_centroid)
@@ -1044,6 +1089,11 @@ def measure_point_cloud_preview(
             + (
                 ["centroid_separation_uncertainty_interval_below_numeric_resolution"]
                 if centroid_separation_interval_unresolved
+                else []
+            )
+            + (
+                ["preview_centroid_separation_uncertainty_interval_below_numeric_resolution"]
+                if preview_centroid_interval_unresolved
                 else []
             )
             + (
