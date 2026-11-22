@@ -1108,3 +1108,27 @@ area underflow, non-simple loops, and standalone versus executable,
 typed, persisted Workflow Builder graph comparisons provide synthetic
 regression coverage. Biological verification, independent calibration,
 installed Windows GUI and physical GPU acceptance remain outstanding.
+
+### Selected route cumulative-distance precision (provisional QC)
+
+A selected mesh-edge route now reports
+`path_cumulative_lost_positive_segment_indices`: zero-based positions of
+**positive calibrated segments** whose addition leaves the preceding
+binary64 cumulative distance unchanged. A connected route with no such loss
+reports `[]`; a disconnected or unreferenced route reports `null`.
+Affected routes emit `positive_selected_mesh_segment_lost_in_cumulative_distance`
+within `path_qc_warnings`. Original segment lengths, source vertex order,
+and calibration-scale intervals are retained; the cumulative totals are *not*
+silently repaired or mislabeled as exact. This pinpoints route-local loss
+separately from component-wide shortest-path ambiguity.
+
+An independent four-vertex synthetic mesh inside the public source-coordinate
+bounds includes a positive 1e-8 m segment following 1e9 m, whose cumulative
+binary64 total cannot advance. Direct service, standalone project API and
+twice-executed persisted typed Workflow Builder regressions check identical
+route diagnostics, full saved measurement artifacts and SHA-256 hashes.
+The warning is numerical reconstruction QC, not an independently measured
+coral branch length, biological growth, reidentification, calibration
+verification, or source acquisition uncertainty. The installed Windows GUI,
+physical GPU, human review, and representative coral validation gates remain
+open.
