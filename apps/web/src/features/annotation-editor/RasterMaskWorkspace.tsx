@@ -430,11 +430,7 @@ export function RasterMaskWorkspace({
           >
             Box editor
           </button>
-          <button
-            type="button"
-            disabled={mutationBusy}
-            onClick={onClose}
-          >
+          <button type="button" disabled={mutationBusy} onClick={onClose}>
             Close editor
           </button>
         </div>

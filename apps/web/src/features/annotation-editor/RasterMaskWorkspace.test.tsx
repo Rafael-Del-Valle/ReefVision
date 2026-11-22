@@ -861,7 +861,9 @@ it.each(["duplicate", "reclassify", "paint"] as const)(
       rejectRequest(new Error("Synthetic offline mutation failure"));
     });
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Close editor" })).toBeEnabled(),
+      expect(
+        screen.getByRole("button", { name: "Close editor" }),
+      ).toBeEnabled(),
     );
     fireEvent.keyDown(document.body, { key: "d", ctrlKey: true });
     await waitFor(() =>
