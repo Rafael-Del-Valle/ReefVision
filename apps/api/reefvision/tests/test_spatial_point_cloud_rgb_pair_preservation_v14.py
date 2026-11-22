@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 from typing import cast
 
 import pytest
@@ -30,6 +32,57 @@ def _colored_ply(rows: list[str]) -> str:
     return PLY_HEADER.format(count=len(rows)) + "\n".join(rows) + "\n"
 
 
+def test_ordered_rgb_acquisition_fingerprint_catches_hidden_observations(
+    client: TestClient,
+) -> None:
+    """Omitted RGB rows change full acquisition evidence, not preview evidence."""
+    points = [[0, 0, 0], [1, 0, 0]]
+    colors = [[10, 20, 30], [40, 50, 60]]
+    direct = measure_point_cloud_preview(
+        points=points, point_colors=colors, **CALIBRATION
+    )
+    expected_hash = hashlib.sha256(
+        b"[[0.0,0.0,0.0,10,20,30],[1.0,0.0,0.0,40,50,60]]"
+    ).hexdigest()
+    assert direct["provenance"]["source_ordered_xyz_rgb_sha256"] == expected_hash
+    changed = measure_point_cloud_preview(
+        points=points, point_colors=[[10, 20, 31], [40, 50, 60]], **CALIBRATION
+    )
+    assert changed["provenance"]["geometry_sha256"] == direct["provenance"]["geometry_sha256"]
+    assert changed["provenance"]["source_ordered_xyz_rgb_sha256"] != expected_hash
+    uncolored = measure_point_cloud_preview(points=points, **CALIBRATION)
+    assert uncolored["provenance"]["source_ordered_xyz_rgb_sha256"] is None
+
+    pid = str(create_project(client, "Off-preview RGB acquisition evidence")["id"])
+    endpoint = f"/api/v1/projects/{pid}/spatial/point-cloud-preview"
+    sampled = {i * 599 // 511 for i in range(512)}
+    hidden_index = next(i for i in range(600) if i not in sampled)
+    rows = [f"{i} 0 0 10 20 30" for i in range(600)]
+    changed_rows = rows.copy()
+    changed_rows[hidden_index] = f"{hidden_index} 0 0 11 20 30"
+    first = client.post(
+        endpoint, json={**CALIBRATION, "ply_text": _colored_ply(rows)}
+    )
+    second = client.post(
+        endpoint, json={**CALIBRATION, "ply_text": _colored_ply(changed_rows)}
+    )
+    assert first.status_code == second.status_code == 200
+    before, after = first.json(), second.json()
+    assert hidden_index not in before["preview_point_indices"]
+    assert before["preview_point_indices"] == after["preview_point_indices"]
+    assert before["provenance"]["ordered_geometry_sha256"] == (
+        after["provenance"]["ordered_geometry_sha256"]
+    )
+    assert before["provenance"]["source_ordered_xyz_rgb_sha256"] != (
+        after["provenance"]["source_ordered_xyz_rgb_sha256"]
+    )
+    assert before["preview_rgb_variant_support"]["preview_sample_xyz_rgb_sha256"] == (
+        after["preview_rgb_variant_support"]["preview_sample_xyz_rgb_sha256"]
+    )
+    assert before["provenance"]["calibration_verified"] is False
+    assert before["provenance"]["specimen_identity_verified"] is False
+
+
 def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
     client: TestClient,
 ) -> None:
@@ -40,16 +93,12 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
     rare_index = next(i for i in range(1, 300) if i not in default_indices)
     rows = []
     for i in range(600):
-        rgb = "80 90 100" if i == rare_index else (
-            "10 20 30" if i < 300 else "40 50 60"
-        )
+        rgb = "80 90 100" if i == rare_index else ("10 20 30" if i < 300 else "40 50 60")
         rows.append(f"{0 if i < 300 else 1} 0 0 {rgb}")
     params = {**CALIBRATION, "ply_text": _colored_ply(rows)}
     normal_response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     pinned_params = {**params, "preserve_distinct_xyz_rgb_pairs_in_preview": True}
-    pinned_response = client.post(
-        f"{base}/spatial/point-cloud-preview", json=pinned_params
-    )
+    pinned_response = client.post(f"{base}/spatial/point-cloud-preview", json=pinned_params)
     assert normal_response.status_code == 200, normal_response.text
     assert pinned_response.status_code == 200, pinned_response.text
     normal, pinned = normal_response.json(), pinned_response.json()
@@ -77,8 +126,8 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
     support = pinned["preview_rgb_variant_support"]
     assert support["source_distinct_xyz_rgb_pairs"] == 3
     assert support["preview_distinct_xyz_rgb_pairs"] == 3
-    assert support["preview_rgb_channel_ranges_uint8"] == (
-        support["source_rgb_channel_ranges_uint8"]
+    assert (
+        support["preview_rgb_channel_ranges_uint8"] == (support["source_rgb_channel_ranges_uint8"])
     )
     assert support["preview_omitted_source_rgb_channel_extrema"] == []
     assert "preview_omits_rgb_channel_extrema" not in pinned["qc_warnings"]
@@ -90,9 +139,8 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
     assert "preview_omits_multi_rgb_locus_variants" not in pinned["qc_warnings"]
     assert "preview_omits_distinct_xyz_rgb_observations" not in pinned["qc_warnings"]
     assert pinned["provenance"] == normal["provenance"]
-    assert pinned["preview_sample_geometry_sha256"] != (
-        normal["preview_sample_geometry_sha256"]
-    )
+    assert len(pinned["provenance"]["source_ordered_xyz_rgb_sha256"]) == 64
+    assert pinned["preview_sample_geometry_sha256"] != (normal["preview_sample_geometry_sha256"])
     assert pinned["provenance"]["calibration_verified"] is False
     assert pinned["provenance"]["specimen_identity_verified"] is False
     assert pinned["surface_area_m2"] is None
@@ -100,13 +148,9 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
 
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     assert registry.status_code == 200, registry.text
-    node = next(
-        n for n in registry.json() if n["node_type"] == "point_cloud_preview"
-    )
+    node = next(n for n in registry.json() if n["node_type"] == "point_cloud_preview")
     assert node["executable"] is True
-    assert (
-        node["optional_parameters"]["preserve_distinct_xyz_rgb_pairs_in_preview"] is False
-    )
+    assert node["optional_parameters"]["preserve_distinct_xyz_rgb_pairs_in_preview"] is False
     graph = {
         "graph_id": "color-observation-retention-v14",
         "name": "Retain imported PLY RGB observations",
@@ -135,9 +179,7 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
     assert saved.status_code == 201, saved.text
     digests: list[str] = []
     for _ in range(2):
-        run = client.post(
-            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-        )
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         app = cast(FastAPI, client.app)
         assert process_workflow_run_job(
@@ -183,10 +225,7 @@ def test_rgb_pair_preservation_strict_source_and_capacity(
         )
 
     # 513 distinct color observations at two XYZ locations cannot fit in 512.
-    rows = [
-        f"{i // 256} 0 0 {i % 256} {i // 256} 0"
-        for i in range(513)
-    ]
+    rows = [f"{i // 256} 0 0 {i % 256} {i // 256} 0" for i in range(513)]
     colored = {**CALIBRATION, "ply_text": _colored_ply(rows)}
     over_budget = client.post(
         base, json={**colored, "preserve_distinct_xyz_rgb_pairs_in_preview": True}
@@ -336,9 +375,7 @@ def test_preview_centroid_sampling_displacement_standalone_and_saved_workflow(
     assert saved.status_code == 201, saved.text
     hashes: list[str] = []
     for _ in range(2):
-        run = client.post(
-            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-        )
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         app = cast(FastAPI, client.app)
         assert process_workflow_run_job(
@@ -359,9 +396,7 @@ def test_preview_centroid_sampling_displacement_standalone_and_saved_workflow(
 
 
 def test_preview_centroid_has_no_false_bias_for_complete_or_coincident_source() -> None:
-    complete = measure_point_cloud_preview(
-        points=[[0, 0, 0], [1, 0, 0]], **CALIBRATION
-    )
+    complete = measure_point_cloud_preview(points=[[0, 0, 0], [1, 0, 0]], **CALIBRATION)
     assert complete["preview_minus_source_row_centroid_offset_m"] == [0.0, 0.0, 0.0]
     assert complete["preview_minus_source_row_centroid_offset_scale_interval_m"] == [
         [0.0, 0.0],
@@ -373,18 +408,12 @@ def test_preview_centroid_has_no_false_bias_for_complete_or_coincident_source() 
         0,
         0,
     ]
-    assert complete[
-        "preview_vs_source_row_centroid_separation_fraction_of_bbox_diagonal"
-    ] == 0
+    assert complete["preview_vs_source_row_centroid_separation_fraction_of_bbox_diagonal"] == 0
 
-    coincident = measure_point_cloud_preview(
-        points=[[7, 7, 7]] * 600, **CALIBRATION
-    )
+    coincident = measure_point_cloud_preview(points=[[7, 7, 7]] * 600, **CALIBRATION)
     assert coincident["preview_minus_source_row_centroid_offset_m"] == [0.0, 0.0, 0.0]
     assert coincident["preview_vs_source_row_centroid_separation_m"] == 0
-    assert coincident[
-        "preview_vs_source_row_centroid_separation_fraction_of_bbox_diagonal"
-    ] is None
+    assert coincident["preview_vs_source_row_centroid_separation_fraction_of_bbox_diagonal"] is None
     assert coincident["surface_area_m2"] is None
     assert coincident["branch_length_m"] is None
 
@@ -409,8 +438,9 @@ def test_preview_centroid_signed_offset_uncertainty_missing_and_exact() -> None:
     assert exact["preview_minus_source_row_centroid_offset_scale_interval_m"] == [
         [value, value] for value in offset
     ]
-    assert "preview_centroid_offset_uncertainty_interval_below_numeric_resolution" not in (
-        exact["qc_warnings"]
+    assert (
+        "preview_centroid_offset_uncertainty_interval_below_numeric_resolution"
+        not in (exact["qc_warnings"])
     )
     assert exact["provenance"]["specimen_identity_verified"] is False
 
@@ -424,13 +454,8 @@ def test_preview_centroid_signed_offset_tracks_direction_on_all_three_axes() -> 
     measured = measure_point_cloud_preview(points=points, **CALIBRATION)
     indices = measured["preview_point_indices"]
     assert rare_index not in indices
-    source = [
-        sum(row[axis] for row in points) * 0.01 / len(points)
-        for axis in range(3)
-    ]
-    shown = [
-        sum(points[i][axis] for i in indices) * 0.01 / len(indices) for axis in range(3)
-    ]
+    source = [sum(row[axis] for row in points) * 0.01 / len(points) for axis in range(3)]
+    shown = [sum(points[i][axis] for i in indices) * 0.01 / len(indices) for axis in range(3)]
     expected = [shown[axis] - source[axis] for axis in range(3)]
     offset = measured["preview_minus_source_row_centroid_offset_m"]
     assert offset == pytest.approx(expected)
@@ -470,8 +495,8 @@ def test_full_colored_ply_preview_does_not_warn_about_missing_rgb_extrema(
         "green": [0, 255],
         "blue": [0, 255],
     }
-    assert support["preview_rgb_channel_ranges_uint8"] == (
-        support["source_rgb_channel_ranges_uint8"]
+    assert (
+        support["preview_rgb_channel_ranges_uint8"] == (support["source_rgb_channel_ranges_uint8"])
     )
     assert support["preview_omitted_source_rgb_channel_extrema"] == []
     assert "preview_omits_rgb_channel_extrema" not in payload["qc_warnings"]
