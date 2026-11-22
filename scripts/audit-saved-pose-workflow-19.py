@@ -191,8 +191,13 @@ def main() -> int:
     args = parser.parse_args()
     try:
         evidence = inspect(args.db, args.run_id, args.data_dir)
-    except (OSError, ValueError, sqlite3.Error, RuntimeError) as exc:
-        print(json.dumps({"status": "FAIL", "reason": str(exc)}), file=sys.stderr)
+    except Exception as exc:
+        # A failed scientific integrity check (including domain/SQLAlchemy
+        # exceptions) must never be emitted as a passing evidence record.
+        print(
+            json.dumps({"status": "FAIL", "error_type": type(exc).__name__, "reason": str(exc)}),
+            file=sys.stderr,
+        )
         return 2
     print(json.dumps(evidence, indent=2, sort_keys=True))
     return 0
