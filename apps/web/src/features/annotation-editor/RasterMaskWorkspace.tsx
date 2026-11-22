@@ -58,6 +58,19 @@ interface RasterEditCommand {
   points: Point[];
 }
 
+interface RasterClassCommand {
+  imageId: string;
+  baseRevision: number;
+  maskAnnotationId: string;
+  labelClassId: string;
+}
+
+interface RasterDuplicateCommand {
+  imageId: string;
+  baseRevision: number;
+  maskAnnotationId: string;
+}
+
 type RasterEditContext = Omit<RasterEditCommand, "points">;
 
 export function RasterMaskWorkspace({
@@ -70,6 +83,20 @@ export function RasterMaskWorkspace({
   const queryClient = useQueryClient();
   const [selectedMaskId, setSelectedMaskId] = useState<string | null>(null);
   const strokeContextRef = useRef<RasterEditContext | null>(null);
+  // Three revision-changing operations share a synchronous lock, including
+  // keyboard shortcuts fired before React renders a pending button state.
+  const mutationInFlightRef = useRef(false);
+  const [mutationBusy, setMutationBusy] = useState(false);
+  const acquireMutation = () => {
+    if (mutationInFlightRef.current) return false;
+    mutationInFlightRef.current = true;
+    setMutationBusy(true);
+    return true;
+  };
+  const releaseMutation = () => {
+    mutationInFlightRef.current = false;
+    setMutationBusy(false);
+  };
   // Late saves from a previous image must not reselect its class or mask in
   // the newly opened image. Pending mutations can outlive navigation.
   const currentImageIdRef = useRef(imageId);
@@ -102,7 +129,7 @@ export function RasterMaskWorkspace({
   // An in-progress gesture belongs to the image, class and mask selected
   // when its initiating pointer went down, not whatever is selected at release.
   function captureEditContext(): RasterEditContext | null {
-    if (!session || !activeClassId) return null;
+    if (mutationInFlightRef.current || !session || !activeClassId) return null;
     return {
       imageId,
       baseRevision: session.image.annotation_revision,
@@ -204,18 +231,15 @@ export function RasterMaskWorkspace({
         queryKey: ["skeleton-readiness", response.mask_annotation.id],
       });
     },
+    onSettled: releaseMutation,
   });
 
   const classMutation = useMutation({
-    mutationFn: (labelClassId: string) => {
-      if (!session || !selectedMask) {
-        throw new Error("Select a painted mask before changing its class");
-      }
-      return reclassifyRasterMask(imageId, selectedMask.id, {
-        base_revision: session.image.annotation_revision,
-        label_class_id: labelClassId,
-      });
-    },
+    mutationFn: (command: RasterClassCommand) =>
+      reclassifyRasterMask(command.imageId, command.maskAnnotationId, {
+        base_revision: command.baseRevision,
+        label_class_id: command.labelClassId,
+      }),
     onSuccess: async (response) => {
       if (response.image.id !== currentImageIdRef.current) {
         await queryClient.invalidateQueries({
@@ -234,15 +258,14 @@ export function RasterMaskWorkspace({
         queryKey: ["project-images", project.id],
       });
     },
+    onSettled: releaseMutation,
   });
 
   const duplicateMutation = useMutation({
-    mutationFn: (maskId: string) => {
-      if (!session) throw new Error("The raster mask session is not loaded");
-      return duplicateRasterMask(imageId, maskId, {
-        base_revision: session.image.annotation_revision,
-      });
-    },
+    mutationFn: (command: RasterDuplicateCommand) =>
+      duplicateRasterMask(command.imageId, command.maskAnnotationId, {
+        base_revision: command.baseRevision,
+      }),
     onSuccess: async (response) => {
       if (response.image.id !== currentImageIdRef.current) {
         await queryClient.invalidateQueries({
@@ -264,7 +287,35 @@ export function RasterMaskWorkspace({
         queryKey: ["project-images", project.id],
       });
     },
+    onSettled: releaseMutation,
   });
+
+  const requestEdit = (command: RasterEditCommand) => {
+    if (acquireMutation()) editMutation.mutate(command);
+  };
+  const requestClassChange = (labelClassId: string) => {
+    if (!session || !selectedMask || !acquireMutation()) return;
+    classMutation.mutate({
+      imageId: session.image.id,
+      baseRevision: session.image.annotation_revision,
+      maskAnnotationId: selectedMask.id,
+      labelClassId,
+    });
+  };
+  const requestDuplicate = (maskId: string) => {
+    if (
+      !session ||
+      !rasterMasks.some((mask) => mask.id === maskId) ||
+      !acquireMutation()
+    ) {
+      return;
+    }
+    duplicateMutation.mutate({
+      imageId: session.image.id,
+      baseRevision: session.image.annotation_revision,
+      maskAnnotationId: maskId,
+    });
+  };
 
   const copySelectedRaster = useCallback(() => {
     if (!session || !selectedMask) {
@@ -305,8 +356,8 @@ export function RasterMaskWorkspace({
       );
       return;
     }
-    duplicateMutation.mutate(clipboard.rasterMaskIds[0]);
-  }, [duplicateMutation, session]);
+    requestDuplicate(clipboard.rasterMaskIds[0]);
+  }, [requestDuplicate, session]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -321,12 +372,12 @@ export function RasterMaskWorkspace({
         pasteRaster();
       } else if (key === "d" && selectedMask) {
         event.preventDefault();
-        duplicateMutation.mutate(selectedMask.id);
+        requestDuplicate(selectedMask.id);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [copySelectedRaster, duplicateMutation, pasteRaster, selectedMask]);
+  }, [copySelectedRaster, pasteRaster, requestDuplicate, selectedMask]);
 
   if (sessionQuery.isPending || !session) {
     return (
@@ -366,7 +417,7 @@ export function RasterMaskWorkspace({
           <button
             type="button"
             className="visually-hidden"
-            disabled={editMutation.isPending}
+            disabled={mutationBusy}
             onClick={onReturnToMasks}
           >
             Polygon tool
@@ -374,14 +425,14 @@ export function RasterMaskWorkspace({
           <button
             type="button"
             className="visually-hidden"
-            disabled={editMutation.isPending}
+            disabled={mutationBusy}
             onClick={onReturnToBoxes}
           >
             Box editor
           </button>
           <button
             type="button"
-            disabled={editMutation.isPending}
+            disabled={mutationBusy}
             onClick={onClose}
           >
             Close editor
@@ -398,14 +449,14 @@ export function RasterMaskWorkspace({
                 <p className="eyebrow">Brush tool</p>
                 <h3>Paint mask object</h3>
               </div>
-              <span>{editMutation.isPending ? "Saving..." : "Ready"}</span>
+              <span>{mutationBusy ? "Saving..." : "Ready"}</span>
             </div>
             <div className="annotation-editor-inline-actions">
               <button
                 type="button"
                 className={mode === "paint" ? "active" : "secondary"}
                 aria-pressed={mode === "paint"}
-                disabled={editMutation.isPending}
+                disabled={mutationBusy}
                 onClick={() => setMode("paint")}
               >
                 Paint
@@ -414,7 +465,7 @@ export function RasterMaskWorkspace({
                 type="button"
                 className={mode === "erase" ? "active" : "secondary"}
                 aria-pressed={mode === "erase"}
-                disabled={!canErase || editMutation.isPending}
+                disabled={!canErase || mutationBusy}
                 onClick={() => setMode("erase")}
               >
                 Erase
@@ -423,7 +474,7 @@ export function RasterMaskWorkspace({
                 type="button"
                 className={mode === "fill" ? "active" : "secondary"}
                 aria-pressed={mode === "fill"}
-                disabled={editMutation.isPending}
+                disabled={mutationBusy}
                 onClick={() => setMode("fill")}
               >
                 Fill
@@ -438,7 +489,7 @@ export function RasterMaskWorkspace({
                   min="0"
                   max="96"
                   value={fillTolerance}
-                  disabled={editMutation.isPending}
+                  disabled={mutationBusy}
                   onChange={(event) =>
                     setFillTolerance(Number(event.target.value))
                   }
@@ -453,7 +504,7 @@ export function RasterMaskWorkspace({
                   min="1"
                   max="128"
                   value={brushRadius}
-                  disabled={editMutation.isPending}
+                  disabled={mutationBusy}
                   onChange={(event) =>
                     setBrushRadius(Number(event.target.value))
                   }
@@ -493,13 +544,13 @@ export function RasterMaskWorkspace({
                   <button
                     type="button"
                     className="annotation-class-button"
-                    disabled={editMutation.isPending || classMutation.isPending}
+                    disabled={mutationBusy}
                     onClick={() => {
                       if (
                         selectedMask &&
                         selectedMask.label_class_id !== labelClass.id
                       ) {
-                        classMutation.mutate(labelClass.id);
+                        requestClassChange(labelClass.id);
                         return;
                       }
                       setActiveClassId(labelClass.id);
@@ -527,7 +578,7 @@ export function RasterMaskWorkspace({
               <button
                 type="button"
                 className="secondary"
-                disabled={rasterMasks.length === 0 || editMutation.isPending}
+                disabled={rasterMasks.length === 0 || mutationBusy}
                 onClick={() => {
                   setCreateAnotherMaskRequested(true);
                   setSelectedMaskId(null);
@@ -543,7 +594,7 @@ export function RasterMaskWorkspace({
                 className="secondary"
                 title="Copy to ReefVision's internal clipboard (Ctrl/Cmd+C)"
                 aria-keyshortcuts="Control+C Meta+C"
-                disabled={!selectedMask || duplicateMutation.isPending}
+                disabled={!selectedMask || mutationBusy}
                 onClick={copySelectedRaster}
               >
                 Copy
@@ -553,9 +604,9 @@ export function RasterMaskWorkspace({
                 className="secondary"
                 title="Duplicate raster mask (Ctrl/Cmd+D)"
                 aria-keyshortcuts="Control+D Meta+D"
-                disabled={!selectedMask || duplicateMutation.isPending}
+                disabled={!selectedMask || mutationBusy}
                 onClick={() =>
-                  selectedMask && duplicateMutation.mutate(selectedMask.id)
+                  selectedMask && requestDuplicate(selectedMask.id)
                 }
               >
                 Duplicate
@@ -565,7 +616,7 @@ export function RasterMaskWorkspace({
                 className="secondary"
                 title="Paste compatible raster mask (Ctrl/Cmd+V)"
                 aria-keyshortcuts="Control+V Meta+V"
-                disabled={duplicateMutation.isPending}
+                disabled={mutationBusy}
                 onClick={pasteRaster}
               >
                 Paste
@@ -588,7 +639,7 @@ export function RasterMaskWorkspace({
                     className={
                       selectedMaskId === mask.id ? "active" : "secondary"
                     }
-                    disabled={editMutation.isPending}
+                    disabled={mutationBusy}
                     onClick={() => {
                       setCreateAnotherMaskRequested(false);
                       setSelectedMaskId(mask.id);
@@ -606,7 +657,7 @@ export function RasterMaskWorkspace({
           <section className="annotation-sidebar-section">
             <SkeletonAnalysisPanel
               selectedMask={selectedSkeletonMask}
-              documentDirty={editMutation.isPending || classMutation.isPending}
+              documentDirty={mutationBusy}
               onOverlayChange={setSkeletonOverlay}
             />
           </section>
@@ -667,11 +718,11 @@ export function RasterMaskWorkspace({
               <RasterFillLayer
                 width={image.width_px}
                 height={image.height_px}
-                disabled={editMutation.isPending || activeClassId === null}
+                disabled={mutationBusy || activeClassId === null}
                 onFill={(point) => {
                   const context = captureEditContext();
                   if (context) {
-                    editMutation.mutate({
+                    requestEdit({
                       ...context,
                       mode: "fill",
                       points: [point],
@@ -686,7 +737,7 @@ export function RasterMaskWorkspace({
                 height={image.height_px}
                 mode={mode}
                 brushRadius={brushRadius}
-                disabled={editMutation.isPending || activeClassId === null}
+                disabled={mutationBusy || activeClassId === null}
                 onStrokeStart={() => {
                   strokeContextRef.current = captureEditContext();
                 }}
@@ -697,7 +748,7 @@ export function RasterMaskWorkspace({
                   const context = strokeContextRef.current;
                   strokeContextRef.current = null;
                   if (context) {
-                    editMutation.mutate({
+                    requestEdit({
                       ...context,
                       mode: settings.mode,
                       brushRadius: settings.brushRadius,

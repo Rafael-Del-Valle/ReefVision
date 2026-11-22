@@ -726,3 +726,148 @@ it.each(["reclassify", "duplicate"] as const)(
     );
   },
 );
+
+it.each(["duplicate", "reclassify", "paint"] as const)(
+  "serializes %s against other raster mutations and shortcuts",
+  async (operation) => {
+    const mask = {
+      id: "mask-1",
+      image_id: "image-1",
+      label_class_id: "class-1",
+      geometry_kind: "raster_mask",
+      mask_path: "projects/project-1/masks/image-1/mask-1.png",
+      polygon_json: null,
+      x_min: 10,
+      y_min: 10,
+      x_max: 80,
+      y_max: 70,
+      area_pixels: 900,
+      source_type: "human_brush",
+      provenance_json: null,
+      status: "verified",
+      created_by: "local_user",
+      created_at: "2026-09-16T00:00:00Z",
+      updated_at: "2026-09-16T00:00:00Z",
+      deleted_at: null,
+      revision: 1,
+    };
+    vi.mocked(getAnnotationSession).mockResolvedValue({
+      ...session,
+      mask_annotations: [mask],
+      label_classes: [
+        session.label_classes[0],
+        {
+          id: "class-2",
+          name: "Sponge",
+          display_color: "#e76f51",
+          is_active: true,
+        },
+      ],
+    } as never);
+    const rasterApi = (await import("./rasterMaskApi")) as unknown as {
+      editRasterMask: ReturnType<typeof vi.fn>;
+      duplicateRasterMask: ReturnType<typeof vi.fn>;
+      reclassifyRasterMask: ReturnType<typeof vi.fn>;
+    };
+    const activeMock =
+      operation === "paint"
+        ? rasterApi.editRasterMask
+        : operation === "reclassify"
+          ? rasterApi.reclassifyRasterMask
+          : rasterApi.duplicateRasterMask;
+    let rejectRequest!: (error: Error) => void;
+    activeMock.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectRequest = reject;
+        }),
+    );
+    if (operation !== "duplicate") {
+      rasterApi.duplicateRasterMask.mockImplementation(
+        () => new Promise(() => {}),
+      );
+    }
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RasterMaskWorkspace
+          project={{ id: "project-1", name: "Reef" } as Project}
+          imageId="image-1"
+          onReturnToMasks={vi.fn()}
+          onReturnToBoxes={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("button", { name: /Coral \| r1/i });
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+
+    if (operation === "duplicate") {
+      fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    } else if (operation === "reclassify") {
+      fireEvent.click(screen.getByRole("button", { name: "Sponge" }));
+    } else {
+      const canvas = screen.getByTestId(
+        "raster-brush-layer",
+      ) as unknown as SVGSVGElement;
+      vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: 400,
+        bottom: 300,
+        width: 400,
+        height: 300,
+        toJSON: () => ({}),
+      });
+      Object.defineProperty(canvas, "setPointerCapture", { value: vi.fn() });
+      Object.defineProperty(canvas, "releasePointerCapture", {
+        value: vi.fn(),
+      });
+      Object.defineProperty(canvas, "hasPointerCapture", {
+        value: vi.fn(() => true),
+      });
+      fireEvent.pointerDown(canvas, {
+        button: 0,
+        pointerId: 113,
+        clientX: 100,
+        clientY: 75,
+      });
+      fireEvent.pointerUp(canvas, { pointerId: 113 });
+    }
+
+    await waitFor(() => expect(activeMock).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("button", { name: "Close editor" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Duplicate" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Sponge" })).toBeDisabled();
+    expect(
+      screen.getByRole("slider", { name: /Brush radius/i }),
+    ).toBeDisabled();
+
+    fireEvent.keyDown(document.body, { key: "d", ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: "v", ctrlKey: true });
+    expect(rasterApi.duplicateRasterMask).toHaveBeenCalledTimes(
+      operation === "duplicate" ? 1 : 0,
+    );
+    expect(activeMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      rejectRequest(new Error("Synthetic offline mutation failure"));
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Close editor" })).toBeEnabled(),
+    );
+    fireEvent.keyDown(document.body, { key: "d", ctrlKey: true });
+    await waitFor(() =>
+      expect(rasterApi.duplicateRasterMask).toHaveBeenCalledTimes(
+        operation === "duplicate" ? 2 : 1,
+      ),
+    );
+  },
+);
