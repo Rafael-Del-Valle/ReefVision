@@ -226,6 +226,7 @@ def test_skip_migrations_allows_actual_packaged_head_without_upgrading(
     with sqlite3.connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0041",)
 
+
 def test_skip_migrations_rejects_replaced_valid_database_between_preflights(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
