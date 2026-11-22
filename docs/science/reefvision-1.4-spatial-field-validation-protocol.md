@@ -61,6 +61,19 @@ actual appearance; it must not be scored as coral health, bleaching, lesion
 extent or tissue survival without separately validated color standards
 and human-reviewed biological references.
 
+For loci observed under multiple RGB values, independently report how many of
+those XYZ loci retain **every observed color variant** in the preview versus
+how many lose at least one variant. The nested `preview_rgb_variant_support`
+fields `multi_rgb_xyz_loci_with_complete_preview` and
+`multi_rgb_xyz_loci_with_incomplete_preview` must sum to the number of
+source XYZ loci with multiple RGB values. Emit
+`preview_omits_multi_rgb_locus_variants` only when an observed variant at a
+multicolor locus is missing. Verify both omitted rare RGB in a 600-row PLY
+and complete retention in a three-row PLY, through standalone analysis and
+twice-executed persisted typed Workflow Builder graphs with matching
+artifacts and SHA-256 fingerprints. This is acquisition display evidence,
+**not** validated colorimetry, bleaching, disease or tissue-loss assessment.
+
 ## Anatomical measurements
 
 A selected surface-edge path is not automatically a coral branch centerline. For anatomical branch length, document branch endpoints, skeletonization or centerline algorithm, branch/junction rules, ambiguity handling, and repeatability across at least two blinded annotators. Report uncertainty from scale, endpoint placement, reconstruction, and repeat segmentation independently. Do not label surface paths as validated branch lengths until an independent specimen reference and repeatability study pass.
