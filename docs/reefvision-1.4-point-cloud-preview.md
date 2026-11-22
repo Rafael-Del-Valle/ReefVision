@@ -656,3 +656,19 @@ acquisition-row order, while the existing saved executable typed Workflow
 Builder graph is run twice and requires byte-for-byte scientific-artifact and
 artifact-SHA-256 equality. Physical coral reference validation, reviewer
 sign-off, installed Windows GUI/MSI/CAB and GPU gates remain on hold.
+
+## Numerically unresolved preview-offset scale bounds (November 22, 2026)
+
+The signed X/Y/Z difference between a bounded display sample's row-weighted
+centroid and the full acquisition centroid reports scale-only uncertainty,
+not reconstruction, sampling, spatial-registration, or organism-motion error.
+When an extremely small but positive supplied relative calibration uncertainty
+rounds both bounds of a nonzero offset to the same float, the corresponding
+interval is `null` with
+`preview_centroid_offset_uncertainty_interval_below_numeric_resolution` QC.
+A genuinely zero coordinate offset retains `[0, 0]`; a zero *supplied*
+uncertainty retains exact bounds without that QC. The separation magnitude
+likewise withholds unresolvable scale-only bounds instead of suggesting false
+certainty. The strict-mypy regression and direct/API/twice-replayed executable
+persisted typed Workflow Builder test guard this behavior. Calibration and
+biological identity remain unverified pending independent scientific review.
