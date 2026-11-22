@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   getAnnotationSession,
+  getClassVisibilityBundle,
   imageDisplayUrl,
   type AnnotationSession,
   type Project,
@@ -28,6 +29,7 @@ import {
   readInternalAnnotationClipboard,
   writeInternalAnnotationClipboard,
 } from "./annotationClipboard";
+import { resolveClassVisibilityState, visibilitySourceLabel } from "./classVisibility";
 import { resolveRasterMaskSelection } from "./rasterMaskSelection";
 import {
   toEditorMaskAnnotation,
@@ -115,6 +117,12 @@ export function RasterMaskWorkspace({
     queryFn: ({ signal }) => getAnnotationSession(imageId, signal),
     refetchOnWindowFocus: false,
   });
+  const visibilityQuery = useQuery({
+    queryKey: ["class-visibility", project.id],
+    queryFn: ({ signal }) => getClassVisibilityBundle(project.id, signal),
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  });
   const session = sessionQuery.data as MaskAwareAnnotationSession | undefined;
   const rasterMasks = useMemo(
     () =>
@@ -129,7 +137,14 @@ export function RasterMaskWorkspace({
   // An in-progress gesture belongs to the image, class and mask selected
   // when its initiating pointer went down, not whatever is selected at release.
   function captureEditContext(): RasterEditContext | null {
-    if (mutationInFlightRef.current || !session || !activeClassId) return null;
+    if (
+      mutationInFlightRef.current ||
+      !session ||
+      !activeClassId ||
+      targetClassIsHidden
+    ) {
+      return null;
+    }
     return {
       imageId,
       baseRevision: session.image.annotation_revision,
@@ -145,6 +160,25 @@ export function RasterMaskWorkspace({
     [selectedMask],
   );
   const selectedMaskClassId = selectedMask?.label_class_id ?? null;
+  // The main box editor already respects saved segmentation visibility. The
+  // separate brush workspace must use the same per-user/project precedence.
+  // Never apply another project's cached visibility to this biological image.
+  const visibilityBundle =
+    visibilityQuery.data?.project_id === project.id
+      ? visibilityQuery.data
+      : undefined;
+  const segmentationVisibility = resolveClassVisibilityState(
+    "segmentation_overlays",
+    visibilityBundle,
+    {},
+    session?.label_classes.map((item) => item.id) ?? [],
+  );
+  const targetClassIsHidden = segmentationVisibility.hiddenClassIds.some(
+    (id) => id === selectedMaskClassId || id === activeClassId,
+  );
+  const selectedMaskClassIsHidden =
+    selectedMaskClassId !== null &&
+    segmentationVisibility.hiddenClassIds.includes(selectedMaskClassId);
   const selectedMaskColor =
     session?.label_classes.find((item) => item.id === selectedMaskClassId)
       ?.display_color ?? "#2a9d8f";
@@ -398,7 +432,7 @@ export function RasterMaskWorkspace({
   }
 
   const image = session.image;
-  const canErase = selectedMask !== null;
+  const canErase = selectedMask !== null && !targetClassIsHidden;
 
   return (
     <div
@@ -522,6 +556,28 @@ export function RasterMaskWorkspace({
               <p className="form-error">{duplicateMutation.error.message}</p>
             )}
             {clipboardMessage && <p role="status">{clipboardMessage}</p>}
+            <p
+              className="annotation-helper"
+              data-testid="raster-visibility-source"
+            >
+              Segmentation overlay visibility:{" "}
+              {visibilityQuery.isPending
+                ? "Loading saved settings"
+                : visibilityQuery.isError
+                  ? "Settings unavailable (showing all)"
+                  : visibilitySourceLabel(segmentationVisibility.source)}
+            </p>
+            {targetClassIsHidden && (
+              <p
+                className="annotation-helper"
+                data-testid="raster-hidden-class-notice"
+                role="status"
+              >
+                This paint target is hidden by saved segmentation visibility.
+                Its original pixels and revision remain unchanged. Show its
+                class in the main annotation editor before painting or filling.
+              </p>
+            )}
           </section>
 
           <section className="annotation-sidebar-section">
@@ -687,7 +743,7 @@ export function RasterMaskWorkspace({
               draggable={false}
               style={{ display: "block", width: "100%", height: "100%" }}
             />
-            {selectedMask && (
+            {selectedMask && !selectedMaskClassIsHidden && (
               <div
                 data-testid="selected-raster-mask-overlay"
                 aria-label="Selected raster mask"
@@ -714,7 +770,7 @@ export function RasterMaskWorkspace({
               <RasterFillLayer
                 width={image.width_px}
                 height={image.height_px}
-                disabled={mutationBusy || activeClassId === null}
+                disabled={mutationBusy || activeClassId === null || targetClassIsHidden}
                 onFill={(point) => {
                   const context = captureEditContext();
                   if (context) {
@@ -733,7 +789,7 @@ export function RasterMaskWorkspace({
                 height={image.height_px}
                 mode={mode}
                 brushRadius={brushRadius}
-                disabled={mutationBusy || activeClassId === null}
+                disabled={mutationBusy || activeClassId === null || targetClassIsHidden}
                 onStrokeStart={() => {
                   strokeContextRef.current = captureEditContext();
                 }}

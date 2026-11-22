@@ -1,5 +1,13 @@
 # ReefVision 1.6.0 Report
 
+## 2026-11-22 — Saved segmentation visibility in the separate brush editor (Track D; RELEASE HOLD)
+
+- Audited already-existing 1.0–1.5 segmentation tools, 1.6 per-user/project class visibility and typed saved executable QC Workflow Builder. The main annotation editor already resolves `segmentation_overlays` preferences, but the separate raster brush workspace still drew selected mask overlays without consulting those saved settings.
+- The brush workspace now loads the same project-scoped visibility bundle, applies personal preference before project default, ignores a mismatched project response, and suppresses only the selected hidden-class overlay. Hidden biological masks remain in the object list and skeleton selection; original mask pixels, revision, class, annotations, and saved dataset/workflow evidence are not changed. Painting and filling an invisible target are blocked with an explicit reason and instructions to show the class again. If the local visibility service is unavailable, the editor reports the limitation rather than inventing a saved preference.
+- Five React regression cases cover saved personal preference, project fallback, explicit visible personal override, cache refresh and cross-project response isolation. Exact-head frontend/backend/E2E/Windows CI and representative biological installed-GUI acceptance remain necessary; tests are not claimed passing until verified.
+- This is display/editor safety, not a new biological processing node. Existing typed executable QC Workflow Builder graphs/runs, units, provenance, retries and explicit researcher review gates are unchanged; no migration or pretrained weight is involved.
+- **RELEASE HOLD:** independently reconcile the 1.1/1.6 Alembic-0038 collision, complete exact-head science/saved-workflow CI, native Windows MSI/CAB installed-GUI clean install and upgrade/rollback, and obtain researcher approval before merging or releasing. Versions 1.7 and revised 1.8 remain untouched.
+
 ## Completed In This Pass
 
 - Preserved the earlier project-loading, training-draft, and image-loading improvements.

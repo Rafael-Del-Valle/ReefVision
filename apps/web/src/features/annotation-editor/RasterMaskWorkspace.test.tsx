@@ -8,11 +8,18 @@ import {
 } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 
-import { getAnnotationSession, type Project } from "../../api/client";
+import {
+  getAnnotationSession,
+  getClassVisibilityBundle,
+  type ClassVisibilityBundle,
+  type ClassVisibilityScopeState,
+  type Project,
+} from "../../api/client";
 import { RasterMaskWorkspace } from "./RasterMaskWorkspace";
 
 vi.mock("../../api/client", () => ({
   getAnnotationSession: vi.fn(),
+  getClassVisibilityBundle: vi.fn(),
   imageDisplayUrl: () => "/image.png",
 }));
 
@@ -64,9 +71,87 @@ const session = {
   next_image_id: null,
 };
 
+const emptyVisibilityState: ClassVisibilityScopeState = {
+  saved: false,
+  hidden_class_ids: [],
+  updated_at: null,
+  updated_by_identity: null,
+};
+
+function visibilityBundle(
+  projectId: string,
+  options: {
+    userSaved?: boolean;
+    userHidden?: string[];
+    projectSaved?: boolean;
+    projectHidden?: string[];
+  } = {},
+): ClassVisibilityBundle {
+  const scopes = {
+    annotations: emptyVisibilityState,
+    predictions: emptyVisibilityState,
+    qc_overlays: emptyVisibilityState,
+    video_tracks: emptyVisibilityState,
+    segmentation_overlays: emptyVisibilityState,
+  };
+  return {
+    project_id: projectId,
+    user_identity: "local-user:fixture",
+    supported_layer_types: [
+      "annotations",
+      "predictions",
+      "qc_overlays",
+      "video_tracks",
+      "segmentation_overlays",
+    ],
+    precedence: [],
+    user_preferences: {
+      ...scopes,
+      segmentation_overlays: {
+        ...emptyVisibilityState,
+        saved: options.userSaved ?? false,
+        hidden_class_ids: options.userHidden ?? [],
+      },
+    },
+    project_defaults: {
+      ...scopes,
+      segmentation_overlays: {
+        ...emptyVisibilityState,
+        saved: options.projectSaved ?? false,
+        hidden_class_ids: options.projectHidden ?? [],
+      },
+    },
+  };
+}
+
+const savedRasterMask = {
+  id: "mask-1",
+  image_id: "image-1",
+  label_class_id: "class-1",
+  geometry_kind: "raster_mask",
+  mask_path: "projects/project-1/masks/mask-1.png",
+  polygon_json: null,
+  x_min: 10,
+  y_min: 10,
+  x_max: 80,
+  y_max: 70,
+  area_pixels: 900,
+  source_type: "human_brush",
+  provenance_json: null,
+  status: "verified",
+  created_by: "local_user",
+  created_at: "2026-09-16T00:00:00Z",
+  updated_at: "2026-09-16T00:00:00Z",
+  deleted_at: null,
+  revision: 1,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getAnnotationSession).mockResolvedValue(session as never);
+  vi.mocked(getClassVisibilityBundle).mockImplementation(async (projectId) =>
+    visibilityBundle(projectId),
+  );
 });
 
 it("uses endpoint-safe styling for the Brush radius slider", async () => {
@@ -873,3 +958,168 @@ it.each(["duplicate", "reclassify", "paint"] as const)(
     );
   },
 );
+
+it.each([
+  {
+    name: "saved personal preference",
+    options: { userSaved: true, userHidden: ["class-1"] },
+    source: "My Preference",
+    hidden: true,
+  },
+  {
+    name: "saved project default",
+    options: { projectSaved: true, projectHidden: ["class-1"] },
+    source: "Project Default",
+    hidden: true,
+  },
+  {
+    name: "explicitly visible personal preference overriding project default",
+    options: {
+      userSaved: true,
+      userHidden: [],
+      projectSaved: true,
+      projectHidden: ["class-1"],
+    },
+    source: "My Preference",
+    hidden: false,
+  },
+])(
+  "respects $name for selected raster overlays without changing scientific records",
+  async ({ options, source, hidden }) => {
+    vi.mocked(getAnnotationSession).mockResolvedValue({
+      ...session,
+      mask_annotations: [savedRasterMask],
+    } as never);
+    vi.mocked(getClassVisibilityBundle).mockResolvedValue(
+      visibilityBundle("project-1", options),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RasterMaskWorkspace
+          project={{ id: "project-1", name: "Reef" } as Project}
+          imageId="image-1"
+          onReturnToMasks={vi.fn()}
+          onReturnToBoxes={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("button", { name: /Coral \\| r1/i });
+    await waitFor(() =>
+      expect(screen.getByTestId("raster-visibility-source")).toHaveTextContent(
+        source,
+      ),
+    );
+    expect(screen.getByText("1 masks")).toBeInTheDocument();
+    expect(screen.getByTestId("raster-skeleton-panel")).toHaveTextContent(
+      "mask-1:raster_mask",
+    );
+    const brush = screen.getByTestId("raster-brush-layer");
+    if (hidden) {
+      expect(
+        screen.queryByTestId("selected-raster-mask-overlay"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("raster-hidden-class-notice")).toHaveTextContent(
+        "original pixels and revision remain unchanged",
+      );
+      expect(brush).toHaveStyle({ cursor: "not-allowed" });
+      fireEvent.pointerDown(brush, { button: 0, pointerId: 12 });
+      fireEvent.pointerUp(brush, { pointerId: 12 });
+      const rasterApi = (await import("./rasterMaskApi")) as unknown as {
+        editRasterMask: ReturnType<typeof vi.fn>;
+      };
+      expect(rasterApi.editRasterMask).not.toHaveBeenCalled();
+    } else {
+      expect(
+        screen.getByTestId("selected-raster-mask-overlay"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("raster-hidden-class-notice"),
+      ).not.toBeInTheDocument();
+      expect(brush).toHaveStyle({ cursor: "crosshair" });
+    }
+    expect(savedRasterMask.revision).toBe(1);
+    expect(savedRasterMask.area_pixels).toBe(900);
+  },
+);
+
+it("updates the brush overlay from saved visibility cache without rewriting its mask", async () => {
+  vi.mocked(getAnnotationSession).mockResolvedValue({
+    ...session,
+    mask_annotations: [savedRasterMask],
+  } as never);
+  vi.mocked(getClassVisibilityBundle).mockResolvedValue(
+    visibilityBundle("project-1", {
+      userSaved: true,
+      userHidden: ["class-1"],
+    }),
+  );
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RasterMaskWorkspace
+        project={{ id: "project-1", name: "Reef" } as Project}
+        imageId="image-1"
+        onReturnToMasks={vi.fn()}
+        onReturnToBoxes={vi.fn()}
+        onClose={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  await screen.findByTestId("raster-hidden-class-notice");
+  expect(
+    screen.queryByTestId("selected-raster-mask-overlay"),
+  ).not.toBeInTheDocument();
+
+  await act(async () => {
+    queryClient.setQueryData(
+      ["class-visibility", "project-1"],
+      visibilityBundle("project-1", { userSaved: true, userHidden: [] }),
+    );
+  });
+  await screen.findByTestId("selected-raster-mask-overlay");
+  expect(screen.getByText("1 masks")).toBeInTheDocument();
+  expect(screen.getByTestId("raster-skeleton-panel")).toHaveTextContent(
+    "mask-1:raster_mask",
+  );
+  expect(savedRasterMask.area_pixels).toBe(900);
+});
+
+it("does not apply another project's stale visibility bundle to a raster mask", async () => {
+  vi.mocked(getAnnotationSession).mockResolvedValue({
+    ...session,
+    mask_annotations: [savedRasterMask],
+  } as never);
+  vi.mocked(getClassVisibilityBundle).mockResolvedValue(
+    visibilityBundle("another-project", {
+      userSaved: true,
+      userHidden: ["class-1"],
+    }),
+  );
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RasterMaskWorkspace
+        project={{ id: "project-1", name: "Reef" } as Project}
+        imageId="image-1"
+        onReturnToMasks={vi.fn()}
+        onReturnToBoxes={vi.fn()}
+        onClose={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  await waitFor(() =>
+    expect(screen.getByTestId("raster-visibility-source")).toHaveTextContent(
+      "Visible by default",
+    ),
+  );
+  expect(screen.getByTestId("selected-raster-mask-overlay")).toBeInTheDocument();
+  expect(screen.queryByTestId("raster-hidden-class-notice")).not.toBeInTheDocument();
+});
