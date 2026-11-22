@@ -1,7 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { RotatedBoxLayer, rotatedBoxFromDrag } from "./RotatedBoxLayer";
+import {
+  RotatedBoxLayer,
+  rotatedBoxFromDrag,
+  rotatedBoxMaskFromPoints,
+  rotatedBoxPoints,
+} from "./RotatedBoxLayer";
 
 beforeAll(() => {
   Object.defineProperty(SVGElement.prototype, "setPointerCapture", {
@@ -359,6 +364,25 @@ describe("RotatedBoxLayer pointer integrity", () => {
         points[3] = { ...points[0] };
       },
     },
+    {
+      name: "sheared quadrilateral",
+      damage: (points: Array<{ x: number; y: number }>) => {
+        points[2].x += 40;
+      },
+    },
+    {
+      name: "nonorthogonal parallelogram",
+      damage: (points: Array<{ x: number; y: number }>) => {
+        points[2].x += 40;
+        points[3].x += 40;
+      },
+    },
+    {
+      name: "concave quadrilateral",
+      damage: (points: Array<{ x: number; y: number }>) => {
+        points[2] = { x: 230, y: 185 };
+      },
+    },
   ])("rejects corrupt $name and allows recovery", ({ damage }) => {
     const original = rotatedBoxFromDrag(
       { x: 200, y: 150 },
@@ -410,6 +434,43 @@ describe("RotatedBoxLayer pointer integrity", () => {
     fireEvent.pointerUp(canvas, { pointerId: 82 });
     expect(onCreate).toHaveBeenCalledTimes(1);
     expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it("continues to edit valid angled rectangles without rewriting source geometry", () => {
+    const original = rotatedBoxMaskFromPoints(
+      rotatedBoxPoints({ x: 360, y: 280 }, 180, 100, Math.PI / 6),
+      "class-1",
+      "angled-box",
+      true,
+      2,
+    );
+    const onUpdate = vi.fn();
+    const canvas = renderLayer([original], vi.fn(), onUpdate);
+    fireEvent.pointerDown(
+      canvas.querySelector("polygon") as SVGPolygonElement,
+      {
+        button: 0,
+        pointerId: 90,
+        clientX: 180,
+        clientY: 140,
+      },
+    );
+    fireEvent.pointerMove(canvas, {
+      pointerId: 90,
+      clientX: 190,
+      clientY: 150,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 90 });
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate.mock.calls[0][0]).toMatchObject({
+      id: "angled-box",
+      geometry_kind: "rotated_box",
+      persisted: true,
+      revision: 2,
+    });
+    expect(onUpdate.mock.calls[0][0].points).not.toEqual(original.points);
+    expect(original.points).toHaveLength(4);
   });
 
 });
