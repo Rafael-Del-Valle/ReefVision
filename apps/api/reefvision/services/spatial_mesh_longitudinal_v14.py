@@ -559,6 +559,17 @@ def compare_mesh_observations(
         extent_rate_bounds is not None and not all(isfinite(value) for value in extent_rate_bounds)
     ):
         raise ValueError("Bounding-box extent change exceeds finite numeric range")
+    # A bounding-box diagonal is orientation sensitive and not anatomical
+    # branch length. Classify only its propagated *scale-only* difference.
+    # Unknown timepoint uncertainty must never be inferred as zero.
+    extent_difference_scale_only_sign: str | None = None
+    if extent_delta_bounds is not None:
+        if extent_delta_bounds[0] > 0:
+            extent_difference_scale_only_sign = "positive"
+        elif extent_delta_bounds[1] < 0:
+            extent_difference_scale_only_sign = "negative"
+        else:
+            extent_difference_scale_only_sign = "includes_zero"
     # A geometry fingerprint describes source triangles, not calibrated size.
     # The same imported geometry can appear to grow solely because its scale
     # changed. Surface-area changes are still reported, but never certified.
@@ -774,6 +785,8 @@ def compare_mesh_observations(
         warnings.append("zero_followup_surface_area_requires_reconstruction_review")
     if early_extent is not None and early_extent > 0 and late_extent == 0:
         warnings.append("zero_followup_extent_requires_reconstruction_review")
+    if extent_difference_scale_only_sign == "includes_zero":
+        warnings.append("axis_aligned_extent_difference_scale_bounds_include_zero")
     if any(observation_qc):
         warnings.append("source_mesh_qc_requires_review")
     before_topology, after_topology = topology_counts
@@ -1531,6 +1544,9 @@ def compare_mesh_observations(
         "before_axis_aligned_bounding_box_diagonal_m": early_extent,
         "after_axis_aligned_bounding_box_diagonal_m": late_extent,
         "delta_axis_aligned_bounding_box_diagonal_m": extent_delta,
+        "axis_aligned_extent_difference_sign_under_scale_only_bounds": (
+            extent_difference_scale_only_sign
+        ),
         "relative_axis_aligned_bounding_box_diagonal_change_percent": extent_relative,
         "relative_axis_aligned_bounding_box_diagonal_scale_interval_percent": (
             extent_relative_bounds
@@ -1628,6 +1644,7 @@ def compare_mesh_observations(
             "delta_surface_area_m2",
             "surface_area_difference_sign_under_scale_only_bounds",
             "delta_axis_aligned_bounding_box_diagonal_m",
+            "axis_aligned_extent_difference_sign_under_scale_only_bounds",
             "relative_axis_aligned_bounding_box_diagonal_change_percent",
             "relative_axis_aligned_bounding_box_diagonal_scale_interval_percent",
             "delta_axis_aligned_bounding_box_diagonal_scale_interval_m",
