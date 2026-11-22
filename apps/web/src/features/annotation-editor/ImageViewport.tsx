@@ -129,6 +129,17 @@ export function ImageViewport({
     // initial camera image is fitted and manual scientific zoom is preserved.
     // updateSize ignores duplicate measurements from the two listeners.
     globalThis.addEventListener("resize", updateSize);
+    // WebView2 can resize the visual viewport after desktop zoom or pane
+    // adjustments without notifying ResizeObserver or window.resize.
+    // Measure the actual canvas client dimensions, never the zoomed visual
+    // viewport size, so polygon and mask coordinates remain image-relative.
+    const visualViewport = globalThis.visualViewport;
+    try {
+      visualViewport?.addEventListener("resize", updateSize);
+    } catch {
+      // An incomplete embedded VisualViewport implementation must not break
+      // initial image fitting; window.resize remains available.
+    }
     let observer: ResizeObserver | null = null;
     if (typeof ResizeObserver === "function") {
       try {
@@ -152,6 +163,11 @@ export function ImageViewport({
         // Observer cleanup failures must not leak the window listener.
       }
       globalThis.removeEventListener("resize", updateSize);
+      try {
+        visualViewport?.removeEventListener("resize", updateSize);
+      } catch {
+        // Some embedded implementations fail to remove listeners on teardown.
+      }
     };
   }, []);
 
