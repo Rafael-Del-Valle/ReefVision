@@ -160,7 +160,13 @@ if (-not [string]::IsNullOrWhiteSpace($ProvenancePath)) {
     $manifest = Get-Content -LiteralPath $manifestFile.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
     if ($manifest.version -cne '1.0.3' -or
         $manifest.source_commit -cne $CandidateSha.ToLowerInvariant() -or
-        $manifest.source_tree_clean -ne $true -or $manifest.msi_verified -ne $true) {
+        # JSON numbers and strings must not masquerade as Boolean proof that
+        # a candidate was built from a clean source tree and MSI verified.
+        # PowerShell's normal -eq/-ne comparisons coerce 1/"true" to $true.
+        $manifest.source_tree_clean -isnot [bool] -or
+        $manifest.source_tree_clean -ne $true -or
+        $manifest.msi_verified -isnot [bool] -or
+        $manifest.msi_verified -ne $true) {
         throw 'Build provenance does not match the candidate version, SHA, or verification flags.'
     }
     $declared = @{}
