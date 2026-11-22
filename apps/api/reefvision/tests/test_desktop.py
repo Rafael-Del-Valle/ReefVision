@@ -1,3 +1,4 @@
+import asyncio
 import io
 import json
 import os
@@ -7,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from reefvision.config import clear_settings_cache
+from reefvision.config import Settings, clear_settings_cache
 from reefvision.desktop import (
     DesktopLaunchOptions,
     build_settings,
@@ -16,6 +17,7 @@ from reefvision.desktop import (
     require_scale_assistant_marker_runtime,
     resolve_alembic_paths,
     resolve_server_port,
+    run_api_server,
     watch_shutdown_stream,
     write_runtime_port,
     write_self_test_result,
@@ -97,6 +99,58 @@ def test_parse_args_enables_packaged_provider_hardware_acceptance() -> None:
     assert options.provider_hardware_acceptance is True
     assert options.safe_mode is True
     assert options.data_dir == Path("C:/reefvision-provider-acceptance")
+
+
+
+@pytest.mark.parametrize(
+    "host",
+    ["0.0.0.0", "::", "192.168.1.9", "research.example", ""],
+)
+def test_desktop_refuses_remote_or_unresolved_host_before_startup(
+    host: str, tmp_path: Path
+) -> None:
+    with pytest.raises(SystemExit) as cli_error:
+        parse_args(["--host", host, "--data-dir", str(tmp_path / "research")])
+    assert cli_error.value.code == 2
+
+    # Programmatic callers cannot bypass the CLI's network security boundary.
+    options = DesktopLaunchOptions(
+        host=host,
+        port=0,
+        data_dir=tmp_path / "research",
+        log_file=None,
+        context_file=None,
+        run_migrations=False,
+    )
+    with pytest.raises(ValueError, match="loopback"):
+        build_settings(options)
+    assert not (tmp_path / "research").exists()
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "127.13.2.4", "::1", "localhost"])
+def test_desktop_accepts_only_explicit_loopback_host(host: str) -> None:
+    assert parse_args(["--host", host]).host == host
+
+
+def test_desktop_server_rejects_remote_settings_before_app_creation(tmp_path: Path) -> None:
+    # Even a direct run_api_server call must refuse a non-loopback bind.
+    settings = Settings(
+        env="desktop",
+        api_host="0.0.0.0",
+        data_dir=tmp_path / "science-data",
+    )
+    options = DesktopLaunchOptions(
+        host="127.0.0.1",
+        port=0,
+        data_dir=settings.data_dir,
+        log_file=None,
+        context_file=tmp_path / "published-port.txt",
+        run_migrations=False,
+    )
+    with pytest.raises(ValueError, match="loopback"):
+        asyncio.run(run_api_server(settings, options))
+    assert not options.context_file.exists()
+
 
 
 def test_scale_assistant_marker_runtime_accepts_opencv_contrib(
