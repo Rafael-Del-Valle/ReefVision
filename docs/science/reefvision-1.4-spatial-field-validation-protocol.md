@@ -199,6 +199,32 @@ Builder replay must continue matching complete scientific artifacts and
 SHA-256 fingerprints. This proves source-input integrity only, not calibrated
 color, coral health, verified specimen identity or independent replicates.
 
+### Bounded preview centroid displacement is not organism movement
+
+The point-cloud preview reports a row-weighted sample centroid alongside the
+full-source row-weighted centroid. Compare
+`preview_row_centroid_in_source_frame_m` to
+`arithmetic_centroid_in_source_frame_m` using
+`preview_vs_source_row_centroid_separation_m`, its available scale-only
+uncertainty interval, and the dimensionless
+`preview_vs_source_row_centroid_separation_fraction_of_bbox_diagonal`.
+The normalized fraction is `null` when the full-source bounding-box diagonal
+is zero, not a fabricated zero-denominator measurement. Identical complete
+samples and coincident-source scans must not report spurious displacement.
+When a positive uncertainty interval falls below representable precision,
+withhold that interval and retain explicit QC instead of asserting certainty.
+
+Challenge a 600-row synthetic cloud where an ordinarily decimated source row
+contains a distinct coordinate. Independently compute each centroid from the
+full acquisition row indices and displayed original row indices and compare
+their difference, calibration factor, and interval. Verify the direct service,
+standalone project API, and **two executions of the same persisted typed
+Workflow Builder graph**, including identical complete artifacts and SHA-256
+digests. Acquisition rows are not biological replicates; sample-centroid
+displacement is neither coral displacement, registration accuracy, surface
+coverage, tissue health nor independent scale calibration. This test is
+synthetic; field evidence and human review are still required.
+
 ### Raw RGB channel-extrema completeness (not biological condition)
 
 For imported colored ASCII PLY point clouds, compare the minimum and maximum
