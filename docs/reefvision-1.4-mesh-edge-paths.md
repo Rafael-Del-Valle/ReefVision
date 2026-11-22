@@ -1165,3 +1165,24 @@ This gives a reproducible magnitude and direction for the previously reported
 path nor recovers source geometry, absolute calibration or biological truth.
 Synthetic tests inspect both signed and zero cases, standalone API parity and
 twice-run persisted executable typed Workflow Builder artifact hashes.
+
+
+### Nominal route length versus stored calibrated segments
+
+Connected routes also expose `path_nominal_total_exact_match` and
+`path_nominal_total_vs_edge_sum_exact_fraction_m`. The signed exact rational
+is the displayed `length_m` (Dijkstra's source-unit distance multiplied by
+caller-supplied scale) minus the exact sum of the stored calibrated binary64
+segment lengths. A negative result indicates a nominal route shorter than
+those stored segments; a positive result indicates a longer one. On disagreement
+`selected_mesh_route_nominal_total_disagrees_with_exact_edge_sum` is emitted.
+Disconnected and unreferenced paths report `null`, not a spurious exact match.
+
+This differs from the *cumulative-trace* diagnostic: independently scaling
+segments and scaling a rounded source-unit total can produce different values.
+The two signed fractions audit the full selected polyline without claiming one
+representation is physical truth. Neither is a calibrated confidence interval,
+an anatomical centerline, a biological growth measurement, nor independent
+validation of specimen identity. Regression tests compare the direct engine,
+standalone project endpoint and twice-replayed persisted typed Workflow Builder
+artifacts, including source provenance and stable artifact hashes.
