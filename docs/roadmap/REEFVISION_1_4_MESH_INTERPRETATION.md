@@ -1121,3 +1121,30 @@ and persisted executable typed Workflow Builder analyses continue to share
 the same measurement engine and full artifact/provenance comparison tests.
 Human biological validation, registration, reconstruction quality,
 calibration uncertainty beyond scale, and installed-GUI/GPU gates remain open.
+
+## Longitudinal surface-area difference versus scale uncertainty (November 22, 2026)
+
+The standalone mesh-longitudinal comparison and executable typed persisted
+`mesh_longitudinal_comparison` Workflow Builder node report
+`surface_area_difference_sign_under_scale_only_bounds`. This field is
+`positive` only when the lower bound of the after-minus-before surface-area
+difference is strictly positive; `negative` only when its upper bound is
+strictly negative; and `includes_zero` if the interval contains zero,
+including when the nominal difference is nonzero. In that case the QC code
+`surface_area_difference_scale_bounds_include_zero` is also recorded.
+An absent timepoint uncertainty interval yields `null`, **not** a claim
+that the observed difference is exact. All bounds propagate *independent
+per-timepoint multiplicative calibration-scale limits*; they do not account
+for reconstruction, field measurement, segmentation, orientation,
+registration, or pseudoreplication. They are not statistical confidence
+intervals, p-values, or evidence of coral growth.
+
+The sign classification is withheld (null) alongside derived change fields
+when identity is disputed or inconclusive, original imported source/asset
+evidence is reused, or unchanged imported geometry has merely been
+rescaled and re-exported. The original preview data, timestamps,
+provenance, and QC records remain available for audit. Synthetic regressions
+cover both signs, zero overlap, unknown uncertainty, and full standalone /
+saved-graph artifact parity. The release remains subject to independent
+human identity, calibration, and biological-review evidence.
+
