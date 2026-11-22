@@ -382,7 +382,9 @@ export function RasterMaskWorkspace({
       session.image.id !== currentImageIdRef.current ||
       !visibilityReady ||
       !sourceMask ||
-      segmentationVisibility.hiddenClassIds.includes(sourceMask.label_class_id) ||
+      segmentationVisibility.hiddenClassIds.includes(
+        sourceMask.label_class_id,
+      ) ||
       !acquireMutation()
     ) {
       return;
@@ -641,7 +643,8 @@ export function RasterMaskWorkspace({
               >
                 This paint target is hidden by saved segmentation visibility.
                 Its original pixels and revision remain unchanged. Show its
-                class in the main annotation editor before editing or duplicating.
+                class in the main annotation editor before editing or
+                duplicating.
               </p>
             )}
           </section>
@@ -666,7 +669,9 @@ export function RasterMaskWorkspace({
                       mutationBusy ||
                       !visibilityReady ||
                       selectedMaskClassIsHidden ||
-                      segmentationVisibility.hiddenClassIds.includes(labelClass.id)
+                      segmentationVisibility.hiddenClassIds.includes(
+                        labelClass.id,
+                      )
                     }
                     onClick={() => {
                       if (

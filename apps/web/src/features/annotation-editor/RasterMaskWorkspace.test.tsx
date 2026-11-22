@@ -1448,9 +1448,7 @@ it("does not duplicate a mask while project visibility is unresolved", async () 
   const rasterApi = (await import("./rasterMaskApi")) as unknown as {
     duplicateRasterMask: ReturnType<typeof vi.fn>;
   };
-  rasterApi.duplicateRasterMask.mockImplementation(
-    () => new Promise(() => {}),
-  );
+  rasterApi.duplicateRasterMask.mockImplementation(() => new Promise(() => {}));
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
