@@ -282,6 +282,12 @@ def test_preview_centroid_sampling_displacement_standalone_and_saved_workflow(
         [display_x - source_x, 0.0, 0.0]
     )
     assert direct["preview_minus_source_row_centroid_offset_m"][0] < 0
+    signed_interval = direct["preview_minus_source_row_centroid_offset_scale_interval_m"]
+    assert signed_interval is not None
+    assert signed_interval[0] == pytest.approx(
+        sorted([(display_x - source_x) * 0.9, (display_x - source_x) * 1.1])
+    )
+    assert signed_interval[1:] == [[0.0, 0.0], [0.0, 0.0]]
     assert direct["preview_vs_source_row_centroid_separation_m"] == pytest.approx(separation)
     assert direct["preview_vs_source_row_centroid_separation_scale_interval_m"] == (
         pytest.approx([separation * 0.9, separation * 1.1])
@@ -298,6 +304,7 @@ def test_preview_centroid_sampling_displacement_standalone_and_saved_workflow(
     for key in (
         "preview_row_centroid_in_source_frame_m",
         "preview_minus_source_row_centroid_offset_m",
+        "preview_minus_source_row_centroid_offset_scale_interval_m",
         "preview_vs_source_row_centroid_separation_m",
         "preview_vs_source_row_centroid_separation_scale_interval_m",
         "preview_vs_source_row_centroid_separation_fraction_of_bbox_diagonal",
@@ -357,6 +364,11 @@ def test_preview_centroid_has_no_false_bias_for_complete_or_coincident_source() 
         points=[[0, 0, 0], [1, 0, 0]], **CALIBRATION
     )
     assert complete["preview_minus_source_row_centroid_offset_m"] == [0.0, 0.0, 0.0]
+    assert complete["preview_minus_source_row_centroid_offset_scale_interval_m"] == [
+        [0.0, 0.0],
+        [0.0, 0.0],
+        [0.0, 0.0],
+    ]
     assert complete["preview_vs_source_row_centroid_separation_m"] == 0
     assert complete["preview_vs_source_row_centroid_separation_scale_interval_m"] == [
         0,
@@ -376,6 +388,32 @@ def test_preview_centroid_has_no_false_bias_for_complete_or_coincident_source() 
     ] is None
     assert coincident["surface_area_m2"] is None
     assert coincident["branch_length_m"] is None
+
+
+def test_preview_centroid_signed_offset_uncertainty_missing_and_exact() -> None:
+    """Missing scale uncertainty is unknown; zero uncertainty keeps signed offsets."""
+    points = [[0, 0, 0]] * 599 + [[10, 0, 0]]
+    # The last acquisition is visible by uniform preview sampling. The
+    # nonuniform source rows still shift the preview centroid relative to all
+    # 600 rows, without indicating any real movement of an organism.
+    missing = measure_point_cloud_preview(
+        points=points,
+        **{**CALIBRATION, "relative_scale_uncertainty": None},
+    )
+    assert missing["preview_minus_source_row_centroid_offset_scale_interval_m"] is None
+    exact = measure_point_cloud_preview(
+        points=points,
+        **{**CALIBRATION, "relative_scale_uncertainty": 0.0},
+    )
+    offset = exact["preview_minus_source_row_centroid_offset_m"]
+    assert offset[0] > 0
+    assert exact["preview_minus_source_row_centroid_offset_scale_interval_m"] == [
+        [value, value] for value in offset
+    ]
+    assert "preview_centroid_offset_uncertainty_interval_below_numeric_resolution" not in (
+        exact["qc_warnings"]
+    )
+    assert exact["provenance"]["specimen_identity_verified"] is False
 
 
 def test_preview_centroid_signed_offset_tracks_direction_on_all_three_axes() -> None:
@@ -400,6 +438,13 @@ def test_preview_centroid_signed_offset_tracks_direction_on_all_three_axes() -> 
     assert offset[0] < 0
     assert offset[1] > 0
     assert offset[2] < 0
+    intervals = measured["preview_minus_source_row_centroid_offset_scale_interval_m"]
+    assert intervals is not None
+    for signed_value, interval in zip(offset, intervals, strict=True):
+        assert interval == pytest.approx(
+            sorted([signed_value * 0.9, signed_value * 1.1])
+        )
+        assert interval[0] <= interval[1]
     assert measured["preview_vs_source_row_centroid_separation_m"] == pytest.approx(
         sum(value * value for value in expected) ** 0.5
     )
