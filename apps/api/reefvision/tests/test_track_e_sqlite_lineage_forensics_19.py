@@ -59,7 +59,8 @@ def _inspect(tmp_path: Path, ddl: str, revision: str) -> tuple[int, dict[str, ob
               CONSTRAINT ck_review_queue_item_event_type CHECK (
                 event_type IN ('comment', 'assign', 'unassign',
                                'triage_start', 'triage_skip', 'triage_return')
-              )
+              ),
+              UNIQUE(review_queue_item_id, client_request_id)
             );
             """,
             "0039",
@@ -76,6 +77,8 @@ def test_classifies_conflicting_real_sqlite_schema_without_writing(
     status, report = _inspect(tmp_path, ddl, revision)
     assert status == 0
     assert report["classification"] == expected
+    if expected.startswith("1.6-qc"):
+        assert report["qc_request_key_unique"] is True
     assert report["automatic_migration_authorized"] is False
     assert report["manual_migration_reconciliation_required"] is True
 
@@ -311,3 +314,38 @@ def test_rejects_persisted_scientific_lineage_with_orphaned_foreign_key(
     ]
     assert report["automatic_migration_authorized"] is False
     assert any("foreign-key violations" in issue for issue in report["issues"])
+
+
+def test_refuses_duplicate_review_requests_without_real_0038_unique_constraint(
+    tmp_path: Path,
+) -> None:
+    # A valid event CHECK does not prevent duplicate scientist review actions.
+    # The actual 1.6/0038 migration guarantees one event per item/request pair.
+    ddl = """
+        CREATE TABLE projects (id TEXT PRIMARY KEY);
+        CREATE TABLE review_queues (id TEXT PRIMARY KEY, project_id TEXT NOT NULL);
+        CREATE TABLE review_queue_items (
+          id TEXT PRIMARY KEY, review_queue_id TEXT, project_id TEXT
+        );
+        CREATE TABLE review_queue_item_events (
+          id TEXT PRIMARY KEY, project_id TEXT, review_queue_id TEXT,
+          review_queue_item_id TEXT, client_request_id TEXT,
+          event_type TEXT, actor TEXT,
+          CHECK(event_type IN ('comment', 'assign', 'unassign'))
+        );
+        INSERT INTO projects VALUES ('project-1');
+        INSERT INTO review_queues VALUES ('queue-1', 'project-1');
+        INSERT INTO review_queue_items VALUES ('item-1', 'queue-1', 'project-1');
+        INSERT INTO review_queue_item_events VALUES
+          ('event-1', 'project-1', 'queue-1', 'item-1', 'same-request', 'comment', 'a'),
+          ('event-2', 'project-1', 'queue-1', 'item-1', 'same-request', 'comment', 'a');
+    """
+    status, report = _inspect(tmp_path, ddl, "0038")
+    assert status == 2
+    assert report["classification"] == "ambiguous"
+    assert report["review_event_check"] == "coordination"
+    assert report["qc_event_scope_violations"] == 0
+    assert report["qc_event_type_violations"] == 0
+    assert report["qc_request_key_unique"] is False
+    assert report["automatic_migration_authorized"] is False
+    assert any("item/request uniqueness" in issue for issue in report["issues"])

@@ -95,8 +95,24 @@ def inspect_database(path: Path) -> dict[str, object]:
 
         qc_scope_violations: int | None = None
         qc_scope_error: str | None = None
+        qc_request_key_unique: bool | None = None
         qc_event_type_counts: list[tuple[object, int]] = []
         if signatures[REVIEW_TABLE]:
+            # 1.6/0038 guarantees idempotent append-only review requests by a
+            # non-partial UNIQUE constraint on the item and client request ID.
+            # A lookalike CHECK alone cannot establish this scientific history.
+            qc_request_key_unique = False
+            for index in connection.execute(f'PRAGMA index_list("{REVIEW_TABLE}")'):
+                if not index[2] or index[4]:
+                    continue
+                index_name = index[1].replace('"', '""')
+                key_columns = [
+                    row[2]
+                    for row in connection.execute(f'PRAGMA index_info("{index_name}")')
+                ]
+                if key_columns == ["review_queue_item_id", "client_request_id"]:
+                    qc_request_key_unique = True
+                    break
             qc_event_type_counts = connection.execute(
                 f'SELECT event_type, COUNT(*) FROM "{REVIEW_TABLE}" GROUP BY event_type'
             ).fetchall()
@@ -206,6 +222,8 @@ def inspect_database(path: Path) -> dict[str, object]:
         issues.append("Partial scientific 0038 schema")
     if groups["review_0038"] and review_check == "unknown":
         issues.append("QC event CHECK constraint cannot be identified")
+    if groups["review_0038"] and not qc_request_key_unique:
+        issues.append("QC event item/request uniqueness constraint is missing")
     if REVIEW_TABLE in tables and not groups["review_0038"]:
         issues.append("Incomplete QC review event schema")
 
@@ -234,6 +252,7 @@ def inspect_database(path: Path) -> dict[str, object]:
         "review_event_check": review_check if groups["review_0038"] else None,
         "qc_event_scope_violations": qc_scope_violations,
         "qc_event_type_violations": qc_event_type_violations,
+        "qc_request_key_unique": qc_request_key_unique,
         "foreign_key_violations": foreign_key_violations,
         "foreign_key_violation_sources": foreign_key_violation_sources,
         "classification": classification,
