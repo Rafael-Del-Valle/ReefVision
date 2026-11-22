@@ -636,4 +636,124 @@ describe("RotatedBoxLayer pointer integrity", () => {
     });
     expect(original.points).toEqual(points);
   });
+
+  it.each([
+    {
+      name: "canonical horizontal corner crossing",
+      reverse: false,
+      pointer: { x: 450, y: 125 },
+      expectedPoints: [
+        { x: 398, y: 125 },
+        { x: 400, y: 125 },
+        { x: 400, y: 300 },
+        { x: 398, y: 300 },
+      ],
+      expectedArea: 350,
+    },
+    {
+      name: "canonical vertical corner crossing",
+      reverse: false,
+      pointer: { x: 150, y: 350 },
+      expectedPoints: [
+        { x: 150, y: 298 },
+        { x: 400, y: 298 },
+        { x: 400, y: 300 },
+        { x: 150, y: 300 },
+      ],
+      expectedArea: 500,
+    },
+    {
+      name: "historical reverse-winding corner crossing",
+      reverse: true,
+      pointer: { x: 450, y: 350 },
+      expectedPoints: [
+        { x: 398, y: 350 },
+        { x: 400, y: 350 },
+        { x: 400, y: 150 },
+        { x: 398, y: 150 },
+      ],
+      expectedArea: 400,
+    },
+  ])("clamps $name without reflecting the saved box", ({
+    reverse,
+    pointer,
+    expectedPoints,
+    expectedArea,
+  }) => {
+    const canonical = rotatedBoxFromDrag(
+      { x: 200, y: 150 },
+      { x: 400, y: 300 },
+      "class-1",
+      "crossing-corner",
+    );
+    const original = reverse
+      ? rotatedBoxMaskFromPoints(
+          [...canonical.points!].reverse(),
+          "class-1",
+          "crossing-corner",
+          true,
+          9,
+        )
+      : canonical;
+    const originalPoints = original.points!.map((point) => ({ ...point }));
+    const onUpdate = vi.fn();
+    const canvas = renderLayer([original], vi.fn(), onUpdate);
+    const corner = canvas.querySelector("rect") as SVGRectElement;
+    fireEvent.pointerDown(corner, {
+      button: 0,
+      pointerId: 104,
+      clientX: originalPoints[0].x / 2,
+      clientY: originalPoints[0].y / 2,
+    });
+    fireEvent.pointerMove(canvas, {
+      pointerId: 104,
+      clientX: pointer.x / 2,
+      clientY: pointer.y / 2,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 104 });
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const revised = onUpdate.mock.calls[0][0];
+    expect(revised.points).toEqual(expectedPoints);
+    expect(revised.area_pixels).toBeCloseTo(expectedArea, 5);
+    expect(revised.id).toBe(original.id);
+    expect(revised.persisted).toBe(original.persisted);
+    expect(revised.revision).toBe(original.revision);
+    expect(original.points).toEqual(originalPoints);
+  });
+
+  it("preserves scientific revision when a corner crosses its anchor and returns", () => {
+    const original = rotatedBoxFromDrag(
+      { x: 200, y: 150 },
+      { x: 400, y: 300 },
+      "class-1",
+      "crossing-noop",
+    );
+    const onUpdate = vi.fn();
+    const canvas = renderLayer([original], vi.fn(), onUpdate);
+    fireEvent.pointerDown(canvas.querySelector("rect") as SVGRectElement, {
+      button: 0,
+      pointerId: 105,
+      clientX: 100,
+      clientY: 75,
+    });
+    fireEvent.pointerMove(canvas, {
+      pointerId: 105,
+      clientX: 225,
+      clientY: 62.5,
+    });
+    fireEvent.pointerMove(canvas, {
+      pointerId: 105,
+      clientX: 100,
+      clientY: 75,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 105 });
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(original.points).toEqual([
+      { x: 200, y: 150 },
+      { x: 400, y: 150 },
+      { x: 400, y: 300 },
+      { x: 200, y: 300 },
+    ]);
+  });
 });
