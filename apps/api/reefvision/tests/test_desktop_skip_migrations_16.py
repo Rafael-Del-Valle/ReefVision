@@ -49,13 +49,9 @@ def test_skip_migrations_rejects_stale_or_foreign_science_without_writing(
     database_path = settings.resolved_data_dir / "reefvision.db"
     with sqlite3.connect(database_path) as connection:
         connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
-        connection.execute(
-            "INSERT INTO alembic_version (version_num) VALUES (?)", (revision,)
-        )
+        connection.execute("INSERT INTO alembic_version (version_num) VALUES (?)", (revision,))
         connection.execute("CREATE TABLE preserved_observations (note TEXT NOT NULL)")
-        connection.execute(
-            "INSERT INTO preserved_observations VALUES ('original biological note')"
-        )
+        connection.execute("INSERT INTO preserved_observations VALUES ('original biological note')")
         if foreign_science:
             connection.execute("CREATE TABLE scientific_records (id TEXT PRIMARY KEY)")
             connection.execute("INSERT INTO scientific_records VALUES ('science-keep')")
@@ -69,9 +65,9 @@ def test_skip_migrations_rejects_stale_or_foreign_science_without_writing(
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
             revision,
         )
-        assert connection.execute(
-            "SELECT note FROM preserved_observations"
-        ).fetchone() == ("original biological note",)
+        assert connection.execute("SELECT note FROM preserved_observations").fetchone() == (
+            "original biological note",
+        )
         if foreign_science:
             assert connection.execute("SELECT id FROM scientific_records").fetchone() == (
                 "science-keep",
@@ -92,6 +88,4 @@ def test_skip_migrations_allows_actual_packaged_head_without_upgrading(
     monkeypatch.setattr(desktop.command, "upgrade", never_upgrade)
     desktop.require_existing_desktop_schema(settings)
     with sqlite3.connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0041",
-        )
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0041",)
