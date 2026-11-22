@@ -1117,13 +1117,185 @@ it("does not apply another project's stale visibility bundle to a raster mask", 
   );
   await waitFor(() =>
     expect(screen.getByTestId("raster-visibility-source")).toHaveTextContent(
+      "Project settings mismatch (editing paused)",
+    ),
+  );
+  expect(screen.getByTestId("raster-visibility-pending-notice")).toHaveTextContent(
+    "Existing masks and revisions are unchanged",
+  );
+  expect(
+    screen.queryByTestId("selected-raster-mask-overlay"),
+  ).not.toBeInTheDocument();
+  expect(screen.getByTestId("raster-brush-layer")).toHaveStyle({
+    cursor: "not-allowed",
+  });
+  expect(screen.getByRole("button", { name: "Retry visibility settings" })).toBeEnabled();
+});
+
+it("pauses painting before project visibility loads and honors a hidden class on arrival", async () => {
+  vi.mocked(getAnnotationSession).mockResolvedValue({
+    ...session,
+    mask_annotations: [savedRasterMask],
+  } as never);
+  let resolveVisibility!: (bundle: ClassVisibilityBundle) => void;
+  vi.mocked(getClassVisibilityBundle).mockImplementation(
+    () =>
+      new Promise<ClassVisibilityBundle>((resolve) => {
+        resolveVisibility = resolve;
+      }),
+  );
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RasterMaskWorkspace
+        project={{ id: "project-1", name: "Reef" } as Project}
+        imageId="image-1"
+        onReturnToMasks={vi.fn()}
+        onReturnToBoxes={vi.fn()}
+        onClose={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  await screen.findByRole("button", { name: /Coral \\| r1/i });
+  await screen.findByTestId("raster-visibility-pending-notice");
+  const brush = screen.getByTestId("raster-brush-layer");
+  expect(brush).toHaveStyle({ cursor: "not-allowed" });
+  expect(screen.queryByTestId("selected-raster-mask-overlay")).not.toBeInTheDocument();
+  fireEvent.pointerDown(brush, { button: 0, pointerId: 201 });
+  fireEvent.pointerUp(brush, { pointerId: 201 });
+  const rasterApi = (await import("./rasterMaskApi")) as unknown as {
+    editRasterMask: ReturnType<typeof vi.fn>;
+  };
+  expect(rasterApi.editRasterMask).not.toHaveBeenCalled();
+
+  await act(async () => {
+    resolveVisibility(
+      visibilityBundle("project-1", {
+        userSaved: true,
+        userHidden: ["class-1"],
+      }),
+    );
+  });
+  await waitFor(() =>
+    expect(screen.getByTestId("raster-visibility-source")).toHaveTextContent(
+      "My Preference",
+    ),
+  );
+  expect(screen.getByTestId("raster-hidden-class-notice")).toBeInTheDocument();
+  expect(brush).toHaveStyle({ cursor: "not-allowed" });
+  expect(savedRasterMask.area_pixels).toBe(900);
+  expect(savedRasterMask.revision).toBe(1);
+});
+
+it("recovers editing only after a failed visibility fetch is explicitly retried", async () => {
+  vi.mocked(getAnnotationSession).mockResolvedValue({
+    ...session,
+    mask_annotations: [savedRasterMask],
+  } as never);
+  vi.mocked(getClassVisibilityBundle)
+    .mockRejectedValueOnce(new Error("Local settings unavailable"))
+    .mockResolvedValue(visibilityBundle("project-1"));
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RasterMaskWorkspace
+        project={{ id: "project-1", name: "Reef" } as Project}
+        imageId="image-1"
+        onReturnToMasks={vi.fn()}
+        onReturnToBoxes={vi.fn()}
+        onClose={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  await screen.findByRole("button", { name: /Coral \\| r1/i });
+  await waitFor(() =>
+    expect(screen.getByTestId("raster-visibility-source")).toHaveTextContent(
+      "Settings unavailable (editing paused)",
+    ),
+  );
+  expect(screen.getByTestId("raster-brush-layer")).toHaveStyle({
+    cursor: "not-allowed",
+  });
+  expect(screen.queryByTestId("selected-raster-mask-overlay")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Retry visibility settings" }));
+  await waitFor(() =>
+    expect(screen.getByTestId("raster-visibility-source")).toHaveTextContent(
       "Visible by default",
     ),
   );
-  expect(
-    screen.getByTestId("selected-raster-mask-overlay"),
-  ).toBeInTheDocument();
-  expect(
-    screen.queryByTestId("raster-hidden-class-notice"),
-  ).not.toBeInTheDocument();
+  expect(screen.queryByTestId("raster-visibility-pending-notice")).not.toBeInTheDocument();
+  expect(screen.getByTestId("selected-raster-mask-overlay")).toBeInTheDocument();
+  expect(screen.getByTestId("raster-brush-layer")).toHaveStyle({
+    cursor: "crosshair",
+  });
+});
+
+it("discards a stroke when saved visibility hides its source class mid-gesture", async () => {
+  vi.mocked(getClassVisibilityBundle).mockResolvedValue(
+    visibilityBundle("project-1"),
+  );
+  const rasterApi = (await import("./rasterMaskApi")) as unknown as {
+    editRasterMask: ReturnType<typeof vi.fn>;
+  };
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RasterMaskWorkspace
+        project={{ id: "project-1", name: "Reef" } as Project}
+        imageId="image-1"
+        onReturnToMasks={vi.fn()}
+        onReturnToBoxes={vi.fn()}
+        onClose={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  const canvas = (await screen.findByTestId(
+    "raster-brush-layer",
+  )) as unknown as SVGSVGElement;
+  await waitFor(() =>
+    expect(screen.getByTestId("raster-visibility-source")).toHaveTextContent(
+      "Visible by default",
+    ),
+  );
+  vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    right: 400,
+    bottom: 300,
+    width: 400,
+    height: 300,
+    toJSON: () => ({}),
+  });
+  Object.defineProperty(canvas, "setPointerCapture", { value: vi.fn() });
+  Object.defineProperty(canvas, "releasePointerCapture", { value: vi.fn() });
+  Object.defineProperty(canvas, "hasPointerCapture", {
+    value: vi.fn(() => true),
+  });
+  fireEvent.pointerDown(canvas, {
+    button: 0,
+    pointerId: 202,
+    clientX: 80,
+    clientY: 60,
+  });
+  await act(async () => {
+    queryClient.setQueryData(
+      ["class-visibility", "project-1"],
+      visibilityBundle("project-1", {
+        userSaved: true,
+        userHidden: ["class-1"],
+      }),
+    );
+  });
+  fireEvent.pointerUp(canvas, { pointerId: 202 });
+  expect(screen.getByTestId("raster-hidden-class-notice")).toBeInTheDocument();
+  expect(rasterApi.editRasterMask).not.toHaveBeenCalled();
+  expect(session.image.annotation_revision).toBe(0);
 });
