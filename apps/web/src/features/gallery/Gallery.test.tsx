@@ -3083,6 +3083,64 @@ describe("Gallery", () => {
     ).toBeInTheDocument();
   });
 
+  it("re-aligns the focused thumbnail from visual-only WebView2 resize events", async () => {
+    const visualViewport = new EventTarget();
+    const removal = vi.spyOn(visualViewport, "removeEventListener");
+    vi.stubGlobal("visualViewport", visualViewport);
+    try {
+      const secondImage: ProjectImage = {
+        ...image,
+        id: "image-2",
+        original_filename: "swiftia-02.png",
+      };
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        jsonResponse({
+          items: [image, secondImage],
+          total: 2,
+          page: 1,
+          page_size: 24,
+          pages: 1,
+        }),
+      );
+      const { unmount } = renderGallery();
+      const filmstrip = await screen.findByRole("list", {
+        name: "Nearby images",
+      });
+      const second = screen.getByRole("listitem", {
+        name: "Focus swiftia-02.png",
+      });
+      const stripRect = { left: Number.NaN, right: 400 };
+      vi.spyOn(filmstrip, "getBoundingClientRect").mockImplementation(
+        () => stripRect as DOMRect,
+      );
+      vi.spyOn(second, "getBoundingClientRect").mockReturnValue({
+        left: 450,
+        right: 550,
+      } as DOMRect);
+
+      await userEvent.click(second);
+      expect(second).toHaveAttribute("aria-current", "true");
+      expect(filmstrip.scrollLeft).toBe(0);
+
+      // Neither ResizeObserver nor window.resize fires. The visual viewport
+      // event must recover the selected thumbnail without changing focus.
+      stripRect.left = 100;
+      act(() => {
+        visualViewport.dispatchEvent(new Event("resize"));
+      });
+      await waitFor(() => expect(filmstrip.scrollLeft).toBe(150));
+      expect(second).toHaveAttribute("aria-current", "true");
+      expect(
+        screen.getByAltText("Focused project image: swiftia-02.png"),
+      ).toBeInTheDocument();
+      unmount();
+      expect(removal).toHaveBeenCalledWith("resize", expect.any(Function));
+    } finally {
+      removal.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("keeps focus navigation inside the horizontal filmstrip", async () => {
     const secondImage: ProjectImage = {
       ...image,
