@@ -323,11 +323,14 @@ function resize(
     y: winding * Math.cos(d.angle),
   };
   const delta = { x: pointer.x - opposite.x, y: pointer.y - opposite.y };
-  const boxWidth = Math.max(2, Math.abs(delta.x * axisX.x + delta.y * axisX.y));
-  const boxHeight = Math.max(
-    2,
-    Math.abs(delta.x * axisY.x + delta.y * axisY.y),
-  );
+  const horizontal = delta.x * axisX.x + delta.y * axisX.y;
+  const vertical = delta.x * axisY.x + delta.y * axisY.y;
+  // Preserve which side of the fixed opposite vertex the grabbed corner
+  // belongs to. Absolute projection lengths would reflect the box when a
+  // pointer crosses that vertex, silently relocating biological geometry.
+  // Keep the existing two-source-pixel minimum without flipping its axes.
+  const boxWidth = Math.max(2, signs.x * horizontal);
+  const boxHeight = Math.max(2, signs.y * vertical);
   const center = {
     x:
       opposite.x +
