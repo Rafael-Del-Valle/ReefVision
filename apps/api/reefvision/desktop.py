@@ -11,7 +11,7 @@ import subprocess
 import sys
 import threading
 from collections.abc import Sequence
-from contextlib import suppress
+from contextlib import closing, suppress
 from dataclasses import dataclass
 from ipaddress import ip_address
 from pathlib import Path
@@ -282,6 +282,7 @@ def require_existing_desktop_schema(settings: Settings) -> None:
     from reefvision.db.session import create_database_engine
 
     database_url = make_url(settings.resolved_database_url)
+    sqlite_path: Path | None = None
     if database_url.get_backend_name() == "sqlite":
         database_name = database_url.database
         if not database_name or database_name == ":memory:" or not Path(database_name).is_file():
@@ -289,6 +290,32 @@ def require_existing_desktop_schema(settings: Settings) -> None:
                 "ReefVision --skip-migrations requires an existing on-disk "
                 "SQLite database; refusing to create or serve an unverified schema."
             )
+        sqlite_path = Path(database_name)
+
+    if sqlite_path is not None:
+        # A valid Alembic stamp alone cannot prove that SQLite storage or
+        # biological/reviewer parent links survived an interrupted restore.
+        # Inspect the *existing* file through a read-only URI so even a bad
+        # path cannot create a replacement research database.
+        import sqlite3
+
+        try:
+            with closing(sqlite3.connect(sqlite_path.resolve().as_uri() + "?mode=ro", uri=True)) as probe:
+                if probe.execute("PRAGMA quick_check(1)").fetchone() != ("ok",):
+                    raise RuntimeError(
+                        "ReefVision --skip-migrations refused a damaged SQLite database; "
+                        "preserve the original and restore a verified research backup."
+                    )
+                if probe.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                    raise RuntimeError(
+                        "ReefVision --skip-migrations refused orphaned scientific or "
+                        "reviewer references; preserve the database for human review."
+                    )
+        except sqlite3.DatabaseError as exc:
+            raise RuntimeError(
+                "ReefVision --skip-migrations could not inspect the existing SQLite "
+                "database safely; preserve the original and review a verified backup."
+            ) from exc
 
     alembic_ini, migrations_dir = resolve_alembic_paths()
     config = Config(str(alembic_ini))
