@@ -102,13 +102,13 @@ def test_refuses_colliding_version_with_hybrid_tables(tmp_path: Path) -> None:
 
 
 def test_qc_lineage_requires_event_check_not_incidental_sql_text(tmp_path: Path) -> None:
-    # A colliding revision plus words in an unrelated SQL comment cannot
-    # certify the installed QC triage CHECK constraint.
+    # A comment containing a complete, but non-executed triage CHECK must
+    # never override the actual coordination-only CHECK in sqlite_master.
     ddl = """
         CREATE TABLE review_queue_item_events (
           id TEXT, project_id TEXT, review_queue_id TEXT, review_queue_item_id TEXT,
           client_request_id TEXT, event_type TEXT, actor TEXT,
-          note TEXT, -- 'triage_start', 'triage_skip', 'triage_return'
+          note TEXT, -- CHECK(event_type IN ('comment', 'assign', 'unassign', 'triage_start', 'triage_skip', 'triage_return'))
           CHECK(event_type IN ('comment', 'assign', 'unassign'))
         );
     """
