@@ -74,6 +74,57 @@ def test_skip_migrations_rejects_stale_or_foreign_science_without_writing(
             )
 
 
+def test_skip_migrations_rejects_corrupt_sqlite_without_creating_replacement(
+    tmp_path: Path,
+) -> None:
+    settings = _desktop_settings(tmp_path)
+    settings.ensure_directories()
+    database_path = settings.resolved_data_dir / "reefvision.db"
+    damaged_bytes = b"not-a-sqlite-database\x00preserve-for-scientific-recovery"
+    database_path.write_bytes(damaged_bytes)
+
+    with pytest.raises(RuntimeError, match="could not inspect the existing SQLite"):
+        desktop.require_existing_desktop_schema(settings)
+
+    assert database_path.read_bytes() == damaged_bytes
+
+
+def test_skip_migrations_rejects_orphaned_references_at_valid_head_without_repair(
+    tmp_path: Path,
+) -> None:
+    settings = _desktop_settings(tmp_path)
+    settings.ensure_directories()
+    desktop.run_pending_migrations(settings)
+    database_path = settings.resolved_data_dir / "reefvision.db"
+
+    # Simulate an interrupted external restore which retained a valid 0041
+    # stamp but not the biological parent evidence. SQLite permits this when
+    # a separate writer had foreign-key enforcement disabled.
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("CREATE TABLE preserved_parent (id INTEGER PRIMARY KEY)")
+        connection.execute(
+            "CREATE TABLE preserved_child (id INTEGER PRIMARY KEY, "
+            "parent_id INTEGER NOT NULL REFERENCES preserved_parent(id))"
+        )
+        connection.execute("INSERT INTO preserved_child VALUES (1, 73)")
+        connection.execute("CREATE TABLE biological_notes (note TEXT NOT NULL)")
+        connection.execute("INSERT INTO biological_notes VALUES ('keep original evidence')")
+    original_bytes = database_path.read_bytes()
+
+    with pytest.raises(RuntimeError, match="orphaned scientific or reviewer references"):
+        desktop.require_existing_desktop_schema(settings)
+
+    assert database_path.read_bytes() == original_bytes
+    with sqlite3.connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0041",
+        )
+        assert connection.execute("SELECT parent_id FROM preserved_child").fetchone() == (73,)
+        assert connection.execute("SELECT note FROM biological_notes").fetchone() == (
+            "keep original evidence",
+        )
+
+
 def test_skip_migrations_allows_actual_packaged_head_without_upgrading(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
