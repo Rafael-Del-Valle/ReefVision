@@ -926,9 +926,7 @@ def measure_point_cloud_preview(
     preview_minus_source_centroid_offset = (
         [0.0, 0.0, 0.0]
         if len(preview_indices) == len(vertices) or unique_count == 1
-        else [
-            preview_row_centroid[axis] - centroid[axis] for axis in range(3)
-        ]
+        else [preview_row_centroid[axis] - centroid[axis] for axis in range(3)]
     )
     preview_centroid_separation = dist(centroid, preview_row_centroid)
     if unique_count == 1:
