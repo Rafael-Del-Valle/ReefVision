@@ -153,9 +153,7 @@ def test_skip_migrations_rejects_unique_index_corruption_without_repair(
         connection.execute("PRAGMA writable_schema=OFF")
 
     original_bytes = database_path.read_bytes()
-    with sqlite3.connect(
-        database_path.resolve().as_uri() + "?mode=ro", uri=True
-    ) as probe:
+    with sqlite3.connect(database_path.resolve().as_uri() + "?mode=ro", uri=True) as probe:
         assert probe.execute("PRAGMA quick_check(1)").fetchone() == ("ok",)
         assert probe.execute("PRAGMA integrity_check(1)").fetchone() != ("ok",)
 
@@ -163,15 +161,9 @@ def test_skip_migrations_rejects_unique_index_corruption_without_repair(
         desktop.require_existing_desktop_schema(settings)
 
     assert database_path.read_bytes() == original_bytes
-    with sqlite3.connect(
-        database_path.resolve().as_uri() + "?mode=ro", uri=True
-    ) as probe:
-        assert probe.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0041",
-        )
-        assert probe.execute("SELECT COUNT(*) FROM restored_observations").fetchone() == (
-            2,
-        )
+    with sqlite3.connect(database_path.resolve().as_uri() + "?mode=ro", uri=True) as probe:
+        assert probe.execute("SELECT version_num FROM alembic_version").fetchone() == ("0041",)
+        assert probe.execute("SELECT COUNT(*) FROM restored_observations").fetchone() == (2,)
 
 
 def test_skip_migrations_rejects_orphaned_references_at_valid_head_without_repair(
@@ -201,9 +193,7 @@ def test_skip_migrations_rejects_orphaned_references_at_valid_head_without_repai
 
     assert database_path.read_bytes() == original_bytes
     with sqlite3.connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0041",
-        )
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0041",)
         assert connection.execute("SELECT parent_id FROM preserved_child").fetchone() == (73,)
         assert connection.execute("SELECT note FROM biological_notes").fetchone() == (
             "keep original evidence",
@@ -247,9 +237,7 @@ def test_skip_migrations_rejects_replaced_valid_database_between_preflights(
     replacement = tmp_path / "replacement-scientific-database.sqlite"
     shutil.copy2(database_path, replacement)
     with sqlite3.connect(replacement) as connection:
-        connection.execute(
-            "UPDATE biological_notes SET note = 'different Swiftia note'"
-        )
+        connection.execute("UPDATE biological_notes SET note = 'different Swiftia note'")
     real_resolve = desktop.resolve_alembic_paths
 
     def replace_between_preflights(resource_root: Path | None = None) -> tuple[Path, Path]:
@@ -272,9 +260,7 @@ def test_skip_migrations_rejects_replaced_valid_database_between_preflights(
     # researcher-controlled test substitution leaves the original backup.
     assert original_backup.read_bytes() == original_bytes
     with sqlite3.connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0041",
-        )
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0041",)
         assert connection.execute("SELECT note FROM biological_notes").fetchone() == (
             "different Swiftia note",
         )
@@ -282,4 +268,3 @@ def test_skip_migrations_rejects_replaced_valid_database_between_preflights(
         assert connection.execute("SELECT note FROM biological_notes").fetchone() == (
             "original Swiftia note",
         )
-
