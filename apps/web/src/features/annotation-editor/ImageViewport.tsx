@@ -183,6 +183,22 @@ export function ImageViewport({
   }
 
   function handleWheel(event: WheelEvent<HTMLDivElement>) {
+    // Browser/OS zoom, modified scroll gestures and native input scrolling
+    // take precedence over canvas zoom. Do not steal wheel events handled by
+    // embedded review controls while preserving ordinary image wheel zoom.
+    if (
+      event.defaultPrevented ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      event.shiftKey ||
+      (event.target instanceof Element &&
+        event.target.closest(
+          'input, textarea, select, button, [contenteditable], [role="textbox"], [role="searchbox"], [role="combobox"]',
+        ))
+    ) {
+      return;
+    }
     // Horizontal-only/zero-delta wheel events are not zoom commands.
     if (
       !hasValidImageSize ||
