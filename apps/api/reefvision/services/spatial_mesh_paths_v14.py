@@ -409,11 +409,23 @@ def mesh_edge_paths(
             # An apparently shorter-than-chord route is numeric roundoff,
             # not evidence of exactly zero geometric excess. Withhold the
             # nominal difference and its bounds pending scientist review.
-            geometric_excess_source_units = (
-                shortest[end] - chord_mesh_units
-                if shortest[end] >= chord_mesh_units
-                else None
+            # A source-unit Dijkstra total may round to the endpoint chord
+            # even when the exact sum of its *stored binary64 edge weights*
+            # exceeds that rounded chord. Do not claim an exact straight route
+            # or zero detour from an unresolved rounded total.
+            exact_source_edge_sum = sum(
+                (Fraction(adjacency[a][b]) for a, b in pairwise(route)), Fraction(0)
             )
+            rounded_route_hides_stored_edge_excess = (
+                shortest[end] == chord_mesh_units
+                and exact_source_edge_sum > Fraction(chord_mesh_units)
+            )
+            geometric_excess_source_units: float | None = None
+            if (
+                shortest[end] >= chord_mesh_units
+                and not rounded_route_hides_stored_edge_excess
+            ):
+                geometric_excess_source_units = shortest[end] - chord_mesh_units
             geometric_excess_m = (
                 geometric_excess_source_units * scale
                 if geometric_excess_source_units is not None
@@ -428,11 +440,13 @@ def mesh_edge_paths(
             # A geometric mesh route cannot be shorter than its straight
             # endpoint chord. If binary64 operations violate this invariant,
             # withhold the dimensionless detour rather than reporting < 1.
-            detour_ratio = (
-                shortest[end] / chord_mesh_units
-                if chord_mesh_units > 0 and chord_m > 0 and shortest[end] >= chord_mesh_units
-                else None
-            )
+            if (
+                chord_mesh_units > 0
+                and chord_m > 0
+                and shortest[end] >= chord_mesh_units
+                and not rounded_route_hides_stored_edge_excess
+            ):
+                detour_ratio = shortest[end] / chord_mesh_units
             # A finite nominal route can still overflow when its calibration
             # uncertainty is expanded. Never persist nonfinite scientific JSON.
             if scale_uncertainty is not None:
@@ -456,6 +470,10 @@ def mesh_edge_paths(
             path_qc_warnings = []
             if shortest[end] < chord_mesh_units:
                 path_qc_warnings.append("endpoint_chord_exceeds_rounded_selected_route")
+            if rounded_route_hides_stored_edge_excess:
+                path_qc_warnings.append(
+                    "selected_mesh_route_roundoff_hides_stored_edge_chord_excess"
+                )
             if path_cumulative_lost_positive_segment_indices:
                 path_qc_warnings.append(
                     "positive_selected_mesh_segment_lost_in_cumulative_distance"
