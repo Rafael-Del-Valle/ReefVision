@@ -254,16 +254,13 @@ def _safe_terminal_log_text(payload: bytes) -> str:
             return "\x08"
         return ""
 
-    text = re.sub(
-        r"\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)",
-        strip_terminal_string,
-        text,
+    # Treat adjacent OSC/DCS/SOS/PM/APC strings as one invisible edit.
+    # Removing them separately can splice two loss fragments into a
+    # fabricated measurement (e.g., "0.2" + OSC + OSC + "5" -> "0.25").
+    terminal_string = (
+        r"(?:\x1b[\]PX^_]|[\x90\x98\x9d\x9e\x9f])[\s\S]*?(?:\x07|\x9c|\x1b\\|$)"
     )
-    text = re.sub(
-        r"[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)",
-        strip_terminal_string,
-        text,
-    )
+    text = re.sub(rf"(?:{terminal_string})+", strip_terminal_string, text)
 
     # Backspaces and cursor-edit/erase CSI sequences can rewrite an earlier
     # digit in a loss record. Simply deleting the control bytes would join
