@@ -38,6 +38,7 @@ export function RasterBrushLayer({
   onStrokeCancel,
 }: RasterBrushLayerProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const finishingPointerRef = useRef<number | null>(null);
   const [pointerId, setPointerId] = useState<number | null>(null);
   const [strokeSettings, setStrokeSettings] =
     useState<RasterBrushSettings | null>(null);
@@ -67,6 +68,7 @@ export function RasterBrushLayer({
     if (disabled || event.button !== 0 || pointerId !== null) return;
     const point = sourcePoint(event);
     event.currentTarget.setPointerCapture(event.pointerId);
+    finishingPointerRef.current = null;
     setPointerId(event.pointerId);
     setStrokeSettings({ mode, brushRadius });
     onStrokeStart?.();
@@ -95,6 +97,9 @@ export function RasterBrushLayer({
   function finishStroke(event: PointerEvent<SVGSVGElement>) {
     if (pointerId !== event.pointerId) return;
     const completed = points;
+    // Releasing capture intentionally can synchronously emit lostpointercapture.
+    // It must never cancel the already-approved stroke at this pointer-up.
+    finishingPointerRef.current = event.pointerId;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -107,7 +112,7 @@ export function RasterBrushLayer({
   }
 
   function cancelStroke(event: PointerEvent<SVGSVGElement>) {
-    if (pointerId !== event.pointerId) return;
+    if (pointerId !== event.pointerId || finishingPointerRef.current === event.pointerId) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
