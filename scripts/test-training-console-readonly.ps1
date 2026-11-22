@@ -86,6 +86,11 @@ $script:terminalFailures = @{
     error_message = $null
   }
 }
+# A provider may emit mixed-case loss keys. PowerShell's hashtables are
+# case-insensitive; negative aliases must never masquerade as canonical losses.
+$script:terminalFailures.failed.metrics | Add-Member -NotePropertyName 'TRAIN/CLS_LOSS' -NotePropertyValue (-9.25)
+$script:terminalFailures.failed.metrics | Add-Member -NotePropertyName 'VAL/SEG_LOSS' -NotePropertyValue (-7.5)
+
 # Real training workers often render progress bars with CR-only updates.
 # Preserve the latest 20 logical log lines instead of truncating one huge line.
 $script:logText = ((1..24 | ForEach-Object { "worker-progress-$($_)" }) -join [char]13)
@@ -312,6 +317,9 @@ foreach ($terminalStatus in @('failed', 'cancelled')) {
   if ($terminalStatus -eq 'failed') {
     if ($terminalOutput -notmatch 'train/box_loss\s+0\.4(?:0)? \[summary metric; epoch association unverified\]') {
       throw 'Failed-run summary loss was displayed without its unverified epoch provenance.'
+    }
+    if ($terminalOutput -match '(?im)^\s*(?:train/cls_loss|val/seg_loss)\s+[-+]?[0-9]') {
+      throw 'Mixed-case negative YOLO losses bypassed the scientific measurement QC gate.'
     }
     if (-not $terminalOutput.Contains('Training job log unavailable (status/metrics remain live).') -or
         -not $terminalOutput.Contains('GPU out of memory') -or

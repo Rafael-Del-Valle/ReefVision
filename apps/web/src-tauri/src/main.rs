@@ -293,7 +293,9 @@ function Test-FiniteMetricValue {
 function Test-ValidScientificMetricValue {
   param([string]$Name, [AllowNull()][object]$Value)
   if (-not (Test-FiniteMetricValue -Value $Value)) { return $false }
-  if ($Name -cin @('train/box_loss', 'train/cls_loss', 'train/dfl_loss', 'train/seg_loss',
+  # Mixed-case JSON/PowerShell aliases remain YOLO losses and must obey the
+  # same nonnegative measurement contract as canonical lowercase metric names.
+  if ($Name -in @('train/box_loss', 'train/cls_loss', 'train/dfl_loss', 'train/seg_loss',
                     'val/box_loss', 'val/cls_loss', 'val/dfl_loss', 'val/seg_loss')) {
     return [Convert]::ToDouble($Value, [Globalization.CultureInfo]::InvariantCulture) -ge 0
   }
