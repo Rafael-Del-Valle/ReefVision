@@ -227,6 +227,8 @@ def measure_point_cloud_preview(
     preserve_largest_axis_gap_boundaries_in_preview: bool = False,
     preserve_largest_axis_gap_boundary_loci_in_preview: bool = False,
     preserve_distinct_xyz_loci_in_preview: bool = False,
+    point_colors: list[list[int]] | None = None,
+    preserve_distinct_xyz_rgb_pairs_in_preview: bool = False,
 ) -> dict[str, Any]:
     """Report point extents, not surface area, organism size, or branch length."""
     if not 1 <= len(points) <= MAX_VERTICES:
@@ -241,6 +243,12 @@ def measure_point_cloud_preview(
         raise ValueError("preserve_largest_axis_gap_boundary_loci_in_preview must be a boolean")
     if not isinstance(preserve_distinct_xyz_loci_in_preview, bool):
         raise ValueError("preserve_distinct_xyz_loci_in_preview must be a boolean")
+    if not isinstance(preserve_distinct_xyz_rgb_pairs_in_preview, bool):
+        raise ValueError("preserve_distinct_xyz_rgb_pairs_in_preview must be a boolean")
+    if preserve_distinct_xyz_rgb_pairs_in_preview and (
+        point_colors is None or len(point_colors) != len(points)
+    ):
+        raise ValueError("RGB-pair preservation requires a colored PLY point cloud")
     if type(meters_per_unit) not in (int, float) or not 0 < meters_per_unit <= 1_000_000:
         raise ValueError("meters_per_unit must be a finite numeric value within bounds")
     scale = float(meters_per_unit)
@@ -697,20 +705,32 @@ def measure_point_cloud_preview(
         for index, vertex in enumerate(vertices):
             first_index_per_xyz.setdefault(vertex, index)
         distinct_locus_indices.update(first_index_per_xyz.values())
+    # Preserve each observed XYZ/RGB combination, not just one geometric
+    # location: duplicate RGB observations need not consume display slots.
+    # Color is provisional acquisition evidence, not classified coral health.
+    distinct_rgb_pair_indices: set[int] = set()
+    if preserve_distinct_xyz_rgb_pairs_in_preview:
+        assert point_colors is not None
+        first_index_per_pair: dict[tuple[tuple[float, float, float], tuple[int, ...]], int] = {}
+        for index, (vertex, rgb) in enumerate(zip(vertices, point_colors, strict=True)):
+            first_index_per_pair.setdefault((vertex, tuple(rgb)), index)
+        distinct_rgb_pair_indices.update(first_index_per_pair.values())
     if (
         preserve_axis_extrema_in_preview
         or pin_chords
         or preserve_largest_axis_gap_boundaries_in_preview
         or preserve_largest_axis_gap_boundary_loci_in_preview
         or preserve_distinct_xyz_loci_in_preview
+        or preserve_distinct_xyz_rgb_pairs_in_preview
     ) and len(vertices) > preview_count:
         # Complete distinct-locus retention has priority over the otherwise
         # conventional last acquisition row. With exactly 512 unique XYZ loci
         # and a duplicate final row, pinning that duplicate first would reject
         # a scientifically feasible 512-locus preview as "over budget".
         protected = (
-            set(distinct_locus_indices)
+            distinct_locus_indices | distinct_rgb_pair_indices
             if preserve_distinct_xyz_loci_in_preview
+            or preserve_distinct_xyz_rgb_pairs_in_preview
             else {0, len(vertices) - 1}
         )
         if preserve_axis_extrema_in_preview:
@@ -723,7 +743,10 @@ def measure_point_cloud_preview(
         # First acquisition row is already the first occurrence of one XYZ
         # locus. Preserve the last row when a display slot remains, but never
         # sacrifice a distinct observed locus to retain a duplicate endpoint.
-        if preserve_distinct_xyz_loci_in_preview and len(protected) < preview_count:
+        if (
+            preserve_distinct_xyz_loci_in_preview
+            or preserve_distinct_xyz_rgb_pairs_in_preview
+        ) and len(protected) < preview_count:
             protected.add(len(vertices) - 1)
         # Fill remaining slots evenly across the entire source index range.
         # Taking the first N candidates biases the sample toward early rows.
@@ -910,6 +933,11 @@ def measure_point_cloud_preview(
                 else ""
             )
             + ("_distinct_xyz_loci_preserving" if preserve_distinct_xyz_loci_in_preview else "")
+            + (
+                "_distinct_xyz_rgb_pairs_preserving"
+                if preserve_distinct_xyz_rgb_pairs_in_preview
+                else ""
+            )
         ),
         "preview_largest_axis_gap_boundary_loci_preservation_requested": (
             preserve_largest_axis_gap_boundary_loci_in_preview
@@ -918,6 +946,9 @@ def measure_point_cloud_preview(
             preserve_largest_axis_gap_boundaries_in_preview
         ),
         "preview_distinct_xyz_loci_preservation_requested": preserve_distinct_xyz_loci_in_preview,
+        "preview_distinct_xyz_rgb_pairs_preservation_requested": (
+            preserve_distinct_xyz_rgb_pairs_in_preview
+        ),
         "preview_omitted_selected_chord_endpoint_indices": omitted_chord_endpoints,
         "preview_selected_chord_endpoints_covered": not omitted_chord_endpoints,
         "preview_omitted_axis_extrema": preview_omitted_axis_extrema,
@@ -1147,6 +1178,10 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             payload.preserve_largest_axis_gap_boundary_loci_in_preview
         ),
         preserve_distinct_xyz_loci_in_preview=payload.preserve_distinct_xyz_loci_in_preview,
+        point_colors=point_colors if point_colors else None,
+        preserve_distinct_xyz_rgb_pairs_in_preview=(
+            payload.preserve_distinct_xyz_rgb_pairs_in_preview
+        ),
     )
     result["preview_point_colors_rgb_uint8"] = (
         [point_colors[i] for i in result["preview_point_indices"]] if point_colors else None
