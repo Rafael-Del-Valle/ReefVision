@@ -716,3 +716,85 @@ def test_full_colored_ply_preview_does_not_warn_about_missing_rgb_extrema(
     assert "source_contains_repeated_xyz_rgb_observations" not in payload["qc_warnings"]
     assert "preview_omits_rgb_channel_extrema" not in payload["qc_warnings"]
     assert payload["provenance"]["calibration_verified"] is False
+
+def test_subprecision_preview_centroid_scale_bounds_are_not_false_certainty(
+    client: TestClient,
+) -> None:
+    """Tiny positive calibration uncertainty must not become a fake exact interval."""
+    points = [[0, 0, 0]] * 599 + [[10, 0, 0]]
+    params = {
+        **CALIBRATION,
+        "relative_scale_uncertainty": 1e-30,
+        "points": points,
+    }
+    direct = measure_point_cloud_preview(
+        points=points,
+        **{**CALIBRATION, "relative_scale_uncertainty": 1e-30},
+    )
+    assert direct["preview_minus_source_row_centroid_offset_m"][0] > 0
+    assert direct["preview_minus_source_row_centroid_offset_scale_interval_m"] == [
+        None,
+        [0.0, 0.0],
+        [0.0, 0.0],
+    ]
+    assert direct["preview_vs_source_row_centroid_separation_scale_interval_m"] is None
+    assert (
+        "preview_centroid_offset_uncertainty_interval_below_numeric_resolution"
+        in direct["qc_warnings"]
+    )
+    assert (
+        "preview_centroid_separation_uncertainty_interval_below_numeric_resolution"
+        in direct["qc_warnings"]
+    )
+    assert direct["provenance"]["calibration_verified"] is False
+    assert direct["provenance"]["specimen_identity_verified"] is False
+
+    pid = str(create_project(client, "Subprecision preview calibration bounds")["id"])
+    base = f"/api/v1/projects/{pid}"
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    measured = response.json()
+    assert measured == direct
+
+    graph = {
+        "graph_id": "point-preview-subprecision-scale-v14",
+        "name": "Subprecision preview calibration QC",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "c", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "c",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    digests: list[str] = []
+    app = cast(FastAPI, client.app)
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        )
+        assert artifact["payload_json"] == measured
+        digests.append(artifact["payload_sha256"])
+    assert len(set(digests)) == 1
+    assert len(digests[0]) == 64
