@@ -281,4 +281,102 @@ describe("ImageViewport", () => {
 
     expect(onPointerDown).toHaveBeenCalledTimes(1);
   });
+
+  it("ignores horizontal-only and invalid wheel input without shifting scientific overlays", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Wheel integrity viewport">
+        <svg aria-label="Original scientific polygon">
+          <polygon points="10,10 30,10 20,30" />
+        </svg>
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", {
+      name: "Wheel integrity viewport",
+    });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const original = transform.style.transform;
+    const polygon = screen
+      .getByLabelText("Original scientific polygon")
+      .querySelector("polygon");
+
+    fireEvent.wheel(frame, {
+      deltaX: 150,
+      deltaY: 0,
+      clientX: 100,
+      clientY: 100,
+    });
+    fireEvent.wheel(frame, {
+      deltaY: Infinity,
+      clientX: 100,
+      clientY: 100,
+    });
+    fireEvent.wheel(frame, {
+      deltaY: -100,
+      clientX: Infinity,
+      clientY: 100,
+    });
+    expect(transform.style.transform).toBe(original);
+    expect(polygon).toHaveAttribute("points", "10,10 30,10 20,30");
+
+    fireEvent.wheel(frame, {
+      deltaY: -100,
+      clientX: 100,
+      clientY: 100,
+    });
+    expect(transform.style.transform).not.toBe(original);
+    expect(polygon).toHaveAttribute("points", "10,10 30,10 20,30");
+  });
+
+  it("rejects invalid pointer origins and movements but recovers on valid input", () => {
+    render(
+      <ImageViewport width={1600} height={1200} label="Pan integrity viewport">
+        <svg aria-label="Original coral coordinates">
+          <rect x="4" y="7" width="9" height="12" />
+        </svg>
+      </ImageViewport>,
+    );
+    const frame = screen.getByRole("region", {
+      name: "Pan integrity viewport",
+    });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const initial = transform.style.transform;
+
+    fireEvent.pointerDown(frame, {
+      pointerId: 1,
+      button: 1,
+      clientX: Infinity,
+      clientY: 10,
+    });
+    fireEvent.pointerMove(window, {
+      pointerId: 1,
+      clientX: 40,
+      clientY: 40,
+    });
+    expect(transform.style.transform).toBe(initial);
+
+    fireEvent.pointerDown(frame, {
+      pointerId: 2,
+      button: 1,
+      clientX: 10,
+      clientY: 20,
+    });
+    fireEvent.pointerMove(window, {
+      pointerId: 2,
+      clientX: NaN,
+      clientY: 40,
+    });
+    expect(transform.style.transform).toBe(initial);
+    fireEvent.pointerMove(window, {
+      pointerId: 2,
+      clientX: 40,
+      clientY: 50,
+    });
+    expect(transform.style.transform).not.toBe(initial);
+    expect(
+      screen
+        .getByLabelText("Original coral coordinates")
+        .querySelector("rect"),
+    ).toHaveAttribute("x", "4");
+  });
+
 });
