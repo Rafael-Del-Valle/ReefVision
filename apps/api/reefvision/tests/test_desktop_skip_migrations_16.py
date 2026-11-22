@@ -74,6 +74,36 @@ def test_skip_migrations_rejects_stale_or_foreign_science_without_writing(
             )
 
 
+@pytest.mark.parametrize(
+    "database_url",
+    [
+        "postgresql://researcher@unreachable.invalid/reefvision",
+        "mysql://researcher@unreachable.invalid/reefvision",
+    ],
+)
+def test_skip_migrations_refuses_external_database_before_connection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, database_url: str
+) -> None:
+    from reefvision.db import session
+
+    settings = Settings(
+        env="desktop",
+        data_dir=tmp_path / "science-data",
+        database_url=database_url,
+        background_worker_enabled=False,
+    )
+    monkeypatch.setattr(
+        session,
+        "create_database_engine",
+        lambda _settings: pytest.fail("Offline startup must not open an external database"),
+    )
+
+    with pytest.raises(RuntimeError, match="external database backends are unsupported"):
+        desktop.require_existing_desktop_schema(settings)
+
+    assert not settings.data_dir.exists()
+
+
 def test_skip_migrations_rejects_corrupt_sqlite_without_creating_replacement(
     tmp_path: Path,
 ) -> None:
