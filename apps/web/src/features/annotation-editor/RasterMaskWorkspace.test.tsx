@@ -255,3 +255,93 @@ it("copies and duplicates a selected raster mask as an unverified server record"
   expect(await screen.findByText("2 masks")).toBeInTheDocument();
   expect(screen.getByRole("status")).toHaveTextContent("unverified mask");
 });
+
+
+it("keeps the class, brush size and source revision selected when a stroke began", async () => {
+  const twoClassSession = {
+    ...session,
+    label_classes: [
+      session.label_classes[0],
+      {
+        id: "class-2",
+        name: "Sponge",
+        display_color: "#e76f51",
+        is_active: true,
+      },
+    ],
+  };
+  vi.mocked(getAnnotationSession).mockResolvedValue(twoClassSession as never);
+  const rasterApi = (await import("./rasterMaskApi")) as unknown as {
+    editRasterMask: ReturnType<typeof vi.fn>;
+  };
+  rasterApi.editRasterMask.mockImplementation(() => new Promise(() => {}));
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RasterMaskWorkspace
+        project={{ id: "project-1", name: "Reef" } as Project}
+        imageId="image-1"
+        onReturnToMasks={vi.fn()}
+        onReturnToBoxes={vi.fn()}
+        onClose={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  const canvas = (await screen.findByTestId(
+    "raster-brush-layer",
+  )) as unknown as SVGSVGElement;
+  vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    right: 400,
+    bottom: 300,
+    width: 400,
+    height: 300,
+    toJSON: () => ({}),
+  });
+  Object.defineProperty(canvas, "setPointerCapture", { value: vi.fn() });
+  Object.defineProperty(canvas, "releasePointerCapture", { value: vi.fn() });
+  Object.defineProperty(canvas, "hasPointerCapture", {
+    value: vi.fn(() => true),
+  });
+
+  await screen.findByRole("button", { name: "Sponge" });
+  fireEvent.pointerDown(canvas, {
+    button: 0,
+    pointerId: 91,
+    clientX: 100,
+    clientY: 75,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Sponge" }));
+  fireEvent.change(screen.getByRole("slider", { name: /Brush radius/i }), {
+    target: { value: "40" },
+  });
+  fireEvent.pointerMove(canvas, {
+    pointerId: 91,
+    clientX: 200,
+    clientY: 150,
+  });
+  fireEvent.pointerUp(canvas, { pointerId: 91 });
+  await waitFor(() =>
+    expect(rasterApi.editRasterMask).toHaveBeenCalledWith("image-1", {
+      base_revision: 0,
+      mask_annotation_id: null,
+      label_class_id: "class-1",
+      mode: "paint",
+      brush_radius: 12,
+      fill_tolerance: 24,
+      strokes: [
+        {
+          points: [
+            { x: 100, y: 75 },
+            { x: 200, y: 150 },
+          ],
+        },
+      ],
+    }),
+  );
+});
