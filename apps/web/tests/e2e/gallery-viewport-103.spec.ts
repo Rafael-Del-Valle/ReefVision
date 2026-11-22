@@ -892,50 +892,56 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
   await page.evaluate(() => window.scrollTo(0, 0));
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
 
-  // Touch over the application's document margin is not a valid positive
-  // control: root-level touch policy may legitimately block that gesture.
-  // Use a temporary independent native scroll container instead, with an
-  // explicit pan-y contract. Its measured scroll proves compositor dispatch.
-  await page.evaluate(() => {
-    const probe = document.createElement("div");
-    probe.id = "rv-native-touch-positive-control";
-    probe.setAttribute("aria-hidden", "true");
-    probe.style.position = "fixed";
-    probe.style.left = "0";
-    probe.style.top = "0";
-    probe.style.width = "180px";
-    probe.style.height = "180px";
-    probe.style.overflowY = "auto";
-    probe.style.touchAction = "pan-y";
-    probe.style.overscrollBehavior = "contain";
-    probe.style.zIndex = "2147483647";
-    const content = document.createElement("div");
-    content.style.height = "960px";
-    probe.appendChild(content);
-    document.body.appendChild(probe);
-  });
-  const documentTouchSession = await page.context().newCDPSession(page);
+  // The application may intentionally disable touch panning on an ancestor.
+  // CSS touch-action is intersected across ancestors, so a probe mounted
+  // inside the app cannot establish whether Chromium delivers touch at all.
+  // Use an isolated page in the SAME browser context as a positive control.
+  // This does not change the camera page, its source pixels, or app CSS.
+  const touchControlPage = await page.context().newPage();
   try {
-    await documentTouchSession.send("Input.synthesizeScrollGesture", {
-      x: 80,
-      y: 80,
-      yDistance: -340,
-      gestureSourceType: "touch",
-      speed: 800,
+    await touchControlPage.setViewportSize({ width: 400, height: 400 });
+    await touchControlPage.evaluate(() => {
+      document.body.style.margin = "0";
+      const probe = document.createElement("div");
+      probe.id = "rv-native-touch-positive-control";
+      probe.style.width = "180px";
+      probe.style.height = "180px";
+      probe.style.overflowY = "auto";
+      probe.style.touchAction = "pan-y";
+      probe.style.overscrollBehavior = "contain";
+      const content = document.createElement("div");
+      content.style.height = "960px";
+      probe.appendChild(content);
+      document.body.appendChild(probe);
     });
+    const controlProbe = touchControlPage.locator(
+      "#rv-native-touch-positive-control",
+    );
+    await expect
+      .poll(() =>
+        controlProbe.evaluate(
+          (element) => element.scrollHeight - element.clientHeight,
+        ),
+      )
+      .toBeGreaterThan(400);
+    const controlSession = await page.context().newCDPSession(touchControlPage);
+    try {
+      await controlSession.send("Input.synthesizeScrollGesture", {
+        x: 80,
+        y: 80,
+        yDistance: -340,
+        gestureSourceType: "touch",
+        speed: 800,
+      });
+    } finally {
+      await controlSession.detach();
+    }
+    await expect
+      .poll(() => controlProbe.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(40);
   } finally {
-    await documentTouchSession.detach();
+    await touchControlPage.close();
   }
-  await expect
-    .poll(() =>
-      page
-        .locator("#rv-native-touch-positive-control")
-        .evaluate((element) => element.scrollTop),
-    )
-    .toBeGreaterThan(40);
-  await page.evaluate(() =>
-    document.getElementById("rv-native-touch-positive-control")?.remove(),
-  );
 
   // Real input, not a synthetic WheelEvent, catches document scroll-through
   // when the strip has only one item and the first image just loaded.
