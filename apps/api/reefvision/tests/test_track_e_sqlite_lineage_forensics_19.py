@@ -140,3 +140,28 @@ def test_rejects_qc_event_table_missing_required_review_queue_reference(
     expected_issue = "Incomplete expected table signatures: review_queue_item_events"
     assert expected_issue in report["issues"]
     assert report["automatic_migration_authorized"] is False
+
+
+def test_quoted_sql_identifier_cannot_impersonate_qc_triage_check(
+    tmp_path: Path,
+) -> None:
+    # This is executable SQLite DDL, not a mocked sqlite_master entry.
+    # A quoted column name advertises a triage CHECK, but the only enforced
+    # event_type constraint permits coordination events. At 0039, reject it.
+    ddl = """
+        CREATE TABLE review_queue_item_events (
+          id TEXT, project_id TEXT, review_queue_id TEXT, review_queue_item_id TEXT,
+          client_request_id TEXT, event_type TEXT, actor TEXT,
+          "CHECK(event_type IN (
+            'comment', 'assign', 'unassign',
+            'triage_start', 'triage_skip', 'triage_return'
+          ))" TEXT,
+          CHECK(event_type IN ('comment', 'assign', 'unassign'))
+        );
+    """
+    status, report = _inspect(tmp_path, ddl, "0039")
+    assert status == 2
+    assert report["classification"] == "ambiguous"
+    assert report["review_event_check"] == "coordination"
+    assert report["automatic_migration_authorized"] is False
+    assert "Cannot safely attribute the colliding revision" in " ".join(report["issues"])
