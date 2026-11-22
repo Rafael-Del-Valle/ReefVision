@@ -58,3 +58,38 @@ exact-head validation with representative biological records and replayed
 scientific saved workflows, test the installed Windows MSI/CAB and GUI,
 and obtain explicit researcher approval. Do not merge, tag, release, deploy,
 download unapproved pretrained models or delete research assets.
+
+## Follow-up: inspect physical SQLite health and preserved relationships (2026-11-22)
+
+A matching Alembic 0041 revision and intact QC table constraints are necessary but
+not sufficient evidence that a copied/restored biological database is usable.
+Prior to the existing lineage and exact-head checks, `--skip-migrations` now
+opens the already-present SQLite file through an explicit **read-only URI** and
+requires:
+
+- SQLite `PRAGMA quick_check(1)` to return exactly `ok`. An unreadable/corrupt
+  file is refused without creating a replacement database.
+- `PRAGMA foreign_key_check` to report **no** orphaned references, including
+  historical links whose parent rows could have been lost while foreign-key
+  enforcement was disabled during an external restore.
+
+Both checks stop startup with a recovery-oriented error; they do not invent a
+parent, delete a child, rewrite reviews, checkpoint an archive on purpose, or
+approve any QC evidence. A missing database remains a hard error. The original
+1.1/1.6 revision-0038 lineage collision remains unresolved and blocked.
+
+Disposable SQLite regression fixtures cover an unreadable source file, a
+genuinely migrated 0041 schema containing an orphaned reference and original
+biological note, and the existing intact migrated 0041 success case with no
+upgrade invocation. An independent local SQLite-only probe confirmed
+read-only URI access detects an orphan and rejects invalid database bytes while
+preserving original file bytes. This probe is **not** a substitute for full
+repository pytest, package CI or installed-Windows GUI verification.
+
+The added check is **desktop startup assurance**, not a separate biological
+computation, so it does not introduce a new Workflow Builder node. Existing
+typed, executable saved QC graphs/runs, source units, provenance, reviewer
+approval and retry contracts remain untouched. The final committed tests must
+still pass exact-head CI; representative biological saved-workflow runs,
+migration reconciliation, native Windows installer clean installation,
+upgrade/rollback and interactive installed-GUI acceptance are release gates.
