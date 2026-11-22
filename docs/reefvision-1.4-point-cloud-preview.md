@@ -626,3 +626,33 @@ sampling, calibrated colorimetry, bleaching, health, specimen reidentification,
 independent biological replicates, verified calibration or statistical
 confidence intervals. Human review and representative coral validation remain
 mandatory.
+
+## Unordered source XYZ/RGB acquisition multiset integrity (November 22, 2026)
+
+The color-aware point-cloud service additionally records
+`provenance.source_unordered_xyz_rgb_multiset_sha256` and the explicit
+`source_unordered_xyz_rgb_multiset_canonicalization` version string. The digest
+sorts the **complete** normalized float64 XYZ / uint8 RGB acquisition-row
+multiset before compact UTF-8 JSON hashing. Unlike the existing ordered
+XYZ/RGB fingerprint, this digest remains equal when exporters rearrange valid
+PLY rows without changing observations. Unlike a distinct-pair set digest,
+it **does change** when acquisition-row multiplicities change, even when
+every distinct XYZ/RGB pair still occurs. Changing a sensor RGB triplet
+also changes the digest even if geometry and the visible preview do not.
+
+Exact imported PLY text retains its separate source-payload SHA-256;
+row ordering, comments and property order may change those bytes without
+changing the unordered normalized acquisition evidence. No RGB digest is
+claimed for uncolored XYZ sources. Matching multiset digests are not proof of
+common coral identity, identical calibration, registered coordinate frames,
+biological condition, independent technical replicates, or genuine
+longitudinal change. Human examination of provenance and specimen labels
+remains necessary.
+
+Direct-service regressions cover reversed row order, altered RGB, added
+duplicate acquisitions, and uncolored sources. Standalone colored PLY
+regressions cover different property/header arrangements and reversed
+acquisition-row order, while the existing saved executable typed Workflow
+Builder graph is run twice and requires byte-for-byte scientific-artifact and
+artifact-SHA-256 equality. Physical coral reference validation, reviewer
+sign-off, installed Windows GUI/MSI/CAB and GPU gates remain on hold.
