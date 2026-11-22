@@ -97,6 +97,7 @@ def inspect_database(path: Path) -> dict[str, object]:
         qc_scope_error: str | None = None
         qc_request_key_unique: bool | None = None
         qc_required_columns_not_null: bool | None = None
+        qc_event_foreign_keys_valid: bool | None = None
         qc_event_type_counts: list[tuple[object, int]] = []
         if signatures[REVIEW_TABLE]:
             # The applied 1.6/0038 schema requires complete attributed events.
@@ -133,6 +134,26 @@ def inspect_database(path: Path) -> dict[str, object]:
                 if key_columns == ["review_queue_item_id", "client_request_id"]:
                     qc_request_key_unique = True
                     break
+            # The actual 1.6/0038 migration declares three CASCADE foreign
+            # keys. A lookalike table without those constraints can have valid
+            # existing rows yet silently accept orphaned future QC events.
+            required_foreign_keys = {
+                ("review_queue_id", "review_queues", "id", "CASCADE"),
+                ("review_queue_item_id", "review_queue_items", "id", "CASCADE"),
+                ("project_id", "projects", "id", "CASCADE"),
+            }
+            foreign_keys = connection.execute(
+                f'PRAGMA foreign_key_list("{REVIEW_TABLE}")'
+            ).fetchall()
+            qc_event_foreign_keys_valid = (
+                len(foreign_keys) == len(required_foreign_keys)
+                and {
+                    (row[3], row[2], row[4], row[6].upper())
+                    for row in foreign_keys
+                    if row[1] == 0
+                }
+                == required_foreign_keys
+            )
             qc_event_type_counts = connection.execute(
                 f'SELECT event_type, COUNT(*) FROM "{REVIEW_TABLE}" GROUP BY event_type'
             ).fetchall()
@@ -248,6 +269,8 @@ def inspect_database(path: Path) -> dict[str, object]:
         issues.append("QC event item/request uniqueness constraint is missing")
     if groups["review_0038"] and not qc_required_columns_not_null:
         issues.append("QC event required fields are missing or nullable")
+    if groups["review_0038"] and not qc_event_foreign_keys_valid:
+        issues.append("QC event required CASCADE foreign keys are missing or incorrect")
     if REVIEW_TABLE in tables and not groups["review_0038"]:
         issues.append("Incomplete QC review event schema")
 
@@ -278,6 +301,7 @@ def inspect_database(path: Path) -> dict[str, object]:
         "qc_event_type_violations": qc_event_type_violations,
         "qc_request_key_unique": qc_request_key_unique,
         "qc_required_columns_not_null": qc_required_columns_not_null,
+        "qc_event_foreign_keys_valid": qc_event_foreign_keys_valid,
         "foreign_key_violations": foreign_key_violations,
         "foreign_key_violation_sources": foreign_key_violation_sources,
         "classification": classification,
