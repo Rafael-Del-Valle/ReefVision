@@ -53,6 +53,13 @@ def _inspect(tmp_path: Path, ddl: str, revision: str) -> tuple[int, dict[str, ob
         ),
         (
             """
+            CREATE TABLE projects (id TEXT PRIMARY KEY);
+            CREATE TABLE review_queues (
+              id TEXT PRIMARY KEY, project_id TEXT NOT NULL
+            );
+            CREATE TABLE review_queue_items (
+              id TEXT PRIMARY KEY, review_queue_id TEXT NOT NULL, project_id TEXT NOT NULL
+            );
             CREATE TABLE review_queue_item_events (
               id TEXT PRIMARY KEY NOT NULL, project_id TEXT NOT NULL,
               review_queue_id TEXT NOT NULL, review_queue_item_id TEXT NOT NULL,
@@ -82,6 +89,7 @@ def test_classifies_conflicting_real_sqlite_schema_without_writing(
     if expected.startswith("1.6-qc"):
         assert report["qc_request_key_unique"] is True
         assert report["qc_required_columns_not_null"] is True
+        assert report["qc_event_scope_violations"] == 0
     assert report["automatic_migration_authorized"] is False
     assert report["manual_migration_reconciliation_required"] is True
 
@@ -395,32 +403,28 @@ def test_refuses_nullable_qc_request_ids_despite_a_real_unique_constraint(
     assert any("missing or nullable" in issue for issue in report["issues"])
 
 
-def test_refuses_persisted_scientific_check_violation_outside_fk_audit(
+def test_refuses_empty_qc_review_schema_without_real_parent_tables(
     tmp_path: Path,
 ) -> None:
-    # A saved 1.1 scientific record can violate its table's CHECK if a
-    # historical importer disabled enforcement. FK checks and column
-    # signatures alone would incorrectly certify its Alembic lineage.
+    # An empty event table can satisfy every local event CHECK/UNIQUE/NOT NULL
+    # contract while missing the queue, item, and project tables on which the
+    # real 1.6 migration depends. No populated event is needed to expose it.
     ddl = """
-        CREATE TABLE scientific_records (
-          id TEXT, project_id TEXT,
-          variable TEXT CHECK (variable IN ('temperature', 'salinity')),
-          content_sha256 TEXT
+        CREATE TABLE review_queue_item_events (
+          id TEXT PRIMARY KEY NOT NULL, project_id TEXT NOT NULL,
+          review_queue_id TEXT NOT NULL, review_queue_item_id TEXT NOT NULL,
+          client_request_id TEXT NOT NULL, event_type TEXT NOT NULL,
+          actor TEXT NOT NULL, created_at TEXT NOT NULL,
+          UNIQUE(review_queue_item_id, client_request_id),
+          CHECK(event_type IN ('comment', 'assign', 'unassign'))
         );
-        CREATE TABLE environmental_cache_entries (
-          id TEXT, project_id TEXT, cache_key TEXT, source_url TEXT
-        );
-        PRAGMA ignore_check_constraints=ON;
-        INSERT INTO scientific_records VALUES (
-          'record-1', 'project-1', 'not-a-measured-variable', 'frozen-hash'
-        );
-        PRAGMA ignore_check_constraints=OFF;
     """
     status, report = _inspect(tmp_path, ddl, "0038")
     assert status == 2
     assert report["classification"] == "ambiguous"
-    assert report["table_signatures"]["scientific_records"] is True
-    assert report["foreign_key_violations"] == 0
-    assert report["sqlite_quick_check_passed"] is False
+    assert report["qc_request_key_unique"] is True
+    assert report["qc_required_columns_not_null"] is True
+    assert report["qc_event_scope_violations"] is None
+    assert report["qc_event_type_violations"] == 0
     assert report["automatic_migration_authorized"] is False
-    assert any("quick_check" in issue for issue in report["issues"])
+    assert any("parent tables missing" in issue for issue in report["issues"])
