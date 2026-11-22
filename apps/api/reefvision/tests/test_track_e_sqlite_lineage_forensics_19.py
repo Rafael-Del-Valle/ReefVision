@@ -112,8 +112,8 @@ def test_qc_lineage_requires_event_check_not_incidental_sql_text(tmp_path: Path)
         CREATE TABLE review_queue_item_events (
           id TEXT, project_id TEXT, review_queue_item_id TEXT,
           client_request_id TEXT, event_type TEXT, actor TEXT,
-          CHECK(event_type IN ('comment', 'assign', 'unassign')),
-          note TEXT -- 'triage_start', 'triage_skip', 'triage_return'
+          note TEXT, -- 'triage_start', 'triage_skip', 'triage_return'
+          CHECK(event_type IN ('comment', 'assign', 'unassign'))
         );
     """
     status, report = _inspect(tmp_path, ddl, "0039")
