@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import sqlite3
 from pathlib import Path
 
@@ -140,8 +142,7 @@ def test_skip_migrations_rejects_unique_index_corruption_without_repair(
             [("Swiftia open",), ("Swiftia open",)],
         )
         connection.execute(
-            "CREATE INDEX restored_identification_idx "
-            "ON restored_observations(identification)"
+            "CREATE INDEX restored_identification_idx ON restored_observations(identification)"
         )
         connection.execute("PRAGMA writable_schema=ON")
         connection.execute(
@@ -224,3 +225,60 @@ def test_skip_migrations_allows_actual_packaged_head_without_upgrading(
     desktop.require_existing_desktop_schema(settings)
     with sqlite3.connect(database_path) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0041",)
+
+def test_skip_migrations_rejects_replaced_valid_database_between_preflights(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = _desktop_settings(tmp_path)
+    settings.ensure_directories()
+    desktop.run_pending_migrations(settings)
+    database_path = settings.resolved_data_dir / "reefvision.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("CREATE TABLE biological_notes (note TEXT NOT NULL)")
+        connection.execute("INSERT INTO biological_notes VALUES ('original Swiftia note')")
+    original_bytes = database_path.read_bytes()
+    original_backup = tmp_path / "original-scientific-database.sqlite"
+    original_backup.write_bytes(original_bytes)
+
+    # Both files are real, intact 0041 databases. A revision stamp check
+    # alone cannot tell that the integrity audit and lineage audit inspected
+    # two different observations after a restore or symlink replacement.
+    replacement = tmp_path / "replacement-scientific-database.sqlite"
+    shutil.copy2(database_path, replacement)
+    with sqlite3.connect(replacement) as connection:
+        connection.execute(
+            "UPDATE biological_notes SET note = 'different Swiftia note'"
+        )
+    real_resolve = desktop.resolve_alembic_paths
+
+    def replace_between_preflights(resource_root: Path | None = None) -> tuple[Path, Path]:
+        os.replace(replacement, database_path)
+        return real_resolve(resource_root)
+
+    monkeypatch.setattr(desktop, "resolve_alembic_paths", replace_between_preflights)
+    from reefvision.db import session
+
+    monkeypatch.setattr(
+        session,
+        "create_database_engine",
+        lambda _settings: pytest.fail("A substituted database must not reach a writable engine"),
+    )
+
+    with pytest.raises(RuntimeError, match="database file changed during validation"):
+        desktop.require_existing_desktop_schema(settings)
+
+    # Preflight never silently rewrites either scientific record. The
+    # researcher-controlled test substitution leaves the original backup.
+    assert original_backup.read_bytes() == original_bytes
+    with sqlite3.connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0041",
+        )
+        assert connection.execute("SELECT note FROM biological_notes").fetchone() == (
+            "different Swiftia note",
+        )
+    with sqlite3.connect(original_backup) as connection:
+        assert connection.execute("SELECT note FROM biological_notes").fetchone() == (
+            "original Swiftia note",
+        )
+
