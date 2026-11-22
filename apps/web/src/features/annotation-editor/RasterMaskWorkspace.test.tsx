@@ -1120,16 +1120,18 @@ it("does not apply another project's stale visibility bundle to a raster mask", 
       "Project settings mismatch (editing paused)",
     ),
   );
-  expect(screen.getByTestId("raster-visibility-pending-notice")).toHaveTextContent(
-    "Existing masks and revisions are unchanged",
-  );
+  expect(
+    screen.getByTestId("raster-visibility-pending-notice"),
+  ).toHaveTextContent("Existing masks and revisions are unchanged");
   expect(
     screen.queryByTestId("selected-raster-mask-overlay"),
   ).not.toBeInTheDocument();
   expect(screen.getByTestId("raster-brush-layer")).toHaveStyle({
     cursor: "not-allowed",
   });
-  expect(screen.getByRole("button", { name: "Retry visibility settings" })).toBeEnabled();
+  expect(
+    screen.getByRole("button", { name: "Retry visibility settings" }),
+  ).toBeEnabled();
 });
 
 it("pauses painting before project visibility loads and honors a hidden class on arrival", async () => {
@@ -1162,7 +1164,9 @@ it("pauses painting before project visibility loads and honors a hidden class on
   await screen.findByTestId("raster-visibility-pending-notice");
   const brush = screen.getByTestId("raster-brush-layer");
   expect(brush).toHaveStyle({ cursor: "not-allowed" });
-  expect(screen.queryByTestId("selected-raster-mask-overlay")).not.toBeInTheDocument();
+  expect(
+    screen.queryByTestId("selected-raster-mask-overlay"),
+  ).not.toBeInTheDocument();
   fireEvent.pointerDown(brush, { button: 0, pointerId: 201 });
   fireEvent.pointerUp(brush, { pointerId: 201 });
   const rasterApi = (await import("./rasterMaskApi")) as unknown as {
@@ -1220,15 +1224,23 @@ it("recovers editing only after a failed visibility fetch is explicitly retried"
   expect(screen.getByTestId("raster-brush-layer")).toHaveStyle({
     cursor: "not-allowed",
   });
-  expect(screen.queryByTestId("selected-raster-mask-overlay")).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Retry visibility settings" }));
+  expect(
+    screen.queryByTestId("selected-raster-mask-overlay"),
+  ).not.toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Retry visibility settings" }),
+  );
   await waitFor(() =>
     expect(screen.getByTestId("raster-visibility-source")).toHaveTextContent(
       "Visible by default",
     ),
   );
-  expect(screen.queryByTestId("raster-visibility-pending-notice")).not.toBeInTheDocument();
-  expect(screen.getByTestId("selected-raster-mask-overlay")).toBeInTheDocument();
+  expect(
+    screen.queryByTestId("raster-visibility-pending-notice"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByTestId("selected-raster-mask-overlay"),
+  ).toBeInTheDocument();
   expect(screen.getByTestId("raster-brush-layer")).toHaveStyle({
     cursor: "crosshair",
   });
