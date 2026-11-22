@@ -119,6 +119,57 @@ def test_skip_migrations_rejects_corrupt_sqlite_without_creating_replacement(
     assert database_path.read_bytes() == damaged_bytes
 
 
+
+def test_skip_migrations_rejects_unique_index_corruption_without_repair(
+    tmp_path: Path,
+) -> None:
+    settings = _desktop_settings(tmp_path)
+    settings.ensure_directories()
+    desktop.run_pending_migrations(settings)
+    database_path = settings.resolved_data_dir / "reefvision.db"
+
+    # Simulate an externally damaged index schema: the existing index has
+    # duplicate biological observations but its schema claims UNIQUE.
+    # SQLite quick_check can report "ok" for this inconsistency.
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "CREATE TABLE restored_observations "
+            "(id INTEGER PRIMARY KEY, identification TEXT NOT NULL)"
+        )
+        connection.executemany(
+            "INSERT INTO restored_observations (identification) VALUES (?)",
+            [("Swiftia open",), ("Swiftia open",)],
+        )
+        connection.execute(
+            "CREATE INDEX restored_identification_idx "
+            "ON restored_observations(identification)"
+        )
+        connection.execute("PRAGMA writable_schema=ON")
+        connection.execute(
+            "UPDATE sqlite_schema SET sql = "
+            "REPLACE(sql, 'CREATE INDEX', 'CREATE UNIQUE INDEX') "
+            "WHERE name = 'restored_identification_idx'"
+        )
+        connection.execute("PRAGMA writable_schema=OFF")
+
+    original_bytes = database_path.read_bytes()
+    with sqlite3.connect(database_path.resolve().as_uri() + "?mode=ro", uri=True) as probe:
+        assert probe.execute("PRAGMA quick_check(1)").fetchone() == ("ok",)
+        assert probe.execute("PRAGMA integrity_check(1)").fetchone() != ("ok",)
+
+    with pytest.raises(RuntimeError, match="damaged SQLite database"):
+        desktop.require_existing_desktop_schema(settings)
+
+    assert database_path.read_bytes() == original_bytes
+    with sqlite3.connect(database_path.resolve().as_uri() + "?mode=ro", uri=True) as probe:
+        assert probe.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0041",
+        )
+        assert probe.execute("SELECT COUNT(*) FROM restored_observations").fetchone() == (
+            2,
+        )
+
+
 def test_skip_migrations_rejects_orphaned_references_at_valid_head_without_repair(
     tmp_path: Path,
 ) -> None:
