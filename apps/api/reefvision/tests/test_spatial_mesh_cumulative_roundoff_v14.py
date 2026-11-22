@@ -59,6 +59,17 @@ def test_selected_route_cumulative_roundoff_is_exposed_and_replayed(
     assert affected["path_cumulative_roundoff_exact_fraction_m"] == str(-Fraction(1e-8))
     assert affected["path_nominal_total_vs_edge_sum_exact_fraction_m"] == str(-Fraction(1e-8))
     assert affected["path_nominal_total_exact_match"] is False
+    # The exact stored binary64 source-edge sum exceeds the rounded chord,
+    # although Dijkstra's displayed route total equals that chord. A nominal
+    # detour ratio of 1 or exact zero excess would conceal a positive segment.
+    assert affected["length_m"] == affected["endpoint_chord_length_m"]
+    assert affected["geometric_detour_ratio"] is None
+    assert affected["geometric_excess_length_m"] is None
+    assert affected["geometric_excess_scale_interval_m"] is None
+    assert (
+        "selected_mesh_route_roundoff_hides_stored_edge_chord_excess"
+        in affected["path_qc_warnings"]
+    )
     assert (
         "selected_mesh_route_nominal_total_disagrees_with_exact_edge_sum"
         in affected["path_qc_warnings"]
@@ -80,6 +91,13 @@ def test_selected_route_cumulative_roundoff_is_exposed_and_replayed(
     assert unaffected["path_cumulative_roundoff_exact_fraction_m"] == "0"
     assert unaffected["path_nominal_total_vs_edge_sum_exact_fraction_m"] == "0"
     assert unaffected["path_nominal_total_exact_match"] is True
+    assert unaffected["geometric_detour_ratio"] == 1.0
+    assert unaffected["geometric_excess_length_m"] == 0.0
+    assert unaffected["geometric_excess_scale_interval_m"] == [0.0, 0.0]
+    assert (
+        "selected_mesh_route_roundoff_hides_stored_edge_chord_excess"
+        not in unaffected["path_qc_warnings"]
+    )
     assert (
         "selected_mesh_route_nominal_total_disagrees_with_exact_edge_sum"
         not in unaffected["path_qc_warnings"]
