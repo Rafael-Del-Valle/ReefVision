@@ -139,23 +139,47 @@ def test_camera_jpeg_decompression_bomb_is_failed_import_not_unexpected_error(
     assert client.get(f"/api/v1/projects/{project['id']}/images").json()["total"] == 0
 
 
-def test_large_camera_jpeg_below_pillow_hard_limit_still_imports(
+def test_large_camera_jpeg_warning_range_rejected_without_persisting(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A warning alone must not reject valid high-resolution scientific images."""
+    """The safe decode budget must reject Pillow's warning range before allocation."""
     project = create_project(client, "Large camera warning")
     stream = BytesIO()
     Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG")
     payload = stream.getvalue()
 
-    # Pillow warns above MAX_IMAGE_PIXELS and rejects above twice that limit.
-    # Scale the thresholds down so this test stays fast and deterministic.
+    # 3,072 pixels is above the configured 2,000-pixel budget but below
+    # Pillow's 4,000-pixel hard exception threshold.
     monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 2000)
     with pytest.warns(Image.DecompressionBombWarning):
         report = import_one(client, project["id"], filename="DSC_LARGE.JPEG", content=payload)
 
+    assert not report["successful"], report
+    assert len(report["failed"]) == 1, report
+    assert report["failed"][0]["detail"] == (
+        "Image pixel count exceeds the configured safe decode limit"
+    )
+    gallery = client.get(f"/api/v1/projects/{project['id']}/images")
+    assert gallery.status_code == 200
+    assert gallery.json()["total"] == 0
+
+
+def test_camera_jpeg_at_safe_decode_budget_boundary_still_imports(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The safe limit is inclusive; valid scientific pixels remain importable."""
+    project = create_project(client, "Camera decode budget boundary")
+    stream = BytesIO()
+    Image.new("RGB", (64, 48), (20, 90, 120)).save(stream, format="JPEG")
+    payload = stream.getvalue()
+
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 64 * 48)
+    report = import_one(client, project["id"], filename="DSC_BOUNDARY.JPEG", content=payload)
+
     assert len(report["successful"]) == 1, report
     image_id = report["successful"][0]["image_id"]
+    metadata = client.get(f"/api/v1/images/{image_id}").json()
+    assert (metadata["width_px"], metadata["height_px"]) == (64, 48)
     assert client.get(f"/api/v1/images/{image_id}/content").content == payload
 
 
