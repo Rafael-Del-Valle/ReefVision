@@ -87,6 +87,42 @@ def test_replayed_longitudinal_artifacts_reject_invalid_identity_labels(
         compare_mesh_observations(before, after)
 
 
+@pytest.mark.parametrize(
+    ("later_height", "expected_sign"),
+    [
+        (2.0, "positive"),
+        (0.25, "negative"),
+        (1.1, "includes_zero"),
+        (1.0, "includes_zero"),
+    ],
+)
+def test_longitudinal_scale_only_area_difference_sign(
+    later_height: float, expected_sign: str
+) -> None:
+    """Scale-only overlap is neither a growth test nor identity verification."""
+    before = preview_from_request(
+        MeshPreviewRequest(**_mesh("survey-1", "2026-10-01T12:00:00Z", 1.0))
+    )
+    after = preview_from_request(
+        MeshPreviewRequest(**_mesh("survey-2", "2026-10-02T12:00:00Z", later_height))
+    )
+    before["project_id"] = "p1"
+    after["project_id"] = "p1"
+    comparison = compare_mesh_observations(before, after)
+    assert comparison["surface_area_difference_sign_under_scale_only_bounds"] == expected_sign
+    lower, upper = comparison["delta_surface_area_scale_interval_m2"]
+    if expected_sign == "positive":
+        assert lower > 0
+    elif expected_sign == "negative":
+        assert upper < 0
+    else:
+        assert lower <= 0 <= upper
+    warning = "surface_area_difference_scale_bounds_include_zero"
+    assert (warning in comparison["qc_warnings"]) == (expected_sign == "includes_zero")
+    assert comparison["measurement_status"] == "provisional_unverified_longitudinal_comparison"
+    assert comparison["provenance"]["specimen_identity_verified"] is False
+
+
 def test_replayed_longitudinal_artifacts_accept_maximum_valid_identity_lengths() -> None:
     """The 128-character schema boundary remains valid for replayed previews."""
     specimen_id = "c" * 128
@@ -235,6 +271,8 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     )
     assert expected["delta_surface_area_m2"] == pytest.approx(0.5)
     assert expected["delta_surface_area_scale_interval_m2"] == pytest.approx([0.205, 0.805])
+    assert expected["surface_area_difference_sign_under_scale_only_bounds"] == "positive"
+    assert "surface_area_difference_scale_bounds_include_zero" not in expected["qc_warnings"]
     assert expected["relative_surface_area_change_percent"] == pytest.approx(100)
     assert expected["scale_normalized_surface_area_ratio_after_to_before"] == (pytest.approx(2))
     assert expected["scale_normalized_bounding_box_diagonal_ratio_after_to_before"] == (
@@ -1356,6 +1394,7 @@ def test_mesh_comparison_does_not_invent_scale_uncertainty() -> None:
     result = compare_mesh_observations(base, later)
     assert result["delta_surface_area_m2"] == 1
     assert result["delta_surface_area_scale_interval_m2"] is None
+    assert result["surface_area_difference_sign_under_scale_only_bounds"] is None
     assert result["delta_axis_aligned_bounding_box_diagonal_m"] is None
     assert result["relative_axis_aligned_bounding_box_diagonal_change_percent"] is None
     assert result["relative_axis_aligned_bounding_box_diagonal_scale_interval_percent"] is None
