@@ -387,10 +387,12 @@ def test_preview_centroid_signed_offset_tracks_direction_on_all_three_axes() -> 
     measured = measure_point_cloud_preview(points=points, **CALIBRATION)
     indices = measured["preview_point_indices"]
     assert rare_index not in indices
-    source = [sum(row[axis] for row in points) * 0.01 / len(points) for axis in range(3)]
-    shown = [
-        sum(points[i][axis] for i in indices) * 0.01 / len(indices)
+    source = [
+        sum(row[axis] for row in points) * 0.01 / len(points)
         for axis in range(3)
+    ]
+    shown = [
+        sum(points[i][axis] for i in indices) * 0.01 / len(indices) for axis in range(3)
     ]
     expected = [shown[axis] - source[axis] for axis in range(3)]
     offset = measured["preview_minus_source_row_centroid_offset_m"]
