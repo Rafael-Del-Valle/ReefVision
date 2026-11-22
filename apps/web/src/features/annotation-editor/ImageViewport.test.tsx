@@ -603,4 +603,74 @@ describe("ImageViewport", () => {
       screen.getByLabelText("Original polyp").querySelector("rect"),
     ).toHaveAttribute("x", "8");
   });
+  it("resets pan and zoom when navigating between equally sized source images", () => {
+    function source(id: string) {
+      return (
+        <ImageViewport
+          width={1600}
+          height={1200}
+          label="Navigation viewport"
+          sourceImageId={id}
+        >
+          <svg aria-label={`Scientific image ${id}`}>
+            <polygon points="10,10 30,10 20,30" />
+          </svg>
+        </ImageViewport>
+      );
+    }
+
+    const { rerender } = render(source("image-a"));
+    const frame = screen.getByRole("region", {
+      name: "Navigation viewport",
+    });
+    const transform = screen.getByTestId("image-viewport-transform");
+    const fitted = transform.style.transform;
+    fireEvent.wheel(frame, {
+      deltaY: -100,
+      clientX: 100,
+      clientY: 100,
+    });
+    const zoomed = transform.style.transform;
+    expect(zoomed).not.toBe(fitted);
+
+    // The same source can rerender for review/QC changes without losing zoom.
+    rerender(source("image-a"));
+    expect(transform.style.transform).toBe(zoomed);
+
+    fireEvent.pointerDown(frame, {
+      pointerId: 37,
+      button: 1,
+      clientX: 10,
+      clientY: 10,
+    });
+    rerender(source("image-b"));
+    expect(transform.style.transform).toBe(fitted);
+    fireEvent.pointerMove(window, {
+      pointerId: 37,
+      clientX: 90,
+      clientY: 110,
+    });
+    expect(transform.style.transform).toBe(fitted);
+    expect(screen.queryByLabelText("Scientific image image-a")).toBeNull();
+    expect(
+      screen
+        .getByLabelText("Scientific image image-b")
+        .querySelector("polygon"),
+    ).toHaveAttribute("points", "10,10 30,10 20,30");
+
+    // A fresh gesture on the new source still works.
+    fireEvent.pointerDown(frame, {
+      pointerId: 38,
+      button: 1,
+      clientX: 10,
+      clientY: 10,
+    });
+    fireEvent.pointerMove(window, {
+      pointerId: 38,
+      clientX: 40,
+      clientY: 40,
+    });
+    expect(transform.style.transform).not.toBe(fitted);
+  });
+
 });
