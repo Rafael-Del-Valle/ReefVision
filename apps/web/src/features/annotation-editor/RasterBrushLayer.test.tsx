@@ -303,4 +303,39 @@ describe("RasterBrushLayer", () => {
       { mode: "erase", brushRadius: 15 },
     );
   });
+
+  it("does not misclassify intentional capture release as stroke cancellation", () => {
+    const onStroke = vi.fn();
+    const onStrokeCancel = vi.fn();
+    render(
+      <RasterBrushLayer
+        width={800}
+        height={600}
+        mode="paint"
+        brushRadius={10}
+        onStroke={onStroke}
+        onStrokeCancel={onStrokeCancel}
+      />,
+    );
+    const canvas = layer();
+    mockBounds(canvas);
+    Object.defineProperty(canvas, "releasePointerCapture", {
+      configurable: true,
+      value: vi.fn((pointerId: number) => {
+        fireEvent.lostPointerCapture(canvas, { pointerId });
+      }),
+    });
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      pointerId: 44,
+      clientX: 100,
+      clientY: 75,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 44 });
+    expect(onStrokeCancel).not.toHaveBeenCalled();
+    expect(onStroke).toHaveBeenCalledExactlyOnceWith(
+      [{ x: 200, y: 150 }],
+      { mode: "paint", brushRadius: 10 },
+    );
+  });
 });
