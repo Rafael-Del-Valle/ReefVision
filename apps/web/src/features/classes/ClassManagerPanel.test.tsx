@@ -129,6 +129,30 @@ function classUsage(canDelete: boolean, total = canDelete ? 0 : 1) {
   };
 }
 
+// Individual count rows can be safe integers even when their sum cannot be
+// represented exactly. A reviewer must never approve a rounded reference tally.
+function unsafeAggregateUsage(acrossModalities: boolean) {
+  const excessCategory = acrossModalities
+    ? "dataset_versions"
+    : "quality_control_issues";
+  return {
+    ...classUsage(false, Number.MAX_SAFE_INTEGER + 1),
+    counts: zeroUsageCounts().map((item) => ({
+      ...item,
+      count:
+        item.key === "annotations_active"
+          ? Number.MAX_SAFE_INTEGER
+          : item.key === excessCategory
+            ? 1
+            : 0,
+    })),
+    mutable_reference_count: acrossModalities
+      ? Number.MAX_SAFE_INTEGER
+      : Number.MAX_SAFE_INTEGER + 1,
+    immutable_reference_count: acrossModalities ? 1 : 0,
+  };
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -212,6 +236,8 @@ describe("ClassManagerPanel", () => {
     ["missing blocker evidence", { delete_blockers: null }],
     ["missing identity inventory", { reference_fingerprint: null }],
     ["malformed identity inventory", { reference_fingerprint: "bad" }],
+    ["unsafe summed mutable reference count", unsafeAggregateUsage(false)],
+    ["unsafe summed cross-modality reference count", unsafeAggregateUsage(true)],
   ] as const)("rejects %s before merging", async (_reason, invalidFields) => {
     const confirmation = vi.spyOn(window, "confirm").mockReturnValue(true);
     const fetchMock = vi

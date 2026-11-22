@@ -320,7 +320,13 @@ function reviewedMergeCounts(
     !Array.isArray(usage.counts) ||
     !Array.isArray(usage.delete_blockers) ||
     !Array.isArray(usage.compatibility_warnings) ||
-    usage.counts.length !== Object.keys(REQUIRED_USAGE_CATEGORIES).length
+    usage.counts.length !== Object.keys(REQUIRED_USAGE_CATEGORIES).length ||
+    !Number.isSafeInteger(usage.total_references) ||
+    usage.total_references < 0 ||
+    !Number.isSafeInteger(usage.mutable_reference_count) ||
+    usage.mutable_reference_count < 0 ||
+    !Number.isSafeInteger(usage.immutable_reference_count) ||
+    usage.immutable_reference_count < 0
   ) {
     return null;
   }
@@ -343,8 +349,14 @@ function reviewedMergeCounts(
     counts[item.key] = item.count;
     if (item.mutable) mutable += item.count;
     if (item.immutable) immutable += item.count;
+    // Every row can be safe while the total is not. Do not approve a merge
+    // using a rounded JavaScript sum of biological reference counts.
+    if (!Number.isSafeInteger(mutable) || !Number.isSafeInteger(immutable)) {
+      return null;
+    }
   }
   if (
+    !Number.isSafeInteger(mutable + immutable) ||
     mutable !== usage.mutable_reference_count ||
     immutable !== usage.immutable_reference_count ||
     mutable + immutable !== usage.total_references ||
