@@ -919,6 +919,17 @@ def measure_point_cloud_preview(
             for axis in range(3)
         ]
     )
+    # Signed displacement of the displayed *sample* relative to all source
+    # acquisition rows, in the source coordinate frame. Direction matters for
+    # visualization bias, but is never evidence of organism motion or spatial
+    # registration. A complete or single-locus sample has no sampling offset.
+    preview_minus_source_centroid_offset = (
+        [0.0, 0.0, 0.0]
+        if len(preview_indices) == len(vertices) or unique_count == 1
+        else [
+            preview_row_centroid[axis] - centroid[axis] for axis in range(3)
+        ]
+    )
     preview_centroid_separation = dist(centroid, preview_row_centroid)
     if unique_count == 1:
         preview_centroid_separation = 0.0
@@ -1062,6 +1073,7 @@ def measure_point_cloud_preview(
         "preview_row_centroid_in_source_frame_scale_interval_m": coordinate_scale_intervals(
             preview_row_centroid
         ),
+        "preview_minus_source_row_centroid_offset_m": preview_minus_source_centroid_offset,
         "preview_vs_source_row_centroid_separation_m": preview_centroid_separation,
         "preview_vs_source_row_centroid_separation_scale_interval_m": (
             preview_centroid_scale_interval
