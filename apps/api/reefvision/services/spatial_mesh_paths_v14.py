@@ -474,9 +474,7 @@ def mesh_edge_paths(
                     "selected_mesh_route_roundoff_hides_stored_edge_chord_excess"
                 )
             if impossible_stored_chord:
-                path_qc_warnings.append(
-                    "selected_mesh_route_stored_edge_sum_below_rounded_chord"
-                )
+                path_qc_warnings.append("selected_mesh_route_stored_edge_sum_below_rounded_chord")
             if path_cumulative_lost_positive_segment_indices:
                 path_qc_warnings.append(
                     "positive_selected_mesh_segment_lost_in_cumulative_distance"
