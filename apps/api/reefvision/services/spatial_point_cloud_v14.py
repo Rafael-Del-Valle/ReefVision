@@ -968,10 +968,18 @@ def measure_point_cloud_preview(
     # color observations omitted from the 512-point preview. This supplements
     # geometry-only and exact-import-text hashes; it is not color calibration.
     source_ordered_xyz_rgb_sha256: str | None = None
+    source_unordered_xyz_rgb_multiset_sha256: str | None = None
     if point_colors is not None:
         ordered_rgb_rows = [[*xyz, *rgb] for xyz, rgb in zip(vertices, point_colors, strict=True)]
         source_ordered_xyz_rgb_sha256 = hashlib.sha256(
             json.dumps(ordered_rgb_rows, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        # A sorted *multiset* retains repeated acquisition rows but ignores
+        # arbitrary exporter row ordering. Unlike geometry-only provenance it
+        # also detects changes in the observed RGB associated with each XYZ.
+        # Equality is compatible acquisition evidence, not specimen re-ID.
+        source_unordered_xyz_rgb_multiset_sha256 = hashlib.sha256(
+            json.dumps(sorted(ordered_rgb_rows), separators=(",", ":")).encode("utf-8")
         ).hexdigest()
     return {
         "schema_version": "point-cloud-preview-0001",
@@ -1236,6 +1244,14 @@ def measure_point_cloud_preview(
             "source_ordered_xyz_rgb_sha256": source_ordered_xyz_rgb_sha256,
             "source_ordered_xyz_rgb_canonicalization": (
                 "ordered_normalized_float64_xyz_uint8_rgb_compact_json_utf8_v1"
+                if point_colors is not None
+                else None
+            ),
+            "source_unordered_xyz_rgb_multiset_sha256": (
+                source_unordered_xyz_rgb_multiset_sha256
+            ),
+            "source_unordered_xyz_rgb_multiset_canonicalization": (
+                "sorted_multiset_normalized_float64_xyz_uint8_rgb_compact_json_utf8_v1"
                 if point_colors is not None
                 else None
             ),
