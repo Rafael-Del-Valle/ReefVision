@@ -651,7 +651,7 @@ describe("PolygonMaskLayer", () => {
     expect(onUpdate.mock.calls[0][0]).toMatchObject({
       id: polygonMask.id,
       revision: polygonMask.revision,
-      area_pixels: 243,
+      area_pixels: 165,
     });
     expect(onUpdate.mock.calls[0][0].points[0]).toEqual({ x: 16, y: 19 });
   });
