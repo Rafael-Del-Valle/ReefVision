@@ -599,4 +599,107 @@ describe("PolygonMaskLayer", () => {
     ).toHaveAttribute("cx", "10");
     expect(polygonMask.points?.[0]).toEqual({ x: 10, y: 10 });
   });
+
+
+  it("keeps the first vertex class through selection changes and clear, then uses the next class", () => {
+    const onCreate = vi.fn();
+    const view = (activeClassId: string | null) => (
+      <PolygonMaskLayer
+        width={400}
+        height={300}
+        masks={[]}
+        classColors={{ "class-1": "#2a9d8f", "class-2": "#ef4444" }}
+        activeClassId={activeClassId}
+        tool="polygon"
+        selectedMaskIds={[]}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onSelectionChange={vi.fn()}
+      />
+    );
+    const { rerender } = render(view("class-1"));
+    const layer = maskLayer();
+    mockLayerBounds(layer);
+
+    fireEvent.pointerDown(layer, { clientX: 10, clientY: 10 });
+    fireEvent.pointerDown(layer, { clientX: 30, clientY: 10 });
+    rerender(view("class-2"));
+    expect(screen.getByTestId("polygon-draft")).toHaveAttribute(
+      "stroke",
+      "#2a9d8f",
+    );
+    rerender(view(null));
+    fireEvent.pointerDown(layer, { clientX: 30, clientY: 25 });
+    fireEvent.pointerDown(layer, { clientX: 10, clientY: 25 });
+    fireEvent.keyDown(layer, { key: "Enter" });
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(onCreate.mock.calls[0][0]).toMatchObject({
+      label_class_id: "class-1",
+      area_pixels: 300,
+      points: [
+        { x: 10, y: 10 },
+        { x: 30, y: 10 },
+        { x: 30, y: 25 },
+        { x: 10, y: 25 },
+      ],
+    });
+    expect(screen.queryByTestId("polygon-draft")).toBeNull();
+
+    // Clearing the class blocks a new polygon, not completion of the old one.
+    fireEvent.pointerDown(layer, { clientX: 100, clientY: 100 });
+    expect(screen.queryByTestId("polygon-draft")).toBeNull();
+    rerender(view("class-2"));
+    fireEvent.pointerDown(layer, { clientX: 100, clientY: 100 });
+    fireEvent.pointerDown(layer, { clientX: 140, clientY: 100 });
+    fireEvent.pointerDown(layer, { clientX: 140, clientY: 120 });
+    fireEvent.keyDown(layer, { key: "Enter" });
+    expect(onCreate).toHaveBeenCalledTimes(2);
+    expect(onCreate.mock.calls[1][0]).toMatchObject({
+      label_class_id: "class-2",
+      area_pixels: 400,
+    });
+  });
+
+  it("clears the draft class on Backspace, Escape, and tool cancellation", () => {
+    const onCreate = vi.fn();
+    const view = (activeClassId: string, tool: "polygon" | "select") => (
+      <PolygonMaskLayer
+        width={400}
+        height={300}
+        masks={[]}
+        classColors={{ "class-1": "#2a9d8f", "class-2": "#ef4444" }}
+        activeClassId={activeClassId}
+        tool={tool}
+        selectedMaskIds={[]}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onSelectionChange={vi.fn()}
+      />
+    );
+    const { rerender } = render(view("class-1", "polygon"));
+    const layer = maskLayer();
+    mockLayerBounds(layer);
+    fireEvent.pointerDown(layer, { clientX: 10, clientY: 10 });
+    fireEvent.keyDown(layer, { key: "Backspace" });
+    rerender(view("class-2", "polygon"));
+    fireEvent.pointerDown(layer, { clientX: 10, clientY: 10 });
+    expect(screen.getByTestId("polygon-draft")).toHaveAttribute(
+      "stroke",
+      "#ef4444",
+    );
+    fireEvent.keyDown(layer, { key: "Escape" });
+    expect(screen.queryByTestId("polygon-draft")).toBeNull();
+
+    rerender(view("class-1", "polygon"));
+    fireEvent.pointerDown(layer, { clientX: 10, clientY: 10 });
+    rerender(view("class-2", "select"));
+    expect(screen.queryByTestId("polygon-draft")).toBeNull();
+    rerender(view("class-2", "polygon"));
+    fireEvent.pointerDown(layer, { clientX: 10, clientY: 10 });
+    fireEvent.pointerDown(layer, { clientX: 30, clientY: 10 });
+    fireEvent.pointerDown(layer, { clientX: 30, clientY: 25 });
+    fireEvent.keyDown(layer, { key: "Enter" });
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(onCreate.mock.calls[0][0].label_class_id).toBe("class-2");
+  });
 });

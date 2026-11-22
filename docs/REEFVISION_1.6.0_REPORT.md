@@ -434,3 +434,27 @@ provenance and units remain unchanged. The independent Alembic-0038 collision,
 full exact-head CI, representative biological/saved-workflow acceptance,
 genuine installed MSI/CAB and GUI upgrade/rollback, and researcher release
 approval remain HOLD.
+
+## 2026-11-21 — Polygon vertex-sequence class provenance (Track D)
+
+Existing 1.6 class visibility, reviewer QC and saved typed executable Workflow
+Builder were audited before this isolated editor correction. Unlike the
+rotated-box tool, polygon construction spans multiple pointer gestures: the
+live selected class was used only at completion. Switching or clearing it
+between vertices could silently relabel the biological observation or make a
+valid draft impossible to save. Polygon drafts now retain their first-vertex
+class through Enter or closing-vertex completion, including subsequent class
+changes. Draft outlines retain that class color. Completing, Escape,
+Backspace removing the only vertex, or leaving polygon mode clears the draft
+class; a classless *new* draft remains blocked. Historical annotations and
+source-pixel vertices are not modified.
+
+Two React regressions exercise class changes and clearing during multi-click
+drawing, exact polygon coordinates/area, new-draft class identity, and resets
+for Backspace, Escape and tool change. This is a local annotation integrity
+fix, not a new executable scientific operation: existing saved and standalone
+QC Workflow Builder, typed nodes/units, provenance, retries and human-review
+gates remain preserved. Actual exact-head frontend/backend/E2E and native
+Windows installed-GUI validation still require CI and manual acceptance.
+Independent 1.1/1.6 Alembic-0038 reconciliation and researcher release
+approval remain HOLD.

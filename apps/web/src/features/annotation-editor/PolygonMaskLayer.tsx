@@ -188,6 +188,7 @@ export function PolygonMaskLayer({
 }: PolygonMaskLayerProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [draftPoints, setDraftPoints] = useState<Point[]>([]);
+  const [draftClassId, setDraftClassId] = useState<string | null>(null);
   const [pointerPosition, setPointerPosition] = useState<Point | null>(null);
   const [vertexDrag, setVertexDrag] = useState<VertexDrag | null>(null);
   const [polygonDrag, setPolygonDrag] = useState<PolygonDrag | null>(null);
@@ -214,6 +215,7 @@ export function PolygonMaskLayer({
   useEffect(() => {
     if (tool !== "polygon") {
       setDraftPoints([]);
+      setDraftClassId(null);
       setPointerPosition(null);
     }
   }, [tool]);
@@ -239,11 +241,12 @@ export function PolygonMaskLayer({
   }
 
   function finishDraft() {
-    if (draftPoints.length < 3 || activeClassId === null) {
+    if (draftPoints.length < 3 || draftClassId === null) {
       return;
     }
-    onCreate(polygonMaskFromPoints(draftPoints, activeClassId));
+    onCreate(polygonMaskFromPoints(draftPoints, draftClassId));
     setDraftPoints([]);
+    setDraftClassId(null);
     setPointerPosition(null);
   }
 
@@ -285,7 +288,14 @@ export function PolygonMaskLayer({
       onSelectionChange([]);
       return;
     }
-    if (tool !== "polygon" || activeClassId === null) {
+    if (tool !== "polygon") {
+      return;
+    }
+    // Freeze the biological class at the first vertex, across later class changes.
+    if (draftPoints.length === 0) {
+      if (activeClassId === null) return;
+      setDraftClassId(activeClassId);
+    } else if (draftClassId === null) {
       return;
     }
     const point = imagePoint(event);
@@ -400,6 +410,7 @@ export function PolygonMaskLayer({
   function handleKeyDown(event: KeyboardEvent<SVGSVGElement>) {
     if (event.key === "Escape") {
       setDraftPoints([]);
+      setDraftClassId(null);
       setPointerPosition(null);
       setVertexDrag(null);
       setPolygonDrag(null);
@@ -417,6 +428,7 @@ export function PolygonMaskLayer({
       draftPoints.length > 0
     ) {
       event.preventDefault();
+      if (draftPoints.length === 1) setDraftClassId(null);
       setDraftPoints((current) => current.slice(0, -1));
       return;
     }
@@ -650,7 +662,7 @@ export function PolygonMaskLayer({
             .map((point) => `${point.x},${point.y}`)
             .join(" ")}
           fill="none"
-          stroke={(activeClassId && classColors[activeClassId]) || "#2a9d8f"}
+          stroke={(draftClassId && classColors[draftClassId]) || "#2a9d8f"}
           strokeWidth={2}
           strokeDasharray="8 5"
           vectorEffect="non-scaling-stroke"
@@ -665,7 +677,7 @@ export function PolygonMaskLayer({
           cy={point.y}
           r={index === 0 && draftPoints.length >= 3 ? 7 : 4}
           fill="#ffffff"
-          stroke={(activeClassId && classColors[activeClassId]) || "#2a9d8f"}
+          stroke={(draftClassId && classColors[draftClassId]) || "#2a9d8f"}
           strokeWidth={2}
           vectorEffect="non-scaling-stroke"
           style={{
