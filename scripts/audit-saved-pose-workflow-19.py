@@ -47,6 +47,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
     from sqlalchemy.orm import Session
 
     from reefvision.db.models import (
+        ExperimentRecord,
         Job,
         ModelRegistration,
         PoseTrainingDataset,
@@ -57,6 +58,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
     )
     from reefvision.services.pose_training_datasets import PoseTrainingDatasetService
     from reefvision.services.workflow_provenance import build_workflow_run_provenance
+    from reefvision.storage.datasets import canonical_json_sha256
 
     _require(db.is_file(), "An existing local SQLite database is required")
     _require(data_dir.is_dir(), "An existing model and checkpoint data directory is required")
@@ -157,6 +159,39 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 and result.get("training_job_id") == job.id,
                 "Saved pose-training job request or producer lineage changed",
             )
+            # A checksum-valid workflow artifact is not proof that the durable
+            # experiment registry still belongs to this training run. Verify
+            # the separately persisted scientific summary and environment.
+            experiment_id = result.get("experiment_id")
+            _require(
+                isinstance(experiment_id, str) and bool(experiment_id),
+                "Saved pose training experiment ID is missing",
+            )
+            experiment = session.get(ExperimentRecord, experiment_id)
+            _require(
+                experiment is not None
+                and experiment.project_id == run.project_id
+                and experiment.training_run_id == training.id
+                and experiment.dataset_version_id == training.dataset_version_id
+                and experiment.dataset_manifest_sha256 == training.dataset_manifest_sha256
+                and experiment.split_manifest_sha256 == training.split_manifest_sha256
+                and experiment.task == training.task
+                and experiment.provider_id == training.provider_id
+                and experiment.architecture == training.architecture
+                and isinstance(experiment.summary_metrics_json, dict)
+                and experiment.summary_metrics_json == training.metrics_json
+                and isinstance(experiment.comparison_warnings_json, list)
+                and experiment.comparison_warnings_json == training.warnings_json
+                and isinstance(experiment.artifact_manifest_json, dict)
+                and experiment.artifact_manifest_json == training.artifact_manifest_json
+                and isinstance(experiment.package_versions_json, dict),
+                "Persisted experiment registry no longer matches completed pose training",
+            )
+            _require(
+                canonical_json_sha256(experiment.package_versions_json)
+                == training.artifact_manifest_json.get("experiment_package_versions_sha256"),
+                "Recorded experiment package versions differ from training evidence",
+            )
             checkpoint = _managed_file(root, training.result_checkpoint_path)
             checkpoint_sha = _digest(checkpoint)
             _require(
@@ -194,7 +229,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 == dataset.manifest_sha256
                 and metadata.get("source_split_manifest_sha256") == training.split_manifest_sha256
                 and metadata.get("source_result_checkpoint_path") == training.result_checkpoint_path
-                and metadata.get("source_experiment_id") == result.get("experiment_id"),
+                and metadata.get("source_experiment_id") == experiment.id,
                 "Registered model database provenance no longer matches completed training",
             )
             model_sha = _digest(_managed_file(root, model.managed_path))
@@ -207,6 +242,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 "dataset_manifest_sha256": dataset.manifest_sha256,
                 "training_run_id": training.id,
                 "training_job_id": job.id,
+                "experiment_id": experiment.id,
                 "checkpoint_sha256": checkpoint_sha,
                 "registered_model_id": model.id,
                 "registered_model_sha256": model_sha,
