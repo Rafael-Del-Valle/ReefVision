@@ -841,5 +841,4 @@ describe("RotatedBoxLayer pointer integrity", () => {
     expect(onCreate).toHaveBeenCalledTimes(2);
     expect(onCreate.mock.calls[1][0].label_class_id).toBe("class-2");
   });
-
 });
