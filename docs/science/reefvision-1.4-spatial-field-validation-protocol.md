@@ -184,3 +184,33 @@ request with HTTP **400** for a domain budget violation; invalid boolean
 request types remain HTTP **422** schema validation errors. These are synthetic
 acceptance references, not representative coral, human-review, installed
 Windows, or physical GPU validation.
+
+### Complete colored PLY observation preservation in bounded previews
+
+The strict-boolean `preserve_distinct_xyz_rgb_pairs_in_preview` is an opt-in
+standalone and executable typed `point_cloud_preview` Workflow Builder control
+for **colored ASCII PLY only**. It retains at least one original acquisition row
+per distinct observed (XYZ, R, G, B) combination; a repeated acquisition row
+may be omitted without losing a distinct color observation. This is separate
+from `preserve_distinct_xyz_loci_in_preview`, which preserves geometry but can
+omit rare color variants at one XYZ location. Colorless PLY and inline XYZ
+sources must reject color-pair preservation requests. A request needing more
+than 512 protected rows (including other explicitly pinned indices) must fail
+with a domain validation error rather than publish a partial scientific artifact;
+nonboolean input fails schema validation.
+
+Use a 600-row two-locus colored PLY reference with one rare RGB observation
+placed at a normally omitted index. Assert that ordinary decimation reports
+incomplete multi-color support, whereas the pinned preview retains all three
+observed XYZ/RGB pairs, removes the color-omission warnings, keeps the same
+source geometry/provisional calibration evidence, and yields a different
+sample-bound fingerprint. Verify typed registry discovery, the standalone
+API, and **two executions of the same persisted typed graph**, comparing
+complete measurement payloads and stable artifact SHA-256. Also test an
+over-capacity 513-distinct-pair source and exactly 512 distinct color pairs
+with a duplicate final acquisition row; the latter must succeed with
+explicit endpoint-row omission QC. These diagnostics are about data
+visualization and raw sensor observations; **never infer bleaching, tissue
+condition, health, biological replicates or verified specimen identity**.
+Independent coral references, human adjudication, installed Windows GUI,
+GPU and upgrade/rollback release gates remain outstanding.
