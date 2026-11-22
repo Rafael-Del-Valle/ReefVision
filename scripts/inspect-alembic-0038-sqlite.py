@@ -13,6 +13,7 @@ import argparse
 import json
 import sqlite3
 import sys
+from contextlib import closing
 from pathlib import Path
 
 TABLE_COLUMNS = {
@@ -21,8 +22,12 @@ TABLE_COLUMNS = {
     "computed_metric_definitions": {"id", "project_id", "expression", "definition_sha256"},
     "computed_metric_results": {"id", "project_id", "definition_id", "content_sha256"},
     "review_queue_item_events": {
-        "id", "project_id", "review_queue_item_id", "client_request_id",
-        "event_type", "actor",
+        "id",
+        "project_id",
+        "review_queue_item_id",
+        "client_request_id",
+        "event_type",
+        "actor",
     },
 }
 SCIENTIFIC_38 = ("scientific_records", "environmental_cache_entries")
@@ -41,11 +46,9 @@ def inspect_database(path: Path) -> dict[str, object]:
 
     # mode=ro prevents database creation or writes; query_only is an extra
     # guard. Avoid immutable=1 because it can ignore a live WAL journal.
-    with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True) as connection:
+    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as connection:
         connection.execute("PRAGMA query_only=ON")
-        version_rows = connection.execute(
-            "SELECT version_num FROM alembic_version"
-        ).fetchall()
+        version_rows = connection.execute("SELECT version_num FROM alembic_version").fetchall()
         tables = {
             name: ddl or ""
             for name, ddl in connection.execute(
@@ -59,10 +62,7 @@ def inspect_database(path: Path) -> dict[str, object]:
                 signatures[table] = False
                 continue
             # Table names are fixed constants above, not user-supplied SQL.
-            columns = {
-                row[1]
-                for row in connection.execute(f'PRAGMA table_info("{table}")')
-            }
+            columns = {row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')}
             signatures[table] = required <= columns
             if not signatures[table]:
                 incomplete.append(table)
@@ -76,12 +76,14 @@ def inspect_database(path: Path) -> dict[str, object]:
     check_sql = tables.get(REVIEW_TABLE, "").lower()
     triage = ("triage_start", "triage_skip", "triage_return")
     coordination = ("comment", "assign", "unassign")
-    review_check = (
-        "triage" if all(f"'{item}'" in check_sql for item in triage)
-        else "coordination" if all(f"'{item}'" in check_sql for item in coordination)
-        and not any(f"'{item}'" in check_sql for item in triage)
-        else "unknown"
-    )
+    if all(f"'{item}'" in check_sql for item in triage):
+        review_check = "triage"
+    elif all(f"'{item}'" in check_sql for item in coordination) and not any(
+        f"'{item}'" in check_sql for item in triage
+    ):
+        review_check = "coordination"
+    else:
+        review_check = "unknown"
     issues = []
     if incomplete:
         issues.append("Incomplete expected table signatures: " + ", ".join(incomplete))
@@ -102,13 +104,16 @@ def inspect_database(path: Path) -> dict[str, object]:
         science = groups["scientific_0038"]
         metrics = groups["scientific_0039"]
         review = groups["review_0038"]
-        if science and not review and (revision == "0038" and not metrics or revision == "0039" and metrics):
+        if science and not review and (
+            (revision == "0038" and not metrics)
+            or (revision == "0039" and metrics)
+        ):
             classification = f"1.1-scientific-{revision}"
         elif review and not science and not metrics and (
-            revision == "0038" and review_check == "coordination"
-            or revision == "0039" and review_check == "triage"
+            (revision == "0038" and review_check == "coordination")
+            or (revision == "0039" and review_check == "triage")
         ):
-            classification = f"1.6-qc-{revision}"
+            classification = f"1.6-qc-{revision}
     if classification == "ambiguous":
         issues.append("Cannot safely attribute the colliding revision to one applied lineage")
     return {
