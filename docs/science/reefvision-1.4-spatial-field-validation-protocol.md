@@ -225,9 +225,19 @@ Challenge a 600-row synthetic cloud where an ordinarily decimated source row
 contains a distinct coordinate. Independently compute each centroid from the
 full acquisition row indices and displayed original row indices and compare
 their signed X/Y/Z difference, Euclidean magnitude, calibration factor, and
-scale-only interval. Include a synthetic rare XYZ row that is omitted by
-uniform decimation and creates negative/positive signed offsets on distinct
-axes; reject any biological movement interpretation. Verify the direct service,
+scale-only interval. The signed per-axis
+`preview_minus_source_row_centroid_offset_scale_interval_m` is a list of
+ascending [lower, upper] bounds, or `null` if no relative scale uncertainty
+is supplied. For a negative offset the bounds must reverse the nominal scale
+factor ordering; a genuine zero axis remains [0, 0]. If floating-point
+resolution would falsely collapse a nonzero uncertainty interval, withhold
+the corresponding interval and emit
+`preview_centroid_offset_uncertainty_interval_below_numeric_resolution`.
+These are **shared scale-only** bounds, not independent X/Y/Z measurement
+errors, sampling confidence intervals, or registration uncertainty.
+Include a synthetic rare XYZ row that is omitted by uniform decimation
+and creates negative/positive signed offsets on distinct axes; reject
+any biological movement interpretation. Verify the direct service,
 standalone project API, and **two executions of the same persisted typed
 Workflow Builder graph**, including identical complete artifacts and SHA-256
 digests. Acquisition rows are not biological replicates; sample-centroid
