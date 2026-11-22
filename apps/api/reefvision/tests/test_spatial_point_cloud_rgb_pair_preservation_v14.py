@@ -1,0 +1,193 @@
+"""Guard colored PLY observation retention without biological interpretation."""
+
+from __future__ import annotations
+
+from typing import cast
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.spatial_point_cloud_v14 import measure_point_cloud_preview
+from reefvision.tests.test_annotations import create_project
+
+
+CALIBRATION = {
+    "meters_per_unit": 0.01,
+    "calibration_method": "ruler",
+    "calibration_evidence": "Unverified field scale",
+    "relative_scale_uncertainty": 0.1,
+}
+PLY_HEADER = (
+    "ply\nformat ascii 1.0\nelement vertex {count}\n"
+    "property float x\nproperty float y\nproperty float z\n"
+    "property uchar red\nproperty uchar green\n"
+    "property uchar blue\nend_header\n"
+)
+
+
+def _colored_ply(rows: list[str]) -> str:
+    return PLY_HEADER.format(count=len(rows)) + "\n".join(rows) + "\n"
+
+
+def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
+    client: TestClient,
+) -> None:
+    """A rare observed color must survive without claiming coral condition."""
+    pid = str(create_project(client, "Color observation completeness")["id"])
+    base = f"/api/v1/projects/{pid}"
+    default_indices = {i * 599 // 511 for i in range(512)}
+    rare_index = next(i for i in range(1, 300) if i not in default_indices)
+    rows = [
+        (
+            f"{0 if i < 300 else 1} 0 0 "
+            + ("80 90 100" if i == rare_index else "10 20 30" if i < 300 else "40 50 60")
+        )
+        for i in range(600)
+    ]
+    params = {**CALIBRATION, "ply_text": _colored_ply(rows)}
+    normal_response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    pinned_params = {**params, "preserve_distinct_xyz_rgb_pairs_in_preview": True}
+    pinned_response = client.post(
+        f"{base}/spatial/point-cloud-preview", json=pinned_params
+    )
+    assert normal_response.status_code == 200, normal_response.text
+    assert pinned_response.status_code == 200, pinned_response.text
+    normal, pinned = normal_response.json(), pinned_response.json()
+    assert rare_index not in normal["preview_point_indices"]
+    assert rare_index in pinned["preview_point_indices"]
+    assert len(pinned["preview_point_indices"]) == 512
+    assert normal["preview_rgb_variant_support"]["preview_distinct_xyz_rgb_pairs"] == 2
+    support = pinned["preview_rgb_variant_support"]
+    assert support["source_distinct_xyz_rgb_pairs"] == 3
+    assert support["preview_distinct_xyz_rgb_pairs"] == 3
+    assert support["multi_rgb_xyz_loci_with_complete_preview"] == 1
+    assert support["multi_rgb_xyz_loci_with_incomplete_preview"] == 0
+    assert pinned["preview_distinct_xyz_rgb_pairs_preservation_requested"] is True
+    assert "source_xyz_loci_have_multiple_rgb_values" in pinned["qc_warnings"]
+    assert "preview_omits_multi_rgb_locus_variants" in normal["qc_warnings"]
+    assert "preview_omits_multi_rgb_locus_variants" not in pinned["qc_warnings"]
+    assert "preview_omits_distinct_xyz_rgb_observations" not in pinned["qc_warnings"]
+    assert pinned["provenance"] == normal["provenance"]
+    assert pinned["preview_sample_geometry_sha256"] != (
+        normal["preview_sample_geometry_sha256"]
+    )
+    assert pinned["provenance"]["calibration_verified"] is False
+    assert pinned["provenance"]["specimen_identity_verified"] is False
+    assert pinned["surface_area_m2"] is None
+    assert pinned["branch_length_m"] is None
+
+    registry = client.get("/api/v1/workflow-graphs/node-registry")
+    assert registry.status_code == 200, registry.text
+    node = next(
+        n for n in registry.json() if n["node_type"] == "point_cloud_preview"
+    )
+    assert node["executable"] is True
+    assert node["optional_parameters"]["preserve_distinct_xyz_rgb_pairs_in_preview"] is False
+    graph = {
+        "graph_id": "color-observation-retention-v14",
+        "name": "Retain imported PLY RGB observations",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {
+                "node_id": "c",
+                "node_type": "point_cloud_preview",
+                "parameters": pinned_params,
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "c",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    digests: list[str] = []
+    for _ in range(2):
+        run = client.post(
+            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+        )
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        )
+        assert artifact["payload_json"] == pinned
+        digests.append(artifact["payload_sha256"])
+    assert len(set(digests)) == 1
+    assert len(digests[0]) == 64
+
+
+def test_rgb_pair_preservation_strict_source_and_capacity(
+    client: TestClient,
+) -> None:
+    pid = str(create_project(client, "Color preservation budget")["id"])
+    base = f"/api/v1/projects/{pid}/spatial/point-cloud-preview"
+    uncolored = {**CALIBRATION, "points": [[0, 0, 0], [1, 0, 0]]}
+    invalid_source = client.post(
+        base, json={**uncolored, "preserve_distinct_xyz_rgb_pairs_in_preview": True}
+    )
+    assert invalid_source.status_code == 400, invalid_source.text
+    invalid_type = client.post(
+        base,
+        json={
+            **uncolored,
+            "preserve_distinct_xyz_rgb_pairs_in_preview": "true",
+        },
+    )
+    assert invalid_type.status_code == 422, invalid_type.text
+    with pytest.raises(ValueError, match="must be a boolean"):
+        measure_point_cloud_preview(
+            points=[[0, 0, 0], [1, 0, 0]],
+            **CALIBRATION,
+            preserve_distinct_xyz_rgb_pairs_in_preview="true",  # type: ignore[arg-type]
+        )
+
+    # 513 distinct color observations at two XYZ locations cannot fit in 512.
+    rows = [
+        f"{i // 256} 0 0 {i % 256} {i // 256} 0"
+        for i in range(513)
+    ]
+    colored = {**CALIBRATION, "ply_text": _colored_ply(rows)}
+    over_budget = client.post(
+        base, json={**colored, "preserve_distinct_xyz_rgb_pairs_in_preview": True}
+    )
+    assert over_budget.status_code == 400, over_budget.text
+    assert "display budget" in over_budget.text
+
+    # A repeated final acquisition row is not a distinct RGB observation.
+    exact_rows = rows[:512] + [rows[0]]
+    feasible = client.post(
+        base,
+        json={
+            **CALIBRATION,
+            "ply_text": _colored_ply(exact_rows),
+            "preserve_distinct_xyz_rgb_pairs_in_preview": True,
+        },
+    )
+    assert feasible.status_code == 200, feasible.text
+    sample = feasible.json()
+    assert sample["preview_rgb_variant_support"]["source_distinct_xyz_rgb_pairs"] == 512
+    assert sample["preview_rgb_variant_support"]["preview_distinct_xyz_rgb_pairs"] == 512
+    assert sample["preview_source_acquisition_endpoint_support"] == {
+        "first_row_displayed": True,
+        "last_row_displayed": False,
+    }
+    assert "preview_omits_acquisition_endpoint_row" in sample["qc_warnings"]
