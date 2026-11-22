@@ -96,8 +96,28 @@ def inspect_database(path: Path) -> dict[str, object]:
         qc_scope_violations: int | None = None
         qc_scope_error: str | None = None
         qc_request_key_unique: bool | None = None
+        qc_required_columns_not_null: bool | None = None
         qc_event_type_counts: list[tuple[object, int]] = []
         if signatures[REVIEW_TABLE]:
+            # The applied 1.6/0038 schema requires complete attributed events.
+            # SQLite UNIQUE indexes allow repeated NULL client request IDs,
+            # so the presence of a unique index is not enough for idempotency.
+            required_not_null = {
+                "id",
+                "review_queue_id",
+                "review_queue_item_id",
+                "project_id",
+                "client_request_id",
+                "event_type",
+                "actor",
+                "created_at",
+            }
+            not_null_columns = {
+                row[1]
+                for row in connection.execute(f'PRAGMA table_info("{REVIEW_TABLE}")')
+                if row[3]
+            }
+            qc_required_columns_not_null = required_not_null <= not_null_columns
             # 1.6/0038 guarantees idempotent append-only review requests by a
             # non-partial UNIQUE constraint on the item and client request ID.
             # A lookalike CHECK alone cannot establish this scientific history.
@@ -224,6 +244,8 @@ def inspect_database(path: Path) -> dict[str, object]:
         issues.append("QC event CHECK constraint cannot be identified")
     if groups["review_0038"] and not qc_request_key_unique:
         issues.append("QC event item/request uniqueness constraint is missing")
+    if groups["review_0038"] and not qc_required_columns_not_null:
+        issues.append("QC event required fields are missing or nullable")
     if REVIEW_TABLE in tables and not groups["review_0038"]:
         issues.append("Incomplete QC review event schema")
 
@@ -253,6 +275,7 @@ def inspect_database(path: Path) -> dict[str, object]:
         "qc_event_scope_violations": qc_scope_violations,
         "qc_event_type_violations": qc_event_type_violations,
         "qc_request_key_unique": qc_request_key_unique,
+        "qc_required_columns_not_null": qc_required_columns_not_null,
         "foreign_key_violations": foreign_key_violations,
         "foreign_key_violation_sources": foreign_key_violation_sources,
         "classification": classification,
