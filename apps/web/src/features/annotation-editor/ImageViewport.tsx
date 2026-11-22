@@ -18,11 +18,14 @@ export function ImageViewport({
   width,
   height,
   label,
+  sourceImageId,
   children,
 }: {
   width: number;
   height: number;
   label: string;
+  /** Stable source-image identity, even when consecutive images share dimensions. */
+  sourceImageId?: string;
   children: ReactNode;
 }) {
   // An imported image with missing, fractional or nonfinite pixel dimensions
@@ -76,9 +79,11 @@ export function ImageViewport({
     updateView(actualSizeTransform({ width, height }, frameSize));
   }, [frameSize, hasValidImageSize, height, updateView, width]);
 
+  // Switching between equally sized biological images must not carry the
+  // previous image's pan/zoom or unfinished pan gesture into the new source.
   useEffect(() => {
     fit();
-  }, [fit, height, width]);
+  }, [fit, height, width, sourceImageId]);
 
   useEffect(() => {
     const frame = frameRef.current;
