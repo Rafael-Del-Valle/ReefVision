@@ -204,6 +204,24 @@ try {
     catch { $unverifiedBuildRejected = $true }
     if (-not $unverifiedBuildRejected) { throw 'An unverified MSI build was accepted as verified provenance.' }
     $candidateManifest.msi_verified = $true
+    # A forged build manifest might encode attestation flags as JSON 1 or
+    # "true". PowerShell ordinarily coerces both to $true, so these must fail
+    # instead of marking an unverified MSI/CAB candidate as source-clean.
+    foreach ($flagName in @('source_tree_clean', 'msi_verified')) {
+        foreach ($untrustedValue in @(1, 'true', 'yes')) {
+            $originalFlag = $candidateManifest[$flagName]
+            $candidateManifest[$flagName] = $untrustedValue
+            $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+            $forgedFlagRejected = $false
+            try { $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -ProvenancePath $manifestPath 2>&1 }
+            catch { $forgedFlagRejected = $true }
+            $candidateManifest[$flagName] = $originalFlag
+            if (-not $forgedFlagRejected) {
+                throw "Non-Boolean $flagName attestation was accepted: $untrustedValue"
+            }
+        }
+    }
+    $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
     $candidateManifest.files += $candidateManifest.files[0]
     $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
     $duplicateRejected = $false
