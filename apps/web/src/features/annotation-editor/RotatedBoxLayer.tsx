@@ -125,17 +125,50 @@ export function rotatedBoxFromDrag(
   labelClassId: string,
   id = generatedMaskId(),
 ): EditorMaskAnnotation {
+  // User-drawn boxes must have a stable winding regardless of drag direction.
+  // Historically reverse-axis drags persisted counter-wound rectangles that
+  // the rotation and resize tools could otherwise reinterpret.
+  const left = Math.min(start.x, end.x);
+  const right = Math.max(start.x, end.x);
+  const top = Math.min(start.y, end.y);
+  const bottom = Math.max(start.y, end.y);
   return rotatedBoxMaskFromPoints(
     [
-      { x: start.x, y: start.y },
-      { x: end.x, y: start.y },
-      { x: end.x, y: end.y },
-      { x: start.x, y: end.y },
+      { x: left, y: top },
+      { x: right, y: top },
+      { x: right, y: bottom },
+      { x: left, y: bottom },
     ],
     labelClassId,
     id,
     false,
   );
+}
+
+// Original saved masks may predate canonical drawing order. Preserve their
+// vertex winding when transforming a rectangle, rather than silently flipping
+// its point identity and changing measurement provenance.
+function boxWinding(points: Point[]): 1 | -1 {
+  const edgeX = {
+    x: points[1].x - points[0].x,
+    y: points[1].y - points[0].y,
+  };
+  const edgeY = {
+    x: points[3].x - points[0].x,
+    y: points[3].y - points[0].y,
+  };
+  return edgeX.x * edgeY.y - edgeX.y * edgeY.x < 0 ? -1 : 1;
+}
+
+function orientedBoxPoints(
+  center: Point,
+  boxWidth: number,
+  boxHeight: number,
+  angle: number,
+  winding: 1 | -1,
+): Point[] {
+  const points = rotatedBoxPoints(center, boxWidth, boxHeight, angle);
+  return winding === 1 ? points : points.reverse();
 }
 
 function inside(points: Point[], width: number, height: number): boolean {
@@ -252,9 +285,17 @@ function rotate(
 ): EditorMaskAnnotation {
   if (!mask.points || mask.label_class_id === null) return mask;
   const d = dimensions(mask.points);
+  const winding = boxWinding(mask.points);
   const angle =
-    Math.atan2(pointer.y - d.center.y, pointer.x - d.center.x) + Math.PI / 2;
-  const points = rotatedBoxPoints(d.center, d.width, d.height, angle);
+    Math.atan2(pointer.y - d.center.y, pointer.x - d.center.x) +
+    (winding * Math.PI) / 2;
+  const points = orientedBoxPoints(
+    d.center,
+    d.width,
+    d.height,
+    angle,
+    winding,
+  );
   if (!inside(points, width, height)) return mask;
   return rotatedBoxMaskFromPoints(
     points,
@@ -281,8 +322,12 @@ function resize(
     { x: 1, y: 1 },
     { x: -1, y: 1 },
   ][cornerIndex];
+  const winding = boxWinding(mask.points);
   const axisX = { x: Math.cos(d.angle), y: Math.sin(d.angle) };
-  const axisY = { x: -Math.sin(d.angle), y: Math.cos(d.angle) };
+  const axisY = {
+    x: -winding * Math.sin(d.angle),
+    y: winding * Math.cos(d.angle),
+  };
   const delta = { x: pointer.x - opposite.x, y: pointer.y - opposite.y };
   const boxWidth = Math.max(2, Math.abs(delta.x * axisX.x + delta.y * axisX.y));
   const boxHeight = Math.max(
@@ -297,7 +342,13 @@ function resize(
       opposite.y +
       0.5 * (signs.x * boxWidth * axisX.y + signs.y * boxHeight * axisY.y),
   };
-  const points = rotatedBoxPoints(center, boxWidth, boxHeight, d.angle);
+  const points = orientedBoxPoints(
+    center,
+    boxWidth,
+    boxHeight,
+    d.angle,
+    winding,
+  );
   if (!inside(points, width, height)) return mask;
   return rotatedBoxMaskFromPoints(
     points,
@@ -315,8 +366,8 @@ function rotationHandle(points: Point[]): Point {
     y: (points[0].y + points[1].y) / 2,
   };
   return {
-    x: top.x + Math.sin(d.angle) * 30,
-    y: top.y - Math.cos(d.angle) * 30,
+    x: top.x + boxWinding(points) * Math.sin(d.angle) * 30,
+    y: top.y - boxWinding(points) * Math.cos(d.angle) * 30,
   };
 }
 
