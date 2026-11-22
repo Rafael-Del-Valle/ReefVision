@@ -56,6 +56,9 @@ class PointCloudPreviewRequest(BaseModel):
     # Pin one source row per unique XYZ location across the entire cloud.
     # Fail when the requested distinct locations exceed the display budget.
     preserve_distinct_xyz_loci_in_preview: StrictBool = False
+    # Pin each unique XYZ/RGB observation in colored ASCII PLY, or fail closed
+    # when the 512-point display cannot represent all observed color variants.
+    preserve_distinct_xyz_rgb_pairs_in_preview: StrictBool = False
 
     @field_validator("meters_per_unit", "relative_scale_uncertainty", mode="before")
     @classmethod
