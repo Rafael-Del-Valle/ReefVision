@@ -245,9 +245,21 @@ def measure_point_cloud_preview(
         raise ValueError("preserve_distinct_xyz_loci_in_preview must be a boolean")
     if not isinstance(preserve_distinct_xyz_rgb_pairs_in_preview, bool):
         raise ValueError("preserve_distinct_xyz_rgb_pairs_in_preview must be a boolean")
-    if preserve_distinct_xyz_rgb_pairs_in_preview and (
-        point_colors is None or len(point_colors) != len(points)
+    # Enforce the raw uint8 RGB contract even for direct service callers that
+    # do not request color-pair pinning. A malformed sensor observation must
+    # never be silently treated as valid acquisition evidence.
+    if point_colors is not None and (
+        not isinstance(point_colors, list)
+        or len(point_colors) != len(points)
+        or any(
+            not isinstance(rgb, (list, tuple))
+            or len(rgb) != 3
+            or any(type(channel) is not int or not 0 <= channel <= 255 for channel in rgb)
+            for rgb in point_colors
+        )
     ):
+        raise ValueError("Point colors must have one uint8 RGB triplet per source row")
+    if preserve_distinct_xyz_rgb_pairs_in_preview and point_colors is None:
         raise ValueError("RGB-pair preservation requires a colored PLY point cloud")
     if type(meters_per_unit) not in (int, float) or not 0 < meters_per_unit <= 1_000_000:
         raise ValueError("meters_per_unit must be a finite numeric value within bounds")
