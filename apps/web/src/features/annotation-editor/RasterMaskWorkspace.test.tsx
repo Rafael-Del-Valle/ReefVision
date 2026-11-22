@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 
 import { getAnnotationSession, type Project } from "../../api/client";
@@ -432,3 +432,237 @@ it("keeps the target object selected at pointer-down when the mask list changes 
     ),
   );
 });
+
+it("isolates the selected biological class and a late brush save across project navigation", async () => {
+  const newSession = {
+    ...session,
+    image: {
+      ...session.image,
+      id: "image-2",
+      project_id: "project-2",
+      original_filename: "sponge.png",
+      annotation_revision: 7,
+    },
+    label_classes: [
+      {
+        id: "class-2",
+        name: "Sponge",
+        display_color: "#e76f51",
+        is_active: true,
+      },
+    ],
+  };
+  vi.mocked(getAnnotationSession).mockImplementation(async (id) =>
+    (id === "image-2" ? newSession : session) as never,
+  );
+  const rasterApi = (await import("./rasterMaskApi")) as unknown as {
+    editRasterMask: ReturnType<typeof vi.fn>;
+  };
+  let resolveEdit!: (response: unknown) => void;
+  rasterApi.editRasterMask.mockImplementation(
+    () => new Promise((resolve) => { resolveEdit = resolve; }),
+  );
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+  const workspace = (imageId: string, projectId: string) => (
+    <QueryClientProvider client={queryClient}>
+      <RasterMaskWorkspace
+        project={{ id: projectId, name: "Reef" } as Project}
+        imageId={imageId}
+        onReturnToMasks={vi.fn()}
+        onReturnToBoxes={vi.fn()}
+        onClose={vi.fn()}
+      />
+    </QueryClientProvider>
+  );
+  const { rerender } = render(workspace("image-1", "project-1"));
+  const canvas = (await screen.findByTestId(
+    "raster-brush-layer",
+  )) as unknown as SVGSVGElement;
+  vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+    x: 0, y: 0, top: 0, left: 0, right: 400, bottom: 300,
+    width: 400, height: 300, toJSON: () => ({}),
+  });
+  Object.defineProperty(canvas, "setPointerCapture", { value: vi.fn() });
+  Object.defineProperty(canvas, "releasePointerCapture", { value: vi.fn() });
+  Object.defineProperty(canvas, "hasPointerCapture", {
+    value: vi.fn(() => true),
+  });
+  fireEvent.pointerDown(canvas, {
+    button: 0, pointerId: 101, clientX: 100, clientY: 75,
+  });
+  fireEvent.pointerUp(canvas, { pointerId: 101 });
+  await waitFor(() => expect(rasterApi.editRasterMask).toHaveBeenCalledTimes(1));
+  expect(rasterApi.editRasterMask).toHaveBeenCalledWith(
+    "image-1",
+    expect.objectContaining({ base_revision: 0, label_class_id: "class-1" }),
+  );
+
+  rerender(workspace("image-2", "project-2"));
+  await screen.findByText("sponge.png");
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Sponge" }).closest("li"))
+      .toHaveClass("selected"),
+  );
+  await act(async () => {
+    resolveEdit({
+      image: { ...session.image, annotation_revision: 1 },
+      mask_annotation: {
+        id: "mask-from-image-1", label_class_id: "class-1", deleted_at: null,
+      },
+    });
+  });
+  await waitFor(() =>
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["annotation-session", "image-1"],
+    }),
+  );
+  expect(invalidate).toHaveBeenCalledWith({
+    queryKey: ["project-images", "project-1"],
+  });
+  expect(screen.getByRole("button", { name: "Sponge" }).closest("li"))
+    .toHaveClass("selected");
+  expect(screen.queryByRole("button", { name: "Coral" }))
+    .not.toBeInTheDocument();
+  expect(screen.getByText("0 masks")).toBeInTheDocument();
+
+  // The next brush gesture must use the new study's class and source revision.
+  const newCanvas = screen.getByTestId(
+    "raster-brush-layer",
+  ) as unknown as SVGSVGElement;
+  vi.spyOn(newCanvas, "getBoundingClientRect").mockReturnValue({
+    x: 0, y: 0, top: 0, left: 0, right: 400, bottom: 300,
+    width: 400, height: 300, toJSON: () => ({}),
+  });
+  Object.defineProperty(newCanvas, "setPointerCapture", { value: vi.fn() });
+  Object.defineProperty(newCanvas, "releasePointerCapture", { value: vi.fn() });
+  Object.defineProperty(newCanvas, "hasPointerCapture", {
+    value: vi.fn(() => true),
+  });
+  fireEvent.pointerDown(newCanvas, {
+    button: 0, pointerId: 102, clientX: 140, clientY: 95,
+  });
+  fireEvent.pointerUp(newCanvas, { pointerId: 102 });
+  await waitFor(() =>
+    expect(rasterApi.editRasterMask).toHaveBeenCalledWith(
+      "image-2",
+      expect.objectContaining({
+        base_revision: 7,
+        mask_annotation_id: null,
+        label_class_id: "class-2",
+      }),
+    ),
+  );
+});
+
+it.each(["reclassify", "duplicate"] as const)(
+  "ignores a late %s acknowledgement from the previous image",
+  async (operation) => {
+    const mask = {
+      id: "mask-1",
+      image_id: "image-1",
+      label_class_id: "class-1",
+      geometry_kind: "raster_mask",
+      mask_path: "projects/project-1/masks/mask-1.png",
+      polygon_json: null,
+      x_min: 10, y_min: 10, x_max: 80, y_max: 70, area_pixels: 900,
+      source_type: "human_brush",
+      provenance_json: null,
+      status: "verified",
+      created_by: "local_user",
+      created_at: "2026-09-16T00:00:00Z",
+      updated_at: "2026-09-16T00:00:00Z",
+      deleted_at: null,
+      revision: 1,
+    };
+    const initial = {
+      ...session,
+      mask_annotations: [mask],
+      label_classes: [
+        session.label_classes[0],
+        { id: "class-2", name: "Sponge", display_color: "#e76f51", is_active: true },
+      ],
+    };
+    const next = {
+      ...session,
+      image: {
+        ...session.image,
+        id: "image-2",
+        project_id: "project-2",
+        original_filename: "new-project.png",
+      },
+      mask_annotations: [],
+      label_classes: [
+        { id: "class-3", name: "Seagrass", display_color: "#386641", is_active: true },
+      ],
+    };
+    vi.mocked(getAnnotationSession).mockImplementation(async (id) =>
+      (id === "image-2" ? next : initial) as never,
+    );
+    const rasterApi = (await import("./rasterMaskApi")) as unknown as {
+      reclassifyRasterMask: ReturnType<typeof vi.fn>;
+      duplicateRasterMask: ReturnType<typeof vi.fn>;
+    };
+    let resolveOperation!: (response: unknown) => void;
+    const mockOperation =
+      operation === "reclassify"
+        ? rasterApi.reclassifyRasterMask
+        : rasterApi.duplicateRasterMask;
+    mockOperation.mockImplementation(
+      () => new Promise((resolve) => { resolveOperation = resolve; }),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const workspace = (imageId: string, projectId: string) => (
+      <QueryClientProvider client={queryClient}>
+        <RasterMaskWorkspace
+          project={{ id: projectId, name: "Reef" } as Project}
+          imageId={imageId}
+          onReturnToMasks={vi.fn()}
+          onReturnToBoxes={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(workspace("image-1", "project-1"));
+    await waitFor(() =>
+      expect(screen.getByTestId("raster-skeleton-panel"))
+        .toHaveTextContent("mask-1:raster_mask"),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: operation === "reclassify" ? "Sponge" : "Duplicate",
+      }),
+    );
+    await waitFor(() => expect(mockOperation).toHaveBeenCalledTimes(1));
+    rerender(workspace("image-2", "project-2"));
+    await screen.findByText("new-project.png");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Seagrass" }).closest("li"))
+        .toHaveClass("selected"),
+    );
+    await act(async () => {
+      resolveOperation({
+        image: { ...session.image, annotation_revision: 1 },
+        mask_annotation: { ...mask, label_class_id: "class-2", revision: 2 },
+      });
+    });
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ["annotation-session", "image-1"],
+      }),
+    );
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["project-images", "project-1"],
+    });
+    expect(screen.getByRole("button", { name: "Seagrass" }).closest("li"))
+      .toHaveClass("selected");
+    expect(screen.getByText("0 masks")).toBeInTheDocument();
+    expect(screen.getByTestId("raster-skeleton-panel"))
+      .toHaveTextContent("no-mask");
+  },
+);
