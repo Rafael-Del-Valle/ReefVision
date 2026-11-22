@@ -70,6 +70,10 @@ export function RasterMaskWorkspace({
   const queryClient = useQueryClient();
   const [selectedMaskId, setSelectedMaskId] = useState<string | null>(null);
   const strokeContextRef = useRef<RasterEditContext | null>(null);
+  // Late saves from a previous image must not reselect its class or mask in
+  // the newly opened image. Pending mutations can outlive navigation.
+  const currentImageIdRef = useRef(imageId);
+  currentImageIdRef.current = imageId;
   const [createAnotherMaskRequested, setCreateAnotherMaskRequested] =
     useState(false);
   const [activeClassId, setActiveClassId] = useState<string | null>(null);
@@ -122,14 +126,20 @@ export function RasterMaskWorkspace({
   useEffect(() => {
     strokeContextRef.current = null;
     setSelectedMaskId(null);
+    setActiveClassId(null);
     setCreateAnotherMaskRequested(false);
     setMode("paint");
   }, [imageId]);
 
   useEffect(() => {
     const firstClass = session?.label_classes.find((item) => item.is_active);
-    if (activeClassId === null && firstClass) {
-      setActiveClassId(firstClass.id);
+    if (
+      session &&
+      !session.label_classes.some(
+        (item) => item.id === activeClassId && item.is_active,
+      )
+    ) {
+      setActiveClassId(firstClass?.id ?? null);
     }
   }, [activeClassId, session?.label_classes]);
 
@@ -162,12 +172,24 @@ export function RasterMaskWorkspace({
         strokes: [{ points: command.points }],
       }),
     onSuccess: async (response) => {
+      if (response.image.id !== currentImageIdRef.current) {
+        // An old-image result can invalidate its own caches, but must never
+        // select an old biological class/mask in the newly opened image.
+        await queryClient.invalidateQueries({
+          queryKey: ["annotation-session", response.image.id],
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ["project-images", response.image.project_id],
+        });
+        return;
+      }
       setActiveClassId(response.mask_annotation.label_class_id);
       const deleted = response.mask_annotation.deleted_at !== null;
       if (deleted) {
         setSelectedMaskId(null);
       }
       await sessionQuery.refetch();
+      if (response.image.id !== currentImageIdRef.current) return;
       if (!deleted) {
         setSelectedMaskId(response.mask_annotation.id);
       }
@@ -195,8 +217,18 @@ export function RasterMaskWorkspace({
       });
     },
     onSuccess: async (response) => {
+      if (response.image.id !== currentImageIdRef.current) {
+        await queryClient.invalidateQueries({
+          queryKey: ["annotation-session", response.image.id],
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ["project-images", response.image.project_id],
+        });
+        return;
+      }
       setActiveClassId(response.mask_annotation.label_class_id);
       await sessionQuery.refetch();
+      if (response.image.id !== currentImageIdRef.current) return;
       setSelectedMaskId(response.mask_annotation.id);
       await queryClient.invalidateQueries({
         queryKey: ["project-images", project.id],
@@ -212,7 +244,17 @@ export function RasterMaskWorkspace({
       });
     },
     onSuccess: async (response) => {
+      if (response.image.id !== currentImageIdRef.current) {
+        await queryClient.invalidateQueries({
+          queryKey: ["annotation-session", response.image.id],
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ["project-images", response.image.project_id],
+        });
+        return;
+      }
       await sessionQuery.refetch();
+      if (response.image.id !== currentImageIdRef.current) return;
       setSelectedMaskId(response.mask_annotation.id);
       setCreateAnotherMaskRequested(false);
       setClipboardMessage(
