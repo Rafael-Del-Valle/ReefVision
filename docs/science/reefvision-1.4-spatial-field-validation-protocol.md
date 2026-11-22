@@ -291,3 +291,26 @@ visualization and raw sensor observations; **never infer bleaching, tissue
 condition, health, biological replicates or verified specimen identity**.
 Independent coral references, human adjudication, installed Windows GUI,
 GPU and upgrade/rollback release gates remain outstanding.
+
+### Ordered source XYZ/RGB provenance versus bounded preview evidence
+
+For a colored ASCII PLY point-cloud acquisition, retain
+`provenance.source_ordered_xyz_rgb_sha256`, a SHA-256 digest of the **entire
+validated, normalized, ordered XYZ and uint8 RGB row sequence**, not just the
+at-most-512 displayed points. A colorless XYZ input yields `null`. The digest
+must change when an off-preview RGB observation changes even if the displayed
+sample indices, geometry fingerprint, and preview-specific XYZ/RGB digest stay
+identical. It must not depend on preservation/pinning options. Keep the
+independent `source_payload_sha256` for the exact submitted ASCII PLY text:
+normalized row fingerprints are not raw sensor-file byte signatures.
+
+Use a synthetic 600-row PLY acquisition, mutate only a red channel at a known
+unselected source index, and compare two standalone API responses. Verify the
+full-source color fingerprint changes while the preview XYZ/RGB fingerprint
+and ordered geometry fingerprint do not. Check a known two-row direct-service
+SHA-256 oracle and a colorless negative control. Exercise the fingerprint in
+**two executions of the same saved typed Workflow Builder graph**, comparing
+complete persisted artifacts and their SHA-256 digests. This is source-evidence
+integrity and reproducibility QC only; it cannot validate the original camera
+file, absolute color, bleaching, living tissue, specimen identity or
+calibration. Real coral scans and independent human review are still required.
