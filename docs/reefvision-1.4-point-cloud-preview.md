@@ -599,3 +599,30 @@ engine, standalone project API and twice-executed persisted, typed Workflow
 Builder graph artifacts. Calibration, coordinate registration and biological
 identity stay provisional pending independent physical reference and human
 review. Windows installed GUI/GPU and full release acceptance are still open.
+
+## Exact preview RGB-frequency bias witness (November 22, 2026)
+
+A bounded colored ASCII PLY preview can retain **every distinct XYZ/RGB pair**
+yet alter how frequently each observation appears. The
+`preview_vs_source_xyz_rgb_observation_total_variation` compares normalized
+source acquisition-row counts against the displayed-row counts over **all**
+source XYZ/RGB pairs. A value of zero denotes equal row-frequency
+distributions; a positive value denotes display-sampling frequency distortion,
+not measured organism change. The companion
+`preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction`
+records the reduced [numerator, denominator] of the count-derived rational
+quantity, avoiding a floating-point-only audit record. A nonzero value emits
+`preview_shifts_xyz_rgb_observation_frequency_distribution` even if
+`fraction_of_source_xyz_rgb_pairs_displayed` is 1.0.
+
+Synthetic tests independently calculate the expected rational metric from a
+600-row, three-pair scan with an off-preview rare color, as well as a 513-row
+source containing 512 distinct pairs (all retained, but one repeated row
+omitted). The standalone endpoint and twice-executed, persisted executable
+typed Workflow Builder graph must preserve the same complete scientific
+artifact and SHA-256 digest. The test also verifies a zero result when every
+row is shown. These are **sampling/QC diagnostics**, not unbiased random
+sampling, calibrated colorimetry, bleaching, health, specimen reidentification,
+independent biological replicates, verified calibration or statistical
+confidence intervals. Human review and representative coral validation remain
+mandatory.
