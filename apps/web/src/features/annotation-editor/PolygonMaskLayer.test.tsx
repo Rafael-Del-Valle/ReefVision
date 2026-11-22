@@ -600,7 +600,6 @@ describe("PolygonMaskLayer", () => {
     expect(polygonMask.points?.[0]).toEqual({ x: 10, y: 10 });
   });
 
-
   it("keeps the first vertex class through selection changes and clear, then uses the next class", () => {
     const onCreate = vi.fn();
     const view = (activeClassId: string | null) => (
