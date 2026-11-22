@@ -123,7 +123,7 @@ def inspect_database(path: Path) -> dict[str, object]:
             (revision == "0038" and review_check == "coordination")
             or (revision == "0039" and review_check == "triage")
         ):
-            classification = f"1.6-qc-{revision}
+            classification = f"1.6-qc-{revision}"
     if classification == "ambiguous":
         issues.append("Cannot safely attribute the colliding revision to one applied lineage")
     return {
