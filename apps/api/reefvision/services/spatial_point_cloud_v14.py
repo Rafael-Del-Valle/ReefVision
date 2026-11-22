@@ -969,9 +969,7 @@ def measure_point_cloud_preview(
     # geometry-only and exact-import-text hashes; it is not color calibration.
     source_ordered_xyz_rgb_sha256: str | None = None
     if point_colors is not None:
-        ordered_rgb_rows = [
-            [*xyz, *rgb] for xyz, rgb in zip(vertices, point_colors, strict=True)
-        ]
+        ordered_rgb_rows = [[*xyz, *rgb] for xyz, rgb in zip(vertices, point_colors, strict=True)]
         source_ordered_xyz_rgb_sha256 = hashlib.sha256(
             json.dumps(ordered_rgb_rows, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
@@ -1314,6 +1312,11 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             (tuple(points[index]), tuple(point_colors[index]))
             for index in result["preview_point_indices"]
         }
+        # Repeated acquisition rows are not additional distinct XYZ/RGB
+        # observations. Report their multiplicity without deciding whether
+        # independent sensor acquisitions or biological replicates occurred.
+        repeated_source_pair_rows = len(points) - len(source_pairs)
+        repeated_preview_pair_rows = len(result["preview_point_indices"]) - len(preview_pairs)
         palettes: dict[tuple[float, ...], set[tuple[int, ...]]] = {}
         for point, rgb in zip(points, point_colors, strict=True):
             palettes.setdefault(tuple(point), set()).add(tuple(rgb))
@@ -1359,7 +1362,12 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             "preview_rgb_channel_ranges_uint8": preview_rgb_ranges,
             "preview_omitted_source_rgb_channel_extrema": omitted_rgb_channel_extrema,
             "source_distinct_xyz_rgb_pairs": len(source_pairs),
+            "source_repeated_xyz_rgb_observation_rows": repeated_source_pair_rows,
+            "source_repeated_xyz_rgb_observation_fraction": (
+                repeated_source_pair_rows / len(points)
+            ),
             "preview_distinct_xyz_rgb_pairs": len(preview_pairs),
+            "preview_repeated_xyz_rgb_observation_rows": repeated_preview_pair_rows,
             "fraction_of_source_xyz_rgb_pairs_displayed": (len(preview_pairs) / len(source_pairs)),
             "source_xyz_loci_with_multiple_rgb_values": differing_color_loci,
             "multi_rgb_xyz_loci_with_complete_preview": (
@@ -1378,6 +1386,8 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
                 ).encode("utf-8")
             ).hexdigest(),
         }
+        if repeated_source_pair_rows:
+            result["qc_warnings"].append("source_contains_repeated_xyz_rgb_observations")
         if differing_color_loci:
             result["qc_warnings"].append("source_xyz_loci_have_multiple_rgb_values")
         if len(preview_pairs) != len(source_pairs):
