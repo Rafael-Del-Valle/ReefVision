@@ -1335,9 +1335,13 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             abs(source_count * displayed_row_count - preview_pair_counts.get(pair, 0) * len(points))
             for pair, source_count in source_pair_counts.items()
         )
-        frequency_total_variation = frequency_shift_numerator / (
-            2 * len(points) * displayed_row_count
+        # Preserve a reduced exact rational witness alongside the float:
+        # scans with rare observations can round a small nonzero shift in
+        # floating-point output; researchers can audit the count-based result.
+        frequency_total_variation_exact = Fraction(
+            frequency_shift_numerator, 2 * len(points) * displayed_row_count
         )
+        frequency_total_variation = float(frequency_total_variation_exact)
         palettes: dict[tuple[float, ...], set[tuple[int, ...]]] = {}
         for point, rgb in zip(points, point_colors, strict=True):
             palettes.setdefault(tuple(point), set()).add(tuple(rgb))
@@ -1395,6 +1399,10 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
                 represented_source_rows / len(points)
             ),
             "preview_vs_source_xyz_rgb_observation_total_variation": frequency_total_variation,
+            "preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction": [
+                frequency_total_variation_exact.numerator,
+                frequency_total_variation_exact.denominator,
+            ],
             "source_xyz_loci_with_multiple_rgb_values": differing_color_loci,
             "multi_rgb_xyz_loci_with_complete_preview": (
                 differing_color_loci - incomplete_multi_color_loci
