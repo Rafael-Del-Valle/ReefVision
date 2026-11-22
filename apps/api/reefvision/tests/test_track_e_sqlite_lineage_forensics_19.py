@@ -23,11 +23,7 @@ def _inspect(tmp_path: Path, ddl: str, revision: str) -> tuple[int, dict[str, ob
         connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
         connection.executescript(ddl)
     before = hashlib.sha256(path.read_bytes()).hexdigest()
-    script = (
-        Path(__file__).resolve().parents[4]
-        / "scripts"
-        / "inspect-alembic-0038-sqlite.py"
-    )
+    script = Path(__file__).resolve().parents[4] / "scripts" / "inspect-alembic-0038-sqlite.py"
     result = subprocess.run(
         [sys.executable, str(script), str(path)],
         capture_output=True,
