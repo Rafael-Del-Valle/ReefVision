@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-
 from typing import cast
 
 import pytest
@@ -79,6 +78,118 @@ def test_ordered_rgb_acquisition_fingerprint_catches_hidden_observations(
     )
     assert before["provenance"]["calibration_verified"] is False
     assert before["provenance"]["specimen_identity_verified"] is False
+
+
+
+def test_ply_channel_reordering_preserves_semantic_rgb_hash_and_saved_workflow(
+    client: TestClient,
+) -> None:
+    """Exact PLY bytes differ, but parsed acquisition-row RGB evidence is stable."""
+    pid = str(create_project(client, "Canonical point-cloud RGB evidence")["id"])
+    base = f"/api/v1/projects/{pid}"
+    canonical = _colored_ply(["0 0 0 10 20 30", "1 0 0 40 50 60"])
+    reordered = "\n".join(
+        [
+            "ply",
+            "format ascii 1.0",
+            "comment independent exporter uses a different property order",
+            "element vertex 2",
+            "property uchar blue",
+            "property double z",
+            "property uchar red",
+            "property float x",
+            "property uchar green",
+            "property double y",
+            "end_header",
+            "30 0 10 0 20 0",
+            "60 0 40 1 50 0",
+            "",
+        ]
+    )
+    original_response = client.post(
+        f"{base}/spatial/point-cloud-preview",
+        json={**CALIBRATION, "ply_text": canonical},
+    )
+    reordered_params = {**CALIBRATION, "ply_text": reordered}
+    reordered_response = client.post(
+        f"{base}/spatial/point-cloud-preview", json=reordered_params
+    )
+    assert original_response.status_code == 200, original_response.text
+    assert reordered_response.status_code == 200, reordered_response.text
+    original = original_response.json()
+    normalized = reordered_response.json()
+    expected = hashlib.sha256(
+        b"[[0.0,0.0,0.0,10,20,30],[1.0,0.0,0.0,40,50,60]]"
+    ).hexdigest()
+    for artifact in (original, normalized):
+        assert artifact["provenance"]["source_ordered_xyz_rgb_sha256"] == expected
+        assert artifact["provenance"]["source_ordered_xyz_rgb_canonicalization"] == (
+            "ordered_normalized_float64_xyz_uint8_rgb_compact_json_utf8_v1"
+        )
+        assert artifact["preview_point_colors_rgb_uint8"] == [
+            [10, 20, 30],
+            [40, 50, 60],
+        ]
+        assert artifact["provenance"]["calibration_verified"] is False
+        assert artifact["provenance"]["specimen_identity_verified"] is False
+    assert original["provenance"]["source_payload_sha256"] != (
+        normalized["provenance"]["source_payload_sha256"]
+    )
+    assert original["provenance"]["ordered_geometry_sha256"] == (
+        normalized["provenance"]["ordered_geometry_sha256"]
+    )
+    assert original["preview_sample_geometry_sha256"] == (
+        normalized["preview_sample_geometry_sha256"]
+    )
+    assert original["preview_rgb_variant_support"] == normalized["preview_rgb_variant_support"]
+
+    graph = {
+        "graph_id": "canonical-point-cloud-rgb-v14",
+        "name": "Imported PLY semantic fingerprint QC",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {
+                "node_id": "c",
+                "node_type": "point_cloud_preview",
+                "parameters": reordered_params,
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "c",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    digests: list[str] = []
+    for _ in range(2):
+        run = client.post(
+            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+        )
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        )
+        assert artifact["payload_json"] == normalized
+        digests.append(artifact["payload_sha256"])
+    assert len(set(digests)) == 1
 
 
 def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
