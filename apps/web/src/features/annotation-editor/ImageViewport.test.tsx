@@ -154,7 +154,7 @@ describe("ImageViewport", () => {
     }
   });
 
-  it("refits on VisualViewport resize without losing manual zoom or scientific pixel geometry", () => {
+  it("refits on visual viewport resize without changing annotated pixels", () => {
     // Embedded WebView2 may emit only visualViewport.resize after a desktop
     // scale change. A registered but silent ResizeObserver cannot help.
     class SilentResizeObserver {
@@ -200,7 +200,8 @@ describe("ImageViewport", () => {
         `scale(${fitTransform({ width: 1600, height: 1200 }, dimensions).scale})`,
       );
       fireEvent.wheel(frame, { deltaY: -120, clientX: 470, clientY: 310 });
-      const manualScale = transform.style.transform.match(/scale\(([^)]+)\)/)?.[1];
+      const manualScale =
+        transform.style.transform.match(/scale\(([^)]+)\)/)?.[1];
       expect(manualScale).toBeDefined();
 
       dimensions.width = 1120;
@@ -212,7 +213,10 @@ describe("ImageViewport", () => {
       expect(polygon).toHaveAttribute("points", sourcePoints);
 
       unmount();
-      expect(removeListener).toHaveBeenCalledWith("resize", expect.any(Function));
+      expect(removeListener).toHaveBeenCalledWith(
+        "resize",
+        expect.any(Function),
+      );
     } finally {
       removeListener.mockRestore();
       vi.unstubAllGlobals();
