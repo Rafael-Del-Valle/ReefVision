@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import pytest
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.spatial_point_cloud_v14 import measure_point_cloud_preview
 from reefvision.tests.test_annotations import create_project
-
 
 CALIBRATION = {
     "meters_per_unit": 0.01,
@@ -441,9 +440,7 @@ def test_preview_centroid_signed_offset_tracks_direction_on_all_three_axes() -> 
     intervals = measured["preview_minus_source_row_centroid_offset_scale_interval_m"]
     assert intervals is not None
     for signed_value, interval in zip(offset, intervals, strict=True):
-        assert interval == pytest.approx(
-            sorted([signed_value * 0.9, signed_value * 1.1])
-        )
+        assert interval == pytest.approx(sorted([signed_value * 0.9, signed_value * 1.1]))
         assert interval[0] <= interval[1]
     assert measured["preview_vs_source_row_centroid_separation_m"] == pytest.approx(
         sum(value * value for value in expected) ** 0.5
