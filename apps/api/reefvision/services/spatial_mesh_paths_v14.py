@@ -406,9 +406,20 @@ def mesh_edge_paths(
             # detour diagnostic, never an anatomical branch-length estimate.
             # Both distances share the same calibration scale, so uncertainty
             # bounds must scale the difference together (not independently).
-            geometric_excess_source_units = max(0.0, shortest[end] - chord_mesh_units)
-            geometric_excess_m = geometric_excess_source_units * scale
-            if not isfinite(geometric_excess_m):
+            # An apparently shorter-than-chord route is numeric roundoff,
+            # not evidence of exactly zero geometric excess. Withhold the
+            # nominal difference and its bounds pending scientist review.
+            geometric_excess_source_units = (
+                shortest[end] - chord_mesh_units
+                if shortest[end] >= chord_mesh_units
+                else None
+            )
+            geometric_excess_m = (
+                geometric_excess_source_units * scale
+                if geometric_excess_source_units is not None
+                else None
+            )
+            if geometric_excess_m is not None and not isfinite(geometric_excess_m):
                 raise ValueError("Calibrated geometric detour excess overflowed")
             # Compute the dimensionless detour in source units: calibration
             # cancels, and dividing two tiny calibrated lengths loses precision.
@@ -425,15 +436,17 @@ def mesh_edge_paths(
             # A finite nominal route can still overflow when its calibration
             # uncertainty is expanded. Never persist nonfinite scientific JSON.
             if scale_uncertainty is not None:
+                quantities_for_bounds = [
+                    meters,
+                    chord_m,
+                    *path_edge_lengths_m,
+                    *path_cumulative_lengths_m,
+                ]
+                if geometric_excess_m is not None:
+                    quantities_for_bounds.append(geometric_excess_m)
                 bounds = [
                     value * factor
-                    for value in (
-                        meters,
-                        chord_m,
-                        geometric_excess_m,
-                        *path_edge_lengths_m,
-                        *path_cumulative_lengths_m,
-                    )
+                    for value in quantities_for_bounds
                     for factor in (1 - scale_uncertainty, 1 + scale_uncertainty)
                 ]
                 if any(not isfinite(bound) for bound in bounds):
@@ -468,13 +481,19 @@ def mesh_edge_paths(
                 endpoint_chord_scale_interval_m = _scale_only_length_interval(
                     chord_m, scale_uncertainty
                 )
-                geometric_excess_scale_interval_m = _scale_only_length_interval(
-                    geometric_excess_m, scale_uncertainty
+                geometric_excess_scale_interval_m = (
+                    _scale_only_length_interval(geometric_excess_m, scale_uncertainty)
+                    if geometric_excess_m is not None
+                    else None
                 )
                 unresolved = (
                     (meters > 0 and length_scale_interval_m is None)
                     or (chord_m > 0 and endpoint_chord_scale_interval_m is None)
-                    or (geometric_excess_m > 0 and geometric_excess_scale_interval_m is None)
+                    or (
+                        geometric_excess_m is not None
+                        and geometric_excess_m > 0
+                        and geometric_excess_scale_interval_m is None
+                    )
                     or any(
                         length > 0 and bounds is None
                         for length, bounds in zip(
@@ -514,7 +533,7 @@ def mesh_edge_paths(
                 path_qc_warnings.append("coincident_route_endpoints")
             if chord_mesh_units > 0 and chord_m == 0:
                 path_qc_warnings.append("calibrated_endpoint_chord_underflow")
-            if geometric_excess_source_units > 0 and geometric_excess_m == 0:
+            if geometric_excess_source_units is not None and geometric_excess_source_units > 0 and geometric_excess_m == 0:
                 path_qc_warnings.append("calibrated_geometric_excess_underflow")
             if detour_ratio is not None and not isfinite(detour_ratio):
                 detour_ratio = None
