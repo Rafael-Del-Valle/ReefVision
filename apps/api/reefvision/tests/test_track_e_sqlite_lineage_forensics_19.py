@@ -69,7 +69,11 @@ def _inspect(tmp_path: Path, ddl: str, revision: str) -> tuple[int, dict[str, ob
                 event_type IN ('comment', 'assign', 'unassign',
                                'triage_start', 'triage_skip', 'triage_return')
               ),
-              UNIQUE(review_queue_item_id, client_request_id)
+              UNIQUE(review_queue_item_id, client_request_id),
+              FOREIGN KEY (review_queue_id) REFERENCES review_queues(id) ON DELETE CASCADE,
+              FOREIGN KEY (review_queue_item_id) REFERENCES review_queue_items(id)
+                ON DELETE CASCADE,
+              FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
             );
             """,
             "0039",
@@ -89,9 +93,48 @@ def test_classifies_conflicting_real_sqlite_schema_without_writing(
     if expected.startswith("1.6-qc"):
         assert report["qc_request_key_unique"] is True
         assert report["qc_required_columns_not_null"] is True
+        assert report["qc_event_foreign_keys_valid"] is True
         assert report["qc_event_scope_violations"] == 0
     assert report["automatic_migration_authorized"] is False
     assert report["manual_migration_reconciliation_required"] is True
+
+
+
+def test_rejects_qc_lineage_with_wrong_cascade_foreign_key(
+    tmp_path: Path,
+) -> None:
+    # Actual 1.6/0038 migration requires all three ON DELETE CASCADE links.
+    # Existing rows and PRAGMA foreign_key_check cannot prove those links exist.
+    ddl = """
+        CREATE TABLE projects (id TEXT PRIMARY KEY);
+        CREATE TABLE review_queues (id TEXT PRIMARY KEY, project_id TEXT NOT NULL);
+        CREATE TABLE review_queue_items (
+          id TEXT PRIMARY KEY, review_queue_id TEXT NOT NULL, project_id TEXT NOT NULL
+        );
+        CREATE TABLE review_queue_item_events (
+          id TEXT PRIMARY KEY NOT NULL, project_id TEXT NOT NULL,
+          review_queue_id TEXT NOT NULL, review_queue_item_id TEXT NOT NULL,
+          client_request_id TEXT NOT NULL, event_type TEXT NOT NULL,
+          actor TEXT NOT NULL, created_at TEXT NOT NULL,
+          UNIQUE(review_queue_item_id, client_request_id),
+          CHECK(event_type IN ('comment', 'assign', 'unassign')),
+          FOREIGN KEY (review_queue_id) REFERENCES review_queues(id) ON DELETE CASCADE,
+          FOREIGN KEY (review_queue_item_id) REFERENCES review_queue_items(id)
+            ON DELETE CASCADE,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE NO ACTION
+        );
+    """
+    status, report = _inspect(tmp_path, ddl, "0038")
+    assert status == 2
+    assert report["classification"] == "ambiguous"
+    assert report["review_event_check"] == "coordination"
+    assert report["qc_event_scope_violations"] == 0
+    assert report["foreign_key_violations"] == 0
+    assert report["qc_request_key_unique"] is True
+    assert report["qc_required_columns_not_null"] is True
+    assert report["qc_event_foreign_keys_valid"] is False
+    assert any("CASCADE foreign keys" in issue for issue in report["issues"])
+    assert report["automatic_migration_authorized"] is False
 
 
 def test_refuses_colliding_version_with_hybrid_tables(tmp_path: Path) -> None:
