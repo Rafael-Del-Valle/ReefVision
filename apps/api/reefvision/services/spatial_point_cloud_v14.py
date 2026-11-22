@@ -945,9 +945,7 @@ def measure_point_cloud_preview(
                 offset * (1 + relative_scale_uncertainty),
             )
             lower, upper = min(candidates), max(candidates)
-            if _scale_interval_unresolved(
-                offset, relative_scale_uncertainty, lower, upper
-            ):
+            if _scale_interval_unresolved(offset, relative_scale_uncertainty, lower, upper):
                 preview_centroid_offset_interval_unresolved = True
                 preview_centroid_offset_scale_intervals.append(None)
             else:
