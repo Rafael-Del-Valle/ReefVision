@@ -154,6 +154,70 @@ describe("ImageViewport", () => {
     }
   });
 
+  it("keeps camera geometry usable when WebView2 visualViewport access throws", () => {
+    const previousViewport = Object.getOwnPropertyDescriptor(
+      window,
+      "visualViewport",
+    );
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      get() {
+        throw new Error("WebView2 VisualViewport bridge unavailable");
+      },
+    });
+    vi.stubGlobal("ResizeObserver", undefined);
+    try {
+      const dimensions = { width: 940, height: 620 };
+      const { unmount } = render(
+        <ImageViewport width={1600} height={1200} label="Broken viewport getter">
+          <svg data-testid="getter-overlay" viewBox="0 0 1600 1200">
+            <polygon points="10,20 40,20 40,60" />
+          </svg>
+        </ImageViewport>,
+      );
+      const frame = screen.getByRole("region", {
+        name: "Broken viewport getter",
+      });
+      Object.defineProperty(frame, "clientWidth", {
+        configurable: true,
+        get: () => dimensions.width,
+      });
+      Object.defineProperty(frame, "clientHeight", {
+        configurable: true,
+        get: () => dimensions.height,
+      });
+      const transform = screen.getByTestId("image-viewport-transform");
+      const polygon = screen
+        .getByTestId("getter-overlay")
+        .querySelector("polygon");
+      const originalPoints = polygon?.getAttribute("points");
+
+      fireEvent.resize(window);
+      expect(transform.style.transform).toContain(
+        `scale(${fitTransform({ width: 1600, height: 1200 }, dimensions).scale})`,
+      );
+      fireEvent.wheel(frame, { deltaY: -120, clientX: 470, clientY: 310 });
+      const manuallyZoomedScale =
+        transform.style.transform.match(/scale\\(([^)]+)\\)/)?.[1];
+      expect(manuallyZoomedScale).toBeDefined();
+      dimensions.width = 1120;
+      dimensions.height = 740;
+      fireEvent.resize(window);
+      expect(transform.style.transform).toContain(
+        `scale(${manuallyZoomedScale})`,
+      );
+      expect(polygon).toHaveAttribute("points", originalPoints);
+      unmount();
+    } finally {
+      if (previousViewport) {
+        Object.defineProperty(window, "visualViewport", previousViewport);
+      } else {
+        Reflect.deleteProperty(window, "visualViewport");
+      }
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("refits on visual viewport resize without changing annotated pixels", () => {
     // Embedded WebView2 may emit only visualViewport.resize after a desktop
     // scale change. A registered but silent ResizeObserver cannot help.

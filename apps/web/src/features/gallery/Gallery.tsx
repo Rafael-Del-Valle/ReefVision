@@ -967,8 +967,11 @@ function GalleryContent({
     // Embedded WebView2 may only signal visualViewport.resize after display
     // scaling or docking changes. Re-align the selected scientific image's
     // filmstrip button without changing the source image or document scroll.
-    const visualViewport = window.visualViewport;
+    // A broken WebView2 visualViewport getter can throw before the listener
+    // registration. Keep the selected thumbnail reachable by window resizing.
+    let visualViewport: VisualViewport | null = null;
     try {
+      visualViewport = window.visualViewport;
       visualViewport?.addEventListener("resize", alignFocusedThumbnail);
     } catch {
       // A partial VisualViewport implementation must not block gallery startup.

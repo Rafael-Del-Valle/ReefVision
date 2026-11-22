@@ -2550,6 +2550,60 @@ describe("Gallery", () => {
     ).toHaveAttribute("aria-current", "true");
   });
 
+  it("keeps the first gallery image and filmstrip usable when visualViewport access throws", async () => {
+    const previousViewport = Object.getOwnPropertyDescriptor(
+      window,
+      "visualViewport",
+    );
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      get() {
+        throw new Error("WebView2 VisualViewport bridge unavailable");
+      },
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input).includes(`/projects/${project.id}/images`)) {
+        return jsonResponse({
+          items: [image],
+          total: 1,
+          page: 1,
+          page_size: 24,
+          pages: 1,
+        });
+      }
+      throw new Error(`Unexpected image query: ${String(input)}`);
+    });
+    try {
+      const { unmount } = renderGallery();
+      const thumbnail = await screen.findByRole("listitem", {
+        name: "Focus swiftia-01.png",
+      });
+      const strip = screen.getByRole("list", {
+        name: "Nearby images",
+      }) as HTMLDivElement;
+      expect(
+        screen.getByAltText("Focused project image: swiftia-01.png"),
+      ).toBeInTheDocument();
+      vi.spyOn(strip, "getBoundingClientRect").mockReturnValue({
+        left: 0,
+        right: 100,
+      } as DOMRect);
+      vi.spyOn(thumbnail, "getBoundingClientRect").mockReturnValue({
+        left: 140,
+        right: 180,
+      } as DOMRect);
+      fireEvent.resize(window);
+      expect(strip.scrollLeft).toBe(80);
+      unmount();
+    } finally {
+      if (previousViewport) {
+        Object.defineProperty(window, "visualViewport", previousViewport);
+      } else {
+        Reflect.deleteProperty(window, "visualViewport");
+      }
+    }
+  });
+
   it("keeps the first gallery image fixed under wheel input while preserving browser zoom", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse({

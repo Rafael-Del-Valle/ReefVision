@@ -133,8 +133,12 @@ export function ImageViewport({
     // adjustments without notifying ResizeObserver or window.resize.
     // Measure the actual canvas client dimensions, never the zoomed visual
     // viewport size, so polygon and mask coordinates remain image-relative.
-    const visualViewport = globalThis.visualViewport;
+    // Some embedded WebView2 versions expose a VisualViewport getter that
+    // throws before the listener can be registered. Window resize must still
+    // recover the initial image and preserve pixel-aligned annotations.
+    let visualViewport: VisualViewport | null = null;
     try {
+      visualViewport = globalThis.visualViewport;
       visualViewport?.addEventListener("resize", updateSize);
     } catch {
       // An incomplete embedded VisualViewport implementation must not break
