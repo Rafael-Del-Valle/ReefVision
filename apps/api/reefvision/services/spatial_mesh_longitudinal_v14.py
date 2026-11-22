@@ -1364,7 +1364,20 @@ def compare_mesh_observations(
                 )
             ):
                 warnings.append("identical_geometry_extent_inconsistent_with_calibration_scale")
-    if difference_bounds is None:
+    # A nominal before/after area difference is not necessarily distinguishable
+    # from independent calibration-scale uncertainty. Classify the sign of the
+    # propagated *scale-only* interval, not biological growth or significance.
+    # Missing uncertainty cannot be treated as an interval of zero width.
+    area_difference_scale_only_sign: str | None = None
+    if difference_bounds is not None:
+        if difference_bounds[0] > 0:
+            area_difference_scale_only_sign = "positive"
+        elif difference_bounds[1] < 0:
+            area_difference_scale_only_sign = "negative"
+        else:
+            area_difference_scale_only_sign = "includes_zero"
+            warnings.append("surface_area_difference_scale_bounds_include_zero")
+    else:
         warnings.append("scale_uncertainty_interval_unavailable")
     if identity_disputed:
         warnings.append("longitudinal_change_withheld_disputed_specimen_identity")
@@ -1514,6 +1527,7 @@ def compare_mesh_observations(
         "before_surface_area_m2": a0,
         "after_surface_area_m2": a1,
         "delta_surface_area_m2": difference,
+        "surface_area_difference_sign_under_scale_only_bounds": area_difference_scale_only_sign,
         "before_axis_aligned_bounding_box_diagonal_m": early_extent,
         "after_axis_aligned_bounding_box_diagonal_m": late_extent,
         "delta_axis_aligned_bounding_box_diagonal_m": extent_delta,
@@ -1612,6 +1626,7 @@ def compare_mesh_observations(
             "registered_surface_centroid_separation_caller_bound_interval_m",
             "registered_surface_centroid_offset_target_frame_caller_bound_intervals_m",
             "delta_surface_area_m2",
+            "surface_area_difference_sign_under_scale_only_bounds",
             "delta_axis_aligned_bounding_box_diagonal_m",
             "relative_axis_aligned_bounding_box_diagonal_change_percent",
             "relative_axis_aligned_bounding_box_diagonal_scale_interval_percent",
