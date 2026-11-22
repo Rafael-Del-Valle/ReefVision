@@ -208,6 +208,7 @@ def test_refuses_populated_qc_lineage_with_cross_project_event(
     assert report["automatic_migration_authorized"] is False
     assert any("cross-project links" in issue for issue in report["issues"])
 
+
 def test_rejects_historical_qc_event_types_outside_installed_check(
     tmp_path: Path,
 ) -> None:
@@ -243,4 +244,3 @@ def test_rejects_historical_qc_event_types_outside_installed_check(
     assert report["qc_event_type_violations"] == 1
     assert report["automatic_migration_authorized"] is False
     assert any("disallowed event types" in issue for issue in report["issues"])
-
