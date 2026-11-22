@@ -37,12 +37,8 @@ def test_ordered_rgb_acquisition_fingerprint_catches_hidden_observations(
     """Omitted RGB rows change full acquisition evidence, not preview evidence."""
     points = [[0, 0, 0], [1, 0, 0]]
     colors = [[10, 20, 30], [40, 50, 60]]
-    direct = measure_point_cloud_preview(
-        points=points, point_colors=colors, **CALIBRATION
-    )
-    expected_hash = hashlib.sha256(
-        b"[[0.0,0.0,0.0,10,20,30],[1.0,0.0,0.0,40,50,60]]"
-    ).hexdigest()
+    direct = measure_point_cloud_preview(points=points, point_colors=colors, **CALIBRATION)
+    expected_hash = hashlib.sha256(b"[[0.0,0.0,0.0,10,20,30],[1.0,0.0,0.0,40,50,60]]").hexdigest()
     assert direct["provenance"]["source_ordered_xyz_rgb_sha256"] == expected_hash
     changed = measure_point_cloud_preview(
         points=points, point_colors=[[10, 20, 31], [40, 50, 60]], **CALIBRATION
@@ -60,21 +56,22 @@ def test_ordered_rgb_acquisition_fingerprint_catches_hidden_observations(
     changed_rows = rows.copy()
     changed_rows[hidden_index] = f"{hidden_index} 0 0 11 20 30"
     first = client.post(endpoint, json={**CALIBRATION, "ply_text": _colored_ply(rows)})
-    second = client.post(
-        endpoint, json={**CALIBRATION, "ply_text": _colored_ply(changed_rows)}
-    )
+    second = client.post(endpoint, json={**CALIBRATION, "ply_text": _colored_ply(changed_rows)})
     assert first.status_code == second.status_code == 200
     before, after = first.json(), second.json()
     assert hidden_index not in before["preview_point_indices"]
     assert before["preview_point_indices"] == after["preview_point_indices"]
-    assert before["provenance"]["ordered_geometry_sha256"] == (
-        after["provenance"]["ordered_geometry_sha256"]
+    assert (
+        before["provenance"]["ordered_geometry_sha256"]
+        == (after["provenance"]["ordered_geometry_sha256"])
     )
-    assert before["provenance"]["source_ordered_xyz_rgb_sha256"] != (
-        after["provenance"]["source_ordered_xyz_rgb_sha256"]
+    assert (
+        before["provenance"]["source_ordered_xyz_rgb_sha256"]
+        != (after["provenance"]["source_ordered_xyz_rgb_sha256"])
     )
-    assert before["preview_rgb_variant_support"]["preview_sample_xyz_rgb_sha256"] == (
-        after["preview_rgb_variant_support"]["preview_sample_xyz_rgb_sha256"]
+    assert (
+        before["preview_rgb_variant_support"]["preview_sample_xyz_rgb_sha256"]
+        == (after["preview_rgb_variant_support"]["preview_sample_xyz_rgb_sha256"])
     )
     assert before["provenance"]["calibration_verified"] is False
     assert before["provenance"]["specimen_identity_verified"] is False
@@ -110,16 +107,12 @@ def test_ply_channel_reordering_preserves_semantic_rgb_hash_and_saved_workflow(
         json={**CALIBRATION, "ply_text": canonical},
     )
     reordered_params = {**CALIBRATION, "ply_text": reordered}
-    reordered_response = client.post(
-        f"{base}/spatial/point-cloud-preview", json=reordered_params
-    )
+    reordered_response = client.post(f"{base}/spatial/point-cloud-preview", json=reordered_params)
     assert original_response.status_code == 200, original_response.text
     assert reordered_response.status_code == 200, reordered_response.text
     original = original_response.json()
     normalized = reordered_response.json()
-    expected = hashlib.sha256(
-        b"[[0.0,0.0,0.0,10,20,30],[1.0,0.0,0.0,40,50,60]]"
-    ).hexdigest()
+    expected = hashlib.sha256(b"[[0.0,0.0,0.0,10,20,30],[1.0,0.0,0.0,40,50,60]]").hexdigest()
     for artifact in (original, normalized):
         assert artifact["provenance"]["source_ordered_xyz_rgb_sha256"] == expected
         assert artifact["provenance"]["source_ordered_xyz_rgb_canonicalization"] == (
@@ -131,18 +124,18 @@ def test_ply_channel_reordering_preserves_semantic_rgb_hash_and_saved_workflow(
         ]
         assert artifact["provenance"]["calibration_verified"] is False
         assert artifact["provenance"]["specimen_identity_verified"] is False
-    assert original["provenance"]["source_payload_sha256"] != (
-        normalized["provenance"]["source_payload_sha256"]
+    assert (
+        original["provenance"]["source_payload_sha256"]
+        != (normalized["provenance"]["source_payload_sha256"])
     )
-    assert original["provenance"]["ordered_geometry_sha256"] == (
-        normalized["provenance"]["ordered_geometry_sha256"]
+    assert (
+        original["provenance"]["ordered_geometry_sha256"]
+        == (normalized["provenance"]["ordered_geometry_sha256"])
     )
-    assert original["preview_sample_geometry_sha256"] == (
-        normalized["preview_sample_geometry_sha256"]
+    assert (
+        original["preview_sample_geometry_sha256"] == (normalized["preview_sample_geometry_sha256"])
     )
-    assert original["preview_rgb_variant_support"] == (
-        normalized["preview_rgb_variant_support"]
-    )
+    assert original["preview_rgb_variant_support"] == (normalized["preview_rgb_variant_support"])
 
     graph = {
         "graph_id": "canonical-point-cloud-rgb-v14",
@@ -172,9 +165,7 @@ def test_ply_channel_reordering_preserves_semantic_rgb_hash_and_saved_workflow(
     assert saved.status_code == 201, saved.text
     digests: list[str] = []
     for _ in range(2):
-        run = client.post(
-            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-        )
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         app = cast(FastAPI, client.app)
         assert process_workflow_run_job(
@@ -217,6 +208,12 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
     assert len(pinned["preview_point_indices"]) == 512
     assert normal["preview_rgb_variant_support"]["preview_distinct_xyz_rgb_pairs"] == 2
     normal_rgb = normal["preview_rgb_variant_support"]
+    assert normal_rgb["source_repeated_xyz_rgb_observation_rows"] == 597
+    assert normal_rgb["source_repeated_xyz_rgb_observation_fraction"] == pytest.approx(
+        597 / 600
+    )
+    assert normal_rgb["preview_repeated_xyz_rgb_observation_rows"] == 510
+    assert "source_contains_repeated_xyz_rgb_observations" in normal["qc_warnings"]
     assert normal_rgb["source_rgb_channel_ranges_uint8"] == {
         "red": [10, 80],
         "green": [20, 90],
@@ -236,7 +233,11 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
     support = pinned["preview_rgb_variant_support"]
     assert support["source_distinct_xyz_rgb_pairs"] == 3
     assert support["preview_distinct_xyz_rgb_pairs"] == 3
+    assert support["source_repeated_xyz_rgb_observation_rows"] == 597
+    assert support["preview_repeated_xyz_rgb_observation_rows"] == 509
+    assert support["source_repeated_xyz_rgb_observation_fraction"] == pytest.approx(597 / 600)
     assert (
+
         support["preview_rgb_channel_ranges_uint8"] == (support["source_rgb_channel_ranges_uint8"])
     )
     assert support["preview_omitted_source_rgb_channel_extrema"] == []
@@ -357,7 +358,11 @@ def test_rgb_pair_preservation_strict_source_and_capacity(
     sample = feasible.json()
     support = sample["preview_rgb_variant_support"]
     assert support["source_distinct_xyz_rgb_pairs"] == 512
+    assert support["source_repeated_xyz_rgb_observation_rows"] == 1
+    assert support["source_repeated_xyz_rgb_observation_fraction"] == pytest.approx(1 / 513)
     assert support["preview_distinct_xyz_rgb_pairs"] == 512
+    assert support["preview_repeated_xyz_rgb_observation_rows"] == 0
+    assert "source_contains_repeated_xyz_rgb_observations" in sample["qc_warnings"]
     assert sample["preview_source_acquisition_endpoint_support"] == {
         "first_row_displayed": True,
         "last_row_displayed": False,
@@ -609,5 +614,9 @@ def test_full_colored_ply_preview_does_not_warn_about_missing_rgb_extrema(
         support["preview_rgb_channel_ranges_uint8"] == (support["source_rgb_channel_ranges_uint8"])
     )
     assert support["preview_omitted_source_rgb_channel_extrema"] == []
+    assert support["source_repeated_xyz_rgb_observation_rows"] == 0
+    assert support["source_repeated_xyz_rgb_observation_fraction"] == 0.0
+    assert support["preview_repeated_xyz_rgb_observation_rows"] == 0
+    assert "source_contains_repeated_xyz_rgb_observations" not in payload["qc_warnings"]
     assert "preview_omits_rgb_channel_extrema" not in payload["qc_warnings"]
     assert payload["provenance"]["calibration_verified"] is False
