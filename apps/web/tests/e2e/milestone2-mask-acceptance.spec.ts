@@ -248,6 +248,38 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
       return;
     }
     if (
+      url.pathname.endsWith(`/projects/${project.id}/class-visibility`) &&
+      method === "GET"
+    ) {
+      // The brush must verify this project's saved visibility before paint.
+      // A missing mock now correctly fails closed rather than overwriting
+      // biological observations with unknown hidden-class preferences.
+      const visibleScope = {
+        saved: false,
+        hidden_class_ids: [],
+        updated_at: null,
+        updated_by_identity: null,
+      };
+      const layers = {
+        annotations: visibleScope,
+        predictions: visibleScope,
+        qc_overlays: visibleScope,
+        video_tracks: visibleScope,
+        segmentation_overlays: visibleScope,
+      };
+      await route.fulfill({
+        json: {
+          project_id: project.id,
+          user_identity: "local-user:e2e",
+          supported_layer_types: Object.keys(layers),
+          precedence: [],
+          user_preferences: layers,
+          project_defaults: layers,
+        },
+      });
+      return;
+    }
+    if (
       url.pathname.endsWith(`/projects/${project.id}/images`) &&
       method === "GET"
     ) {
@@ -481,6 +513,12 @@ test("Milestone 2 polygon and raster edits persist across image navigation and r
 
   await page.getByTestId("open-brush-tool").click();
   await expect(page.getByTestId("raster-mask-workspace")).toBeVisible();
+  await expect(page.getByTestId("raster-visibility-source")).toHaveText(
+    "Segmentation overlay visibility: Visible by default",
+  );
+  await expect(
+    page.getByTestId("raster-visibility-pending-notice"),
+  ).toHaveCount(0);
   const brush = page.getByTestId("raster-brush-layer");
   const brushBox = await brush.boundingBox();
   if (!brushBox) throw new Error("Raster brush geometry is unavailable");
