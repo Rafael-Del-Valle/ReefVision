@@ -298,8 +298,9 @@ def require_existing_desktop_schema(settings: Settings) -> None:
         sqlite_path = Path(database_name)
 
     if sqlite_path is not None:
-        # A valid Alembic stamp alone cannot prove that SQLite storage or
-        # biological/reviewer parent links survived an interrupted restore.
+        # A valid Alembic stamp alone cannot prove that SQLite storage,
+        # index/UNIQUE constraints, or biological/reviewer parent links
+        # survived an interrupted restore.
         # Inspect the *existing* file through a read-only URI so even a bad
         # path cannot create a replacement research database.
         import sqlite3
@@ -307,7 +308,7 @@ def require_existing_desktop_schema(settings: Settings) -> None:
         try:
             read_only_uri = sqlite_path.resolve().as_uri() + "?mode=ro"
             with closing(sqlite3.connect(read_only_uri, uri=True)) as probe:
-                if probe.execute("PRAGMA quick_check(1)").fetchone() != ("ok",):
+                if probe.execute("PRAGMA integrity_check(1)").fetchone() != ("ok",):
                     raise RuntimeError(
                         "ReefVision --skip-migrations refused a damaged SQLite database; "
                         "preserve the original and restore a verified research backup."
