@@ -1151,3 +1151,17 @@ only already-rounded calibrated segment floats, and requires the same
 independent calibration, specimen identity and scientist review as other
 mesh geometry products. Direct, standalone API and twice-replayed saved typed
 Workflow Builder tests require complete artifact parity and stable hashes.
+
+### Exact signed cumulative-distance error (numerical QC only)
+
+Connected routes expose `path_cumulative_roundoff_exact_fraction_m`, the exact
+rational value of **displayed final cumulative distance minus the exact sum
+of the stored, calibrated binary64 segment values**. A negative result means
+the cumulative trace omitted distance relative to those already-rounded
+segment values; a positive result means it overshot. An exactly matching route
+reports `"0"`. Disconnected or unreferenced pairs report `null`.
+This gives a reproducible magnitude and direction for the previously reported
+`path_cumulative_total_exact_match` flag; it neither corrects the displayed
+path nor recovers source geometry, absolute calibration or biological truth.
+Synthetic tests inspect both signed and zero cases, standalone API parity and
+twice-run persisted executable typed Workflow Builder artifact hashes.
