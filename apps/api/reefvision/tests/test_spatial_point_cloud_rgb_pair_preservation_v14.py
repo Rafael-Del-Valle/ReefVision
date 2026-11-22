@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import pytest
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.spatial_point_cloud_v14 import measure_point_cloud_preview
@@ -58,9 +58,31 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
     assert rare_index in pinned["preview_point_indices"]
     assert len(pinned["preview_point_indices"]) == 512
     assert normal["preview_rgb_variant_support"]["preview_distinct_xyz_rgb_pairs"] == 2
+    normal_rgb = normal["preview_rgb_variant_support"]
+    assert normal_rgb["source_rgb_channel_ranges_uint8"] == {
+        "red": [10, 80],
+        "green": [20, 90],
+        "blue": [30, 100],
+    }
+    assert normal_rgb["preview_rgb_channel_ranges_uint8"] == {
+        "red": [10, 40],
+        "green": [20, 50],
+        "blue": [30, 60],
+    }
+    assert normal_rgb["preview_omitted_source_rgb_channel_extrema"] == [
+        "red_max",
+        "green_max",
+        "blue_max",
+    ]
+    assert "preview_omits_rgb_channel_extrema" in normal["qc_warnings"]
     support = pinned["preview_rgb_variant_support"]
     assert support["source_distinct_xyz_rgb_pairs"] == 3
     assert support["preview_distinct_xyz_rgb_pairs"] == 3
+    assert support["preview_rgb_channel_ranges_uint8"] == (
+        support["source_rgb_channel_ranges_uint8"]
+    )
+    assert support["preview_omitted_source_rgb_channel_extrema"] == []
+    assert "preview_omits_rgb_channel_extrema" not in pinned["qc_warnings"]
     assert support["multi_rgb_xyz_loci_with_complete_preview"] == 1
     assert support["multi_rgb_xyz_loci_with_incomplete_preview"] == 0
     assert pinned["preview_distinct_xyz_rgb_pairs_preservation_requested"] is True
@@ -194,6 +216,7 @@ def test_rgb_pair_preservation_strict_source_and_capacity(
     }
     assert "preview_omits_acquisition_endpoint_row" in sample["qc_warnings"]
 
+
 @pytest.mark.parametrize(
     "invalid_rgb",
     [
@@ -230,3 +253,32 @@ def test_direct_rgb_rows_accept_uint8_endpoints() -> None:
     assert measured["preview_point_indices"] == [0, 1]
     assert measured["provenance"]["calibration_verified"] is False
     assert measured["provenance"]["specimen_identity_verified"] is False
+
+def test_full_colored_ply_preview_does_not_warn_about_missing_rgb_extrema(
+    client: TestClient,
+) -> None:
+    """Distinct RGB-channel bounds are visible when every row is displayed."""
+    pid = str(create_project(client, "Complete RGB sensor bounds")["id"])
+    rows = [
+        "0 0 0 255 0 0",
+        "1 0 0 0 255 0",
+        "2 0 0 0 0 255",
+    ]
+    response = client.post(
+        f"/api/v1/projects/{pid}/spatial/point-cloud-preview",
+        json={**CALIBRATION, "ply_text": _colored_ply(rows)},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    support = payload["preview_rgb_variant_support"]
+    assert support["source_rgb_channel_ranges_uint8"] == {
+        "red": [0, 255],
+        "green": [0, 255],
+        "blue": [0, 255],
+    }
+    assert support["preview_rgb_channel_ranges_uint8"] == (
+        support["source_rgb_channel_ranges_uint8"]
+    )
+    assert support["preview_omitted_source_rgb_channel_extrema"] == []
+    assert "preview_omits_rgb_channel_extrema" not in payload["qc_warnings"]
+    assert payload["provenance"]["calibration_verified"] is False
