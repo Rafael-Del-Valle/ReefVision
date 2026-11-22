@@ -119,7 +119,6 @@ def test_skip_migrations_rejects_corrupt_sqlite_without_creating_replacement(
     assert database_path.read_bytes() == damaged_bytes
 
 
-
 def test_skip_migrations_rejects_unique_index_corruption_without_repair(
     tmp_path: Path,
 ) -> None:
@@ -153,7 +152,9 @@ def test_skip_migrations_rejects_unique_index_corruption_without_repair(
         connection.execute("PRAGMA writable_schema=OFF")
 
     original_bytes = database_path.read_bytes()
-    with sqlite3.connect(database_path.resolve().as_uri() + "?mode=ro", uri=True) as probe:
+    with sqlite3.connect(
+        database_path.resolve().as_uri() + "?mode=ro", uri=True
+    ) as probe:
         assert probe.execute("PRAGMA quick_check(1)").fetchone() == ("ok",)
         assert probe.execute("PRAGMA integrity_check(1)").fetchone() != ("ok",)
 
@@ -161,7 +162,9 @@ def test_skip_migrations_rejects_unique_index_corruption_without_repair(
         desktop.require_existing_desktop_schema(settings)
 
     assert database_path.read_bytes() == original_bytes
-    with sqlite3.connect(database_path.resolve().as_uri() + "?mode=ro", uri=True) as probe:
+    with sqlite3.connect(
+        database_path.resolve().as_uri() + "?mode=ro", uri=True
+    ) as probe:
         assert probe.execute("SELECT version_num FROM alembic_version").fetchone() == (
             "0041",
         )
