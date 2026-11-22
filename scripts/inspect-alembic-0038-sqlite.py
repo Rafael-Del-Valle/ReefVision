@@ -81,9 +81,12 @@ def inspect_database(path: Path) -> dict[str, object]:
 
         qc_scope_violations: int | None = None
         qc_scope_error: str | None = None
-        if signatures[REVIEW_TABLE] and connection.execute(
-            f'SELECT 1 FROM "{REVIEW_TABLE}" LIMIT 1'
-        ).fetchone() is not None:
+        qc_event_type_counts: list[tuple[object, int]] = []
+        if signatures[REVIEW_TABLE]:
+            qc_event_type_counts = connection.execute(
+                f'SELECT event_type, COUNT(*) FROM "{REVIEW_TABLE}" GROUP BY event_type'
+            ).fetchall()
+        if signatures[REVIEW_TABLE] and qc_event_type_counts:
             # The real 1.6/0039 migration refuses orphaned or cross-project
             # events before recreating the table. Inspect that same invariant
             # for existing populated databases, without changing any records.
@@ -158,7 +161,17 @@ def inspect_database(path: Path) -> dict[str, object]:
         review_check = "coordination"
     else:
         review_check = "unknown"
+    # SQLite CHECK expressions accept NULL, and an imported/older database
+    # can contain historical values written with CHECK enforcement disabled.
+    # Reconcile actual saved event values against the detected enforced set.
+    qc_event_type_violations = sum(
+        count for event_type, count in qc_event_type_counts if event_type not in allowed
+    )
     issues = []
+    if qc_event_type_violations:
+        issues.append(
+            f"QC review events contain {qc_event_type_violations} disallowed event types"
+        )
     if incomplete:
         issues.append("Incomplete expected table signatures: " + ", ".join(incomplete))
     if qc_scope_error:
@@ -202,6 +215,7 @@ def inspect_database(path: Path) -> dict[str, object]:
         "table_signatures": signatures,
         "review_event_check": review_check if groups["review_0038"] else None,
         "qc_event_scope_violations": qc_scope_violations,
+        "qc_event_type_violations": qc_event_type_violations,
         "classification": classification,
         "issues": issues,
         "manual_migration_reconciliation_required": True,
