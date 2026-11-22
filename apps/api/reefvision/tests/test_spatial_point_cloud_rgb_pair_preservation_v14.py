@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from fractions import Fraction
 from typing import cast
 
 import pytest
@@ -206,12 +207,41 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
     assert rare_index not in normal["preview_point_indices"]
     assert rare_index in pinned["preview_point_indices"]
     assert len(pinned["preview_point_indices"]) == 512
+    # Independently compute total variation from each of the three source
+    # RGB/XYZ pair frequencies, without calling the implementation's helper.
+    source_frequencies = [Fraction(299, 600), Fraction(300, 600), Fraction(1, 600)]
+    for artifact in (normal, pinned):
+        indices = artifact["preview_point_indices"]
+        displayed_counts = [
+            sum(i < 300 and i != rare_index for i in indices),
+            sum(i >= 300 for i in indices),
+            int(rare_index in indices),
+        ]
+        displayed_frequencies = [Fraction(count, len(indices)) for count in displayed_counts]
+        reference_tv = sum(
+            (
+                abs(before - after)
+                for before, after in zip(
+                    source_frequencies, displayed_frequencies, strict=True
+                )
+            ),
+            Fraction(0, 1),
+        ) / 2
+        observed = artifact["preview_rgb_variant_support"]
+        assert observed["preview_vs_source_xyz_rgb_observation_total_variation"] == (
+            pytest.approx(float(reference_tv))
+        )
+        assert observed[
+            "preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction"
+        ] == [reference_tv.numerator, reference_tv.denominator]
+        assert reference_tv > 0
+        assert "preview_shifts_xyz_rgb_observation_frequency_distribution" in artifact[
+            "qc_warnings"
+        ]
     assert normal["preview_rgb_variant_support"]["preview_distinct_xyz_rgb_pairs"] == 2
     normal_rgb = normal["preview_rgb_variant_support"]
     assert normal_rgb["source_repeated_xyz_rgb_observation_rows"] == 597
-    assert normal_rgb["source_repeated_xyz_rgb_observation_fraction"] == pytest.approx(
-        597 / 600
-    )
+    assert normal_rgb["source_repeated_xyz_rgb_observation_fraction"] == pytest.approx(597 / 600)
     assert normal_rgb["preview_repeated_xyz_rgb_observation_rows"] == 510
     assert "source_contains_repeated_xyz_rgb_observations" in normal["qc_warnings"]
     assert normal_rgb["source_rgb_channel_ranges_uint8"] == {
@@ -237,7 +267,6 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
     assert support["preview_repeated_xyz_rgb_observation_rows"] == 509
     assert support["source_repeated_xyz_rgb_observation_fraction"] == pytest.approx(597 / 600)
     assert (
-
         support["preview_rgb_channel_ranges_uint8"] == (support["source_rgb_channel_ranges_uint8"])
     )
     assert support["preview_omitted_source_rgb_channel_extrema"] == []
@@ -362,6 +391,17 @@ def test_rgb_pair_preservation_strict_source_and_capacity(
     assert support["source_repeated_xyz_rgb_observation_fraction"] == pytest.approx(1 / 513)
     assert support["preview_distinct_xyz_rgb_pairs"] == 512
     assert support["preview_repeated_xyz_rgb_observation_rows"] == 0
+    assert support["fraction_of_source_xyz_rgb_pairs_displayed"] == 1.0
+    assert support["preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction"] == [
+        511,
+        513 * 512,
+    ]
+    assert support["preview_vs_source_xyz_rgb_observation_total_variation"] == (
+        pytest.approx(511 / (513 * 512))
+    )
+    assert "preview_shifts_xyz_rgb_observation_frequency_distribution" in sample[
+        "qc_warnings"
+    ]
     assert "source_contains_repeated_xyz_rgb_observations" in sample["qc_warnings"]
     assert sample["preview_source_acquisition_endpoint_support"] == {
         "first_row_displayed": True,
@@ -617,6 +657,14 @@ def test_full_colored_ply_preview_does_not_warn_about_missing_rgb_extrema(
     assert support["source_repeated_xyz_rgb_observation_rows"] == 0
     assert support["source_repeated_xyz_rgb_observation_fraction"] == 0.0
     assert support["preview_repeated_xyz_rgb_observation_rows"] == 0
+    assert support["preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction"] == [
+        0,
+        1,
+    ]
+    assert support["preview_vs_source_xyz_rgb_observation_total_variation"] == 0.0
+    assert "preview_shifts_xyz_rgb_observation_frequency_distribution" not in payload[
+        "qc_warnings"
+    ]
     assert "source_contains_repeated_xyz_rgb_observations" not in payload["qc_warnings"]
     assert "preview_omits_rgb_channel_extrema" not in payload["qc_warnings"]
     assert payload["provenance"]["calibration_verified"] is False
