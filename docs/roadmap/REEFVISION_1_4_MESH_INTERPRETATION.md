@@ -1148,3 +1148,31 @@ cover both signs, zero overlap, unknown uncertainty, and full standalone /
 saved-graph artifact parity. The release remains subject to independent
 human identity, calibration, and biological-review evidence.
 
+
+## Longitudinal axis-aligned extent differences versus scale uncertainty (November 22, 2026)
+
+The standalone mesh-longitudinal API and persisted executable typed
+`mesh_longitudinal_comparison` Workflow Builder node now expose
+`axis_aligned_extent_difference_sign_under_scale_only_bounds`.
+Its values are `positive` when the after-minus-before diagonal interval
+is strictly positive, `negative` when strictly negative,
+`includes_zero` when the propagated interval crosses or touches zero,
+or `null` when either timepoint lacks a valid scale-only extent interval.
+An `includes_zero` result adds
+`axis_aligned_extent_difference_scale_bounds_include_zero` QC.
+The field is withheld with other derived longitudinal changes when
+reidentification is disputed or inconclusive, the original source evidence
+is reused, or an identical source mesh was merely rescaled and re-exported.
+
+The axis-aligned bounding-box diagonal is sensitive to mesh orientation,
+occlusion, reconstruction completeness, and alignment. Even an interval
+strictly above zero is **not** measured branch extension, organism growth,
+a confidence interval, or a statistical test. The interval propagates only
+caller-supplied calibration-scale bounds; it excludes reconstruction and
+registration errors. Timepoint source provenance and independent human
+identity/calibration review remain mandatory for any biological interpretation.
+Synthetic regressions exercise both signs, zero overlap, absent intervals,
+withheld identity-disputed changes, standalone API behavior, and two saved
+Workflow Builder executions with identical complete artifact SHA-256 hashes.
+These tests must pass exact-head CI and representative scientific review
+before release-readiness can be claimed.
