@@ -256,7 +256,6 @@ it("copies and duplicates a selected raster mask as an unverified server record"
   expect(screen.getByRole("status")).toHaveTextContent("unverified mask");
 });
 
-
 it("keeps the class, brush size and source revision selected when a stroke began", async () => {
   const twoClassSession = {
     ...session,
