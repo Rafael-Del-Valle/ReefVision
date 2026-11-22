@@ -38,6 +38,16 @@ export function ImageViewport({
   const [view, setView] = useState(viewRef.current);
 
   const updateView = useCallback((next: ViewportTransform) => {
+    // Unreliable pointer/media metadata must never poison the displayed
+    // transform: a nonfinite offset would make every scientific overlay vanish.
+    if (
+      !Number.isFinite(next.scale) ||
+      next.scale <= 0 ||
+      !Number.isFinite(next.offsetX) ||
+      !Number.isFinite(next.offsetY)
+    ) {
+      return;
+    }
     viewRef.current = next;
     setView(next);
   }, []);
@@ -87,16 +97,19 @@ export function ImageViewport({
       if (!drag || event.pointerId !== drag.pointerId) return;
       // Apply movement to the latest view: a wheel zoom during a pan must
       // not be rolled back by the next pointermove.
+      if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) {
+        return;
+      }
       const deltaX = event.clientX - drag.x;
       const deltaY = event.clientY - drag.y;
+      const offsetX = viewRef.current.offsetX + deltaX;
+      const offsetY = viewRef.current.offsetY + deltaY;
+      // Keep the last valid pointer origin so a later valid event can recover.
+      if (!Number.isFinite(offsetX) || !Number.isFinite(offsetY)) return;
       drag.x = event.clientX;
       drag.y = event.clientY;
       if (deltaX === 0 && deltaY === 0) return;
-      updateView({
-        ...viewRef.current,
-        offsetX: viewRef.current.offsetX + deltaX,
-        offsetY: viewRef.current.offsetY + deltaY,
-      });
+      updateView({ ...viewRef.current, offsetX, offsetY });
     };
     const cancel = (event: PointerEvent) => {
       // Finishing a different pointer must not abandon this drag.
@@ -133,7 +146,13 @@ export function ImageViewport({
     ) {
       return;
     }
-    if (dragRef.current) return;
+    if (
+      dragRef.current ||
+      !Number.isFinite(event.clientX) ||
+      !Number.isFinite(event.clientY)
+    ) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     dragRef.current = {
@@ -144,12 +163,24 @@ export function ImageViewport({
   }
 
   function handleWheel(event: WheelEvent<HTMLDivElement>) {
-    event.preventDefault();
+    // Horizontal-only/zero-delta wheel events are not zoom commands.
+    if (
+      !Number.isFinite(event.deltaY) ||
+      event.deltaY === 0 ||
+      !Number.isFinite(event.clientX) ||
+      !Number.isFinite(event.clientY)
+    ) {
+      return;
+    }
     const rect = event.currentTarget.getBoundingClientRect();
+    const focusX = event.clientX - rect.left;
+    const focusY = event.clientY - rect.top;
+    if (!Number.isFinite(focusX) || !Number.isFinite(focusY)) return;
+    event.preventDefault();
     updateView(
       zoomAtPoint(
         viewRef.current,
-        { x: event.clientX - rect.left, y: event.clientY - rect.top },
+        { x: focusX, y: focusY },
         viewRef.current.scale * (event.deltaY > 0 ? 1 / 1.08 : 1.08),
       ),
     );
