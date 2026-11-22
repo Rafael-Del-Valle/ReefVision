@@ -123,6 +123,80 @@ def test_longitudinal_scale_only_area_difference_sign(
     assert comparison["provenance"]["specimen_identity_verified"] is False
 
 
+def test_area_scale_overlap_standalone_and_two_saved_graph_runs(client: TestClient) -> None:
+    """A nominal area increase with scale-overlapping bounds is not verified growth."""
+    project_id = str(create_project(client, "Provisional scale overlap")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    before = _mesh("early", "2026-10-01T12:00:00Z", 1.0)
+    after = _mesh("late", "2026-10-02T12:00:00Z", 1.1)
+    response = client.post(
+        f"{base}/spatial/mesh-longitudinal-comparison",
+        json={"before": before, "after": after},
+    )
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    assert expected["delta_surface_area_m2"] == pytest.approx(0.05)
+    assert expected["surface_area_difference_sign_under_scale_only_bounds"] == "includes_zero"
+    assert "surface_area_difference_scale_bounds_include_zero" in expected["qc_warnings"]
+    assert expected["provenance"]["specimen_identity_verified"] is False
+    graph = {
+        "graph_id": "area-scale-only-overlap-v14",
+        "name": "Ambiguous provisional area difference",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "early", "node_type": "mesh_surface_preview", "parameters": before},
+            {"node_id": "late", "node_type": "mesh_surface_preview", "parameters": after},
+            {"node_id": "compare", "node_type": "mesh_longitudinal_comparison"},
+        ],
+        "edges": [
+            {
+                "edge_id": f"{target}-project",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": target,
+                "target_port_id": "project",
+            }
+            for target in ("early", "late")
+        ]
+        + [
+            {
+                "edge_id": f"{source}-compare",
+                "source_node_id": source,
+                "source_port_id": "measurement",
+                "target_node_id": "compare",
+                "target_port_id": input_port,
+            }
+            for source, input_port in (("early", "before"), ("late", "after"))
+        ],
+    }
+    planned = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert planned.status_code == 200, planned.text
+    assert planned.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    hashes: list[str] = []
+    app = cast(FastAPI, client.app)
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_longitudinal_comparison"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == expected
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
+
+
 def test_replayed_longitudinal_artifacts_accept_maximum_valid_identity_lengths() -> None:
     """The 128-character schema boundary remains valid for replayed previews."""
     specimen_id = "c" * 128
