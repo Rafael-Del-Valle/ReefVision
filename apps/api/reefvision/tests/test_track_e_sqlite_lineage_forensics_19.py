@@ -118,7 +118,9 @@ def test_qc_lineage_requires_event_check_not_incidental_sql_text(tmp_path: Path)
     assert report["review_event_check"] == "coordination"
 
 
-def test_rejects_qc_event_table_missing_required_review_queue_reference(tmp_path: Path) -> None:
+def test_rejects_qc_event_table_missing_required_review_queue_reference(
+    tmp_path: Path,
+) -> None:
     # 1.6 migration 0038 requires review_queue_id to link events to review queues.
     # A lookalike table missing that column must not certify installed lineage.
     ddl = """
@@ -132,5 +134,6 @@ def test_rejects_qc_event_table_missing_required_review_queue_reference(tmp_path
     assert status == 2
     assert report["classification"] == "ambiguous"
     assert report["table_signatures"]["review_queue_item_events"] is False
-    assert "Incomplete expected table signatures: review_queue_item_events" in report["issues"]
+    expected_issue = "Incomplete expected table signatures: review_queue_item_events"
+    assert expected_issue in report["issues"]
     assert report["automatic_migration_authorized"] is False
