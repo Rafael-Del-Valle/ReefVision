@@ -120,3 +120,40 @@ verifies the original database bytes and observations are preserved. It is a
 node: existing typed QC graphs, saved runs, provenance, reviewer gates and
 retry semantics are unaffected. Repository pytest/CI, migration-lineage
 reconciliation and actual installed-Windows acceptance remain mandatory.
+
+## Follow-up: prevent cross-file integrity/lineage evidence (2026-11-22)
+
+Two different SQLite research files can both be well-formed and carry the
+packaged 0041 stamp. If an external restore, symlink replacement or local
+process substitutes the target path after the read-only integrity/foreign-key
+probe but before the Alembic/schema connection, the two verifications may
+refer to **different biological observations**. A matching stamp does not
+make that composite evidence scientifically valid.
+
+For `--skip-migrations`, retain the initial on-disk file identity (device,
+file ID/inode, byte length and nanosecond modification timestamp) and compare
+it **before opening the writable SQLAlchemy engine and after the lineage
+inspection**. A missing/replaced/modified file fails closed with instructions
+to preserve the original and inspect a verified backup. The check never stamps,
+repairs or rewrites the database; successful checks continue to enforce the
+prior full-index integrity, foreign-key and Alembic-0038 lineage guards.
+
+The regression creates two legitimate populated 0041 SQLite databases with
+different *Swiftia* note text, substitutes one between independent preflights
+and demands rejection **before** opening an application engine. Both original
+and replacement observations are independently checked; the source remains
+available in a test-only backup. This protection detects common file/path
+replacement races but **does not guarantee a quiescent database indefinitely**:
+a concurrent writer can commit through SQLite WAL without changing the main
+file's stat signature, and changes after startup remain possible. A copied,
+verified, quiescent research database and a single authorized desktop owner
+remain important for release acceptance. A replacement with unchanged file
+metadata is also outside this guard's detection promise.
+
+This is an offline desktop startup invariant rather than a new biological
+analysis transformation, so it does not duplicate a Workflow Builder node.
+Existing typed saved QC graphs, provenance, dimensionless priorities, retry
+behaviors and explicit researcher approval remain unchanged. Full exact-head
+CI, representative persisted-workflow validation, 1.1/1.6 migration
+reconciliation, and real Windows MSI/CAB clean-install/upgrade/rollback plus
+installed-GUI acceptance remain **RELEASE HOLD** conditions.
