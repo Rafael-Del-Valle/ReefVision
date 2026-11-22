@@ -212,4 +212,95 @@ describe("RasterBrushLayer", () => {
     fireEvent.pointerUp(canvas, { pointerId: 32 });
     expect(onStroke).toHaveBeenCalledTimes(1);
   });
+
+  it("retains the original paint mode and radius during a mid-stroke tool change", () => {
+    const onStroke = vi.fn();
+    const { rerender } = render(
+      <RasterBrushLayer
+        width={800}
+        height={600}
+        mode="paint"
+        brushRadius={10}
+        onStroke={onStroke}
+      />,
+    );
+    const canvas = layer();
+    mockBounds(canvas);
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      pointerId: 41,
+      clientX: 100,
+      clientY: 75,
+    });
+
+    rerender(
+      <RasterBrushLayer
+        width={800}
+        height={600}
+        mode="erase"
+        brushRadius={40}
+        onStroke={onStroke}
+      />,
+    );
+    expect(canvas.querySelector("circle")).toHaveAttribute("r", "10");
+    expect(canvas.querySelector("circle")).toHaveAttribute(
+      "fill",
+      "rgba(87, 204, 153, 0.35)",
+    );
+    fireEvent.pointerMove(canvas, {
+      pointerId: 41,
+      clientX: 200,
+      clientY: 150,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 41 });
+    expect(onStroke).toHaveBeenCalledWith(
+      [
+        { x: 200, y: 150 },
+        { x: 400, y: 300 },
+      ],
+      { mode: "paint", brushRadius: 10 },
+    );
+  });
+
+  it("signals a cancelled stroke without recording it and permits later recovery", () => {
+    const onStroke = vi.fn();
+    const onStrokeStart = vi.fn();
+    const onStrokeCancel = vi.fn();
+    render(
+      <RasterBrushLayer
+        width={800}
+        height={600}
+        mode="erase"
+        brushRadius={15}
+        onStroke={onStroke}
+        onStrokeStart={onStrokeStart}
+        onStrokeCancel={onStrokeCancel}
+      />,
+    );
+    const canvas = layer();
+    mockBounds(canvas);
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      pointerId: 42,
+      clientX: 100,
+      clientY: 75,
+    });
+    fireEvent.pointerCancel(canvas, { pointerId: 42 });
+    expect(onStrokeStart).toHaveBeenCalledTimes(1);
+    expect(onStrokeCancel).toHaveBeenCalledTimes(1);
+    expect(onStroke).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      pointerId: 43,
+      clientX: 150,
+      clientY: 100,
+    });
+    fireEvent.pointerUp(canvas, { pointerId: 43 });
+    expect(onStrokeStart).toHaveBeenCalledTimes(2);
+    expect(onStroke).toHaveBeenCalledWith(
+      [{ x: 300, y: 200 }],
+      { mode: "erase", brushRadius: 15 },
+    );
+  });
 });
