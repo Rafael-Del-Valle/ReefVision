@@ -1157,8 +1157,7 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
     # or interpret RGB variation as independently verified coral condition.
     if point_colors:
         source_pairs = {
-            (tuple(point), tuple(rgb))
-            for point, rgb in zip(points, point_colors, strict=True)
+            (tuple(point), tuple(rgb)) for point, rgb in zip(points, point_colors, strict=True)
         }
         preview_pairs = {
             (tuple(points[index]), tuple(point_colors[index]))
@@ -1168,13 +1167,26 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         for point, rgb in zip(points, point_colors, strict=True):
             palettes.setdefault(tuple(point), set()).add(tuple(rgb))
         differing_color_loci = sum(len(colors) > 1 for colors in palettes.values())
+        # A preview can show a coordinate yet omit one of its independently
+        # observed RGB values. Count that loss separately from total pair
+        # retention, without interpreting it as a biological color change.
+        preview_palettes: dict[tuple[float, ...], set[tuple[int, ...]]] = {}
+        for index in result["preview_point_indices"]:
+            preview_palettes.setdefault(tuple(points[index]), set()).add(tuple(point_colors[index]))
+        incomplete_multi_color_loci = sum(
+            1
+            for locus, colors in palettes.items()
+            if len(colors) > 1 and not colors.issubset(preview_palettes.get(locus, set()))
+        )
         result["preview_rgb_variant_support"] = {
             "source_distinct_xyz_rgb_pairs": len(source_pairs),
             "preview_distinct_xyz_rgb_pairs": len(preview_pairs),
-            "fraction_of_source_xyz_rgb_pairs_displayed": (
-                len(preview_pairs) / len(source_pairs)
-            ),
+            "fraction_of_source_xyz_rgb_pairs_displayed": (len(preview_pairs) / len(source_pairs)),
             "source_xyz_loci_with_multiple_rgb_values": differing_color_loci,
+            "multi_rgb_xyz_loci_with_complete_preview": (
+                differing_color_loci - incomplete_multi_color_loci
+            ),
+            "multi_rgb_xyz_loci_with_incomplete_preview": incomplete_multi_color_loci,
             # Bind color and source acquisition row to the displayed sample;
             # the existing geometry-only sample fingerprint remains unchanged.
             "preview_sample_xyz_rgb_sha256": hashlib.sha256(
@@ -1191,6 +1203,8 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             result["qc_warnings"].append("source_xyz_loci_have_multiple_rgb_values")
         if len(preview_pairs) != len(source_pairs):
             result["qc_warnings"].append("preview_omits_distinct_xyz_rgb_observations")
+        if incomplete_multi_color_loci:
+            result["qc_warnings"].append("preview_omits_multi_rgb_locus_variants")
     else:
         result["preview_rgb_variant_support"] = None
     result["provenance"]["source_format"] = source_format
