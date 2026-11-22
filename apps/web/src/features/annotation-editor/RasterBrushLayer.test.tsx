@@ -298,10 +298,10 @@ describe("RasterBrushLayer", () => {
     });
     fireEvent.pointerUp(canvas, { pointerId: 43 });
     expect(onStrokeStart).toHaveBeenCalledTimes(2);
-    expect(onStroke).toHaveBeenCalledWith(
-      [{ x: 300, y: 200 }],
-      { mode: "erase", brushRadius: 15 },
-    );
+    expect(onStroke).toHaveBeenCalledWith([{ x: 300, y: 200 }], {
+      mode: "erase",
+      brushRadius: 15,
+    });
   });
 
   it("does not misclassify intentional capture release as stroke cancellation", () => {
@@ -334,9 +334,9 @@ describe("RasterBrushLayer", () => {
     fireEvent.pointerUp(canvas, { pointerId: 44 });
     expect(onStrokeCancel).not.toHaveBeenCalled();
     expect(onStroke).toHaveBeenCalledTimes(1);
-    expect(onStroke).toHaveBeenCalledWith(
-      [{ x: 200, y: 150 }],
-      { mode: "paint", brushRadius: 10 },
-    );
+    expect(onStroke).toHaveBeenCalledWith([{ x: 200, y: 150 }], {
+      mode: "paint",
+      brushRadius: 10,
+    });
   });
 });
