@@ -166,6 +166,7 @@ def test_unreferenced_route_has_no_nominal_exact_audit() -> None:
     assert missing["path_nominal_total_vs_edge_sum_exact_fraction_m"] is None
     assert missing["path_qc_warnings"] is None
 
+
 # These exact binary64 source vertices give a three-edge route whose
 # floating-point sum falls two ULPs below the direct endpoint chord.
 # That is numerical roundoff, not a physically shorter-than-straight path.
