@@ -67,8 +67,12 @@ Prior to the existing lineage and exact-head checks, `--skip-migrations` now
 opens the already-present SQLite file through an explicit **read-only URI** and
 requires:
 
-- SQLite `PRAGMA quick_check(1)` to return exactly `ok`. An unreadable/corrupt
-  file is refused without creating a replacement database.
+- SQLite `PRAGMA integrity_check(1)` to return exactly `ok`. This verifies
+  full B-tree, index and UNIQUE-constraint consistency beyond `quick_check`,
+  which can return `ok` despite a damaged index's uniqueness contract.
+  An unreadable/corrupt file is refused without creating a replacement database.
+  The full check can increase startup time for very large local databases,
+  but no approximate or sampled integrity pass can authorize scientific writes.
 - Refuse non-SQLite backends **before** opening a connection: an external
   PostgreSQL/MySQL URL is not an offline desktop research database.
 - `PRAGMA foreign_key_check` to report **no** orphaned references, including
@@ -97,3 +101,22 @@ approval and retry contracts remain untouched. The final committed tests must
 still pass exact-head CI; representative biological saved-workflow runs,
 migration reconciliation, native Windows installer clean installation,
 upgrade/rollback and interactive installed-GUI acceptance are release gates.
+
+## Follow-up: full index and uniqueness verification (2026-11-22)
+
+An independently reproduced SQLite example with two identical *Swiftia* records
+and an externally altered UNIQUE index definition returns `ok` from
+`PRAGMA quick_check(1)` while `PRAGMA integrity_check(1)` correctly reports
+`non-unique entry in index`. The desktop read-only preflight now uses the latter
+with a one-error reporting cap, before opening any write-capable application
+engine. No attempt is made to rebuild the index, rewrite the observations or
+change biological data, and no user database was inspected.
+
+The new regression in `test_desktop_skip_migrations_16.py` creates a disposable,
+fully migrated 0041 fixture, introduces an inconsistent index definition,
+confirms quick-check's false negative, asserts fail-closed preflight, and
+verifies the original database bytes and observations are preserved. It is a
+**startup scientific-data protection**, not a duplicate Workflow Builder analysis
+node: existing typed QC graphs, saved runs, provenance, reviewer gates and
+retry semantics are unaffected. Repository pytest/CI, migration-lineage
+reconciliation and actual installed-Windows acceptance remain mandatory.
