@@ -314,3 +314,30 @@ complete persisted artifacts and their SHA-256 digests. This is source-evidence
 integrity and reproducibility QC only; it cannot validate the original camera
 file, absolute color, bleaching, living tissue, specimen identity or
 calibration. Real coral scans and independent human review are still required.
+
+### Reproducible ordered XYZ/RGB canonicalization across PLY exporters
+
+The full-source fingerprint now publishes
+`provenance.source_ordered_xyz_rgb_canonicalization` as
+`ordered_normalized_float64_xyz_uint8_rgb_compact_json_utf8_v1` for colored
+point clouds (or `null` for colorless sources). Parse validated ASCII PLY
+properties by their **names**, not by column position; normalize finite XYZ
+binary64 coordinates (including negative zero), preserve the original row
+order and uint8 R/G/B values, then hash the compact UTF-8 JSON array of
+ordered six-element `[x,y,z,r,g,b]` rows with SHA-256. This canonicalization
+must be stable across exporters using different valid property arrangements,
+comments and coordinate property types when the parsed observations are
+identical. It is intentionally distinct from `source_payload_sha256`, which
+must change when the submitted PLY text changes.
+
+Use a two-row independent oracle with RGB properties interleaved among
+reordered XYZ properties and a PLY comment, compared with conventional
+XYZ/RGB property order. Assert identical complete ordered XYZ/RGB
+fingerprints, preview colors and parsed geometry, but **different raw source
+payload fingerprints**. Confirm standalone project API results and two
+replays of an executable persisted typed Workflow Builder graph, including
+byte-identical measurement artifact payloads and stable artifact SHA-256.
+Neither digest proves the submitted text matches an original sensor file,
+establishes color calibration or verifies biological condition/identity.
+Review, physical calibration and representative coral references remain
+release gates.
