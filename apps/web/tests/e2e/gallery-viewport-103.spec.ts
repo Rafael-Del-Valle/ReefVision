@@ -880,6 +880,36 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
 
   // Make the one-image cold start scrollable before testing for wheel leakage.
   await enableDocumentScrollProbe(page);
+  // A document overflow probe alone is not evidence that native inputs reach
+  // Chromium. Prove that the same one-image page scrolls from real wheel and
+  // compositor touch gestures OUTSIDE the protected workbench first. Otherwise
+  // both containment checks below could pass when input is broken globally.
+  await page.mouse.move(4, 4);
+  await page.mouse.wheel(0, 280);
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY))
+    .toBeGreaterThan(40);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+
+  const documentTouchSession = await page.context().newCDPSession(page);
+  try {
+    await documentTouchSession.send("Input.synthesizeScrollGesture", {
+      x: 4,
+      y: 4,
+      yDistance: -340,
+      gestureSourceType: "touch",
+      speed: 800,
+    });
+  } finally {
+    await documentTouchSession.detach();
+  }
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY))
+    .toBeGreaterThan(40);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+
   // Real input, not a synthetic WheelEvent, catches document scroll-through
   // when the strip has only one item and the first image just loaded.
   const pageScroll = () =>
