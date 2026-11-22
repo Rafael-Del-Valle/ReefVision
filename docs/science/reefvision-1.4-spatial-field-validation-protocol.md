@@ -202,7 +202,14 @@ color, coral health, verified specimen identity or independent replicates.
 ### Bounded preview centroid displacement is not organism movement
 
 The point-cloud preview reports a row-weighted sample centroid alongside the
-full-source row-weighted centroid. Compare
+full-source row-weighted centroid. The signed three-axis
+`preview_minus_source_row_centroid_offset_m` is computed in the original
+coordinate frame as **sample minus full source**, with negative and positive
+components showing which direction preview decimation shifts the display
+centroid. It is not coral movement, coordinate registration, growth, drift, or
+a measured tracking vector. A complete or single-distinct-locus acquisition
+must report the zero vector without floating-point sampling artifacts.
+Compare
 `preview_row_centroid_in_source_frame_m` to
 `arithmetic_centroid_in_source_frame_m` using
 `preview_vs_source_row_centroid_separation_m`, its available scale-only
@@ -217,7 +224,10 @@ withhold that interval and retain explicit QC instead of asserting certainty.
 Challenge a 600-row synthetic cloud where an ordinarily decimated source row
 contains a distinct coordinate. Independently compute each centroid from the
 full acquisition row indices and displayed original row indices and compare
-their difference, calibration factor, and interval. Verify the direct service,
+their signed X/Y/Z difference, Euclidean magnitude, calibration factor, and
+scale-only interval. Include a synthetic rare XYZ row that is omitted by
+uniform decimation and creates negative/positive signed offsets on distinct
+axes; reject any biological movement interpretation. Verify the direct service,
 standalone project API, and **two executions of the same persisted typed
 Workflow Builder graph**, including identical complete artifacts and SHA-256
 digests. Acquisition rows are not biological replicates; sample-centroid
