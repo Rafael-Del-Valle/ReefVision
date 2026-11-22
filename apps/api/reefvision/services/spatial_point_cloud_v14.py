@@ -1247,9 +1247,7 @@ def measure_point_cloud_preview(
                 if point_colors is not None
                 else None
             ),
-            "source_unordered_xyz_rgb_multiset_sha256": (
-                source_unordered_xyz_rgb_multiset_sha256
-            ),
+            "source_unordered_xyz_rgb_multiset_sha256": (source_unordered_xyz_rgb_multiset_sha256),
             "source_unordered_xyz_rgb_multiset_canonicalization": (
                 "sorted_multiset_normalized_float64_xyz_uint8_rgb_compact_json_utf8_v1"
                 if point_colors is not None
