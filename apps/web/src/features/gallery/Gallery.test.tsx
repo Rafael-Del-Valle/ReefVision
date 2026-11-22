@@ -3083,7 +3083,7 @@ describe("Gallery", () => {
     ).toBeInTheDocument();
   });
 
-  it("re-aligns the focused thumbnail from visual-only WebView2 resize events", async () => {
+  it("re-aligns selected thumbnail on visual viewport resize", async () => {
     const visualViewport = new EventTarget();
     const removal = vi.spyOn(visualViewport, "removeEventListener");
     vi.stubGlobal("visualViewport", visualViewport);
