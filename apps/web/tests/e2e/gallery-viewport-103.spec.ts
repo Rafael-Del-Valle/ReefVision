@@ -353,6 +353,43 @@ test("initial image and gallery scrolling", async ({ page }) => {
   expect(await focused.boundingBox()).toEqual(touchStart);
   await assertDecodedAndContained(1600, 1200);
 
+  // Horizontal finger-panning uses Chromium's compositor, not the synthetic
+  // WheelEvent path. A panorama or wide camera frame must not drag the page
+  // sideways when a scientist pans over the initial fixed preview.
+  const horizontalTouchStart = await focused.boundingBox();
+  expect(horizontalTouchStart).not.toBeNull();
+  const pageBeforeHorizontalTouch = await page.evaluate(() => ({
+    x: window.scrollX,
+    y: window.scrollY,
+  }));
+  const horizontalTouchSession = await page.context().newCDPSession(page);
+  try {
+    await horizontalTouchSession.send("Input.synthesizeScrollGesture", {
+      x: Math.round(
+        horizontalTouchStart!.x + horizontalTouchStart!.width / 2,
+      ),
+      y: Math.round(
+        horizontalTouchStart!.y + horizontalTouchStart!.height / 2,
+      ),
+      xDistance: -380,
+      gestureSourceType: "touch",
+      speed: 800,
+    });
+  } finally {
+    await horizontalTouchSession.detach();
+  }
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  expect(
+    await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY })),
+  ).toEqual(pageBeforeHorizontalTouch);
+  expect(await focused.boundingBox()).toEqual(horizontalTouchStart);
+  await assertDecodedAndContained(1600, 1200);
+
   // Exercise the native non-passive listener in a real Chromium page, not just
   // jsdom. Prevent wheel-driven WebView2 page movement over the preview while
   // leaving browser zoom modifiers and zero-delta events untouched.
