@@ -208,7 +208,7 @@ export function ImageViewport({
     if (
       !hasValidImageSize ||
       event.defaultPrevented ||
-      event.isComposing ||
+      event.nativeEvent.isComposing ||
       event.key.toLowerCase() !== "f" ||
       event.ctrlKey ||
       event.metaKey ||
