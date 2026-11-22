@@ -345,7 +345,6 @@ it("keeps the class, brush size and source revision selected when a stroke began
   );
 });
 
-
 it("keeps the target object selected at pointer-down when the mask list changes mid-stroke", async () => {
   const mask = {
     id: "mask-1",
