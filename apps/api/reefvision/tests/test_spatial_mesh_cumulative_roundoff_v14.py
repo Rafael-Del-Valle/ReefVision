@@ -59,7 +59,8 @@ def test_selected_route_cumulative_roundoff_is_exposed_and_replayed(
     assert affected["path_cumulative_roundoff_exact_fraction_m"] == str(-Fraction(1e-8))
     assert affected["path_nominal_total_vs_edge_sum_exact_fraction_m"] == str(-Fraction(1e-8))
     assert affected["path_nominal_total_exact_match"] is False
-    assert affected["path_source_edge_sum_minus_chord_exact_fraction"] == str(Fraction(1e-8))
+    expected_edge_chord_excess = str(Fraction(1e-8))
+    assert affected["path_source_edge_sum_minus_chord_exact_fraction"] == expected_edge_chord_excess
     # The exact stored binary64 source-edge sum exceeds the rounded chord,
     # although Dijkstra's displayed route total equals that chord. A nominal
     # detour ratio of 1 or exact zero excess would conceal a positive segment.
@@ -297,6 +298,7 @@ def test_impossible_subunit_detour_ratio_is_withheld_in_saved_workflows(
     assert len(set(digests)) == 1
     assert len(digests[0]) == 64
 
+
 # The exact sum of these *stored* binary64 edges is 1/33554432 source
 # units smaller than the independently rounded endpoint chord, although
 # Dijkstra's displayed cumulative total exactly equals that chord.
@@ -334,26 +336,21 @@ def test_rounded_equal_route_with_impossible_exact_stored_chord_is_withheld(
     assert affected["status"] == "connected"
     assert affected["path_vertex_indices"] == [0, 1, 2]
     assert affected["length_m"] == affected["endpoint_chord_length_m"]
-    assert affected["path_source_edge_sum_minus_chord_exact_fraction"] == (
-        "-1/33554432"
-    )
-    assert "selected_mesh_route_stored_edge_sum_below_rounded_chord" in affected[
-        "path_qc_warnings"
-    ]
+    assert affected["path_source_edge_sum_minus_chord_exact_fraction"] == "-1/33554432"
+    stored_chord_warning = "selected_mesh_route_stored_edge_sum_below_rounded_chord"
+    assert stored_chord_warning in affected["path_qc_warnings"]
     assert affected["geometric_detour_ratio"] is None
     assert affected["geometric_excess_length_m"] is None
     assert affected["geometric_excess_scale_interval_m"] is None
     assert control["path_vertex_indices"] == [0, 1]
     assert control["path_source_edge_sum_minus_chord_exact_fraction"] == "0"
     assert control["geometric_detour_ratio"] == 1.0
-    assert "selected_mesh_route_stored_edge_sum_below_rounded_chord" not in control[
-        "path_qc_warnings"
-    ]
+    assert stored_chord_warning not in control["path_qc_warnings"]
 
     direct = measure_mesh_preview(**geometry)
     assert direct["surface_edge_paths"] == paths
     assert direct["provenance"]["calibration_verified"] is False
-    project_id = str(create_project(client, "Stored-edge chord deficit integrity")["id"])
+    project_id = str(create_project(client, "Stored chord precision audit")["id"])
     base = f"/api/v1/projects/{project_id}"
     response = client.post(f"{base}/spatial/mesh-preview", json=geometry)
     assert response.status_code == 200, response.text
@@ -366,7 +363,11 @@ def test_rounded_equal_route_with_impossible_exact_stored_chord_is_withheld(
         "name": "Source edge/chord exact-fraction scientific integrity",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
-            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": geometry},
+            {
+                "node_id": "mesh",
+                "node_type": "mesh_surface_preview",
+                "parameters": geometry,
+            },
         ],
         "edges": [
             {
@@ -386,7 +387,9 @@ def test_rounded_equal_route_with_impossible_exact_stored_chord_is_withheld(
     app = cast(FastAPI, client.app)
     hashes: list[str] = []
     for _ in range(2):
-        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        run = client.post(
+            f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
+        )
         assert run.status_code == 202, run.text
         assert process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
