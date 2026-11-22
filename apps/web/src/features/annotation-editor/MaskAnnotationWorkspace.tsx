@@ -971,6 +971,7 @@ export function MaskAnnotationWorkspace({
             width={image.width_px}
             height={image.height_px}
             label="Polygon mask viewport"
+            sourceImageId={image.id}
           >
             <img
               src={imageDisplayUrl(image.id)}
