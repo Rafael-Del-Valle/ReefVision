@@ -1207,3 +1207,26 @@ A synthetic three-edge regression checks the two-ULP discrepancy,
 standalone API parity, and full artifact/hash parity over two executions
 of a persisted typed Workflow Builder graph. No physical calibration,
 anatomical branch, or biological condition is verified by this guard.
+
+### Stored-edge detour hidden by a rounded nominal route
+
+A second numerical guard catches the converse ambiguity: a selected route's
+rounded source-unit Dijkstra total can equal the independently rounded
+endpoint chord even though the **exact rational sum of its already-rounded
+binary64 source-edge lengths exceeds that chord**. In that case ReefVision
+emits `selected_mesh_route_roundoff_hides_stored_edge_chord_excess` and
+withholds the dimensionless `geometric_detour_ratio`, the nominal
+`geometric_excess_length_m`, and its scale-only interval as `null`.
+A genuine one-edge straight route still reports a ratio of 1 and exactly
+zero excess. Original source vertices, selected route, calibrated segments,
+exact segment-sum audits and provisional calibration evidence are retained.
+
+This comparison is strictly between stored floating-point values, not
+a high-precision reconstruction of the physical chord. It does not determine
+which geometry representation is anatomically correct, infer biological
+straightness, quantify physical calibration error, or establish coral growth.
+The 1e9 + 1e-8 synthetic path regression checks the numeric ambiguity in
+the direct service, standalone project API, and twice-replayed persisted typed
+Workflow Builder graph with identical complete artifacts and SHA-256 digests.
+Representative coral scans, independent human review and installed Windows
+validation are still required.
