@@ -2182,7 +2182,9 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             records, errors = MODULE.inventory(root)
             self.assertEqual(errors, [])
             baseline = {"root": str(root), "files": records, "errors": []}
-            self.assertEqual(MODULE.compare_source_manifest(root, records, baseline), [])
+            self.assertEqual(
+                MODULE.compare_source_manifest(root, records, baseline), []
+            )
 
             changed = {**records[0], "sha256": "0" * 64}
             for current in ([records[0], records[0]], [changed, records[0]]):
