@@ -694,3 +694,27 @@ retained triplets, and the opt-in XYZ/RGB pair-preserving standalone endpoint
 is checked against two executions of the persisted typed Workflow Builder
 graph, including complete artifacts and their SHA-256 fingerprints. Colored
 source provenance remains provisional and requires scientist review.
+
+### Independent raw RGB frequency audit (November 22, 2026)
+
+A preview may retain every distinct raw RGB triplet but change its acquisition-row
+frequency, while a spatial XYZ/RGB pair distribution may shift even when every
+row has the same RGB color. These are different kinds of display sampling bias.
+Colored ASCII PLY results now expose
+`preview_vs_source_rgb_triplet_total_variation` and
+`preview_vs_source_rgb_triplet_total_variation_exact_fraction` in
+`preview_rgb_variant_support`. Both compare the source and sampled **raw
+RGB-triplet row-frequency distributions**; the latter is a reduced exact
+rational numerator/denominator from integer counts, with zero encoded as
+`[0, 1]`. Nonzero shift adds
+`preview_shifts_rgb_triplet_frequency_distribution` to `qc_warnings`.
+
+These are separate from the previously available XYZ/RGB *pair* total variation,
+which is sensitive to spatial association of identical raw colors. Exact
+frequency balance does **not** establish representative spatial sampling,
+calibrated reflectance, unchanged coral tissue, independent biological
+replicates, or verified specimen identity. Synthetic controls distinguish
+(1) retained palette with changed raw-color frequencies and (2) spatial-pair
+frequency bias with exactly constant raw RGB frequencies. Standalone endpoint
+results and twice-executed persisted executable typed Workflow Builder
+scientific artifacts remain under deterministic SHA-256 regression checks.
