@@ -670,6 +670,9 @@ def compare_source_manifest(
         return ["baseline JPEG manifest must contain at least one source file"]
 
     expected: dict[str, tuple[int, str]] = {}
+    # A previously decoded camera baseline must not be silently downgraded to
+    # header-only verification in the post-import acceptance pass.
+    expected_decoded: dict[str, dict[str, object]] = {}
     for entry in source_files:
         if not isinstance(entry, dict):
             return ["baseline JPEG manifest contains a non-object file entry"]
@@ -693,6 +696,10 @@ def compare_source_manifest(
         if relative in expected:
             return ["baseline JPEG manifest contains duplicate source-file paths"]
         expected[relative] = (size, checksum)
+        if "jpeg_decodable" in entry:
+            if entry["jpeg_decodable"] is not True:
+                return ["baseline JPEG manifest contains unverified pixel-decode evidence"]
+            expected_decoded[relative] = entry
 
     actual = {str(record["path"]): record for record in current}
     errors: list[str] = []
@@ -704,6 +711,42 @@ def compare_source_manifest(
         record = actual[relative]
         if (record["bytes"], record["sha256"]) != expected[relative]:
             errors.append(f"source JPEG bytes changed since baseline: {relative!r}")
+        if relative in expected_decoded:
+            if record.get("jpeg_decodable") is not True:
+                errors.append(
+                    f"source JPEG pixel decoding not reverified since baseline: {relative!r}"
+                )
+                continue
+            # Stable file bytes alone cannot reveal a decoder/library change
+            # that silently alters raw-vs-display dimensions, EXIF exposure
+            # provenance, or the assembled camera ICC payload. Compare only
+            # fields the saved verified decoder actually emitted.
+            for field in (
+                "jpeg_pixel_width",
+                "jpeg_pixel_height",
+                "jpeg_display_width",
+                "jpeg_display_height",
+                "jpeg_color_mode",
+                "jpeg_exif_orientation",
+                "jpeg_exif_camera_make",
+                "jpeg_exif_camera_model",
+                "jpeg_exif_datetime_original_local",
+                "jpeg_exif_offset_time_original",
+                "jpeg_exif_subsec_time_original",
+                "jpeg_exif_dimensions_match_raster",
+                "jpeg_icc_profile_present",
+                "jpeg_icc_profile_bytes",
+                "jpeg_icc_profile_sha256",
+            ):
+                prior = expected_decoded[relative]
+                if field in prior and (
+                    field not in record
+                    or type(record[field]) is not type(prior[field])
+                    or record[field] != prior[field]
+                ):
+                    errors.append(
+                        f"source JPEG decoded {field} changed since baseline: {relative!r}"
+                    )
     return errors
 
 
