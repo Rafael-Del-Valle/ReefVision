@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import warnings
 from datetime import datetime
 from pathlib import Path
@@ -813,6 +814,42 @@ def _reject_manifest_constant(value: str) -> object:
     raise ValueError("non-finite JSON constant in baseline JPEG manifest")
 
 
+def _read_baseline_manifest(path: Path) -> bytes:
+    """Read only a bounded, stable regular file, never a pipe or device."""
+    before = path.stat()
+    if not stat.S_ISREG(before.st_mode):
+        raise ValueError("baseline JPEG manifest is not a regular file")
+    limit = 32 * 1024 * 1024
+    if before.st_size > limit:
+        raise ValueError("baseline JPEG manifest exceeds 32 MiB")
+    # Nonblocking open prevents a substituted POSIX FIFO from hanging the
+    # acceptance check. O_NOFOLLOW also rejects a swapped final symlink.
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
+    flags |= getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    with os.fdopen(descriptor, "rb") as stream:
+        opened = os.fstat(stream.fileno())
+        if not stat.S_ISREG(opened.st_mode) or (
+            _file_fingerprint(opened) != _file_fingerprint(before)
+        ):
+            raise ValueError("baseline JPEG manifest changed before reading")
+        payload = stream.read(limit + 1)
+        finished = os.fstat(stream.fileno())
+    after = path.stat()
+    if len(payload) > limit:
+        raise ValueError("baseline JPEG manifest exceeds 32 MiB")
+    if (
+        len(payload) != before.st_size
+        or _is_linked_path(path)
+        or any(
+            _file_fingerprint(observed) != _file_fingerprint(before)
+            for observed in (finished, after)
+        )
+    ):
+        raise ValueError("baseline JPEG manifest changed during reading")
+    return payload
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path, help="Camera fixture directory (read-only)")
@@ -879,12 +916,7 @@ def main() -> int:
     records, errors = inventory(root, verify_decode=args.verify_decode)
     if args.compare_manifest is not None:
         try:
-            # Bound untrusted JSON input; a camera-fixture inventory should
-            # never require reading an arbitrarily large baseline into memory.
-            with args.compare_manifest.open("rb") as stream:
-                baseline_bytes = stream.read(32 * 1024 * 1024 + 1)
-            if len(baseline_bytes) > 32 * 1024 * 1024:
-                raise ValueError("baseline JPEG manifest exceeds 32 MiB")
+            baseline_bytes = _read_baseline_manifest(args.compare_manifest)
             baseline = json.loads(
                 baseline_bytes,
                 object_pairs_hook=_unique_manifest_object,
