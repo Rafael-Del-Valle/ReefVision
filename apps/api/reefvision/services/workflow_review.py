@@ -83,9 +83,7 @@ def _verify_review_graph_binding(
     """
     run = session.get(WorkflowRun, node_run.workflow_run_id)
     graph = (
-        session.get(WorkflowGraphRecord, run.workflow_graph_record_id)
-        if run is not None
-        else None
+        session.get(WorkflowGraphRecord, run.workflow_graph_record_id) if run is not None else None
     )
     graph_json = graph.graph_json if graph is not None else None
     if (
@@ -105,14 +103,10 @@ def _verify_review_graph_binding(
         raise ValidationError("Workflow review saved graph is missing node or edge evidence")
 
     review_nodes = [
-        item
-        for item in nodes
-        if isinstance(item, dict) and item.get("node_id") == node_run.node_id
+        item for item in nodes if isinstance(item, dict) and item.get("node_id") == node_run.node_id
     ]
     producer_nodes = [
-        item
-        for item in nodes
-        if isinstance(item, dict) and item.get("node_id") == producer.node_id
+        item for item in nodes if isinstance(item, dict) and item.get("node_id") == producer.node_id
     ]
     if (
         len(review_nodes) != 1
@@ -166,9 +160,7 @@ def _input_artifacts(
         or artifact.id not in producer.output_artifact_ids_json
     ):
         raise ValidationError("Workflow review input lost its saved producer provenance")
-    _verify_review_graph_binding(
-        session, node_run, producer, artifact, project_id=project_id
-    )
+    _verify_review_graph_binding(session, node_run, producer, artifact, project_id=project_id)
     payload = artifact.payload_json
     if (
         not isinstance(payload, dict)
