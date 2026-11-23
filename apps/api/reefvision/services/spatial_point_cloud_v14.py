@@ -1348,13 +1348,19 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         # Compare full acquisition-row and displayed-row distributions using
         # integer cross-products, avoiding floating-point equality artifacts.
         source_pair_counts: dict[tuple[tuple[float, ...], tuple[int, ...]], int] = {}
+        source_rgb_counts: dict[tuple[int, ...], int] = {}
         for point, rgb in zip(points, point_colors, strict=True):
             pair = (tuple(point), tuple(rgb))
             source_pair_counts[pair] = source_pair_counts.get(pair, 0) + 1
+            color = tuple(rgb)
+            source_rgb_counts[color] = source_rgb_counts.get(color, 0) + 1
         preview_pair_counts: dict[tuple[tuple[float, ...], tuple[int, ...]], int] = {}
+        preview_rgb_counts: dict[tuple[int, ...], int] = {}
         for index in result["preview_point_indices"]:
             pair = (tuple(points[index]), tuple(point_colors[index]))
             preview_pair_counts[pair] = preview_pair_counts.get(pair, 0) + 1
+            color = tuple(point_colors[index])
+            preview_rgb_counts[color] = preview_rgb_counts.get(color, 0) + 1
         represented_source_rows = sum(source_pair_counts[pair] for pair in preview_pairs)
         displayed_row_count = len(result["preview_point_indices"])
         frequency_shift_numerator = sum(
@@ -1368,6 +1374,19 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             frequency_shift_numerator, 2 * len(points) * displayed_row_count
         )
         frequency_total_variation = float(frequency_total_variation_exact)
+        # A distinct XYZ/RGB observation may be undersampled even when its raw
+        # RGB triplet remains frequency-balanced across other XYZ coordinates.
+        # Audit color-frequency shift separately; neither is a tissue metric.
+        rgb_frequency_shift_numerator = sum(
+            abs(
+                source_count * displayed_row_count
+                - preview_rgb_counts.get(color, 0) * len(points)
+            )
+            for color, source_count in source_rgb_counts.items()
+        )
+        rgb_frequency_total_variation_exact = Fraction(
+            rgb_frequency_shift_numerator, 2 * len(points) * displayed_row_count
+        )
         palettes: dict[tuple[float, ...], set[tuple[int, ...]]] = {}
         for point, rgb in zip(points, point_colors, strict=True):
             palettes.setdefault(tuple(point), set()).add(tuple(rgb))
@@ -1426,6 +1445,13 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             "preview_omitted_distinct_rgb_triplets": (
                 len(source_rgb_triplets) - len(preview_rgb_triplets)
             ),
+            "preview_vs_source_rgb_triplet_total_variation": float(
+                rgb_frequency_total_variation_exact
+            ),
+            "preview_vs_source_rgb_triplet_total_variation_exact_fraction": [
+                rgb_frequency_total_variation_exact.numerator,
+                rgb_frequency_total_variation_exact.denominator,
+            ],
             "preview_repeated_xyz_rgb_observation_rows": repeated_preview_pair_rows,
             "fraction_of_source_xyz_rgb_pairs_displayed": (len(preview_pairs) / len(source_pairs)),
             "source_xyz_rgb_observation_rows_represented_in_preview": represented_source_rows,
@@ -1470,6 +1496,8 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             result["qc_warnings"].append("preview_omits_rgb_channel_extrema")
         if len(preview_rgb_triplets) < len(source_rgb_triplets):
             result["qc_warnings"].append("preview_omits_distinct_rgb_triplets")
+        if rgb_frequency_shift_numerator:
+            result["qc_warnings"].append("preview_shifts_rgb_triplet_frequency_distribution")
     else:
         result["preview_rgb_variant_support"] = None
     result["provenance"]["source_format"] = source_format
