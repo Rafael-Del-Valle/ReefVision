@@ -1331,6 +1331,13 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             (tuple(points[index]), tuple(point_colors[index]))
             for index in result["preview_point_indices"]
         }
+        # Count raw RGB triplet coverage independently of XYZ/RGB pairing.
+        # A display can omit a source color even when sampled channel extrema
+        # look complete; missing raw colors are NOT evidence of coral condition.
+        source_rgb_triplets = {tuple(rgb) for rgb in point_colors}
+        preview_rgb_triplets = {
+            tuple(point_colors[index]) for index in result["preview_point_indices"]
+        }
         # Repeated acquisition rows are not additional distinct XYZ/RGB
         # observations. Report their multiplicity without deciding whether
         # independent sensor acquisitions or biological replicates occurred.
@@ -1411,6 +1418,14 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
                 repeated_source_pair_rows / len(points)
             ),
             "preview_distinct_xyz_rgb_pairs": len(preview_pairs),
+            "source_distinct_rgb_triplets": len(source_rgb_triplets),
+            "preview_distinct_rgb_triplets": len(preview_rgb_triplets),
+            "fraction_of_source_rgb_triplets_displayed": (
+                len(preview_rgb_triplets) / len(source_rgb_triplets)
+            ),
+            "preview_omitted_distinct_rgb_triplets": (
+                len(source_rgb_triplets) - len(preview_rgb_triplets)
+            ),
             "preview_repeated_xyz_rgb_observation_rows": repeated_preview_pair_rows,
             "fraction_of_source_xyz_rgb_pairs_displayed": (len(preview_pairs) / len(source_pairs)),
             "source_xyz_rgb_observation_rows_represented_in_preview": represented_source_rows,
@@ -1453,6 +1468,8 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             result["qc_warnings"].append("preview_omits_multi_rgb_locus_variants")
         if omitted_rgb_channel_extrema:
             result["qc_warnings"].append("preview_omits_rgb_channel_extrema")
+        if len(preview_rgb_triplets) < len(source_rgb_triplets):
+            result["qc_warnings"].append("preview_omits_distinct_rgb_triplets")
     else:
         result["preview_rgb_variant_support"] = None
     result["provenance"]["source_format"] = source_format
