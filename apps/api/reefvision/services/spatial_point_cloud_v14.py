@@ -1378,10 +1378,7 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         # RGB triplet remains frequency-balanced across other XYZ coordinates.
         # Audit color-frequency shift separately; neither is a tissue metric.
         rgb_frequency_shift_numerator = sum(
-            abs(
-                source_count * displayed_row_count
-                - preview_rgb_counts.get(color, 0) * len(points)
-            )
+            abs(source_count * displayed_row_count - preview_rgb_counts.get(color, 0) * len(points))
             for color, source_count in source_rgb_counts.items()
         )
         rgb_frequency_total_variation_exact = Fraction(
