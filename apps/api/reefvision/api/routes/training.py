@@ -2,9 +2,10 @@
 
 import os
 import re
+import stat
 import unicodedata
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, BinaryIO
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse
@@ -339,6 +340,16 @@ def _safe_terminal_log_text(payload: bytes) -> str:
     )
 
 
+def _open_training_log(path: Path) -> BinaryIO:
+    """Open an observer handle without waiting on a substituted POSIX FIFO."""
+
+    def opener(name: str, flags: int) -> int:
+        flags |= getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
+        return os.open(name, flags)
+
+    return open(path, "rb", opener=opener)
+
+
 def _training_log_tail(
     log_path: str | None, data_dir: Path, *, finalized: bool = False
 ) -> dict[str, bool | str]:
@@ -371,7 +382,9 @@ def _training_log_tail(
         # replace the resolved log between path validation and open; without
         # this check the read-only monitor could display another job's data.
         expected_identity = path.stat()
-        with path.open("rb") as handle:
+        if not stat.S_ISREG(expected_identity.st_mode):
+            return empty
+        with _open_training_log(path) as handle:
             opened_identity = os.fstat(handle.fileno())
             # Recheck after opening: a substituted symlink or a replaced file
             # must never be read, even when its name still ends in .log.
@@ -380,8 +393,10 @@ def _training_log_tail(
             # the underlying inode. Reject multiply linked files before any
             # bytes are read, including a link added between stat and open.
             if (
-                expected_identity.st_nlink != 1
+                not stat.S_ISREG(opened_identity.st_mode)
+                or expected_identity.st_nlink != 1
                 or opened_identity.st_nlink != 1
+                or opened_identity.st_size < expected_identity.st_size
                 # An append between validation and open is normal, but a
                 # same-size rewrite would invalidate the pre-open snapshot.
                 or (
