@@ -277,6 +277,29 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 and canonical_json_sha256(request) == snapshot["pose_child_job_request_sha256"],
                 "Queued training job request differs from its frozen fingerprint",
             )
+            # Independently reconcile the original queued snapshot with the
+            # saved workflow and worker manifest. Checksum-valid job requests
+            # cannot establish that the separately persisted training draft
+            # still describes the same frozen truth and validation partition.
+            _require(
+                snapshot.get("workflow_run_id") == run_id
+                and snapshot.get("workflow_node_run_id") == training_node_id
+                and snapshot.get("pose_training_dataset_id") == dataset.id
+                and snapshot.get("pose_training_dataset_manifest_sha256")
+                == dataset.manifest_sha256
+                and snapshot.get("pose_validation_dataset_id") == validation_id
+                and snapshot.get("pose_validation_dataset_manifest_sha256")
+                == (validation_dataset.manifest_sha256 if validation_id is not None else None)
+                and snapshot.get("pose_schema_id") == dataset.pose_schema_id
+                and type(snapshot.get("pose_schema_revision")) is int
+                and snapshot.get("pose_schema_revision") == dataset.pose_schema_revision
+                and snapshot.get("pose_schema_content_hash") == dataset.pose_schema_content_hash
+                and isinstance(snapshot.get("split_manifest"), dict)
+                and snapshot["split_manifest"] == manifest.get("pose_split_manifest")
+                and canonical_json_sha256(snapshot["split_manifest"])
+                == training.split_manifest_sha256,
+                "Frozen pose-training draft differs from saved workflow or validation split",
+            )
             # First completion freezes the complete epoch history separately
             # from the final scores. Compare both persisted training records
             # with the saved Workflow Builder result: altered learning curves
