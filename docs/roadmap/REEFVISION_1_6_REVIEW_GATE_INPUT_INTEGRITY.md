@@ -25,3 +25,20 @@ Playwright, persisted-workflow replay and native Windows installed-GUI
 tests. Verify representative biological images before release, reconcile the
 separate 1.1/1.6 Alembic-0038 histories, and obtain explicit researcher
 approval. No release is authorized by this scoped change alone.
+
+## Verified API failure contract and pause preservation (23 November 2026)
+
+The exact-head backend CI for the original regression reported **2,394 passing,
+32 skipped and nine failures**. All nine new corruption cases correctly refused
+approval with HTTP **400** and an explicit domain-validation reason; the tests
+incorrectly expected HTTP 422, which applies to FastAPI request-shape
+validation, not the application's `ValidationError`. The scoped correction
+asserts the actual nine individual refusal reasons, retained review-node
+`waiting_for_review` state, no approval record, and the parent job remaining
+`waiting_for_review`. This does not weaken any scientific input check, convert
+a refusal to approval, or change the production API contract. The original
+consensus-review positive path is still covered separately.
+
+Do not claim the updated tests pass until exact-head CI completes. Genuine
+Windows installer/GUI, representative biological acceptance, Alembic-0038
+cross-version reconciliation and explicit researcher approval remain open.
