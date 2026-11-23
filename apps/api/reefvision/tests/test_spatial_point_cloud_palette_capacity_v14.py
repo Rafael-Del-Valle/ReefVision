@@ -144,3 +144,94 @@ def test_exact_palette_capacity_and_conflicting_pair_preservation_in_saved_graph
         if expected == "succeeded":
             assert len(set(hashes)) == 1
             assert len(hashes[0]) == 64
+
+
+def test_combined_palette_and_locus_preservation_reuses_shared_rows_in_saved_graphs(
+    client: TestClient,
+) -> None:
+    # 513 distinct XYZ/RGB pairs, but just 512 distinct XYZ loci and colors.
+    # RGB 1 first occurs at row 1, while locus 1 first occurs at row 2.
+    # Pinning those first occurrences independently wastes the 513th slot:
+    # row 2 covers both requirements and row 1 can safely be omitted.
+    points = [[float(max(0, index - 1)), 0.0, 0.0] for index in range(513)]
+    colors = [[0, 0, 0], [1, 0, 0]] + [
+        [(index - 1) % 256, (index - 1) // 256, 0]
+        for index in range(2, 513)
+    ]
+    rows = [
+        f"{int(point[0])} 0 0 {rgb[0]} {rgb[1]} {rgb[2]}"
+        for point, rgb in zip(points, colors, strict=True)
+    ]
+    ply_text = (
+        "ply\\nformat ascii 1.0\\n"
+        f"element vertex {len(rows)}\\n"
+        "property float x\\nproperty float y\\nproperty float z\\n"
+        "property uchar red\\nproperty uchar green\\nproperty uchar blue\\n"
+        "end_header\\n" + "\\n".join(rows) + "\\n"
+    )
+    params = {
+        **CALIBRATION,
+        "ply_text": ply_text,
+        "preserve_distinct_xyz_loci_in_preview": True,
+        "preserve_distinct_rgb_triplets_in_preview": True,
+    }
+    project_id = str(create_project(client, "Shared capture for color and XYZ")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    artifact = response.json()
+    selected = [0, *range(2, 513)]
+    assert artifact["preview_point_indices"] == selected
+    assert artifact["preview_unique_coordinate_count"] == 512
+    assert artifact["preview_unique_coordinate_coverage_fraction"] == 1.0
+    assert artifact["preview_distinct_xyz_loci_preservation_requested"] is True
+    assert artifact["preview_distinct_rgb_triplets_preservation_requested"] is True
+    support = artifact["preview_rgb_variant_support"]
+    assert support["source_distinct_rgb_triplets"] == 512
+    assert support["preview_distinct_rgb_triplets"] == 512
+    assert support["source_distinct_xyz_rgb_pairs"] == 513
+    assert support["preview_distinct_xyz_rgb_pairs"] == 512
+    assert "preview_omits_distinct_rgb_triplets" not in artifact["qc_warnings"]
+    assert "preview_omits_distinct_xyz_rgb_observations" in artifact["qc_warnings"]
+    assert artifact["provenance"]["calibration_verified"] is False
+    assert artifact["provenance"]["specimen_identity_verified"] is False
+    assert artifact["surface_area_m2"] is None
+    assert artifact["branch_length_m"] is None
+
+    direct = measure_point_cloud_preview(
+        points=points,
+        point_colors=colors,
+        preserve_distinct_xyz_loci_in_preview=True,
+        preserve_distinct_rgb_triplets_in_preview=True,
+        **CALIBRATION,
+    )
+    assert direct["preview_point_indices"] == selected
+    assert direct["provenance"]["geometry_sha256"] == artifact["provenance"]["geometry_sha256"]
+
+    graph = _graph(params, "shared-acquisition")
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        outputs = [
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        ]
+        assert len(outputs) == 1
+        assert outputs[0]["payload_json"] == artifact
+        hashes.append(outputs[0]["payload_sha256"])
+    assert len(set(hashes)) == 1
+    assert len(hashes[0]) == 64
