@@ -19,9 +19,7 @@ from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_workflow_review_phase10 import _queue_seeded_review_run
 
 
-def _seed_disagreement(
-    client: TestClient, corruption: str | None
-) -> tuple[str, str, str, str]:
+def _seed_disagreement(client: TestClient, corruption: str | None) -> tuple[str, str, str, str]:
     project, run_id, job_id = _queue_seeded_review_run(client)
     project_id = str(project["id"])
     app = cast(FastAPI, client.app)
@@ -29,9 +27,7 @@ def _seed_disagreement(
     detail = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "waiting_for_review"
-    review_id = next(
-        row["id"] for row in detail.json()["nodes"] if row["node_id"] == "review"
-    )
+    review_id = next(row["id"] for row in detail.json()["nodes"] if row["node_id"] == "review")
     with app.state.session_factory() as session:
         review = session.get(WorkflowNodeRun, review_id)
         assert review is not None
@@ -114,9 +110,7 @@ def test_saved_review_rejects_invalid_disagreement_lineage(
             inputs = _input_artifacts(session, review, project_id=project_id)
             assert len(inputs) == 1
             with pytest.raises(ValidationError, match=expected_error):
-                _disagreement_artifact_for_consensus(
-                    session, inputs[0], project_id=project_id
-                )
+                _disagreement_artifact_for_consensus(session, inputs[0], project_id=project_id)
     response = client.post(
         f"/api/v1/workflow-node-runs/{review_id}/resume-review",
         json={"reviewed_by": "scientist", "note": "Reject modified cohort"},
@@ -142,9 +136,7 @@ def test_saved_review_accepts_authentic_empty_disagreements(client: TestClient) 
         assert review is not None
         inputs = _input_artifacts(session, review, project_id=project_id)
         assert len(inputs) == 1
-        sibling = _disagreement_artifact_for_consensus(
-            session, inputs[0], project_id=project_id
-        )
+        sibling = _disagreement_artifact_for_consensus(session, inputs[0], project_id=project_id)
         assert sibling is not None and sibling.data_type == "detection_disagreements"
     approval = client.post(
         f"/api/v1/workflow-node-runs/{review_id}/resume-review",

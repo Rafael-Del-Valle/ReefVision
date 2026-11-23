@@ -224,9 +224,7 @@ def _input_artifacts(
         or 0
     )
     if actual_output_count != len(producer_outputs):
-        raise ValidationError(
-            "Workflow review producer output manifest omits persisted artifacts"
-        )
+        raise ValidationError("Workflow review producer output manifest omits persisted artifacts")
     _verify_review_graph_binding(session, node_run, producer, artifact, project_id=project_id)
     payload = artifact.payload_json
     if (
@@ -351,6 +349,7 @@ def _disagreement_artifact_for_consensus(
     ):
         raise ValidationError("Workflow consensus disagreement handoff failed source provenance")
     return sibling
+
 
 def _auto_label_post_review(
     session: Session,
