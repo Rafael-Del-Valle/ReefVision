@@ -302,6 +302,11 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
             reference_tv.numerator,
             reference_tv.denominator,
         ]
+        # Here each distinct XYZ/RGB pair has its own RGB triplet, so
+        # marginalizing the spatial coordinate loses no variation.
+        assert observed["preview_xyz_rgb_vs_rgb_marginal_tv_gap"] == 0.0
+        assert observed["preview_xyz_rgb_vs_rgb_marginal_tv_gap_exact_fraction"] == [0, 1]
+        assert "preview_xyz_rgb_tv_exceeds_rgb_marginal_tv" not in artifact["qc_warnings"]
         assert "preview_shifts_rgb_triplet_frequency_distribution" in artifact["qc_warnings"]
         assert observed["preview_vs_source_xyz_rgb_observation_total_variation"] == (
             pytest.approx(float(reference_tv))
@@ -471,6 +476,15 @@ def test_balanced_two_color_histogram_can_hide_complete_spatial_sampling_loss(
     assert support["preview_omitted_distinct_rgb_triplets"] == 0
     assert support["preview_vs_source_rgb_triplet_total_variation_exact_fraction"] == [0, 1]
     assert support["preview_vs_source_rgb_triplet_total_variation"] == 0.0
+    # All observed pair variation disappears when XYZ is marginalized out.
+    spatial_only_gap = Fraction(88, 600)
+    assert support["preview_xyz_rgb_vs_rgb_marginal_tv_gap"] == pytest.approx(
+        float(spatial_only_gap)
+    )
+    assert support["preview_xyz_rgb_vs_rgb_marginal_tv_gap_exact_fraction"] == [
+        spatial_only_gap.numerator,
+        spatial_only_gap.denominator,
+    ]
     # Independent exact reference: 88/600 source rows from a separate XYZ
     # locus are absent, even though both RGB histogram frequencies are 1/2.
     expected_pair_tv = Fraction(88, 600)
@@ -484,6 +498,7 @@ def test_balanced_two_color_histogram_can_hide_complete_spatial_sampling_loss(
         float(expected_pair_tv)
     )
     assert "preview_shifts_rgb_triplet_frequency_distribution" not in expected["qc_warnings"]
+    assert "preview_xyz_rgb_tv_exceeds_rgb_marginal_tv" in expected["qc_warnings"]
     assert "preview_shifts_xyz_rgb_observation_frequency_distribution" in expected["qc_warnings"]
     assert "preview_omits_distinct_xyz_rgb_observations" in expected["qc_warnings"]
     assert expected["provenance"]["calibration_verified"] is False
@@ -559,6 +574,14 @@ def test_rgb_frequency_can_remain_stable_while_spatial_pair_frequency_shifts(
     assert support["preview_vs_source_rgb_triplet_total_variation"] == 0.0
     assert support["preview_vs_source_rgb_triplet_total_variation_exact_fraction"] == [0, 1]
     expected_pair_tv = abs(Fraction(1, 512) - Fraction(1, 600))
+    assert support["preview_xyz_rgb_vs_rgb_marginal_tv_gap_exact_fraction"] == [
+        expected_pair_tv.numerator,
+        expected_pair_tv.denominator,
+    ]
+    assert support["preview_xyz_rgb_vs_rgb_marginal_tv_gap"] == pytest.approx(
+        float(expected_pair_tv)
+    )
+    assert "preview_xyz_rgb_tv_exceeds_rgb_marginal_tv" in artifact["qc_warnings"]
     assert support["preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction"] == [
         expected_pair_tv.numerator,
         expected_pair_tv.denominator,
