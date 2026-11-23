@@ -1,0 +1,190 @@
+"""Exact joint XYZ/RGB preview row-cover boundary, including persisted workflows."""
+
+from __future__ import annotations
+
+from typing import cast
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.spatial_point_cloud_v14 import measure_point_cloud_preview
+from reefvision.tests.test_annotations import create_project
+
+CALIBRATION = {
+    "meters_per_unit": 0.01,
+    "calibration_method": "ruler",
+    "calibration_evidence": "Synthetic, provisional source-scale witness",
+    "relative_scale_uncertainty": 0.1,
+}
+
+
+def _alternating_source() -> tuple[list[list[float]], list[list[int]], str]:
+    # The first-occurrence rows for A, B, C are A/1, B/2, C/1.
+    # A/2, B/3, C/1 is a three-row cover of all three loci and colors.
+    # A local single-swap heuristic rejects this feasible cover because
+    # B/2 is the only initially retained acquisition of color 2.
+    observations: list[tuple[int, list[int]]] = [
+        (0, [1, 0, 0]),
+        (0, [2, 0, 0]),
+        (1, [2, 0, 0]),
+        (1, [3, 0, 0]),
+        (2, [1, 0, 0]),
+    ]
+    observations.extend(
+        (locus, [locus % 256, locus // 256, 1])
+        for locus in range(3, 512)
+    )
+    points = [[float(locus), 0.0, 0.0] for locus, _ in observations]
+    colors = [rgb for _, rgb in observations]
+    assert len(points) == 514
+    assert len({tuple(point) for point in points}) == 512
+    assert len({tuple(rgb) for rgb in colors}) == 512
+    rows = [
+        f"{locus} 0 0 {rgb[0]} {rgb[1]} {rgb[2]}"
+        for locus, rgb in observations
+    ]
+    ply_text = (
+        "ply\nformat ascii 1.0\n"
+        f"element vertex {len(rows)}\n"
+        "property float x\nproperty float y\nproperty float z\n"
+        "property uchar red\nproperty uchar green\nproperty uchar blue\n"
+        "end_header\n" + "\n".join(rows) + "\n"
+    )
+    return points, colors, ply_text
+
+
+def _graph(params: dict, suffix: str) -> dict:
+    return {
+        "graph_id": f"joint-locus-color-matching-{suffix}",
+        "name": f"Exact joint XYZ and RGB row cover: {suffix}",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "c", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "c",
+                "target_port_id": "project",
+            }
+        ],
+    }
+
+
+def test_alternating_joint_cover_minimal_rows_and_saved_workflow(
+    client: TestClient,
+) -> None:
+    points, colors, ply_text = _alternating_source()
+    project_id = str(create_project(client, "Alternating joint point-cloud cover")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = {
+        **CALIBRATION,
+        "ply_text": ply_text,
+        "preserve_distinct_xyz_loci_in_preview": True,
+        "preserve_distinct_rgb_triplets_in_preview": True,
+    }
+    expected = [1, 3, *range(4, 514)]
+    direct = measure_point_cloud_preview(
+        points=points,
+        point_colors=colors,
+        preserve_distinct_xyz_loci_in_preview=True,
+        preserve_distinct_rgb_triplets_in_preview=True,
+        **CALIBRATION,
+    )
+    assert direct["preview_point_indices"] == expected
+    assert direct["preview_unique_coordinate_count"] == 512
+    assert direct["provenance"]["calibration_verified"] is False
+    assert direct["provenance"]["specimen_identity_verified"] is False
+    assert direct["surface_area_m2"] is None
+    assert direct["branch_length_m"] is None
+
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    artifact = response.json()
+    assert artifact["preview_point_indices"] == expected
+    assert artifact["preview_unique_coordinate_coverage_fraction"] == 1.0
+    assert artifact["preview_source_acquisition_endpoint_support"] == {
+        "first_row_displayed": False,
+        "last_row_displayed": True,
+    }
+    support = artifact["preview_rgb_variant_support"]
+    assert support["source_distinct_rgb_triplets"] == 512
+    assert support["preview_distinct_rgb_triplets"] == 512
+    assert support["preview_omitted_distinct_rgb_triplets"] == 0
+    assert support["source_distinct_xyz_rgb_pairs"] == 514
+    assert support["preview_distinct_xyz_rgb_pairs"] == 512
+    assert "preview_omits_acquisition_endpoint_row" in artifact["qc_warnings"]
+    assert "preview_omits_distinct_rgb_triplets" not in artifact["qc_warnings"]
+    assert "preview_omits_distinct_xyz_rgb_observations" in artifact["qc_warnings"]
+    assert "preview_shifts_rgb_triplet_frequency_distribution" in artifact["qc_warnings"]
+    assert artifact["provenance"]["geometry_sha256"] == direct["provenance"]["geometry_sha256"]
+    assert artifact["provenance"]["calibration_verified"] is False
+    assert artifact["provenance"]["specimen_identity_verified"] is False
+
+    pair_required = {**params, "preserve_distinct_xyz_rgb_pairs_in_preview": True}
+    extrema_required = {**params, "preserve_axis_extrema_in_preview": True}
+    with pytest.raises(ValueError, match="Protected point indices exceed the display budget"):
+        measure_point_cloud_preview(
+            points=points,
+            point_colors=colors,
+            preserve_distinct_xyz_loci_in_preview=True,
+            preserve_distinct_rgb_triplets_in_preview=True,
+            preserve_axis_extrema_in_preview=True,
+            **CALIBRATION,
+        )
+    for rejected_params in (pair_required, extrema_required):
+        rejected = client.post(
+            f"{base}/spatial/point-cloud-preview", json=rejected_params
+        )
+        assert rejected.status_code == 400, rejected.text
+        assert "display budget" in rejected.text
+
+    # Persist each typed graph and execute it twice: no invalid success
+    # artifact and no variation in the accepted scientific evidence.
+    app = cast(FastAPI, client.app)
+    for suffix, parameters, expected_status in (
+        ("matched", params, "succeeded"),
+        ("all-pairs", pair_required, "failed"),
+        ("fixed-extrema", extrema_required, "failed"),
+    ):
+        graph = _graph(parameters, suffix)
+        plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+        assert plan.status_code == 200, plan.text
+        assert plan.json()["executable"] is True
+        saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+        assert saved.status_code == 201, saved.text
+        hashes: list[str] = []
+        for _ in range(2):
+            run = client.post(
+                f"{base}/workflow-runs",
+                json={"graph_record_id": saved.json()["id"]},
+            )
+            assert run.status_code == 202, run.text
+            ran = process_workflow_run_job(
+                app.state.settings,
+                app.state.session_factory,
+                str(run.json()["job_id"]),
+            )
+            assert ran is (expected_status == "succeeded")
+            detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+            assert detail.status_code == 200, detail.text
+            assert detail.json()["run"]["status"] == expected_status
+            outputs = [
+                item
+                for item in detail.json()["artifacts"]
+                if item["data_type"] == "point_cloud_measurement_preview"
+            ]
+            if expected_status == "succeeded":
+                assert len(outputs) == 1
+                assert outputs[0]["payload_json"] == artifact
+                hashes.append(outputs[0]["payload_sha256"])
+            else:
+                assert "display budget" in detail.json()["run"]["error_message"]
+                assert outputs == []
+        if expected_status == "succeeded":
+            assert len(set(hashes)) == 1
+            assert len(hashes[0]) == 64
