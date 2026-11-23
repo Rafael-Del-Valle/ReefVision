@@ -53,7 +53,6 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
         PoseLandmarkSchemaRevision,
         PoseModelSchemaBinding,
         PoseTrainingDataset,
-        PoseTrainingDatasetItem,
         TrainingRun,
         WorkflowArtifact,
         WorkflowNodeRun,
@@ -193,29 +192,32 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 _require(
                     validation_dataset is not None
                     and validation_dataset.project_id == run.project_id
+                    and validation_dataset.pose_schema_id == dataset.pose_schema_id
+                    and validation_dataset.pose_schema_revision == dataset.pose_schema_revision
                     and validation_dataset.pose_schema_content_hash
                     == dataset.pose_schema_content_hash,
                     "Saved validation dataset is missing, foreign, or anatomically incompatible",
                 )
                 PoseTrainingDatasetService(session).manifest(validation_id)
-                # A separately frozen validation set must be genuinely held out.
-                # Video IDs may change on re-import, so compare source file
-                # digests and frame indices instead of database asset IDs.
-                if validation_id != dataset.id:
-                    def source_frames(frozen_id: str) -> set[tuple[str, int]]:
-                        return set(
-                            session.execute(
-                                select(
-                                    PoseTrainingDatasetItem.video_sha256,
-                                    PoseTrainingDatasetItem.frame_index,
-                                ).where(PoseTrainingDatasetItem.dataset_id == frozen_id)
-                            ).tuples().all()
-                        )
-
-                    _require(
-                        not source_frames(dataset.id).intersection(source_frames(validation_id)),
-                        "Separate frozen validation dataset reuses training video frames",
+                # Match the production pose-workflow training contract: a
+                # validation dataset must be distinct and share *no source
+                # videos*, even when the selected frame indices differ.
+                # Frame-only comparison misses correlated adjacent frames.
+                _require(
+                    validation_id != dataset.id,
+                    "Validation dataset is the training dataset",
+                )
+                train_items = dataset.manifest_json["items"]
+                validation_items = validation_dataset.manifest_json["items"]
+                _require(
+                    {item["video_id"] for item in train_items}.isdisjoint(
+                        {item["video_id"] for item in validation_items}
                     )
+                    and {item["video_sha256"] for item in train_items}.isdisjoint(
+                        {item["video_sha256"] for item in validation_items}
+                    ),
+                    "Separate frozen validation dataset reuses source video identity or content",
+                )
             job = session.get(Job, training.job_id)
             _require(
                 job is not None and job.status == "succeeded",
