@@ -531,7 +531,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             # Scientific acceptance covers *all* checkpoint files frozen by
             # the worker, not just the selected checkpoint registered as a model.
             # Non-selected best/last weights are independent research artifacts.
-            checkpoint_manifest = training.artifact_manifest_json
+            verified_checkpoints: dict[str, dict[str, Any]] = {}
             for path_key, sha_key, filename in (
                 ("best_checkpoint_path", "best_checkpoint_sha256", "best.pt"),
                 ("last_checkpoint_path", "last_checkpoint_sha256", "last.pt"),
@@ -552,10 +552,16 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                     advertised_path == expected_weights_prefix + filename,
                     f"{path_key} belongs to another training run",
                 )
+                advertised_file = _managed_file(root, advertised_path)
+                advertised_size = advertised_file.stat().st_size
                 _require(
-                    _digest(_managed_file(root, advertised_path)) == advertised_sha,
-                    f"{path_key} bytes differ from saved training manifest",
+                    advertised_size > 0 and _digest(advertised_file) == advertised_sha,
+                    f"{path_key} is empty or differs from saved training manifest",
                 )
+                verified_checkpoints[filename] = {
+                    "sha256": advertised_sha,
+                    "size_bytes": advertised_size,
+                }
 
             model = session.get(ModelRegistration, registered.get("model_id"))
             _require(
@@ -660,6 +666,8 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 "project_id": run.project_id,
                 "workflow_run_id": run.id,
                 "workflow_job_id": parent_job.id,
+                "workflow_graph_sha256": run.graph_sha256,
+                "workflow_provenance_sha256": canonical_json_sha256(provenance),
                 "frozen_dataset_id": dataset.id,
                 "verified_items": dataset.item_count,
                 "verified_source_video_count": len(video_digests),
@@ -699,6 +707,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 "seed_model_sha256": training.resolved_model_checksum,
                 "checkpoint_sha256": checkpoint_sha,
                 "checkpoint_size_bytes": checkpoint_size,
+                "verified_checkpoints": verified_checkpoints,
                 "registered_model_id": model.id,
                 "registered_model_sha256": model_sha,
                 "scope": "saved workflow, frozen truth, training and local model bytes only",
