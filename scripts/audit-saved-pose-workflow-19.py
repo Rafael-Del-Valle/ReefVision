@@ -70,6 +70,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
         PoseTrainingDataset,
         Project,
         TrainingRun,
+        VideoAsset,
         WorkflowArtifact,
         WorkflowNodeRun,
         WorkflowRun,
@@ -253,6 +254,40 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                     ),
                     "Separate frozen validation dataset reuses source video identity or content",
                 )
+            # A frozen pose manifest proves what videos were reviewed, not
+            # that the original media still exists or has the recorded bytes.
+            # Hash each unique training/held-out source once. Missing or
+            # modified footage cannot pass real scientific acceptance even
+            # when database snapshots and model checkpoints still agree.
+            video_digests: dict[str, str] = {}
+            verified_source_bytes = 0
+            source_items = dataset.manifest_json["items"] + (
+                validation_dataset.manifest_json["items"] if validation_id is not None else []
+            )
+            for source_item in source_items:
+                video_id = source_item["video_id"]
+                expected_video_sha = source_item["video_sha256"]
+                _require(
+                    video_digests.get(video_id, expected_video_sha) == expected_video_sha,
+                    "Frozen datasets disagree on a source video's checksum",
+                )
+                if video_id in video_digests:
+                    continue
+                source_video = session.get(VideoAsset, video_id)
+                _require(
+                    source_video is not None
+                    and source_video.project_id == run.project_id
+                    and source_video.sha256 == expected_video_sha,
+                    "Frozen source video registration no longer matches saved truth",
+                )
+                video_file = _managed_file(root, source_video.managed_path)
+                video_size = video_file.stat().st_size
+                _require(
+                    video_size > 0 and _digest(video_file) == expected_video_sha,
+                    "Frozen source video bytes are missing or changed",
+                )
+                video_digests[video_id] = expected_video_sha
+                verified_source_bytes += video_size
             job = session.get(Job, training.job_id)
             _require(
                 job is not None and job.status == "succeeded",
@@ -579,6 +614,8 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 "workflow_job_id": parent_job.id,
                 "frozen_dataset_id": dataset.id,
                 "verified_items": dataset.item_count,
+                "verified_source_video_count": len(video_digests),
+                "verified_source_video_bytes": verified_source_bytes,
                 "dataset_manifest_sha256": dataset.manifest_sha256,
                 "validation_dataset_id": validation_id,
                 "separate_validation_frame_overlap_checked": (
