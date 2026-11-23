@@ -157,3 +157,47 @@ behaviors and explicit researcher approval remain unchanged. Full exact-head
 CI, representative persisted-workflow validation, 1.1/1.6 migration
 reconciliation, and real Windows MSI/CAB clean-install/upgrade/rollback plus
 installed-GUI acceptance remain **RELEASE HOLD** conditions.
+
+
+## Follow-up: detect WAL-only biological changes across preflights (2026-11-22)
+
+SQLite Write-Ahead Logging can preserve a completely unchanged main database
+file while appending newly committed scientific observations to its companion
+`-wal` file. The prior main-file inode/size/mtime safeguard alone did not
+detect that race. A successful integrity check against one version of an
+uncheckpointed WAL must not authorize opening the write-capable sidecar
+against later observations.
+
+The `--skip-migrations` read-only preflight now snapshots each relevant
+WAL file identity, size and nanosecond mtime, including the resolved target
+when the SQLite database path is a symlink. It checks for WAL changes
+between the physical integrity/foreign-key probe and the Alembic schema
+probe and again after schema inspection. Appearance, disappearance or
+mutation of a **nonempty** WAL fails closed with a recovery message.
+An empty WAL (which even read-only SQLite connections may create) does
+not contain committed frames and is treated like an absent file.
+Transient `-shm` WAL-index metadata is deliberately not treated as
+biological data. No journal is checkpointed, repaired or removed by this
+feature.
+
+The new parameterized regression creates a genuinely migrated local 0041
+research database in WAL mode, retains a writer and injects a second
+committed biological note between preflights. It covers both an initially
+absent WAL and one already containing an observation; it proves that the
+main database file's identity/stat remain exactly unchanged, that only the
+WAL changes, that startup refuses to open the application engine, and
+that existing and new notes remain intact. In normal use, stop competing
+writers and retry after reviewing the database/backup rather than
+silently accepting a mixed evidence window.
+
+This remains a **best-effort fail-closed startup check**, not a transactional
+snapshot lock, a cryptographic database attestation or guaranteed detection
+of a malicious actor who restores a journal's metadata. No claim is made
+about changes after the validation window. The 1.1/1.6 Alembic-0038
+collision is still unresolved. Full repository CI, independent science and
+saved Workflow Builder regressions, biological field evidence, installed
+Windows MSI/CAB clean-install and upgrade/rollback, interactive GUI
+acceptance and explicit researcher approval remain required for release.
+No new workflow node is appropriate for this out-of-band database-startup
+boundary; all existing typed saved QC workflows, provenance and review
+gates are preserved.
