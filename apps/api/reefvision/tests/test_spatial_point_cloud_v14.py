@@ -540,6 +540,76 @@ def test_non_ascii_ply_rejected_without_standalone_or_workflow_artifact(
     )
 
 
+@pytest.mark.parametrize("exponent_sign", ["+", "-"])
+def test_unrepresentable_zero_exponent_rejected_atomically(
+    client: TestClient, exponent_sign: str
+) -> None:
+    """Unrepresentable Decimal exponents must not escape as server errors."""
+    valid_ply = (
+        "ply\nformat ascii 1.0\nelement vertex 2\n"
+        "property double x\nproperty double y\nproperty double z\n"
+        "property uchar red\nproperty uchar green\nproperty uchar blue\n"
+        "end_header\n1 2 3 10 20 30\n0e+40 4 5 40 50 60\n"
+    )
+    valid_colors: list[list[int]] = []
+    assert parse_ascii_ply_points(valid_ply, colors_out=valid_colors) == [
+        [1.0, 2.0, 3.0],
+        [0.0, 4.0, 5.0],
+    ]
+    assert valid_colors == [[10, 20, 30], [40, 50, 60]]
+
+    token = f"0e{exponent_sign}{'9' * 40}"
+    assert float(token) == 0.0
+    bad_ply = valid_ply.replace("0e+40", token)
+    staged_colors: list[list[int]] = []
+    diagnostic = "Point-cloud decimal coordinate outside supported range"
+    with pytest.raises(ValueError, match=diagnostic):
+        parse_ascii_ply_points(bad_ply, colors_out=staged_colors)
+    assert staged_colors == []
+
+    project_id = str(create_project(client, "Unrepresentable PLY exponent")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = {**PARAMS, "ply_text": bad_ply}
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert standalone.status_code == 400, standalone.text
+    assert diagnostic in standalone.text
+
+    graph = {
+        "graph_id": "reject-unrepresentable-exponent-v14",
+        "name": "Fail closed on unrepresentable PLY exponent",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert not process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "failed"
+        assert diagnostic in detail.json()["run"]["error_message"]
+        assert not any(
+            artifact["data_type"] == "point_cloud_measurement_preview"
+            for artifact in detail.json()["artifacts"]
+        )
+
+
 def test_ascii_ply_comment_remains_supported() -> None:
     with_comment = PLY.replace("end_header", "comment temperature C\nend_header")
     assert parse_ascii_ply_points(with_comment) == parse_ascii_ply_points(PLY)
