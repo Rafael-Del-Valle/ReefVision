@@ -39,3 +39,25 @@ units, retries and mandatory human review are **preserved**, not replaced;
 focus handoff is UI-only and must not become a duplicate workflow node.
 Release remains on HOLD pending the independent 1.1/1.6 Alembic-0038
 collision, representative biology, full acceptance and researcher approval.
+
+## Synchronous focus handoff before React unmount (2026-11-22)
+
+The existing navigation test exercised an autofocus destination mounted after
+React processed the close. There is a second real desktop sequence: a workspace
+navigator may focus its own search or project input **synchronously** in the
+`onNavigate` callback, while the onboarding dialog's document-level
+`focusin` listener is still mounted. The old listener immediately pulled
+focus back to the help dialog; after close, focus could be lost to the document
+body even though the old-launcher restoration had correctly been suppressed.
+
+The focus trap now yields **only** after the user explicitly initiates
+`navigateTo`; it still recaptures background focus throughout ordinary help
+and restores the launcher on non-navigation dismissal. A parameterized React
+regression exercises both project-scoped Workflow Builder navigation and the
+project-independent System destination, with the destination input focused
+inside `onNavigate` before `onClose` unmounts the modal. This is local UI
+accessibility, not a new scientific Workflow Builder operation; typed saved QC
+workflows, artifacts, scientific units, provenance and researcher approval
+remain unchanged. Release remains on HOLD for exact-head frontend/E2E and
+backend CI, the independent 1.1/1.6 Alembic collision, biological acceptance,
+physical MSI clean-install/upgrade/rollback and installed-GUI validation.

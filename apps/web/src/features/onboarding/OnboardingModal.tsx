@@ -41,6 +41,7 @@ export function OnboardingModal({
       const dialog = dialogRef.current;
       if (
         dialog &&
+        !handoffFocusRef.current &&
         event.target instanceof Node &&
         !dialog.contains(event.target)
       ) {

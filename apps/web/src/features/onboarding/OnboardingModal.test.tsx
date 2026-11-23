@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { OnboardingModal, type OnboardingDestination } from "./OnboardingModal";
@@ -71,6 +71,25 @@ function WorkspaceHandoffHarness() {
         <section aria-label="Navigated workspace">
           <input aria-label="Workspace search" autoFocus />
         </section>
+      )}
+    </>
+  );
+}
+
+function SynchronousFocusHandoffHarness({ hasProject }: { hasProject: boolean }) {
+  const [open, setOpen] = useState(true);
+  const destinationRef = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <input ref={destinationRef} aria-label="New workspace search" />
+      {open && (
+        <OnboardingModal
+          version="1.6"
+          hasProject={hasProject}
+          onNavigate={() => destinationRef.current?.focus()}
+          onClose={() => setOpen(false)}
+          onDismissPermanently={() => setOpen(false)}
+        />
       )}
     </>
   );
@@ -152,6 +171,28 @@ describe("onboarding local usability", () => {
       expect(screen.queryByRole("dialog")).toBeNull();
       expect(document.activeElement).toBe(
         screen.getByRole("textbox", { name: "Workspace search" }),
+      );
+    },
+  );
+
+  it.each([
+    { label: "Open Workflow Builder", hasProject: true },
+    { label: "Open System status", hasProject: false },
+  ])(
+    "preserves an immediately focused destination before the help modal unmounts: $label",
+    ({ label, hasProject }) => {
+      render(<SynchronousFocusHandoffHarness hasProject={hasProject} />);
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Close" }),
+      );
+
+      // Some desktop navigators focus the next workspace synchronously,
+      // before the help dialog has actually unmounted. Its focusin trap
+      // must not recapture that explicit navigation handoff.
+      fireEvent.click(screen.getByRole("button", { name: label }));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(document.activeElement).toBe(
+        screen.getByRole("textbox", { name: "New workspace search" }),
       );
     },
   );
