@@ -798,6 +798,21 @@ def compare_source_manifest(
 
 
 
+def _unique_manifest_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """Reject ambiguous JSON objects instead of trusting the last duplicate key."""
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON member in baseline JPEG manifest")
+        result[key] = value
+    return result
+
+
+def _reject_manifest_constant(value: str) -> object:
+    """Scientific evidence must use standard JSON, not NaN or Infinity."""
+    raise ValueError("non-finite JSON constant in baseline JPEG manifest")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path, help="Camera fixture directory (read-only)")
@@ -870,7 +885,11 @@ def main() -> int:
                 baseline_bytes = stream.read(32 * 1024 * 1024 + 1)
             if len(baseline_bytes) > 32 * 1024 * 1024:
                 raise ValueError("baseline JPEG manifest exceeds 32 MiB")
-            baseline = json.loads(baseline_bytes)
+            baseline = json.loads(
+                baseline_bytes,
+                object_pairs_hook=_unique_manifest_object,
+                parse_constant=_reject_manifest_constant,
+            )
         except (OSError, ValueError, UnicodeError) as exc:
             errors.append(f"cannot read baseline JPEG manifest: {type(exc).__name__}")
         else:
