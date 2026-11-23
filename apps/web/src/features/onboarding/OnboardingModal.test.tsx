@@ -76,7 +76,11 @@ function WorkspaceHandoffHarness() {
   );
 }
 
-function SynchronousFocusHandoffHarness({ hasProject }: { hasProject: boolean }) {
+function SynchronousFocusHandoffHarness({
+  hasProject,
+}: {
+  hasProject: boolean;
+}) {
   const [open, setOpen] = useState(true);
   const destinationRef = useRef<HTMLInputElement>(null);
   return (
