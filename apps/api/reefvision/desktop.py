@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import os
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -349,8 +350,6 @@ def require_existing_desktop_schema(settings: Settings) -> None:
         # survived an interrupted restore.
         # Inspect the *existing* file through a read-only URI so even a bad
         # path cannot create a replacement research database.
-        import sqlite3
-
         try:
             read_only_uri = sqlite_path.resolve().as_uri() + "?mode=ro"
             with closing(sqlite3.connect(read_only_uri, uri=True)) as probe:
@@ -415,8 +414,6 @@ def require_existing_desktop_schema(settings: Settings) -> None:
     # The application engine is write-capable. Even accidental future DDL
     # in a lineage check must be refused by this inspection-only connection.
     # Reuse the exact physical file URI inspected by PRAGMA integrity_check.
-    import sqlite3
-
     engine = create_engine(
         "sqlite+pysqlite://",
         creator=lambda: sqlite3.connect(read_only_uri, uri=True),
