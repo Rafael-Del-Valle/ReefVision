@@ -45,6 +45,35 @@ const enableDocumentScrollProbe = async (
     .toBeGreaterThan(400);
 };
 
+// Use the DevTools touch-input path rather than synthesizeScrollGesture:
+// Chromium's headless desktop backend can silently ignore the latter even
+// with touch emulation enabled. Individual touch moves exercise the native
+// compositor and make the positive-control scroll genuinely observable.
+const dispatchNativeTouchPan = async (
+  session: import("@playwright/test").CDPSession,
+  x: number,
+  startY: number,
+) => {
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x, y: startY, id: 1 }],
+  });
+  try {
+    for (let delta = 10; delta <= 140; delta += 10) {
+      await session.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x, y: startY - delta, id: 1 }],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  } finally {
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+  }
+};
+
 // Browser-generated JPEG bytes exercise the real camera-image decoder path
 // without network fixtures or changing scientific source-image metadata.
 test("initial image and gallery scrolling", async ({ page }) => {
@@ -934,13 +963,7 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
         enabled: true,
         maxTouchPoints: 1,
       });
-      await controlSession.send("Input.synthesizeScrollGesture", {
-        x: 80,
-        y: 80,
-        yDistance: -340,
-        gestureSourceType: "touch",
-        speed: 800,
-      });
+      await dispatchNativeTouchPan(controlSession, 80, 160);
     } finally {
       await controlSession.detach();
     }
@@ -972,19 +995,18 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
   const beforeTouchBounds = await focused.boundingBox();
   expect(beforeTouchBounds).not.toBeNull();
   const beforeTouchScroll = await pageScroll();
+  await page.bringToFront();
   const touchSession = await page.context().newCDPSession(page);
   try {
     await touchSession.send("Emulation.setTouchEmulationEnabled", {
       enabled: true,
       maxTouchPoints: 1,
     });
-    await touchSession.send("Input.synthesizeScrollGesture", {
-      x: Math.round(beforeTouchBounds!.x + beforeTouchBounds!.width / 2),
-      y: Math.round(beforeTouchBounds!.y + beforeTouchBounds!.height / 2),
-      yDistance: -340,
-      gestureSourceType: "touch",
-      speed: 800,
-    });
+    await dispatchNativeTouchPan(
+      touchSession,
+      Math.round(beforeTouchBounds!.x + beforeTouchBounds!.width / 2),
+      Math.round(beforeTouchBounds!.y + beforeTouchBounds!.height / 2),
+    );
   } finally {
     await touchSession.detach();
   }
