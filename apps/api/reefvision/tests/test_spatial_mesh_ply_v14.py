@@ -218,3 +218,64 @@ def test_invalid_ply_face_index_fails_standalone_and_saved_workflow(client: Test
         artifact["data_type"] == "mesh_measurement_preview"
         for artifact in detail.json()["artifacts"]
     )
+
+
+@pytest.mark.parametrize("exponent_sign", ["+", "-"])
+def test_ply_mesh_decimal_exponent_fails_standalone_and_saved_workflow(
+    client: TestClient, exponent_sign: str
+) -> None:
+    """Reject unrepresentable source decimals without publishing measurements."""
+    valid = PLY.replace("255 0 0 0", "255 0e+40 0 0")
+    assert parse_ply_triangles(valid) == parse_ply_triangles(PLY)
+    token = f"0e{exponent_sign}{'9' * 40}"
+    assert float(token) == 0.0
+    invalid = valid.replace("0e+40", token)
+    diagnostic = "PLY mesh decimal coordinate outside supported range"
+    with pytest.raises(ValueError, match=diagnostic):
+        parse_ply_triangles(invalid)
+
+    project_id = str(create_project(client, "PLY decimal exponent audit")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    control = client.post(f"{base}/spatial/mesh-preview", json={**MESH, "ply_text": valid})
+    assert control.status_code == 200, control.text
+    assert control.json()["surface_area_m2"] == pytest.approx(0.0003)
+    assert control.json()["provenance"]["calibration_verified"] is False
+
+    params = {**MESH, "ply_text": invalid}
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 400, standalone.text
+    assert diagnostic in standalone.text
+    graph = {
+        "graph_id": "ply-decimal-exponent-v14",
+        "name": "Reject unrepresentable mesh coordinates",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert not process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "failed"
+        assert diagnostic in detail.json()["run"]["error_message"]
+        assert not any(
+            artifact["data_type"] == "mesh_measurement_preview"
+            for artifact in detail.json()["artifacts"]
+        )
