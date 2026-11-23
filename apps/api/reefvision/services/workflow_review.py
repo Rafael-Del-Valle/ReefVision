@@ -422,18 +422,44 @@ def pose_active_learning_review_status(
 
     payload = dict(artifact.payload_json or {})
 
-    if payload.get("project_id") not in {None, project_id}:
+    if payload.get("project_id") not in (None, project_id):
         raise ValidationError("Pose Active Learning Review received a round from another project")
 
-    round_id = str(payload.get("round_id") or "")
-
-    if not round_id:
+    round_id = payload.get("round_id")
+    if type(round_id) is not str or not round_id:
         raise ValidationError("Pose Active Learning Review artifact is missing round_id")
 
     manifest = PoseActiveLearningService(session).export_manifest(round_id)
 
     if manifest.project_id != project_id:
         raise ValidationError("Pose Active Learning round belongs to another project")
+
+    # The workflow's immutable round selection is separate from the mutable
+    # scientist-review status. Do not approve a different round, video, or
+    # candidate cohort merely because its current record is retraining-ready.
+    if payload.get("video_id") != manifest.video_id:
+        raise ValidationError("Pose Active Learning review video lineage does not match")
+    if payload.get("selection_sha256") != manifest.selection_sha256:
+        raise ValidationError("Pose Active Learning review selection lineage does not match")
+
+    candidate_ids = payload.get("candidate_ids")
+    expected_ids = [item["candidate_id"] for item in manifest.candidates]
+    if (
+        not isinstance(candidate_ids, list)
+        or any(type(value) is not str or not value for value in candidate_ids)
+        or len(candidate_ids) != len(set(candidate_ids))
+        or len(candidate_ids) != len(expected_ids)
+        or set(candidate_ids) != set(expected_ids)
+    ):
+        raise ValidationError("Pose Active Learning review candidate cohort does not match")
+
+    if (
+        type(payload.get("candidate_count")) is not int
+        or payload["candidate_count"] != len(expected_ids)
+        or type(payload.get("selected_count")) is not int
+        or payload["selected_count"] != len(expected_ids)
+    ):
+        raise ValidationError("Pose Active Learning review candidate counts do not match")
 
     ready = manifest.status == "complete" and manifest.retraining_ready
 
