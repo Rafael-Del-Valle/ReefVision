@@ -853,3 +853,33 @@ The standalone API, direct service and both saved-graph runs must reject that
 configuration without persisting a point-cloud measurement artifact. The
 unmodified original PLY and unverified scale/organism identity remain outside
 the sample's asserted scientific coverage.
+
+### Exact joint XYZ-locus and raw RGB coverage (unverified preview evidence)
+
+When both `preserve_distinct_xyz_loci_in_preview` and
+`preserve_distinct_rgb_triplets_in_preview` are requested, source acquisitions
+form a bipartite graph: each original row connects one exact XYZ locus to one
+raw RGB triplet. The selector now uses deterministic augmenting-path maximum
+matching followed by minimum edge-cover completion **after** reserving any
+independently protected axes, chord endpoints, gap boundaries, or XYZ/RGB
+pairs. This finds a minimum number of additional **original acquisition rows**
+needed to display every source locus and every raw RGB triplet. It does not
+interpolate colors, modify measured coordinates, or create observations.
+
+A 514-acquisition synthetic control has 512 distinct loci and 512 colors. A
+single-swap heuristic would reserve 513 rows because maintaining color 2
+requires reassignment along the chain A/1 → A/2, B/2 → B/3, C/1.
+Maximum matching selects the feasible 512-row original-acquisition cover,
+retaining every locus and raw color, while reporting two omitted XYZ/RGB
+acquisition combinations and their sampling QC. Requiring **all 514 distinct
+XYZ/RGB pairs** or independently pinning the competing x-minimum row still
+exceeds the display capacity and fails closed. The standalone API and
+twice-executed saved typed Workflow Builder regressions test success,
+reproducible artifact fingerprints, and the absence of fabricated artifacts
+on rejected requests.
+
+The matching proof concerns the minimal **display-row coverage under these
+explicit constraints**, not minimum sensor effort, spatial coverage of a coral,
+registration, measured surface area, branch length, biological health, or
+verified specimen reidentification. Calibration and identity stay provisional
+until separately reviewed against physical reference evidence.
