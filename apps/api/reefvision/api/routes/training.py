@@ -414,17 +414,19 @@ def _training_log_tail(
             handle.seek(0, 2)
             size = handle.tell()
             start = max(0, size - 16384)
-            handle.seek(start)
-            payload = handle.read(16384)
-            # Snapshot the exact source bytes before trimming incomplete records.
-            # Metadata checks alone cannot distinguish a valid worker append
-            # from an in-place rewrite followed by an append.
-            snapshot_payload = payload
+            # Freeze the range at the observed EOF, even if the worker appends
+            # before read(). Include the boundary byte in the integrity check:
+            # rewriting it could otherwise turn a partial line into a metric.
+            snapshot_start = max(0, start - 1)
+            handle.seek(snapshot_start)
+            snapshot_payload = handle.read(size - snapshot_start)
+            if len(snapshot_payload) != size - snapshot_start:
+                raise HTTPException(status_code=403, detail="Training log changed during read")
+            payload = snapshot_payload[1:] if start else snapshot_payload
             if start:
                 # Never present the middle of a truncated line as a complete
                 # epoch or loss value in the read-only PowerShell monitor.
-                handle.seek(start - 1)
-                previous = handle.read(1)
+                previous = snapshot_payload[:1]
                 if previous not in {b"\n", b"\r"}:
                     boundary = next(
                         (index for index, byte in enumerate(payload) if byte in (10, 13)),
@@ -476,7 +478,7 @@ def _training_log_tail(
             # not rewrite already observed epoch/loss evidence. This protects
             # against same-inode overwrite-plus-append races that evade the
             # size/mtime checks above, without ever modifying the training job.
-            handle.seek(start)
+            handle.seek(snapshot_start)
             if handle.read(len(snapshot_payload)) != snapshot_payload:
                 raise HTTPException(status_code=403, detail="Training log changed during read")
     except (OSError, RuntimeError, ValueError):
