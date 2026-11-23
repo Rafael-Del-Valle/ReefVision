@@ -706,8 +706,27 @@ def compare_source_manifest(
     # could certify a malformed inventory against a valid saved baseline.
     actual: dict[str, dict[str, object]] = {}
     for record in current:
-        relative = record.get("path")
-        if not isinstance(relative, str):
+        if not isinstance(record, dict):
+            return ["current JPEG inventory contains malformed source-file evidence"]
+        relative, size, checksum = (
+            record.get("path"), record.get("bytes"), record.get("sha256")
+        )
+        # A caller can replay a saved or corrupted inventory directly. Do
+        # not certify missing/invalid measurements, a changed path, or an
+        # unchecked JPEG signature merely because a dictionary lookup works.
+        if (
+            not isinstance(relative, str)
+            or not relative
+            or "\\" in relative
+            or relative.startswith("/")
+            or any(component in ("", ".", "..") for component in relative.split("/"))
+            or Path(relative).suffix.lower() not in JPEG_SUFFIXES
+            or type(size) is not int
+            or size < 0
+            or not isinstance(checksum, str)
+            or re.fullmatch(r"[0-9a-f]{64}", checksum) is None
+            or record.get("jpeg_boundary_markers") is not True
+        ):
             return ["current JPEG inventory contains malformed source-file evidence"]
         if relative in actual:
             return ["current JPEG inventory contains duplicate source-file paths"]

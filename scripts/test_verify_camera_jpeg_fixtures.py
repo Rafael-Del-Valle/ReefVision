@@ -140,6 +140,39 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 [],
             )
 
+    def test_comparator_rejects_untrusted_current_integrity_records(self) -> None:
+        """A malformed replay cannot be accepted or crash the camera comparator."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            good = {
+                "path": "SONY.JPG",
+                "bytes": 16,
+                "sha256": "a" * 64,
+                "jpeg_boundary_markers": True,
+            }
+            baseline = {"root": str(root), "errors": [], "files": [good]}
+            self.assertEqual(MODULE.compare_source_manifest(root, [good], baseline), [])
+            cases = (
+                ("non-object", None),
+                ("no size", {key: value for key, value in good.items() if key != "bytes"}),
+                ("boolean size", {**good, "bytes": True}),
+                ("negative size", {**good, "bytes": -1}),
+                ("missing checksum", {**good, "sha256": None}),
+                ("noncanonical checksum", {**good, "sha256": "A" * 64}),
+                ("missing signature", {key: value for key, value in good.items()
+                                       if key != "jpeg_boundary_markers"}),
+                ("failed signature", {**good, "jpeg_boundary_markers": False}),
+                ("nonboolean signature", {**good, "jpeg_boundary_markers": 1}),
+                ("traversal path", {**good, "path": "../SONY.JPG"}),
+                ("Windows path", {**good, "path": "folder\\\\SONY.JPG"}),
+            )
+            for label, current in cases:
+                with self.subTest(case=label):
+                    self.assertEqual(
+                        MODULE.compare_source_manifest(root, [current], baseline),
+                        ["current JPEG inventory contains malformed source-file evidence"],
+                    )
+
     def test_cli_verified_decode_baseline_cannot_be_downgraded(self) -> None:
         """A post-import run must explicitly repeat the original pixel check."""
         import hashlib
