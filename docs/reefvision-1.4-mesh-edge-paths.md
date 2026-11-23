@@ -1290,3 +1290,34 @@ project-scoped API, and twice-replayed persisted executable typed
 artifacts and reproducible fingerprints. These tests do not substitute for
 coral reconstruction review, physical calibration, or installed Windows/GPU
 acceptance.
+
+## Locate calibrated underflow by selected mesh-edge segment
+
+A scientifically selected route now reports
+`path_calibrated_underflow_segment_indices`, an ordered array of **zero-based
+selected segment positions** for which the stored source-frame mesh-edge length
+is strictly positive but multiplying by the caller's physical scale produces
+binary64 `0.0`. The array is `[]` for a connected route with no calibrated
+segment underflow, and `null` for disconnected or unreferenced paths. This
+field is populated **even when no relative scale uncertainty is supplied**.
+
+The existing `calibrated_path_segment_underflow` QC remains, but a scientist can
+now locate each lost segment in the full-resolution route rather than infer it
+from a warning alone. A genuine zero-length source edge is **not** indexed and
+still has its separate topology warning and legitimate zero-length scale-only
+bounds. These indices are different from
+`path_cumulative_lost_positive_segment_indices`, which identify a *positive
+calibrated* edge that is lost only when added to an already large cumulative
+binary64 path total; one form of loss does not prove the other.
+
+The original imported OBJ/PLY/GLB coordinates, source edge topology, raw
+calibrated segment values, withheld uncertainty intervals, and unverified
+calibration/human-review provenance are preserved. Neither index list
+validates physical resolution, biological coral branch length, specimen
+identity, growth, or health. Synthetic tests exercise a 1e-170 source edge at
+1e-155 m/unit, an unaffected control, absent uncertainty, true source-zero
+edges, and missing paths. Direct engine, standalone project-scoped API and
+twice-executed persisted typed `mesh_surface_preview` workflows must agree
+on complete scientific artifacts and reproducible SHA-256 fingerprints. Field
+calibration, independent scientific review, installed Windows GUI and GPU
+verification remain release gates.
