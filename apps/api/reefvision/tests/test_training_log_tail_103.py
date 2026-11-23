@@ -1119,3 +1119,51 @@ def test_training_log_api_uses_persisted_run_path_only(
         "text": "epoch 2 train/cls_loss=0.44\n",
     }
     assert looked_up == ["run-1"]
+
+
+def test_log_tail_rejects_same_inode_rewrite_hidden_by_append(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verify bounded content identity, not only a stable inode and file size."""
+    log = tmp_path / "training.log"
+    original = b"epoch=4\ntrain/box_loss=0.25\n"
+    log.write_bytes(original)
+    original_open = Path.open
+    observed_reads: list[bytes] = []
+
+    class RacingReadOnlyHandle:
+        def __init__(self, handle: object) -> None:
+            self.handle = handle
+
+        def __enter__(self) -> "RacingReadOnlyHandle":
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            self.handle.close()
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self.handle, name)
+
+        def read(self, size: int = -1) -> bytes:
+            data = self.handle.read(size)
+            observed_reads.append(data)
+            if len(observed_reads) == 2:
+                # A worker append can conceal another process rewriting a
+                # previously observed loss. Model that race without opening a
+                # Windows-denied concurrent writer or altering fixture bytes.
+                altered = data.replace(b"0.25", b"9.99")
+                assert altered != data and len(altered) == len(data)
+                return altered
+            return data
+
+    def racing_open(path: Path, mode: str = "r", *args: object, **kwargs: object):
+        handle = original_open(path, mode, *args, **kwargs)
+        return RacingReadOnlyHandle(handle) if path == log and mode == "rb" else handle
+
+    monkeypatch.setattr(Path, "open", racing_open)
+    with pytest.raises(HTTPException) as error:
+        training_routes._training_log_tail("training.log", tmp_path)
+    assert error.value.status_code == 403
+    assert len(observed_reads) == 2
+    with original_open(log, "rb") as untouched:
+        assert untouched.read() == original
