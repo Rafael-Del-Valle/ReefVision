@@ -821,3 +821,25 @@ minimum-row-cover solver**; unusual combinations of preservation
 requirements may still fail closed rather than silently discard protected
 acquisitions. Source geometry, raw RGB, and unverified biological
 interpretation remain separate.
+
+### Same-locus RGB representative replacement (November 23, 2026)
+
+A separately tested 513-acquisition boundary has 512 unique XYZ loci and 512
+raw RGB triplets. The first representative for one XYZ locus carries a color
+also acquired at another locus; its later acquisition carries the sole
+observation of the final color. Naively retaining every first-occurrence
+locus row and then adding the missing color would require **513** rows.
+The bounded sampler now replaces the redundant first representative with
+the later original row at the **same** XYZ locus, provided the displaced color
+still has another protected representative. Axis extrema, requested chords,
+gap boundaries and protected XYZ/RGB pairs cannot be displaced by this repair.
+
+This case retains all 512 observed loci and all 512 RGB triplets in the
+512-row display, while disclosing the omitted unique XYZ/RGB observation
+and the absent first acquisition endpoint. Standalone imported-PLY and
+twice-executed persisted typed Workflow Builder tests check the exact
+source-row selection, complete artifact parity, provenance and reproducible
+SHA-256 fingerprints. Requiring all 513 XYZ/RGB pairs still fails closed with
+no measurement artifact. This is a local deterministic feasibility repair,
+**not** a guarantee that every feasible joint-cover configuration can be
+found, and it is not a biological-condition or reidentification assessment.
