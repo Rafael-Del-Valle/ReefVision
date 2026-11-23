@@ -2217,6 +2217,57 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual(photo.read_bytes(), original)
             self.assertTrue(baseline.read_text(encoding="utf-8").startswith("{"))
 
+    def test_cli_rejects_ambiguous_baseline_json_even_when_digest_matches(self) -> None:
+        """Duplicate JSON members must not conceal a contradictory source record."""
+        import hashlib
+        import subprocess
+        import sys
+
+        with tempfile.TemporaryDirectory() as directory:
+            staging = Path(directory)
+            camera = staging / "camera"
+            camera.mkdir()
+            photo = camera / "CAMERA.JPG"
+            original = bytes.fromhex("ffd8") + b"capture" + bytes.fromhex("ffd9")
+            photo.write_bytes(original)
+            records, errors = MODULE.inventory(camera.resolve())
+            self.assertEqual(errors, [])
+            baseline = staging / "baseline.json"
+            valid = json.dumps(
+                {"root": str(camera.resolve()), "files": records, "errors": []}
+            )
+            command = [
+                sys.executable, str(SCRIPT), str(camera),
+                "--compare-manifest", str(baseline),
+            ]
+
+            def compare(payload: str) -> tuple[int, list[str]]:
+                baseline.write_bytes(payload.encode("utf-8"))
+                digest = hashlib.sha256(baseline.read_bytes()).hexdigest()
+                result = subprocess.run(
+                    [*command, "--expected-manifest-sha256", digest],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                return result.returncode, json.loads(result.stdout)["errors"]
+
+            self.assertEqual(compare(valid), (0, []))
+            cases = (
+                '{"errors": ["source unreadable"], ' + valid[1:],
+                valid.replace('"sha256":', '"sha256": "invalid", "sha256":', 1),
+                valid[:-1] + ', "qc": NaN}',
+                valid[:-1] + ', "qc": Infinity}',
+                valid[:-1] + ', "qc": -Infinity}',
+            )
+            for payload in cases:
+                with self.subTest(payload=payload):
+                    self.assertNotEqual(payload, valid)
+                    code, errors = compare(payload)
+                    self.assertEqual(code, 1)
+                    self.assertIn("cannot read baseline JPEG manifest: ValueError", errors)
+            self.assertEqual(photo.read_bytes(), original)
+
     def test_duplicate_current_records_cannot_mask_altered_camera_source(self) -> None:
         """Reject a duplicated scanner path instead of silently taking its last row."""
         with tempfile.TemporaryDirectory() as directory:
