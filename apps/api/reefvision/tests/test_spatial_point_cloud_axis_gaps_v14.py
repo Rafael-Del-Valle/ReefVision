@@ -693,8 +693,7 @@ def test_rgb_ply_duplicate_xyz_color_variants_are_audited_in_saved_graph(
     assert xyz_response.status_code == 200, xyz_response.text
     assert xyz_response.json()["preview_rgb_variant_support"] is None
     assert (
-        "preview_shifts_xyz_locus_frequency_distribution"
-        not in xyz_response.json()["qc_warnings"]
+        "preview_shifts_xyz_locus_frequency_distribution" not in xyz_response.json()["qc_warnings"]
     )
     assert "preview_xyz_rgb_tv_exceeds_xyz_marginal_tv" not in xyz_response.json()["qc_warnings"]
     assert "preview_omits_distinct_xyz_rgb_observations" not in xyz_response.json()["qc_warnings"]
