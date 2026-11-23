@@ -721,9 +721,12 @@ def test_rgb_pair_preservation_strict_source_and_capacity(
             json={"graph_record_id": saved.json()["id"]},
         )
         assert queued.status_code == 202, queued.text
-        assert process_workflow_run_job(
-            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
-        ) is False
+        assert (
+            process_workflow_run_job(
+                app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+            )
+            is False
+        )
         detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
         assert detail.status_code == 200, detail.text
         assert detail.json()["run"]["status"] == "failed"
