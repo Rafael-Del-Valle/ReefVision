@@ -876,7 +876,10 @@
   gap: 0.45rem;
   padding: 0.55rem;
   overflow-x: auto;
-  overscroll-behavior-inline: contain;
+  /* Contain both touchpad axes at a thumbnail boundary. Vertical gestures
+     should not chain into document scrolling when WebView2 sends an
+     uncancelable compositor scroll before the native wheel listener runs. */
+  overscroll-behavior: contain;
   scrollbar-width: thin;
 }
 
