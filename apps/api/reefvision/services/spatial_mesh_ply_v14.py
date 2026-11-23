@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from math import isfinite
 from re import fullmatch
 from struct import pack, unpack
@@ -214,7 +214,14 @@ def parse_ply_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
             raise ValueError("PLY vertex properties must be finite")
         for axis, index in enumerate(xyz):
             coordinate = numeric[index]
-            source_decimal = Decimal(values[index])
+            # A zero with an extreme exponent can pass float validation
+            # but fail Decimal construction. Reject it before geometry QC.
+            try:
+                source_decimal = Decimal(values[index])
+            except InvalidOperation as exc:
+                raise ValueError("PLY mesh decimal coordinate outside supported range") from exc
+            if not source_decimal.is_finite():
+                raise ValueError("PLY mesh decimal coordinate outside supported range")
             previous = source_decimals_by_axis[axis].get(coordinate)
             if previous is not None and previous != source_decimal:
                 raise ValueError(
