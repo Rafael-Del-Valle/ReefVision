@@ -68,7 +68,6 @@ REVIEW_GATE_INPUT_TYPES: dict[str, frozenset[str]] = {
 }
 
 
-
 def _verify_review_graph_binding(
     session: Session,
     node_run: WorkflowNodeRun,
@@ -136,6 +135,7 @@ def _verify_review_graph_binding(
         or not incoming[0]["target_port_id"]
     ):
         raise ValidationError("Workflow review input is not connected to its saved graph edge")
+
 
 def _input_artifacts(
     session: Session, node_run: WorkflowNodeRun, *, project_id: str
