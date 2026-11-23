@@ -26,9 +26,7 @@ def _waiting_saved_review(client: TestClient) -> tuple[FastAPI, str, str, str]:
     detail = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert detail.status_code == 200
     assert detail.json()["run"]["status"] == "waiting_for_review"
-    review_id = next(
-        node["id"] for node in detail.json()["nodes"] if node["node_id"] == "review"
-    )
+    review_id = next(node["id"] for node in detail.json()["nodes"] if node["node_id"] == "review")
     return app, run_id, job_id, review_id
 
 
@@ -89,9 +87,7 @@ def test_saved_review_two_local_approvals_are_one_decision(
     detail = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert detail.status_code == 200
     assert detail.json()["run"]["status"] == "queued"
-    review = next(
-        node for node in detail.json()["nodes"] if node["id"] == review_id
-    )
+    review = next(node for node in detail.json()["nodes"] if node["id"] == review_id)
     assert review["status"] == "review_approved"
     assert review["result_json"]["review_approval"]["reviewed_by"] == "first-scientist"
     with app.state.session_factory() as session:
@@ -107,9 +103,10 @@ def test_saved_review_rejects_stale_read_transaction(
     with app.state.session_factory() as session:
         connection = session.connection()
         connection.exec_driver_sql("BEGIN")
-        assert session.scalar(
-            select(WorkflowNodeRun.status).where(WorkflowNodeRun.id == review_id)
-        ) == "waiting_for_review"
+        assert (
+            session.scalar(select(WorkflowNodeRun.status).where(WorkflowNodeRun.id == review_id))
+            == "waiting_for_review"
+        )
         with pytest.raises(ConflictError, match="fresh transaction"):
             workflow_review.resume_review_gate(
                 session,
@@ -124,9 +121,7 @@ def test_saved_review_rejects_stale_read_transaction(
     detail = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert detail.status_code == 200
     assert detail.json()["run"]["status"] == "waiting_for_review"
-    review = next(
-        node for node in detail.json()["nodes"] if node["id"] == review_id
-    )
+    review = next(node for node in detail.json()["nodes"] if node["id"] == review_id)
     assert review["status"] == "waiting_for_review"
     assert "review_approval" not in (review["result_json"] or {})
     with app.state.session_factory() as session:
