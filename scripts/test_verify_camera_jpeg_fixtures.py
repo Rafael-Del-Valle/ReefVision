@@ -66,8 +66,8 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertNotEqual(MODULE._file_fingerprint(first),
                                 MODULE._file_fingerprint(differing_ctime))
 
-    def test_decoded_baseline_requires_matching_geometry_exif_and_icc(self) -> None:
-        """An unchanged JPEG hash cannot excuse a changed decoder interpretation."""
+    def test_decoded_baseline_requires_matching_geometry_exif_icc_and_qc(self) -> None:
+        """Matching JPEG bytes must not conceal changed EXIF QC/uncertainty verdicts."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             baseline_record = {
@@ -83,6 +83,11 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 "jpeg_exif_orientation": 6,
                 "jpeg_exif_datetime_original_local": "2026:04:03 14:00:00",
                 "jpeg_exif_offset_time_original": "-04:00",
+                "jpeg_exif_capture_timezone_unknown": False,
+                "jpeg_exif_exposure_ifd_conflict": False,
+                "jpeg_exif_ifd0_dimension_conflict": False,
+                "jpeg_exif_camera_model_malformed": False,
+                "jpeg_exif_pixel_width": 12,
                 "jpeg_icc_profile_sha256": "b" * 64,
             }
             baseline = {"root": str(root), "errors": [], "files": [baseline_record]}
@@ -94,6 +99,13 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 ("jpeg_display_width", 12),
                 ("jpeg_exif_orientation", 1),
                 ("jpeg_exif_offset_time_original", None),
+                # A decoder changing only its QC determination must not pass
+                # even when file SHA, orientation and timestamps stay identical.
+                ("jpeg_exif_capture_timezone_unknown", True),
+                ("jpeg_exif_exposure_ifd_conflict", True),
+                ("jpeg_exif_ifd0_dimension_conflict", True),
+                ("jpeg_exif_camera_model_malformed", True),
+                ("jpeg_exif_pixel_width", 11),
                 ("jpeg_icc_profile_sha256", "c" * 64),
             ):
                 with self.subTest(field=field, replacement=replacement):
