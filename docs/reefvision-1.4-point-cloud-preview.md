@@ -759,3 +759,24 @@ Synthetic regressions independently calculate the exact fractions for 600-row co
 A dedicated synthetic 3-row PLY control contains two different acquired RGB triplets at the same XYZ locus, plus another XYZ acquisition. All three rows are displayed without decimation. A valid preview must therefore preserve the joint XYZ/RGB distribution and both XYZ-only and RGB-only marginal distributions exactly, yielding zero total-variation distance, exact rational witnesses `[0, 1]`, and zero joint-minus-marginal gaps. It must not emit any preview sampling-frequency shift or marginal-gap QC warnings. The original `source_xyz_loci_have_multiple_rgb_values` observation remains present; it is **acquisition variation, not verified coral biology**.
 
 This is checked against the standalone project endpoint and the two full-artifact, hash-identical executions of its persisted typed Workflow Builder graph. The same regression suite also checks that an uncolored XYZ cloud cannot acquire RGB-specific QC warnings. This control distinguishes legitimate heterogeneous source observations from artifacts introduced by decimating the preview. It does not demonstrate experimental replication, color calibration, tissue assessment, or representative coral validation.
+
+
+## Protected raw color observations: saved-graph failure boundary (November 23, 2026)
+
+The opt-in `preserve_distinct_xyz_rgb_pairs_in_preview` flag is a strict
+retention request, not permission to discard observations silently. When
+513 **distinct** original XYZ/RGB acquisitions compete for the 512-row
+display budget, the standalone imported-PLY API and direct measurement engine
+reject the request. A persisted, typed executable `point_cloud_preview`
+Workflow Builder graph carrying the same settings must also terminate as
+**failed** with the display-budget explanation and **no point-cloud measurement
+artifact**, across repeated runs. The persisted graph is not modified or
+automatically relaxed to produce a misleading success.
+
+A repeated acquisition of one of the 512 unique pairs does not consume an
+additional protected slot: the feasible 513-row control preserves all 512
+distinct source pairs while its source-to-preview frequency QC still reveals
+the dropped repeated row. These are bounds on raw sensor/acquisition evidence,
+not limits on reconstructed coral morphology or verified tissue condition.
+Calibration, specimen identity, and biological interpretation remain
+provisional.
