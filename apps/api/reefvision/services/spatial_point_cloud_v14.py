@@ -6,7 +6,7 @@ import hashlib
 import json
 from collections import Counter
 from datetime import UTC
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 from itertools import pairwise
 from math import dist, fsum, isfinite
@@ -255,7 +255,15 @@ def parse_ascii_ply_points(
         if any(not isfinite(value) or abs(value) > 1_000_000_000 for value in parsed):
             raise ValueError("Point-cloud coordinates must be finite and bounded")
         for axis, (token, value) in enumerate(zip(tokens, parsed, strict=True)):
-            exact_decimal = Decimal(token)
+            # float() accepts zero with arbitrarily large exponent tokens,
+            # but Decimal may reject the exponent before collision checks.
+            # Convert that failure to a controlled, atomic import rejection.
+            try:
+                exact_decimal = Decimal(token)
+            except InvalidOperation as exc:
+                raise ValueError("Point-cloud decimal coordinate outside supported range") from exc
+            if not exact_decimal.is_finite():
+                raise ValueError("Point-cloud decimal coordinate outside supported range")
             previous = source_decimals_by_axis[axis].get(value)
             if previous is not None and previous != exact_decimal:
                 raise ValueError(
