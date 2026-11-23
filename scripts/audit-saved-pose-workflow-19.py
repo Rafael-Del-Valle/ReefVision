@@ -205,6 +205,23 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 and result.get("training_job_id") == job.id,
                 "Saved pose-training job request or producer lineage changed",
             )
+            # The queued child job independently pins the held-out dataset and
+            # split. The draft also fingerprints the *entire* submitted request,
+            # protecting scientific settings beyond the three dataset digests.
+            _require(
+                request.get("pose_validation_dataset_id") == validation_id
+                and request.get("pose_validation_dataset_manifest_sha256")
+                == (validation_dataset.manifest_sha256 if validation_id is not None else None)
+                and request.get("pose_split_manifest_sha256") == training.split_manifest_sha256,
+                "Queued training job disagrees with frozen validation or split lineage",
+            )
+            snapshot = training.draft_snapshot_json
+            _require(
+                isinstance(snapshot, dict)
+                and isinstance(snapshot.get("pose_child_job_request_sha256"), str)
+                and canonical_json_sha256(request) == snapshot["pose_child_job_request_sha256"],
+                "Queued training job request differs from its frozen fingerprint",
+            )
             # A checksum-valid workflow artifact is not proof that the durable
             # experiment registry still belongs to this training run. Verify
             # the separately persisted scientific summary and environment.
