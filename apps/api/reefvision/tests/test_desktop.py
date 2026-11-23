@@ -190,6 +190,67 @@ def test_write_runtime_port_creates_parent_directory(tmp_path: Path) -> None:
     assert context_file.read_text(encoding="utf-8").strip() == "48177"
 
 
+def test_ready_port_preserves_occupied_legacy_staging_file(
+    tmp_path: Path,
+) -> None:
+    context_file = tmp_path / "gui" / "backend-port.txt"
+    context_file.parent.mkdir()
+    legacy_staging = context_file.with_suffix(context_file.suffix + ".tmp")
+    legacy_staging.write_text("researcher-controlled evidence", encoding="utf-8")
+
+    write_runtime_port(context_file, 48177)
+
+    assert context_file.read_text(encoding="utf-8") == "48177\n"
+    assert legacy_staging.read_text(encoding="utf-8") == "researcher-controlled evidence"
+    assert sorted(path.name for path in context_file.parent.iterdir()) == [
+        "backend-port.txt",
+        "backend-port.txt.tmp",
+    ]
+
+
+def test_ready_port_preserves_observation_behind_preplanted_staging_symlink(
+    tmp_path: Path,
+) -> None:
+    observation = tmp_path / "original-swiftia-observation.txt"
+    observation.write_text("original biological observation", encoding="utf-8")
+    context_file = tmp_path / "gui" / "backend-port.txt"
+    context_file.parent.mkdir()
+    legacy_staging = context_file.with_suffix(context_file.suffix + ".tmp")
+    try:
+        legacy_staging.symlink_to(observation)
+    except (OSError, NotImplementedError):
+        pytest.skip("Disposable test symlinks are unavailable on this Windows host")
+
+    write_runtime_port(context_file, 48177)
+
+    assert context_file.read_text(encoding="utf-8") == "48177\n"
+    assert observation.read_text(encoding="utf-8") == "original biological observation"
+    assert legacy_staging.is_symlink()
+    assert legacy_staging.resolve() == observation
+    assert sorted(path.name for path in context_file.parent.iterdir()) == [
+        "backend-port.txt",
+        "backend-port.txt.tmp",
+    ]
+
+
+def test_ready_port_replace_failure_preserves_prior_signal_and_cleans_staging(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context_file = tmp_path / "gui" / "backend-port.txt"
+    context_file.parent.mkdir()
+    context_file.write_text("old listener\n", encoding="utf-8")
+
+    def locked_replace(_src: Path, _dst: Path) -> None:
+        raise PermissionError("simulated Windows ready-file lock")
+
+    monkeypatch.setattr(os, "replace", locked_replace)
+    with pytest.raises(PermissionError, match="ready-file lock"):
+        write_runtime_port(context_file, 48177)
+
+    assert context_file.read_text(encoding="utf-8") == "old listener\n"
+    assert [path.name for path in context_file.parent.iterdir()] == ["backend-port.txt"]
+
+
 def test_watch_shutdown_stream_stops_server_on_shutdown_command() -> None:
     server = SimpleNamespace(should_exit=False)
 
@@ -204,6 +265,24 @@ def test_watch_shutdown_stream_stops_server_on_eof() -> None:
     watch_shutdown_stream(io.StringIO(""), server)
 
     assert server.should_exit is True
+
+
+def test_packaged_self_test_preserves_legacy_staging_evidence(tmp_path: Path) -> None:
+    legacy_staging = tmp_path / "self-test-result.json.tmp"
+    legacy_staging.write_text("preserve prior evidence", encoding="utf-8")
+
+    result = write_self_test_result(tmp_path, version="1.6", openapi_path_count=17)
+
+    assert json.loads(result.read_text(encoding="utf-8")) == {
+        "application_version": "1.6",
+        "openapi_path_count": 17,
+        "status": "PASS",
+    }
+    assert legacy_staging.read_text(encoding="utf-8") == "preserve prior evidence"
+    assert sorted(path.name for path in tmp_path.iterdir()) == [
+        "self-test-result.json",
+        "self-test-result.json.tmp",
+    ]
 
 
 def test_write_self_test_result_records_packaged_version(tmp_path: Path) -> None:

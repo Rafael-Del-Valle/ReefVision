@@ -10,6 +10,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import threading
 from collections.abc import Sequence
 from contextlib import closing, suppress
@@ -202,13 +203,27 @@ def build_settings(options: DesktopLaunchOptions) -> Settings:
     return settings
 
 
+def _write_atomic_desktop_text(target: Path, content: str) -> None:
+    """Use an exclusive staging file so a planted fixed .tmp link cannot alter data."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, staging_name = tempfile.mkstemp(
+        prefix=f".{target.name}.", suffix=".tmp", dir=target.parent
+    )
+    staging = Path(staging_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(content)
+        # Windows requires the staging handle to close before replacement.
+        os.replace(staging, target)
+    finally:
+        # Failed publication must not leave a private staging artifact.
+        staging.unlink(missing_ok=True)
+
+
 def write_runtime_port(context_file: Path | None, port: int) -> None:
     if context_file is None:
         return
-    context_file.parent.mkdir(parents=True, exist_ok=True)
-    temporary = context_file.with_suffix(context_file.suffix + ".tmp")
-    temporary.write_text(f"{port}\n", encoding="utf-8")
-    os.replace(temporary, context_file)
+    _write_atomic_desktop_text(context_file, f"{port}\n")
 
 
 def request_server_shutdown(server: object, reason: str) -> None:
@@ -514,18 +529,12 @@ def write_self_test_result(
 ) -> Path:
     """Write deterministic machine-readable evidence for packaged self-test success."""
     result_path = data_dir / SELF_TEST_RESULT_FILENAME
-    result_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = result_path.with_suffix(result_path.suffix + ".tmp")
     payload = {
         "status": "PASS",
         "application_version": version,
         "openapi_path_count": openapi_path_count,
     }
-    temporary.write_text(
-        json.dumps(payload, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    os.replace(temporary, result_path)
+    _write_atomic_desktop_text(result_path, json.dumps(payload, sort_keys=True) + "\n")
     return result_path
 
 
