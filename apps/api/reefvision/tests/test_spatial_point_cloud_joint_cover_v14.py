@@ -268,9 +268,7 @@ def test_joint_cover_multiple_mandatory_acquisitions_and_order(
         colors = [[acquisitions[index][1], 0, 0] for index in order]
         mandatory = {order.index(index) for index in anchored_source_rows}
         selected = _minimum_joint_locus_color_cover(vertices, colors, mandatory)
-        assert selected == _minimum_joint_locus_color_cover(
-            vertices, colors, mandatory
-        )
+        assert selected == _minimum_joint_locus_color_cover(vertices, colors, mandatory)
         assert mandatory.issubset(selected)
         source_loci = set(vertices)
         source_colors = {tuple(color) for color in colors}
@@ -295,3 +293,109 @@ def test_joint_cover_multiple_mandatory_acquisitions_and_order(
         assert len(selected) == optimal_size, (
             f"fixed={anchored_source_rows}, reversed={order[0] != 0}"
         )
+
+
+@pytest.mark.parametrize("repair", [False, True])
+def test_joint_cover_hall_deficiency_saved_workflow(client: TestClient, repair: bool) -> None:
+    """Equal marginal counts need not imply a feasible joint row cover."""
+    # A and B only observe color 1; C observes both colors 2 and 3.
+    # All four original rows are necessary despite three loci and colors.
+    # A new B/2 observation repairs the deficiency, allowing a three-row
+    # cover A/1, B/2, C/3. The other 509 loci have one unique color each.
+    observations = [(0, 1), (1, 1), (2, 2), (2, 3)]
+    if repair:
+        observations.append((1, 2))
+    observations.extend((locus, locus + 1) for locus in range(3, 512))
+    vertices = [(float(locus), 0.0, 0.0) for locus, _ in observations]
+    colors = [[color % 256, color // 256, 0] for _, color in observations]
+    assert len(set(vertices)) == 512
+    assert len({tuple(rgb) for rgb in colors}) == 512
+    cover = _minimum_joint_locus_color_cover(vertices, colors, set())
+    assert len(cover) == (512 if repair else 513)
+    assert {vertices[index] for index in cover} == set(vertices)
+    assert {tuple(colors[index]) for index in cover} == {tuple(rgb) for rgb in colors}
+
+    points = [list(vertex) for vertex in vertices]
+    rows = [
+        f"{locus} 0 0 {rgb[0]} {rgb[1]} {rgb[2]}"
+        for (locus, _), rgb in zip(observations, colors, strict=True)
+    ]
+    ply_text = (
+        "ply\nformat ascii 1.0\n"
+        f"element vertex {len(rows)}\n"
+        "property float x\nproperty float y\nproperty float z\n"
+        "property uchar red\nproperty uchar green\nproperty uchar blue\n"
+        "end_header\n" + "\n".join(rows) + "\n"
+    )
+    constraints = {
+        "preserve_distinct_xyz_loci_in_preview": True,
+        "preserve_distinct_rgb_triplets_in_preview": True,
+    }
+    if repair:
+        direct = measure_point_cloud_preview(
+            points=points, point_colors=colors, **constraints, **CALIBRATION
+        )
+        assert direct["preview_point_indices"] == sorted(cover)
+        assert direct["provenance"]["calibration_verified"] is False
+        assert direct["provenance"]["specimen_identity_verified"] is False
+    else:
+        with pytest.raises(ValueError, match="Protected point indices exceed the display budget"):
+            measure_point_cloud_preview(
+                points=points, point_colors=colors, **constraints, **CALIBRATION
+            )
+
+    project = create_project(client, "Joint cover Hall deficiency")
+    base = f"/api/v1/projects/{project['id']}"
+    params = {**CALIBRATION, **constraints, "ply_text": ply_text}
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    if repair:
+        assert response.status_code == 200, response.text
+        artifact = response.json()
+        assert artifact["preview_point_indices"] == sorted(cover)
+        assert artifact["preview_unique_coordinate_coverage_fraction"] == 1.0
+        assert artifact["preview_rgb_variant_support"]["preview_distinct_rgb_triplets"] == 512
+        assert artifact["provenance"]["specimen_identity_verified"] is False
+    else:
+        assert response.status_code == 400, response.text
+        assert "display budget" in response.text
+
+    graph = _graph(params, f"hall-{repair}")
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(
+            f"{base}/workflow-runs",
+            json={"graph_record_id": saved.json()["id"]},
+        )
+        assert run.status_code == 202, run.text
+        ran = process_workflow_run_job(
+            app.state.settings,
+            app.state.session_factory,
+            str(run.json()["job_id"]),
+        )
+        assert ran is repair
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        result = detail.json()
+        outputs = [
+            item
+            for item in result["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        ]
+        if repair:
+            assert result["run"]["status"] == "succeeded"
+            assert len(outputs) == 1
+            assert outputs[0]["payload_json"] == artifact
+            hashes.append(outputs[0]["payload_sha256"])
+        else:
+            assert result["run"]["status"] == "failed"
+            assert "display budget" in result["run"]["error_message"]
+            assert outputs == []
+    if repair:
+        assert len(set(hashes)) == 1
+        assert len(hashes[0]) == 64
