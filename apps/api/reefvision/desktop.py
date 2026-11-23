@@ -271,6 +271,24 @@ def preload_frozen_windows_scipy_native() -> None:
     LOGGER.info("SciPy ARPACK preloaded: %s", eigsh.__name__)
 
 
+def _sqlite_wal_identity(path: Path) -> tuple[int, int, int, int] | None:
+    """Identify committed WAL storage without treating empty sidecars as data."""
+    try:
+        state = path.stat()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise RuntimeError(
+            "ReefVision --skip-migrations cannot inspect the SQLite WAL; "
+            "preserve the research database and review its journal files."
+        ) from exc
+    if state.st_size == 0:
+        # A read-only SQLite connection can create an empty WAL file.
+        # Zero bytes cannot contain committed observations.
+        return None
+    return state.st_dev, state.st_ino, state.st_size, state.st_mtime_ns
+
+
 def require_existing_desktop_schema(settings: Settings) -> None:
     """Fail closed when --skip-migrations would serve an unverified local database.
 
@@ -298,6 +316,8 @@ def require_existing_desktop_schema(settings: Settings) -> None:
         sqlite_path = Path(database_name)
 
     initial_file_state: tuple[int, int, int, int] | None = None
+    wal_paths: tuple[Path, ...] = ()
+    initial_wal_states: tuple[tuple[int, int, int, int] | None, ...] = ()
     if sqlite_path is not None:
         try:
             initial_stat = sqlite_path.stat()
@@ -312,6 +332,18 @@ def require_existing_desktop_schema(settings: Settings) -> None:
             initial_stat.st_size,
             initial_stat.st_mtime_ns,
         )
+        # SQLite may place recent observations in the separate WAL rather
+        # than changing the main database file. Watch both the supplied and
+        # resolved journal paths when an installation uses a symlink.
+        wal_paths = tuple(
+            dict.fromkeys(
+                (
+                    Path(f"{sqlite_path}-wal"),
+                    Path(f"{sqlite_path.resolve()}-wal"),
+                )
+            )
+        )
+        initial_wal_states = tuple(_sqlite_wal_identity(path) for path in wal_paths)
         # A valid Alembic stamp alone cannot prove that SQLite storage,
         # index/UNIQUE constraints, or biological/reviewer parent links
         # survived an interrupted restore.
@@ -369,6 +401,12 @@ def require_existing_desktop_schema(settings: Settings) -> None:
                 "ReefVision --skip-migrations database file changed during validation; "
                 "refusing to combine unrelated integrity and migration evidence. "
                 "Stop other writers and review a verified research backup."
+            )
+        if tuple(_sqlite_wal_identity(path) for path in wal_paths) != initial_wal_states:
+            raise RuntimeError(
+                "ReefVision --skip-migrations SQLite WAL changed during validation; "
+                "refusing to mix biological observations across integrity and "
+                "migration evidence. Stop other writers and review a verified backup."
             )
 
     require_unchanged_sqlite_file()
