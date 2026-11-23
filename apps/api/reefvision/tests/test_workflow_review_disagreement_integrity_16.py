@@ -65,6 +65,11 @@ def _seed_disagreement(client: TestClient, corruption: str | None) -> tuple[str,
             sibling.payload_sha256 = canonical_json_sha256(forged)
         elif corruption == "wrong_port":
             sibling.producer_port_id = "consensus"
+        elif corruption == "wrong_type":
+            sibling.data_type = "detection_proposals"
+        elif corruption == "wrong_type_and_port":
+            sibling.data_type = "detection_proposals"
+            sibling.producer_port_id = "consensus"
         elif corruption == "duplicate_sibling":
             second = WorkflowArtifact(
                 workflow_run_id=run_id,
@@ -91,6 +96,8 @@ def _seed_disagreement(client: TestClient, corruption: str | None) -> tuple[str,
         ("changed_payload", "disagreement handoff failed source provenance"),
         ("wrong_project", "disagreement handoff failed source provenance"),
         ("wrong_port", "disagreement handoff failed source provenance"),
+        ("wrong_type", "disagreement handoff failed source provenance"),
+        ("wrong_type_and_port", "disagreement handoff failed source provenance"),
         ("duplicate_sibling", "disagreement output is ambiguous"),
     ],
 )
