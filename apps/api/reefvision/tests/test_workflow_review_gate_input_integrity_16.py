@@ -10,8 +10,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from reefvision.db.models import Job, WorkflowArtifact, WorkflowNodeRun
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.services.workflow_review import _input_artifacts
+from reefvision.services.workflow_review import _input_artifacts, _pending_review_count
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_workflow_review_phase10 import _queue_seeded_review_run
 
@@ -28,6 +29,7 @@ from reefvision.tests.test_workflow_review_phase10 import _queue_seeded_review_r
         "missing_producer_output",
         "missing_prediction",
         "missing_classification",
+        "duplicate_identifiers",
     ],
 )
 def test_saved_review_rejects_invalid_or_lost_scientific_input(
@@ -63,6 +65,15 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
             producer = session.get(WorkflowNodeRun, artifact.producer_node_run_id)
             assert producer is not None
             producer.output_artifact_ids_json = []
+        elif corruption == "duplicate_identifiers":
+            # Persisted, correctly rehashed evidence can still claim the same
+            # scientific prediction twice; it must not silently deduplicate.
+            artifact.data_type = "detection_proposals"
+            artifact.payload_json = {
+                "project_id": project["id"],
+                "proposal_ids": ["repeated-proposal", "repeated-proposal"],
+            }
+            artifact.payload_sha256 = canonical_json_sha256(artifact.payload_json)
         elif corruption in {"missing_prediction", "missing_classification"}:
             artifact.data_type = (
                 "detection_proposals"
@@ -92,6 +103,7 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
         "missing_producer_output": "producer provenance",
         "missing_prediction": "missing or foreign prediction proposals",
         "missing_classification": "invalid run or scientific data type",
+        "duplicate_identifiers": "duplicate prediction identifiers",
     }
     assert resumed.status_code == 400, resumed.text
     assert expected_details[corruption] in resumed.json()["detail"]
@@ -142,3 +154,29 @@ def test_legacy_nullable_project_scope_stays_bound_to_saved_run(client: TestClie
         assert artifacts[0].payload_json["project_id"] is None
     detail = client.get(f"/api/v1/workflow-runs/{run_id}").json()
     assert detail["run"]["status"] == "waiting_for_review"
+
+
+@pytest.mark.parametrize(
+    ("data_type", "field"),
+    [
+        ("detection_proposals", "proposal_ids"),
+        ("mask_proposals", "proposal_ids"),
+        ("classification_predictions", "prediction_ids"),
+    ],
+)
+def test_standalone_review_rejects_repeated_prediction_evidence(
+    client: TestClient, data_type: str, field: str
+) -> None:
+    """All three typed prediction inputs must reject repeated identifiers."""
+    app = cast(FastAPI, client.app)
+    artifact = WorkflowArtifact(
+        workflow_run_id="synthetic-run",
+        producer_node_run_id="synthetic-producer",
+        producer_port_id="proposals",
+        data_type=data_type,
+        payload_json={field: ["same-scientific-prediction", "same-scientific-prediction"]},
+        payload_sha256="a" * 64,
+    )
+    with app.state.session_factory() as session:
+        with pytest.raises(ValidationError, match="duplicate prediction identifiers"):
+            _pending_review_count(session, [artifact], project_id="synthetic-project")
