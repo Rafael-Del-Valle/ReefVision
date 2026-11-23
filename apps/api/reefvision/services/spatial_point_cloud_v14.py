@@ -72,6 +72,70 @@ def _source_affine_dimension(vertices: list[tuple[float, float, float]]) -> int:
     return 1 if direction is not None else 0
 
 
+def _minimum_joint_locus_color_cover(
+    vertices: list[tuple[float, float, float]],
+    colors: list[list[int]],
+    mandatory: set[int],
+) -> set[int]:
+    """Find a minimum original-row cover of source XYZ loci and raw RGB colors.
+
+    Each acquisition is an edge between its exact XYZ locus and raw RGB
+    triplet. Mandatory indices remain fixed; maximum bipartite matching on
+    uncovered obligations minimizes additional displayed rows. This is not
+    calibration, a biological-condition assessment, or specimen re-ID.
+    """
+    first_locus: dict[tuple[float, float, float], int] = {}
+    first_color: dict[tuple[int, ...], int] = {}
+    for index, (locus, rgb) in enumerate(zip(vertices, colors, strict=True)):
+        first_locus.setdefault(locus, index)
+        first_color.setdefault(tuple(rgb), index)
+    fixed_loci = {vertices[index] for index in mandatory}
+    fixed_colors = {tuple(colors[index]) for index in mandatory}
+    missing_loci = [locus for locus in first_locus if locus not in fixed_loci]
+    missing_colors = set(first_color) - fixed_colors
+    # Even perfect matching cannot cover more than two obligations per row.
+    if len(mandatory) + max(len(missing_loci), len(missing_colors)) > MAX_PREVIEW_POINTS:
+        raise ValueError("Protected point indices exceed the display budget")
+    candidate_rows: dict[tuple[float, float, float], list[int]] = {
+        locus: [] for locus in missing_loci
+    }
+    for index, (locus, rgb) in enumerate(zip(vertices, colors, strict=True)):
+        if locus in candidate_rows and tuple(rgb) in missing_colors:
+            candidate_rows[locus].append(index)
+    matched_color_locus: dict[tuple[int, ...], tuple[float, float, float]] = {}
+    matched_locus_row: dict[tuple[float, float, float], int] = {}
+
+    def augment(locus: tuple[float, float, float], visited: set[tuple[int, ...]]) -> bool:
+        for index in candidate_rows[locus]:
+            rgb = tuple(colors[index])
+            if rgb in visited:
+                continue
+            visited.add(rgb)
+            previous = matched_color_locus.get(rgb)
+            if previous is None or augment(previous, visited):
+                matched_color_locus[rgb] = locus
+                matched_locus_row[locus] = index
+                return True
+        return False
+
+    for locus in missing_loci:
+        augment(locus, set())
+    covered = set(mandatory) | set(matched_locus_row.values())
+    covered_loci = {vertices[index] for index in covered}
+    covered_colors = {tuple(colors[index]) for index in covered}
+    for locus in missing_loci:
+        if locus not in covered_loci:
+            index = first_locus[locus]
+            covered.add(index)
+            covered_loci.add(locus)
+            covered_colors.add(tuple(colors[index]))
+    for rgb, index in first_color.items():
+        if rgb not in covered_colors:
+            covered.add(index)
+            covered_colors.add(rgb)
+    return covered
+
+
 def parse_ascii_ply_points(
     text: str, *, colors_out: list[list[int]] | None = None
 ) -> list[list[float]]:
@@ -732,12 +796,9 @@ def measure_point_cloud_preview(
         for index, (vertex, rgb) in enumerate(zip(vertices, point_colors, strict=True)):
             first_index_per_pair.setdefault((vertex, tuple(rgb)), index)
         distinct_rgb_pair_indices.update(first_index_per_pair.values())
-    # Reuse already-protected acquisitions for palette coverage before
-    # reserving new display rows. A first-occurrence locus representative
-    # can also be replaced by another acquisition at that *same* XYZ locus,
-    # but only when its old RGB is still represented elsewhere. Never
-    # replace an axis, chord, gap-boundary or XYZ/RGB-pair protected row.
-    # This deterministic local repair is not an optimal set-cover solver.
+    # Simultaneous XYZ-locus and raw-color preservation is a bipartite edge
+    # cover, not two independent first-observation selections. In particular,
+    # a rare color may require a chain of reassigned locus representatives.
     distinct_rgb_triplet_indices: set[int] = set()
     if preserve_distinct_rgb_triplets_in_preview:
         assert point_colors is not None
@@ -746,37 +807,18 @@ def measure_point_cloud_preview(
             immovable.update(extrema_indices)
         if pin_chords:
             immovable.update(selected_endpoint_indices)
-        already_pinned = distinct_locus_indices | immovable
-        pinned_color_counts = Counter(tuple(point_colors[index]) for index in already_pinned)
-        retained_colors = set(pinned_color_counts)
-        pinned_locus_index = {vertices[index]: index for index in distinct_locus_indices}
-        for index, rgb in enumerate(point_colors):
-            color = tuple(rgb)
-            if color in retained_colors:
-                continue
-            previous = (
-                pinned_locus_index.get(vertices[index])
-                if preserve_distinct_xyz_loci_in_preview
-                else None
-            )
-            if (
-                previous is not None
-                and previous not in immovable
-                and pinned_color_counts[tuple(point_colors[previous])] > 1
-            ):
-                old_color = tuple(point_colors[previous])
-                distinct_locus_indices.remove(previous)
-                distinct_locus_indices.add(index)
-                already_pinned.remove(previous)
-                already_pinned.add(index)
-                pinned_locus_index[vertices[index]] = index
-                pinned_color_counts[old_color] -= 1
-                pinned_color_counts[color] += 1
-            else:
-                distinct_rgb_triplet_indices.add(index)
-                already_pinned.add(index)
-                pinned_color_counts[color] += 1
-            retained_colors.add(color)
+        if preserve_distinct_xyz_loci_in_preview:
+            cover = _minimum_joint_locus_color_cover(vertices, point_colors, immovable)
+            distinct_locus_indices = cover - immovable
+        else:
+            # Palette-only selection retains first observed raw RGB triplets,
+            # reusing independently protected acquisition rows where possible.
+            retained_colors = {tuple(point_colors[index]) for index in immovable}
+            for index, rgb in enumerate(point_colors):
+                color = tuple(rgb)
+                if color not in retained_colors:
+                    distinct_rgb_triplet_indices.add(index)
+                    retained_colors.add(color)
     if (
         preserve_axis_extrema_in_preview
         or pin_chords
