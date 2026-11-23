@@ -505,6 +505,18 @@ test("initial image and gallery scrolling", async ({ page }) => {
   await assertDecodedAndContained(6000, 400);
   expect(await previewWheelPolicy()).toEqual(expectedPreviewWheelPolicy);
   const filmstrip = workbench.locator(".rv-media-filmstrip");
+  // CSS containment protects compositor-delivered touchpad input that can
+  // bypass a cancelable wheel handler in an installed Windows WebView2.
+  // Check BOTH axes: inline-only containment still leaks vertical gestures.
+  expect(
+    await filmstrip.evaluate((element) => {
+      const style = window.getComputedStyle(element);
+      return {
+        overscrollX: style.overscrollBehaviorX,
+        overscrollY: style.overscrollBehaviorY,
+      };
+    }),
+  ).toEqual({ overscrollX: "contain", overscrollY: "contain" });
   // The strip converts ordinary wheel movement to horizontal browsing, but
   // must not intercept Ctrl/Meta browser zoom gestures.
   const filmstripWheelPolicy = () =>
@@ -571,6 +583,40 @@ test("initial image and gallery scrolling", async ({ page }) => {
   expect(await page.evaluate(() => window.scrollY)).toBe(
     documentScrollBeforeWheel,
   );
+  await assertDecodedAndContained(1600, 1200);
+
+  // At the last thumbnail, native vertical and horizontal trackpad wheels
+  // must not chain to a scrollable document after the strip hits its edge.
+  // A separate document-scroll positive control above proves this is not a
+  // vacuous assertion on a page with nowhere to scroll.
+  await filmstrip.evaluate((element) => {
+    element.scrollLeft = element.scrollWidth;
+  });
+  await expect
+    .poll(scrollOffset)
+    .toBe(
+      await filmstrip.evaluate(
+        (element) => element.scrollWidth - element.clientWidth,
+      ),
+    );
+  await filmstrip.hover();
+  const filmstripEnd = await scrollOffset();
+  const pageAtFilmstripEnd = await page.evaluate(() => ({
+    x: window.scrollX,
+    y: window.scrollY,
+  }));
+  await page.mouse.wheel(0, 320);
+  await page.mouse.wheel(240, 0);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  expect(await scrollOffset()).toBe(filmstripEnd);
+  expect(
+    await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY })),
+  ).toEqual(pageAtFilmstripEnd);
   await assertDecodedAndContained(1600, 1200);
 
   // When the thumbnail strip fits, wheel input must still be consumed by the
