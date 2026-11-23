@@ -125,6 +125,8 @@ def _pending_review_count(
             type(value) is not str or not value for value in raw_ids
         ):
             raise ValidationError("Workflow review input has malformed prediction identifiers")
+        if len(raw_ids) != len(set(raw_ids)):
+            raise ValidationError("Workflow review input has duplicate prediction identifiers")
         target.update(raw_ids)
 
     pending = 0
