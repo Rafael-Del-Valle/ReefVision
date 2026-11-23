@@ -66,6 +66,112 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertNotEqual(MODULE._file_fingerprint(first),
                                 MODULE._file_fingerprint(differing_ctime))
 
+    def test_decoded_baseline_requires_matching_geometry_exif_and_icc(self) -> None:
+        """An unchanged JPEG hash cannot excuse a changed decoder interpretation."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline_record = {
+                "path": "portrait.JPEG",
+                "bytes": 42,
+                "sha256": "a" * 64,
+                "jpeg_boundary_markers": True,
+                "jpeg_decodable": True,
+                "jpeg_pixel_width": 12,
+                "jpeg_pixel_height": 8,
+                "jpeg_display_width": 8,
+                "jpeg_display_height": 12,
+                "jpeg_exif_orientation": 6,
+                "jpeg_exif_datetime_original_local": "2026:04:03 14:00:00",
+                "jpeg_exif_offset_time_original": "-04:00",
+                "jpeg_icc_profile_sha256": "b" * 64,
+            }
+            baseline = {"root": str(root), "errors": [], "files": [baseline_record]}
+            self.assertEqual(MODULE.compare_source_manifest(root, [baseline_record], baseline), [])
+
+            for field, replacement in (
+                ("jpeg_decodable", False),
+                ("jpeg_decodable", None),
+                ("jpeg_display_width", 12),
+                ("jpeg_exif_orientation", 1),
+                ("jpeg_exif_offset_time_original", None),
+                ("jpeg_icc_profile_sha256", "c" * 64),
+            ):
+                with self.subTest(field=field, replacement=replacement):
+                    current = {**baseline_record, field: replacement}
+                    errors = MODULE.compare_source_manifest(root, [current], baseline)
+                    self.assertTrue(errors, "Decoder drift or missing verification passed")
+                    self.assertIn("source JPEG", errors[0])
+
+            header_only = {
+                key: value for key, value in baseline_record.items()
+                if not key.startswith("jpeg_") or key == "jpeg_boundary_markers"
+            }
+            self.assertIn(
+                "pixel decoding not reverified",
+                MODULE.compare_source_manifest(root, [header_only], baseline)[0],
+            )
+            invalid_baseline = {
+                "root": str(root), "errors": [],
+                "files": [{**baseline_record, "jpeg_decodable": False}],
+            }
+            self.assertEqual(
+                MODULE.compare_source_manifest(root, [baseline_record], invalid_baseline),
+                ["baseline JPEG manifest contains unverified pixel-decode evidence"],
+            )
+            # Legacy checksum-only baselines retain their original comparison
+            # contract; do not claim they ever carried pixel/EXIF evidence.
+            self.assertEqual(
+                MODULE.compare_source_manifest(
+                    root, [header_only],
+                    {"root": str(root), "errors": [], "files": [header_only]},
+                ),
+                [],
+            )
+
+    def test_cli_verified_decode_baseline_cannot_be_downgraded(self) -> None:
+        """A post-import run must explicitly repeat the original pixel check."""
+        import hashlib
+
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; camera decode replay unverified")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "camera"
+            root.mkdir()
+            photo = root / "DSC_0001.JPEG"
+            exif = Image.Exif()
+            exif[274] = 6
+            Image.new("RGB", (12, 8), (30, 60, 90)).save(
+                photo, format="JPEG", exif=exif
+            )
+            original = photo.read_bytes()
+            before_output = io.StringIO()
+            with mock.patch("sys.argv", [str(SCRIPT), str(root), "--verify-decode"]):
+                with contextlib.redirect_stdout(before_output):
+                    self.assertEqual(MODULE.main(), 0)
+            before_bytes = before_output.getvalue().encode("utf-8")
+            before_path = Path(directory) / "before.json"
+            before_path.write_bytes(before_bytes)
+            arguments = [
+                str(SCRIPT), str(root), "--compare-manifest", str(before_path),
+                "--expected-manifest-sha256", hashlib.sha256(before_bytes).hexdigest(),
+            ]
+            unchecked_output = io.StringIO()
+            with mock.patch("sys.argv", arguments):
+                with contextlib.redirect_stdout(unchecked_output):
+                    self.assertEqual(MODULE.main(), 1)
+            self.assertIn(
+                "source JPEG pixel decoding not reverified since baseline",
+                json.loads(unchecked_output.getvalue())["errors"][0],
+            )
+            replay_output = io.StringIO()
+            with mock.patch("sys.argv", arguments + ["--verify-decode"]):
+                with contextlib.redirect_stdout(replay_output):
+                    self.assertEqual(MODULE.main(), 0)
+            self.assertEqual(json.loads(replay_output.getvalue())["errors"], [])
+            self.assertEqual(photo.read_bytes(), original)
+
     def test_mixed_case_extensions_and_nested_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
