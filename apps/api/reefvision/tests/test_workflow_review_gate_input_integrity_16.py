@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import WorkflowArtifact, WorkflowNodeRun
+from reefvision.db.models import Job, WorkflowArtifact, WorkflowNodeRun
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.workflow_review import _input_artifacts
 from reefvision.storage.datasets import canonical_json_sha256
@@ -81,7 +81,20 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
         f"/api/v1/workflow-node-runs/{review_id}/resume-review",
         json={"reviewed_by": "scientist", "note": "Attempted approval"},
     )
-    assert resumed.status_code == 422, resumed.text
+    # Domain ValidationError is mapped to HTTP 400, not Pydantic's 422.
+    expected_details = {
+        "missing_artifact": "Workflow review input artifact no longer exists",
+        "empty_binding": "Workflow review gate has invalid saved input bindings",
+        "duplicate_binding": "Workflow review gate has invalid saved input bindings",
+        "changed_payload": "Workflow review input failed project or checksum validation",
+        "foreign_project": "Workflow review input failed project or checksum validation",
+        "wrong_type": "Workflow review input has invalid run or scientific data type",
+        "missing_producer_output": "Workflow review input lost its saved producer provenance",
+        "missing_prediction": "Workflow review cannot approve missing or foreign prediction proposals",
+        "missing_classification": "Workflow review input has invalid run or scientific data type",
+    }
+    assert resumed.status_code == 400, resumed.text
+    assert resumed.json() == {"detail": expected_details[corruption]}
     after = client.get(f"/api/v1/workflow-runs/{run_id}").json()
     assert after["run"]["status"] == "waiting_for_review"
     node = next(node for node in after["nodes"] if node["id"] == review_id)
@@ -92,6 +105,9 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
             session.scalar(select(WorkflowNodeRun.status).where(WorkflowNodeRun.id == review_id))
             == "waiting_for_review"
         )
+        parent_job = session.get(Job, job_id)
+        assert parent_job is not None
+        assert parent_job.status == "waiting_for_review"
 
 
 def test_legacy_nullable_project_scope_stays_bound_to_saved_run(client: TestClient) -> None:
