@@ -732,16 +732,25 @@ def measure_point_cloud_preview(
         for index, (vertex, rgb) in enumerate(zip(vertices, point_colors, strict=True)):
             first_index_per_pair.setdefault((vertex, tuple(rgb)), index)
         distinct_rgb_pair_indices.update(first_index_per_pair.values())
-    # Raw palette coverage can be feasible even when preserving all spatial
-    # XYZ/RGB combinations is not. Pin only the first source row per color.
-    # Combined protected requests fail closed if their union exceeds 512.
+    # Raw palette coverage can be feasible even when preserving every
+    # spatial XYZ/RGB pair is not. Reuse already-protected acquisitions for
+    # their colors before pinning additional first-occurrence RGB rows.
+    # Otherwise two compatible retention requests can falsely exceed 512.
+    # This is a deterministic greedy reuse, not a globally minimal cover.
     distinct_rgb_triplet_indices: set[int] = set()
     if preserve_distinct_rgb_triplets_in_preview:
         assert point_colors is not None
-        first_index_per_color: dict[tuple[int, ...], int] = {}
+        already_pinned = distinct_locus_indices | distinct_rgb_pair_indices | gap_boundary_indices
+        if preserve_axis_extrema_in_preview:
+            already_pinned.update(extrema_indices)
+        if pin_chords:
+            already_pinned.update(selected_endpoint_indices)
+        retained_colors = {tuple(point_colors[index]) for index in already_pinned}
         for index, rgb in enumerate(point_colors):
-            first_index_per_color.setdefault(tuple(rgb), index)
-        distinct_rgb_triplet_indices.update(first_index_per_color.values())
+            color = tuple(rgb)
+            if color not in retained_colors:
+                retained_colors.add(color)
+                distinct_rgb_triplet_indices.add(index)
     if (
         preserve_axis_extrema_in_preview
         or pin_chords
