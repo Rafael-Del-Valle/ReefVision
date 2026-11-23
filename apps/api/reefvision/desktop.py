@@ -715,7 +715,16 @@ async def publish_runtime_port_when_ready(
         if server.should_exit:
             raise RuntimeError("ReefVision desktop API exited before startup completed")
         await asyncio.sleep(0.05)
-    write_runtime_port(context_file, resolve_server_port(server, requested_port))
+    try:
+        write_runtime_port(context_file, resolve_server_port(server, requested_port))
+    except Exception:
+        # The desktop learns the actual listener address only from this file.
+        # If it cannot be published, stop the sidecar instead of leaving a
+        # headless write-capable API accepting requests with no GUI attachment.
+        request_server_shutdown(
+            server, "Desktop port publication failed; requesting API shutdown"
+        )
+        raise
 
 
 async def run_api_server(settings: Settings, options: DesktopLaunchOptions) -> int:
