@@ -147,25 +147,26 @@ def test_saved_executable_pose_al_refuses_silently_dropped_model_filter(
     detail = response.json()
     assert detail["run"]["status"] == "failed"
     assert "unique list of nonempty model IDs" in (detail["run"]["error_message"] or "")
-    assert any(
-        node["node_id"] == "al" and node["status"] == "failed"
-        for node in detail["nodes"]
-    )
+    assert any(node["node_id"] == "al" and node["status"] == "failed" for node in detail["nodes"])
     assert not [
         artifact
         for artifact in detail["artifacts"]
-        if artifact["data_type"] in {
+        if artifact["data_type"]
+        in {
             "pose_active_learning_round",
             "verified_pose_active_learning_round",
         }
     ]
     assert all("review_approval" not in (node["result_json"] or {}) for node in detail["nodes"])
     with app.state.session_factory() as session:
-        assert session.scalar(
-            select(PoseActiveLearningRound.id).where(
-                PoseActiveLearningRound.project_id == project_id
+        assert (
+            session.scalar(
+                select(PoseActiveLearningRound.id).where(
+                    PoseActiveLearningRound.project_id == project_id
+                )
             )
-        ) is None
+            is None
+        )
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "failed"
