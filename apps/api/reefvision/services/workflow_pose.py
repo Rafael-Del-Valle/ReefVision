@@ -551,31 +551,29 @@ def execute_pose_active_learning_adapter(
     }:
         raise ValidationError("Pose Active Learning received tracks from another project")
 
-    track_ids = _track_ids(temporal_payload)
+    # An explicit model filter is part of the scientific acquisition cohort.
+    # Never silently discard malformed or repeated IDs and then run a
+    # different selection than the researcher requested.
+    raw_model_ids = parameters.get("model_ids")
+    if raw_model_ids is None:
+        model_ids: list[str] = []
+    elif (
+        not isinstance(raw_model_ids, list)
+        or any(type(value) is not str or not value.strip() for value in raw_model_ids)
+        or len(raw_model_ids) != len(set(raw_model_ids))
+    ):
+        raise ValidationError(
+            "Pose Active Learning model_ids must be a unique list of nonempty model IDs"
+        )
+    else:
+        model_ids = list(raw_model_ids)
 
+    track_ids = _track_ids(temporal_payload)
     tracks, video = _scoped_tracks(
         session,
         project_id=project_id,
         track_ids=track_ids,
     )
-
-    raw_model_ids = parameters.get("model_ids")
-
-    if isinstance(
-        raw_model_ids,
-        list,
-    ):
-        model_ids = [
-            str(value)
-            for value in raw_model_ids
-            if isinstance(
-                value,
-                str,
-            )
-            and value
-        ]
-    else:
-        model_ids = []
 
     if not model_ids:
         model_ids = sorted({track.source_model_id for track in tracks if track.source_model_id})
