@@ -721,9 +721,7 @@ async def publish_runtime_port_when_ready(
         # The desktop learns the actual listener address only from this file.
         # If it cannot be published, stop the sidecar instead of leaving a
         # headless write-capable API accepting requests with no GUI attachment.
-        request_server_shutdown(
-            server, "Desktop port publication failed; requesting API shutdown"
-        )
+        request_server_shutdown(server, "Desktop port publication failed; requesting API shutdown")
         raise
 
 
