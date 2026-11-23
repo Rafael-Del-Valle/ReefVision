@@ -1871,5 +1871,94 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 json.dumps(records, allow_nan=False)
 
 
+    def test_saved_camera_manifest_detects_mutated_added_and_missing_originals(self) -> None:
+        """Actual CLI pre/post checks must fail closed without rewriting sources."""
+        import subprocess
+        import sys
+
+        with tempfile.TemporaryDirectory() as directory:
+            staging = Path(directory)
+            camera = staging / "approved originals"
+            camera.mkdir()
+            first = camera / "Sony DSC_0001.JPG"
+            second = camera / "Canon IMG_0002.jpeg"
+            first_bytes = bytes.fromhex("ffd8") + b"source-one" + bytes.fromhex("ffd9")
+            second_bytes = bytes.fromhex("ffd8") + b"source-two" + bytes.fromhex("ffd9")
+            first.write_bytes(first_bytes)
+            second.write_bytes(second_bytes)
+            manifest = staging / "baseline-camera.json"
+
+            command = [sys.executable, str(SCRIPT), str(camera)]
+            baseline_run = subprocess.run(command, capture_output=True, text=True, check=False)
+            self.assertEqual(baseline_run.returncode, 0, baseline_run.stderr)
+            manifest.write_text(baseline_run.stdout, encoding="utf-8")
+
+            def compare() -> tuple[int, list[str]]:
+                result = subprocess.run(
+                    [*command, "--compare-manifest", str(manifest)],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                return result.returncode, json.loads(result.stdout)["errors"]
+
+            code, errors = compare()
+            self.assertEqual((code, errors), (0, []))
+            # Changing data while preserving file length must invalidate the
+            # original SHA-256 rather than passing a size-only acceptance.
+            first.write_bytes(first_bytes.replace(b"one", b"two"))
+            code, errors = compare()
+            self.assertEqual(code, 1)
+            self.assertIn(
+                "source JPEG bytes changed since baseline: 'Sony DSC_0001.JPG'", errors
+            )
+            first.write_bytes(first_bytes)
+            extra = camera / "unexpected.JPEG"
+            extra.write_bytes(bytes.fromhex("ffd8") + b"new" + bytes.fromhex("ffd9"))
+            code, errors = compare()
+            self.assertEqual(code, 1)
+            self.assertIn(
+                "source JPEG added since baseline: 'unexpected.JPEG'", errors
+            )
+            extra.unlink()
+            second.unlink()
+            code, errors = compare()
+            self.assertEqual(code, 1)
+            self.assertIn(
+                "source JPEG missing since baseline: 'Canon IMG_0002.jpeg'", errors
+            )
+            self.assertEqual(first.read_bytes(), first_bytes)
+
+    def test_untrusted_camera_manifest_is_not_accepted_as_immutable_evidence(self) -> None:
+        """Malformed, duplicated or wrong-root baselines cannot certify source QC."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            original = root / "CAMERA.JPG"
+            original.write_bytes(bytes.fromhex("ffd8") + b"unaltered" + bytes.fromhex("ffd9"))
+            records, errors = MODULE.inventory(root)
+            self.assertEqual(errors, [])
+            baseline = {"root": str(root), "files": records, "errors": []}
+            self.assertEqual(MODULE.compare_source_manifest(root, records, baseline), [])
+
+            def check(changes: dict[str, object]) -> None:
+                tampered = {**baseline, **changes}
+                self.assertNotEqual(
+                    MODULE.compare_source_manifest(root, records, tampered), []
+                )
+
+            check({"root": str(root.parent)})
+            check({"errors": ["source unreadable"]})
+            check({"files": [records[0], records[0]]})
+            check({"files": [{**records[0], "path": "../CAMERA.JPG"}]})
+            check({"files": [{**records[0], "path": "folder\\CAMERA.JPG"}]})
+            check({"files": [{**records[0], "bytes": True}]})
+            check({"files": [{**records[0], "sha256": "0" * 63}]})
+            check({"files": [{**records[0], "jpeg_boundary_markers": False}]})
+            check({"files": []})
+            check({"files": "not an inventory"})
+            check({"files": [None]})
+            self.assertEqual(original.read_bytes(), bytes.fromhex("ffd8") + b"unaltered" + bytes.fromhex("ffd9"))
+
+
 if __name__ == "__main__":
     unittest.main()
