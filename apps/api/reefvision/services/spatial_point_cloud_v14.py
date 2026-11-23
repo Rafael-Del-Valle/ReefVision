@@ -1384,6 +1384,13 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         rgb_frequency_total_variation_exact = Fraction(
             rgb_frequency_shift_numerator, 2 * len(points) * displayed_row_count
         )
+        # Marginalizing XYZ/RGB pairs to RGB triplets cannot increase total
+        # variation. This exact nonnegative gap detects spatial sampling bias
+        # invisible to a color-only histogram; it is not an additive estimate
+        # of anatomical change, tissue condition, or spatial registration.
+        xyz_rgb_vs_rgb_marginal_tv_gap = (
+            frequency_total_variation_exact - rgb_frequency_total_variation_exact
+        )
         palettes: dict[tuple[float, ...], set[tuple[int, ...]]] = {}
         for point, rgb in zip(points, point_colors, strict=True):
             palettes.setdefault(tuple(point), set()).add(tuple(rgb))
@@ -1449,6 +1456,13 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
                 rgb_frequency_total_variation_exact.numerator,
                 rgb_frequency_total_variation_exact.denominator,
             ],
+            "preview_xyz_rgb_vs_rgb_marginal_tv_gap": float(
+                xyz_rgb_vs_rgb_marginal_tv_gap
+            ),
+            "preview_xyz_rgb_vs_rgb_marginal_tv_gap_exact_fraction": [
+                xyz_rgb_vs_rgb_marginal_tv_gap.numerator,
+                xyz_rgb_vs_rgb_marginal_tv_gap.denominator,
+            ],
             "preview_repeated_xyz_rgb_observation_rows": repeated_preview_pair_rows,
             "fraction_of_source_xyz_rgb_pairs_displayed": (len(preview_pairs) / len(source_pairs)),
             "source_xyz_rgb_observation_rows_represented_in_preview": represented_source_rows,
@@ -1495,6 +1509,8 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             result["qc_warnings"].append("preview_omits_distinct_rgb_triplets")
         if rgb_frequency_shift_numerator:
             result["qc_warnings"].append("preview_shifts_rgb_triplet_frequency_distribution")
+        if xyz_rgb_vs_rgb_marginal_tv_gap > 0:
+            result["qc_warnings"].append("preview_xyz_rgb_tv_exceeds_rgb_marginal_tv")
     else:
         result["preview_rgb_variant_support"] = None
     result["provenance"]["source_format"] = source_format
