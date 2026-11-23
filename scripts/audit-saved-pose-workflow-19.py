@@ -254,6 +254,27 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                     ),
                     "Separate frozen validation dataset reuses source video identity or content",
                 )
+            # The split digest alone only proves internal consistency. Rebuild
+            # the production split contract from independently verified rows
+            # so a rehashed manifest cannot silently misstate its inputs.
+            expected_split = {
+                "schema_version": "pose-training-split-0001",
+                "training_dataset_id": dataset.id,
+                "training_dataset_manifest_sha256": dataset.manifest_sha256,
+                "validation_dataset_id": validation_id,
+                "validation_dataset_manifest_sha256": (
+                    validation_dataset.manifest_sha256 if validation_id is not None else None
+                ),
+                "validation_mode": expected_validation_mode,
+                "pose_schema_id": dataset.pose_schema_id,
+                "pose_schema_revision": dataset.pose_schema_revision,
+                "pose_schema_content_hash": dataset.pose_schema_content_hash,
+            }
+            _require(
+                manifest["pose_split_manifest"] == expected_split
+                and result.get("validation_mode") == expected_validation_mode,
+                "Frozen split manifest or result misstates the verified scientific inputs",
+            )
             # A frozen pose manifest proves what videos were reviewed, not
             # that the original media still exists or has the recorded bytes.
             # Hash each unique training/held-out source once. Missing or
