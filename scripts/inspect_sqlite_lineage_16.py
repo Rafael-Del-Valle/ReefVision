@@ -103,6 +103,15 @@ def inspect(path: Path) -> dict:
                     alembic_stamp_constraint_error = (
                         "invalid_alembic_version_column_constraints"
                     )
+                # The desktop migration guard already refuses triggers on the
+                # revision table. Matching stamps and DDL must not bypass that
+                # protection in this independent read-only comparison tool.
+                version_trigger = connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'trigger' "
+                    "AND tbl_name = 'alembic_version' COLLATE NOCASE LIMIT 1"
+                ).fetchone()
+                if version_trigger is not None and alembic_stamp_constraint_error is None:
+                    alembic_stamp_constraint_error = "alembic_version_triggers_require_review"
                 # Do not sort SQLite mixed-type values or serialize raw BLOBs:
                 # malformed stamps must remain structured, JSON-safe evidence.
                 raw_stamps = [row[0] for row in connection.execute(
