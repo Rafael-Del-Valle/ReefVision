@@ -427,6 +427,114 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
     assert len(digests[0]) == 64
 
 
+def test_balanced_two_color_histogram_can_hide_complete_spatial_sampling_loss(
+    client: TestClient,
+) -> None:
+    """Two retained RGB colors do not certify representative source XYZ/RGB pairs."""
+    # Ordinary bounded preview selects 512/600 source rows. Construct two
+    # colors with exactly equal frequencies inside AND outside that selection,
+    # but put the 88 omitted acquisitions at a separate observed XYZ locus.
+    sampled_indices = {index * 599 // 511 for index in range(512)}
+    points: list[list[float]] = []
+    colors: list[list[int]] = []
+    rows: list[str] = []
+    selected_count = omitted_count = 0
+    for index in range(600):
+        sampled = index in sampled_indices
+        rank = selected_count if sampled else omitted_count
+        red = rank < (256 if sampled else 44)
+        color = [50, 0, 0] if red else [0, 50, 0]
+        x = 0.0 if sampled else 1.0
+        points.append([x, 0.0, 0.0])
+        colors.append(color)
+        rows.append(f"{int(x)} 0 0 {color[0]} {color[1]} {color[2]}")
+        if sampled:
+            selected_count += 1
+        else:
+            omitted_count += 1
+    assert selected_count == 512
+    assert omitted_count == 88
+
+    direct = measure_point_cloud_preview(points=points, point_colors=colors, **CALIBRATION)
+    pid = str(create_project(client, "Balanced color, missing spatial observations")["id"])
+    base = f"/api/v1/projects/{pid}"
+    params = {**CALIBRATION, "ply_text": _colored_ply(rows)}
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    assert direct["preview_point_indices"] == expected["preview_point_indices"]
+    assert direct["provenance"]["geometry_sha256"] == expected["provenance"]["geometry_sha256"]
+
+    support = expected["preview_rgb_variant_support"]
+    assert support["source_distinct_rgb_triplets"] == 2
+    assert support["preview_distinct_rgb_triplets"] == 2
+    assert support["preview_omitted_distinct_rgb_triplets"] == 0
+    assert support["preview_vs_source_rgb_triplet_total_variation_exact_fraction"] == [0, 1]
+    assert support["preview_vs_source_rgb_triplet_total_variation"] == 0.0
+    # Independent exact reference: 88/600 source rows from a separate XYZ
+    # locus are absent, even though both RGB histogram frequencies are 1/2.
+    expected_pair_tv = Fraction(88, 600)
+    assert support["source_distinct_xyz_rgb_pairs"] == 4
+    assert support["preview_distinct_xyz_rgb_pairs"] == 2
+    assert support["preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction"] == [
+        expected_pair_tv.numerator,
+        expected_pair_tv.denominator,
+    ]
+    assert support["preview_vs_source_xyz_rgb_observation_total_variation"] == pytest.approx(
+        float(expected_pair_tv)
+    )
+    assert "preview_shifts_rgb_triplet_frequency_distribution" not in expected["qc_warnings"]
+    assert "preview_shifts_xyz_rgb_observation_frequency_distribution" in expected["qc_warnings"]
+    assert "preview_omits_distinct_xyz_rgb_observations" in expected["qc_warnings"]
+    assert expected["provenance"]["calibration_verified"] is False
+    assert expected["provenance"]["specimen_identity_verified"] is False
+    assert expected["surface_area_m2"] is None
+    assert expected["branch_length_m"] is None
+
+    graph = {
+        "graph_id": "rgb-balanced-spatial-loss-v14",
+        "name": "Audit balanced RGB and omitted spatial acquisitions",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "c", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "c",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    digests: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        )
+        assert artifact["payload_json"] == expected
+        digests.append(artifact["payload_sha256"])
+    assert len(set(digests)) == 1
+    assert len(digests[0]) == 64
+
+
 def test_rgb_frequency_can_remain_stable_while_spatial_pair_frequency_shifts(
     client: TestClient,
 ) -> None:
