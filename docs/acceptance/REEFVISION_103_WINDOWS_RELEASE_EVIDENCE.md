@@ -120,8 +120,12 @@ if ($LASTEXITCODE -ne 0) { throw 'Camera originals changed, disappeared, or were
 "PASS: verified pre/post JPEG names, byte counts and SHA-256; saved baseline hash $beforeSha256"
 ```
 
-The baseline must be a well-formed, error-free scanner JSON inventory. Comparison
-rejects a different source root, duplicate/unsafe manifest paths, changed source
+The baseline must be a well-formed, error-free scanner JSON inventory.
+The scanner refuses baseline files **inside** the approved camera fixture tree
+and refuses baseline paths traversing symbolic links or Windows junctions.
+Keep the JSON evidence in an independent, non-linked directory as shown above;
+these checks protect provenance boundaries but do not authenticate the operator.
+Comparison rejects a different source root, duplicate/unsafe manifest paths, changed source
 hashes even when file size is unchanged, missing files and new JPEG files.
 The optional `--expected-manifest-sha256` flag also rejects a baseline whose
 JSON bytes differ from the separately recorded pre-import digest, including

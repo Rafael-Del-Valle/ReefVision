@@ -2099,6 +2099,79 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertIn("requires --compare-manifest", missing_baseline.stderr)
             self.assertEqual(photo.read_bytes(), altered)
 
+    def test_cli_camera_baseline_stays_outside_source_tree_and_unlinked(self) -> None:
+        """A camera inventory must not trust redirected or in-tree evidence."""
+        import subprocess
+        import sys
+
+        with tempfile.TemporaryDirectory() as directory:
+            staging = Path(directory)
+            camera = staging / "approved-camera-originals"
+            camera.mkdir()
+            original = b"\\xff\\xd8original-camera-capture\\xff\\xd9"
+            photo = camera / "DSC_0001.JPG"
+            photo.write_bytes(original)
+            records, errors = MODULE.inventory(camera.resolve())
+            self.assertEqual(errors, [])
+
+            evidence = staging / "evidence"
+            evidence.mkdir()
+            baseline = evidence / "baseline.json"
+            baseline.write_text(
+                json.dumps(
+                    {"root": str(camera.resolve()), "files": records, "errors": []}
+                ),
+                encoding="utf-8",
+            )
+            command = [
+                sys.executable,
+                str(SCRIPT),
+                str(camera),
+                "--compare-manifest",
+            ]
+
+            def compare(path: Path) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    [*command, str(path)],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+
+            verified = compare(baseline)
+            self.assertEqual(verified.returncode, 0, verified.stderr)
+            self.assertEqual(json.loads(verified.stdout)["errors"], [])
+
+            # Even a valid inventory must never live among immutable images.
+            embedded = camera / "baseline.json"
+            embedded.write_bytes(baseline.read_bytes())
+            denied = compare(embedded)
+            self.assertEqual(denied.returncode, 2)
+            self.assertIn("outside the camera fixture", denied.stderr)
+
+            linked_file = staging / "linked-baseline.json"
+            try:
+                linked_file.symlink_to(baseline)
+            except (OSError, NotImplementedError):
+                pass  # Windows without symlink privilege still tests in-tree safety.
+            else:
+                denied = compare(linked_file)
+                self.assertEqual(denied.returncode, 2)
+                self.assertIn("symbolic link or junction", denied.stderr)
+
+            linked_parent = staging / "linked-evidence"
+            try:
+                linked_parent.symlink_to(evidence, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                pass
+            else:
+                denied = compare(linked_parent / "baseline.json")
+                self.assertEqual(denied.returncode, 2)
+                self.assertIn("symbolic link or junction", denied.stderr)
+
+            self.assertEqual(photo.read_bytes(), original)
+            self.assertEqual(baseline.read_text(encoding="utf-8").startswith("{"), True)
+
     def test_untrusted_camera_manifest_is_not_accepted_as_immutable_evidence(self) -> None:
         """Malformed, duplicated or wrong-root baselines cannot certify source QC."""
         with tempfile.TemporaryDirectory() as directory:

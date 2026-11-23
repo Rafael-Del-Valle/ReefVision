@@ -793,6 +793,27 @@ def main() -> int:
         parser.error(f"cannot resolve camera fixture directory: {type(exc).__name__}")
     if not root.is_dir():
         parser.error("directory must be a directory")
+    if args.compare_manifest is not None:
+        # The baseline is independent scientific evidence, not another camera
+        # source. Never read a linked/junctioned manifest or a manifest inside
+        # the approved original-image tree: both can silently redirect or
+        # contaminate a supposedly immutable camera acceptance inventory.
+        baseline_candidate = args.compare_manifest.absolute()
+        if any(
+            _is_linked_path(component)
+            for component in (baseline_candidate, *baseline_candidate.parents)
+        ):
+            parser.error(
+                "baseline JPEG manifest must not traverse a symbolic link or junction"
+            )
+        try:
+            baseline_path = baseline_candidate.resolve(strict=False)
+        except (OSError, RuntimeError):
+            parser.error("cannot resolve baseline JPEG manifest path")
+        if baseline_path.is_relative_to(root):
+            parser.error(
+                "baseline JPEG manifest must be stored outside the camera fixture directory"
+            )
     records, errors = inventory(root, verify_decode=args.verify_decode)
     if args.compare_manifest is not None:
         try:
