@@ -43,7 +43,7 @@ def _managed_file(root: Path, value: str) -> Path:
 def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
     # The app imports are delayed so the script works from a source checkout.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps" / "api"))
-    from sqlalchemy import create_engine, select
+    from sqlalchemy import create_engine, event, select
     from sqlalchemy.orm import Session
 
     from reefvision.db.models import (
@@ -73,6 +73,15 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
         return connection
 
     engine = create_engine("sqlite://", creator=connect)
+
+    # This audit compares several independently persisted scientific records.
+    # A SQLAlchemy Session alone does not pin SQLite SELECTs to one snapshot
+    # under the sqlite3 legacy transaction mode. Start a real read transaction
+    # when the Session begins so concurrent app writes cannot mix revisions.
+    @event.listens_for(engine, "begin")
+    def begin_snapshot(connection: Any) -> None:
+        connection.exec_driver_sql("BEGIN")
+
     try:
         with Session(engine) as session:
             run = session.get(WorkflowRun, run_id)
