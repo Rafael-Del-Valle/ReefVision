@@ -843,3 +843,13 @@ SHA-256 fingerprints. Requiring all 513 XYZ/RGB pairs still fails closed with
 no measurement artifact. This is a local deterministic feasibility repair,
 **not** a guarantee that every feasible joint-cover configuration can be
 found, and it is not a biological-condition or reidentification assessment.
+
+The strict boundary is also tested through **two independent executions** of a
+saved, typed Workflow Builder graph when protected XYZ axis extrema would
+require keeping the displaced source acquisition. Even though 512 locations
+and 512 colors can fit together without that extra restriction, requiring an
+independently protected extremum can make the 512-row preview impossible.
+The standalone API, direct service and both saved-graph runs must reject that
+configuration without persisting a point-cloud measurement artifact. The
+unmodified original PLY and unverified scale/organism identity remain outside
+the sample's asserted scientific coverage.
