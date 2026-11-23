@@ -624,7 +624,31 @@ def test_rgb_ply_duplicate_xyz_color_variants_are_audited_in_saved_graph(
     assert expected["unique_point_count"] == 2
     assert expected["preview_unique_coordinate_count"] == 2
     assert 34 not in expected["preview_point_indices"]
+    # Row coverage alone conceals rare-color and channel-extremum losses.
+    # Audit source-vs-preview RGB distributions without inferring tissue condition.
     assert expected["preview_rgb_variant_support"] == {
+        "source_repeated_xyz_rgb_observation_rows": 597,
+        "source_repeated_xyz_rgb_observation_fraction": 597 / 600,
+        "preview_repeated_xyz_rgb_observation_rows": 510,
+        "source_xyz_rgb_observation_rows_represented_in_preview": 599,
+        "fraction_of_source_xyz_rgb_observation_rows_represented_in_preview": 599 / 600,
+        "preview_vs_source_xyz_rgb_observation_total_variation": 1 / 600,
+        "preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction": [1, 600],
+        "source_rgb_channel_ranges_uint8": {
+            "red": [20, 255],
+            "green": [0, 230],
+            "blue": [0, 230],
+        },
+        "preview_rgb_channel_ranges_uint8": {
+            "red": [20, 230],
+            "green": [20, 230],
+            "blue": [20, 230],
+        },
+        "preview_omitted_source_rgb_channel_extrema": [
+            "red_max",
+            "green_min",
+            "blue_min",
+        ],
         "source_distinct_xyz_rgb_pairs": 3,
         "preview_distinct_xyz_rgb_pairs": 2,
         "fraction_of_source_xyz_rgb_pairs_displayed": pytest.approx(2 / 3),
