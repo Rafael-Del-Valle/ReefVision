@@ -7,10 +7,13 @@ must not alter pixel decoding, canonical media type, or the original bytes.
 from __future__ import annotations
 
 import hashlib
+from io import BytesIO
 
 import pytest
+from fastapi.testclient import TestClient
 from PIL import Image
 
+from reefvision.tests.test_images import create_project, import_one
 from reefvision.storage.images import (
     InvalidImageError,
     ensure_supported_extension,
@@ -387,3 +390,73 @@ def test_camera_import_never_promotes_conflicting_ifd0_exposure_to_utc(
         assert inspected.metadata["exif_exposure_ifd_conflict_fields"] == [conflict_field]
         assert "UTC capture timestamp not inferred" in inspected.metadata["capture_time_warning"]
     assert path.read_bytes() == original
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "DSC_0042.jpg",
+        "DSC_0042.JPG",
+        "DSC_0042.jpeg",
+        "DSC_0042.JPEG",
+        "DSC_0042.jpe",
+        "DSC_0042.JPE",
+        "DSC_0042.jFif",
+        "DSC_0042.JFI",
+        "DSC_0042.jif",
+    ],
+)
+def test_camera_alias_api_import_gallery_display_and_original_roundtrip(
+    client: TestClient, filename: str
+) -> None:
+    """The HTTP import path must retain the exact camera filename and raw pixels.
+
+    Storage inspection alone does not prove multipart import, gallery persistence,
+    original download, or the full-resolution WebView2 display contract.
+    Synthetic JPEGs establish alias behavior, not physical Sony/Canon acceptance.
+    """
+    project = create_project(client, f"Camera JPEG alias {filename}")
+    exif = Image.Exif()
+    exif[274] = 6  # The scientific coordinate frame stays unrotated.
+    exif[36867] = "2026:04:03 14:25:30"
+    exif[36881] = "+02:30"
+    stream = BytesIO()
+    Image.new("RGB", (31, 17), (20, 80, 120)).save(stream, format="JPEG", exif=exif)
+    original = stream.getvalue()
+
+    report = import_one(
+        client,
+        project["id"],
+        filename=filename,
+        content=original,
+        relative_path=f"camera/{filename}",
+    )
+    assert len(report["successful"]) == 1, report
+    assert not report["failed"], report
+    assert not report["unsupported"], report
+    image_id = report["successful"][0]["image_id"]
+
+    metadata_response = client.get(f"/api/v1/images/{image_id}")
+    assert metadata_response.status_code == 200
+    metadata = metadata_response.json()
+    assert metadata["original_filename"] == filename
+    assert metadata["media_type"] == "image/jpeg"
+    assert (metadata["width_px"], metadata["height_px"]) == (31, 17)
+    assert metadata["capture_timestamp"].startswith("2026-04-03T11:55:30")
+    assert metadata["metadata_json"]["exif"]["Orientation"] == 6
+
+    gallery = client.get(f"/api/v1/projects/{project['id']}/images")
+    assert gallery.status_code == 200
+    assert gallery.json()["total"] == 1
+    assert gallery.json()["items"][0]["original_filename"] == filename
+
+    original_response = client.get(f"/api/v1/images/{image_id}/content")
+    assert original_response.status_code == 200
+    assert original_response.content == original
+    assert hashlib.sha256(original_response.content).digest() == hashlib.sha256(original).digest()
+
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    assert display.headers["content-type"].startswith("image/png")
+    with Image.open(BytesIO(display.content)) as pixels:
+        assert pixels.size == (31, 17)
+        assert pixels.getexif().get(274) is None
