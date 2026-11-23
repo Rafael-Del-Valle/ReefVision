@@ -54,9 +54,7 @@ def test_unwritable_ready_file_stops_running_api_sidecar(
             self.started = False
             self.should_exit = False
             self.servers = [
-                SimpleNamespace(
-                    sockets=[SimpleNamespace(getsockname=lambda: ("127.0.0.1", 48177))]
-                )
+                SimpleNamespace(sockets=[SimpleNamespace(getsockname=lambda: ("127.0.0.1", 48177))])
             ]
             state["server"] = self
 
