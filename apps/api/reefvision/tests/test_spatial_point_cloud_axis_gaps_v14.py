@@ -653,6 +653,8 @@ def test_rgb_ply_duplicate_xyz_color_variants_are_audited_in_saved_graph(
         "preview_distinct_rgb_triplets": 2,
         "fraction_of_source_rgb_triplets_displayed": pytest.approx(2 / 3),
         "preview_omitted_distinct_rgb_triplets": 1,
+        "preview_vs_source_rgb_triplet_total_variation": 1 / 600,
+        "preview_vs_source_rgb_triplet_total_variation_exact_fraction": [1, 600],
         "source_distinct_xyz_rgb_pairs": 3,
         "preview_distinct_xyz_rgb_pairs": 2,
         "fraction_of_source_xyz_rgb_pairs_displayed": pytest.approx(2 / 3),
@@ -667,6 +669,7 @@ def test_rgb_ply_duplicate_xyz_color_variants_are_audited_in_saved_graph(
     assert "source_xyz_loci_have_multiple_rgb_values" in expected["qc_warnings"]
     assert "preview_omits_distinct_xyz_rgb_observations" in expected["qc_warnings"]
     assert "preview_omits_distinct_rgb_triplets" in expected["qc_warnings"]
+    assert "preview_shifts_rgb_triplet_frequency_distribution" in expected["qc_warnings"]
     assert "preview_omits_multi_rgb_locus_variants" in expected["qc_warnings"]
     assert [255, 0, 0] not in expected["preview_point_colors_rgb_uint8"]
     assert expected["provenance"]["calibration_verified"] is False
@@ -683,6 +686,10 @@ def test_rgb_ply_duplicate_xyz_color_variants_are_audited_in_saved_graph(
     assert xyz_response.json()["preview_rgb_variant_support"] is None
     assert "preview_omits_distinct_xyz_rgb_observations" not in xyz_response.json()["qc_warnings"]
     assert "preview_omits_distinct_rgb_triplets" not in xyz_response.json()["qc_warnings"]
+    assert (
+        "preview_shifts_rgb_triplet_frequency_distribution"
+        not in xyz_response.json()["qc_warnings"]
+    )
     graph = {
         "graph_id": f"point-cloud-rgb-variants-{preserve_distinct_loci}-v14",
         "name": "Audit RGB display evidence without tissue-condition inference",
