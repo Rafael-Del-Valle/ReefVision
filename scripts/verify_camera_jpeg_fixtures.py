@@ -721,7 +721,20 @@ def main() -> int:
         type=Path,
         help="Compare exact source filenames, sizes and SHA-256 against a saved JSON inventory (read-only).",
     )
+    parser.add_argument(
+        "--expected-manifest-sha256",
+        metavar="SHA256",
+        help=(
+            "Require baseline JSON to match an independently recorded SHA-256 "
+            "(requires --compare-manifest)."
+        ),
+    )
     args = parser.parse_args()
+    if args.expected_manifest_sha256 is not None:
+        if args.compare_manifest is None:
+            parser.error("--expected-manifest-sha256 requires --compare-manifest")
+        if re.fullmatch(r"[0-9a-fA-F]{64}", args.expected_manifest_sha256) is None:
+            parser.error("--expected-manifest-sha256 must contain 64 hexadecimal digits")
     # Reject a linked root before resolve() can silently follow it outside the
     # owner-approved camera fixture directory.
     # Reject symlinks in any supplied path component, not only the final
@@ -748,7 +761,20 @@ def main() -> int:
         except (OSError, ValueError, UnicodeError) as exc:
             errors.append(f"cannot read baseline JPEG manifest: {type(exc).__name__}")
         else:
-            errors.extend(compare_source_manifest(root, records, baseline))
+            # Checking source bytes against a co-edited baseline is not independent
+            # integrity evidence. Require its separately recorded digest when
+            # supplied, so changing both the capture and JSON cannot pass QC.
+            if (
+                args.expected_manifest_sha256 is not None
+                and hashlib.sha256(baseline_bytes).hexdigest()
+                != args.expected_manifest_sha256.lower()
+            ):
+                errors.append(
+                    "baseline JPEG manifest SHA-256 mismatch: saved file differs "
+                    "from independently recorded digest"
+                )
+            else:
+                errors.extend(compare_source_manifest(root, records, baseline))
     print(json.dumps({"root": str(root), "files": records, "errors": errors},
                      indent=2, sort_keys=True))
     return 1 if errors else 0
