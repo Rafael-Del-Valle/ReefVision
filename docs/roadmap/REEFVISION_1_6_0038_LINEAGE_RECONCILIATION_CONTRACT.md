@@ -206,3 +206,29 @@ populated biological and saved-workflow replay acceptance, and genuine
 installed Windows MSI/CAB upgrade and rollback are still release gates.
 The existing executable QC workflow, typed ports, provenance and review
 gates are unchanged; this diagnostic is not a new scientific workflow node.
+
+## Independent strict schema comparison: revision-table foreign keys (2026-11-23)
+
+A canonical-looking version_num column and a clean foreign_key_check
+do not prove that changing the revision is isolated from research records.
+An incoming foreign key with ON UPDATE CASCADE or ON DELETE CASCADE
+can change or remove linked observations when Alembic advances its stamp.
+An outgoing foreign key can bind the revision to unrelated data.
+
+The strict read-only comparison inspector now checks for any incoming or
+outgoing foreign key involving alembic_version within its pinned SQLite
+snapshot, including case-insensitive target names. It reports
+`alembic_version_foreign_keys_require_review` without adding linked row
+values or foreign-key definitions to the diagnostic. The three existing
+strict gates refuse even structurally identical database copies with zero
+FK violations. Unrelated scientific foreign keys remain supported. The nine
+parameterized negative cases and positive control check read-only behavior
+and comparison results. Independent disposable SQLite probes verified
+detection of update and delete cascades, outgoing and self references, and
+unrelated and plain schemas; the actual cascade effects were also reproduced
+on disposable data. Repository CI must validate the new regressions separately.
+
+This strengthens the independent migration evidence gate only. It neither
+rewrites the migration graph nor changes Workflow Builder or scientific
+records. Integrated lineage, representative biological saved-workflow
+acceptance, installed Windows validation and explicit approval remain HOLD.
