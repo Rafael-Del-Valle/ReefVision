@@ -94,7 +94,8 @@ def _minimum_joint_locus_color_cover(
     missing_loci = [locus for locus in first_locus if locus not in fixed_loci]
     missing_colors = set(first_color) - fixed_colors
     # Even perfect matching cannot cover more than two obligations per row.
-    if len(mandatory) + max(len(missing_loci), len(missing_colors)) > MAX_PREVIEW_POINTS:
+    required_slots = len(mandatory) + max(len(missing_loci), len(missing_colors))
+    if required_slots > MAX_PREVIEW_POINTS:
         raise ValueError("Protected point indices exceed the display budget")
     candidate_rows: dict[tuple[float, float, float], list[int]] = {
         locus: [] for locus in missing_loci
@@ -105,7 +106,9 @@ def _minimum_joint_locus_color_cover(
     matched_color_locus: dict[tuple[int, ...], tuple[float, float, float]] = {}
     matched_locus_row: dict[tuple[float, float, float], int] = {}
 
-    def augment(locus: tuple[float, float, float], visited: set[tuple[int, ...]]) -> bool:
+    def augment(
+        locus: tuple[float, float, float], visited: set[tuple[int, ...]]
+    ) -> bool:
         for index in candidate_rows[locus]:
             rgb = tuple(colors[index])
             if rgb in visited:
