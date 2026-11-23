@@ -34,7 +34,22 @@ def _digest(path: Path) -> str:
 def _managed_file(root: Path, value: str) -> Path:
     _require(isinstance(value, str) and bool(value), "Missing local checkpoint path")
     candidate = Path(value)
-    resolved = (candidate if candidate.is_absolute() else root / candidate).resolve(strict=True)
+    _require(".." not in candidate.parts, "Evidence path must not traverse parent directories")
+    unresolved = candidate if candidate.is_absolute() else root / candidate
+    _require(unresolved.is_relative_to(root), "Checkpoint escapes the selected data directory")
+    # Check each original path component *before* resolve() follows redirects.
+    # A symlink or NTFS junction inside the managed root can alias a different
+    # run's checkpoint while retaining a valid digest, hiding broken lineage.
+    current = root
+    for part in unresolved.relative_to(root).parts:
+        current = current / part
+        metadata = current.lstat()
+        _require(
+            not current.is_symlink()
+            and not (getattr(metadata, "st_file_attributes", 0) & 0x400),
+            "Evidence path contains a symlink or Windows reparse point",
+        )
+    resolved = unresolved.resolve(strict=True)
     _require(resolved.is_file(), "Checkpoint is not a regular file")
     _require(resolved.is_relative_to(root), "Checkpoint escapes the selected data directory")
     return resolved
