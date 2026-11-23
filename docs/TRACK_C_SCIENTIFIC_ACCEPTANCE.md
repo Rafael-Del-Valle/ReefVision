@@ -4,6 +4,32 @@ This is a **test plan**, not evidence that ReefVision 1.4 or 1.5 is validated or
 
 ## 1.4: 3D geometry and longitudinal studies
 
+### Balanced multicolor RGB does not establish spatial preview representativeness (synthetic; exact-head CI pending)
+
+A bounded colored-PLY preview can exactly preserve a **two-color acquisition
+histogram** while omitting an entire observed XYZ locus. In the deterministic
+600-row fixture, source RGB channels have two triplets at 300 rows each; the
+512 displayed rows retain 256 of each. Consequently the exact RGB-triplet
+total-variation distance is **0**, yet 88 omitted source rows lie at another
+XYZ coordinate, giving an XYZ/RGB-pair total-variation distance of
+**88/600 = 11/75**. The warning
+`preview_shifts_xyz_rgb_observation_frequency_distribution` and the
+independent `preview_omits_distinct_xyz_rgb_observations` remain required even
+though `preview_shifts_rgb_triplet_frequency_distribution` is absent.
+This is a mathematical acquisition-frequency audit, not a test of true scan
+coverage, coral color physiology, calibrated surface area, independent
+biological replicates, or verified specimen identity.
+
+Regression: `test_spatial_point_cloud_rgb_pair_preservation_v14.py` tests the
+direct point-cloud service, standalone imported PLY project endpoint, a
+planned executable typed Workflow Builder graph, and **two executions of
+the same saved graph** with identical complete scientific JSON artifacts and
+SHA-256 payload fingerprints. All calibration and specimen-verification flags
+remain provisional. The exact-head backend/frontend/E2E/migrations, human
+scientific, installed Windows MSI/CAB GUI and physical GPU gates remain
+mandatory before either version can be considered release-ready.
+
+
 ### Retain distinct XYZ locations at maximal projected scan-gap boundaries (synthetic; CI pending)
 
 A second, optional strict-boolean preview policy,
