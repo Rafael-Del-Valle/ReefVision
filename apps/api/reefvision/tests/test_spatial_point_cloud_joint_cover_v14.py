@@ -262,13 +262,15 @@ def test_joint_cover_multiple_mandatory_acquisitions_and_order(
     repeated runs on the same order must produce identical selected indices.
     """
     acquisitions = [(locus, color) for locus in range(3) for color in range(3)]
-    acquisitions.append((0, 0))  # Separate source observation at an identical XYZ/RGB pair.
+    acquisitions.append((0, 0))  # Duplicate original acquisition, not a new locus.
     for order in (tuple(range(10)), tuple(reversed(range(10)))):
         vertices = [(float(acquisitions[index][0]), 0.0, 0.0) for index in order]
         colors = [[acquisitions[index][1], 0, 0] for index in order]
         mandatory = {order.index(index) for index in anchored_source_rows}
         selected = _minimum_joint_locus_color_cover(vertices, colors, mandatory)
-        assert selected == _minimum_joint_locus_color_cover(vertices, colors, mandatory)
+        assert selected == _minimum_joint_locus_color_cover(
+            vertices, colors, mandatory
+        )
         assert mandatory.issubset(selected)
         source_loci = set(vertices)
         source_colors = {tuple(color) for color in colors}
