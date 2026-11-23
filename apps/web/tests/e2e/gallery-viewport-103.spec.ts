@@ -924,8 +924,16 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
         ),
       )
       .toBeGreaterThan(400);
+    // A desktop Chromium context may not advertise touch input. Enable
+    // touch emulation explicitly so the positive control tests a delivered
+    // compositor gesture rather than an unsupported no-op.
+    await touchControlPage.bringToFront();
     const controlSession = await page.context().newCDPSession(touchControlPage);
     try {
+      await controlSession.send("Emulation.setTouchEmulationEnabled", {
+        enabled: true,
+        maxTouchPoints: 1,
+      });
       await controlSession.send("Input.synthesizeScrollGesture", {
         x: 80,
         y: 80,
@@ -966,6 +974,10 @@ test("single-image camera gallery cold-start keeps pixels and wheel isolated", a
   const beforeTouchScroll = await pageScroll();
   const touchSession = await page.context().newCDPSession(page);
   try {
+    await touchSession.send("Emulation.setTouchEmulationEnabled", {
+      enabled: true,
+      maxTouchPoints: 1,
+    });
     await touchSession.send("Input.synthesizeScrollGesture", {
       x: Math.round(beforeTouchBounds!.x + beforeTouchBounds!.width / 2),
       y: Math.round(beforeTouchBounds!.y + beforeTouchBounds!.height / 2),
