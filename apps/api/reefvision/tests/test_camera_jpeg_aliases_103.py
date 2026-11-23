@@ -9,11 +9,15 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime
 from io import BytesIO
+from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from reefvision.config import Settings
+from reefvision.jobs.worker import process_thumbnail_job
 from reefvision.storage.images import (
     InvalidImageError,
     ensure_supported_extension,
@@ -463,3 +467,80 @@ def test_camera_alias_api_import_gallery_display_and_original_roundtrip(
     with Image.open(BytesIO(display.content)) as pixels:
         assert pixels.size == (31, 17)
         assert pixels.getexif().get(274) is None
+
+
+@pytest.mark.parametrize("filename", ["DSC_CMYK.JPG", "DSC_CMYK.jPe", "DSC_CMYK.JFIF"])
+def test_cmyk_camera_api_import_thumbnail_and_uncertain_time(
+    client: TestClient, test_settings: Settings, filename: str
+) -> None:
+    """CMYK camera captures must remain immutable and display in source pixels.
+
+    This exercises multipart import, metadata, the browser rendition and the
+    actual queued thumbnail worker, not just Pillow inspection. No timezone
+    is inferred from camera-local EXIF time.
+    """
+    project = create_project(client, f"CMYK camera acceptance {filename}")
+    exif = Image.Exif()
+    exif[274] = 6
+    exif[36867] = "2026:04:03 14:25:30"
+    stream = BytesIO()
+    Image.new("CMYK", (41, 23), (20, 50, 70, 5)).save(
+        stream, format="JPEG", exif=exif
+    )
+    original = stream.getvalue()
+    digest = hashlib.sha256(original).hexdigest()
+
+    report = import_one(
+        client,
+        project["id"],
+        filename=filename,
+        content=original,
+        relative_path=f"camera/{filename}",
+    )
+    assert len(report["successful"]) == 1, report
+    assert not report["failed"], report
+    image = report["successful"][0]
+    image_id = image["image_id"]
+
+    response = client.get(f"/api/v1/images/{image_id}")
+    assert response.status_code == 200
+    metadata = response.json()
+    assert metadata["original_filename"] == filename
+    assert metadata["media_type"] == "image/jpeg"
+    assert (metadata["width_px"], metadata["height_px"]) == (41, 23)
+    assert metadata["capture_timestamp"] is None
+    assert "UTC capture timestamp not inferred" in (
+        metadata["metadata_json"]["capture_time_warning"]
+    )
+    assert metadata["metadata_json"]["exif"]["Orientation"] == 6
+
+    original_response = client.get(f"/api/v1/images/{image_id}/content")
+    assert original_response.status_code == 200
+    assert hashlib.sha256(original_response.content).hexdigest() == digest
+    assert original_response.content == original
+
+    display = client.get(f"/api/v1/images/{image_id}/display")
+    assert display.status_code == 200
+    assert display.headers["content-type"].startswith("image/png")
+    with Image.open(BytesIO(display.content)) as rendition:
+        rendition.load()
+        assert rendition.format == "PNG"
+        assert rendition.mode in {"RGB", "RGBA"}
+        assert rendition.size == (41, 23)
+        assert rendition.getexif().get(274) is None
+
+    app = cast(FastAPI, client.app)
+    assert process_thumbnail_job(
+        test_settings, app.state.session_factory, image["thumbnail_job_id"]
+    )
+    thumbnail = client.get(f"/api/v1/images/{image_id}/thumbnail")
+    assert thumbnail.status_code == 200
+    assert thumbnail.headers["content-type"].startswith("image/jpeg")
+    with Image.open(BytesIO(thumbnail.content)) as preview:
+        preview.load()
+        assert preview.format == "JPEG"
+        assert preview.size[0] > 0 and preview.size[1] > 0
+    gallery = client.get(f"/api/v1/projects/{project['id']}/images")
+    assert gallery.status_code == 200
+    assert gallery.json()["total"] == 1
+    assert gallery.json()["items"][0]["original_filename"] == filename
