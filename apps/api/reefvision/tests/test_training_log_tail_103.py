@@ -160,7 +160,9 @@ def test_log_tail_rejects_file_swapped_between_validation_and_open(
             os.replace(replacement, log)
         return original_open(path, mode, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "open", swapped_open)
+    monkeypatch.setattr(
+        training_routes, "_open_training_log", lambda path: swapped_open(path, "rb")
+    )
     with pytest.raises(HTTPException) as error:
         training_routes._training_log_tail("training.log", tmp_path)
     assert error.value.status_code == 403
@@ -192,7 +194,9 @@ def test_log_tail_rejects_same_size_rewrite_before_open(
             )
         return original_open(path, mode, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "open", rewrite_before_read)
+    monkeypatch.setattr(
+        training_routes, "_open_training_log", lambda path: rewrite_before_read(path, "rb")
+    )
     with pytest.raises(HTTPException) as error:
         training_routes._training_log_tail("training.log", tmp_path)
     assert error.value.status_code == 403
@@ -219,7 +223,9 @@ def test_log_tail_allows_append_between_stat_and_open(
                 writer.write(appended)
         return original_open(path, mode, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "open", append_before_read)
+    monkeypatch.setattr(
+        training_routes, "_open_training_log", lambda path: append_before_read(path, "rb")
+    )
     assert training_routes._training_log_tail("training.log", tmp_path) == {
         "available": True,
         "text": (original + appended).decode("utf-8"),
@@ -384,6 +390,59 @@ def test_log_tail_rejects_in_root_hardlink_to_unrelated_scientific_file(
     assert error.value.status_code == 403
     assert private_file.read_bytes() == private_bytes
     assert alias.read_bytes() == private_bytes
+
+
+def test_log_tail_rejects_fifo_substituted_at_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A passive poll must not block on a pipe substituted after validation."""
+    if not hasattr(os, "mkfifo") or not hasattr(os, "O_NONBLOCK"):
+        pytest.skip("Nonblocking FIFO access is unavailable")
+    log = tmp_path / "training.log"
+    original = b"epoch=4\ntrain/box_loss=0.25\n"
+    log.write_bytes(original)
+    fifo = tmp_path / "substitute.log"
+    try:
+        os.mkfifo(fifo)
+    except OSError as error:
+        pytest.skip(f"FIFO creation unavailable: {error}")
+    real_open = os.open
+    observed_flags: list[int] = []
+
+    def substitute_open(path: str, flags: int) -> int:
+        observed_flags.append(flags)
+        # Assert before opening: a broken nonblocking guard must fail the test
+        # rather than indefinitely waiting for a nonexistent FIFO writer.
+        assert flags & os.O_NONBLOCK
+        return real_open(fifo, flags)
+
+    monkeypatch.setattr(training_routes.os, "open", substitute_open)
+    with pytest.raises(HTTPException) as error:
+        training_routes._training_log_tail("training.log", tmp_path)
+    assert error.value.status_code == 403
+    assert len(observed_flags) == 1
+    assert log.read_bytes() == original
+
+
+def test_log_tail_rejects_truncation_between_stat_and_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A shortened log is not a valid append-only training snapshot."""
+    log = tmp_path / "training.log"
+    original = b"epoch=4\ntrain/box_loss=0.25\n"
+    shortened = b"epoch=4\n"
+    log.write_bytes(original)
+    real_open = training_routes._open_training_log
+
+    def truncate_before_open(path: Path):
+        log.write_bytes(shortened)
+        return real_open(path)
+
+    monkeypatch.setattr(training_routes, "_open_training_log", truncate_before_open)
+    with pytest.raises(HTTPException) as error:
+        training_routes._training_log_tail("training.log", tmp_path)
+    assert error.value.status_code == 403
+    assert log.read_bytes() == shortened
 
 
 def test_log_tail_discards_truncated_first_metric_line(tmp_path: Path) -> None:
@@ -1160,7 +1219,9 @@ def test_log_tail_rejects_same_inode_rewrite_hidden_by_append(
         handle = original_open(path, mode, *args, **kwargs)
         return RacingReadOnlyHandle(handle) if path == log and mode == "rb" else handle
 
-    monkeypatch.setattr(Path, "open", racing_open)
+    monkeypatch.setattr(
+        training_routes, "_open_training_log", lambda path: racing_open(path, "rb")
+    )
     with pytest.raises(HTTPException) as error:
         training_routes._training_log_tail("training.log", tmp_path)
     assert error.value.status_code == 403
