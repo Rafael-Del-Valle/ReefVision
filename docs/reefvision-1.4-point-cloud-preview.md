@@ -744,3 +744,12 @@ across two replays of an executable persisted typed Workflow Builder graph.
 Complete source evidence, calibration status, and human-verification flags
 remain intact. Representative coral, independent reviewer and
 installed Windows MSI/CAB/GUI/GPU acceptance remain release gates.
+
+
+## XYZ-marginal exact total-variation audit (November 23, 2026)
+
+Colored ASCII PLY preview artifacts now separately report `preview_vs_source_xyz_locus_total_variation` and `preview_vs_source_xyz_locus_total_variation_exact_fraction`, calculated from acquisition-row frequencies at each exact source XYZ locus versus the bounded display sample. `preview_xyz_rgb_vs_xyz_marginal_tv_gap` and its exact reduced-fraction counterpart subtract that XYZ-only variation from the joint XYZ/RGB observation variation. Both calculations use integer cross-products and rational arithmetic before the optional floating-point display value. By marginalization, the joint variation cannot be less than the XYZ-only variation.
+
+`preview_shifts_xyz_locus_frequency_distribution` flags nonzero XYZ-frequency distortion; `preview_xyz_rgb_tv_exceeds_xyz_marginal_tv` flags additional distortion concealed by aggregating observed RGB values at each XYZ coordinate. The previously reported RGB-only marginal and joint-minus-RGB diagnostics remain independent: a balanced RGB histogram may conceal spatial sampling loss, whereas a balanced XYZ histogram may conceal selective omission of raw color variants acquired at the same position. A complete RGB palette or XYZ set does not guarantee faithful acquisition-row frequencies.
+
+Synthetic regressions independently calculate the exact fractions for 600-row colored PLY previews, with balanced XYZ frequencies and one omitted rare color, balanced RGB frequencies but omitted spatial acquisitions, and a uniform-color spatial-only control. The standalone project endpoint and twice-executed saved, typed `point_cloud_preview` Workflow Builder graph must produce identical full scientific artifacts and SHA-256 fingerprints. These are **display-decimation provenance and QC diagnostics only**: repeated acquisitions are not independent biological replicates, raw RGB values are not calibrated reflectance or tissue-condition measurements, and the analysis does not verify 3D registration, specimen identity, or coral health. Original PLY source hashes and the provisional calibration/review boundaries remain unchanged.
