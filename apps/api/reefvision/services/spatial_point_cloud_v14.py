@@ -97,18 +97,21 @@ def _minimum_joint_locus_color_cover(
     required_slots = len(mandatory) + max(len(missing_loci), len(missing_colors))
     if required_slots > MAX_PREVIEW_POINTS:
         raise ValueError("Protected point indices exceed the display budget")
-    candidate_rows: dict[tuple[float, float, float], list[int]] = {
-        locus: [] for locus in missing_loci
+    # Parallel acquisitions of the same locus/color edge do not improve a
+    # matching. Keep the first original index per edge in acquisition order;
+    # independently mandatory duplicate rows have already been reserved.
+    candidate_rows: dict[tuple[float, float, float], dict[tuple[int, ...], int]] = {
+        locus: {} for locus in missing_loci
     }
     for index, (locus, rgb) in enumerate(zip(vertices, colors, strict=True)):
-        if locus in candidate_rows and tuple(rgb) in missing_colors:
-            candidate_rows[locus].append(index)
+        color_key = tuple(rgb)
+        if locus in candidate_rows and color_key in missing_colors:
+            candidate_rows[locus].setdefault(color_key, index)
     matched_color_locus: dict[tuple[int, ...], tuple[float, float, float]] = {}
     matched_locus_row: dict[tuple[float, float, float], int] = {}
 
     def augment(locus: tuple[float, float, float], visited: set[tuple[int, ...]]) -> bool:
-        for index in candidate_rows[locus]:
-            rgb = tuple(colors[index])
+        for rgb, index in candidate_rows[locus].items():
             if rgb in visited:
                 continue
             visited.add(rgb)
