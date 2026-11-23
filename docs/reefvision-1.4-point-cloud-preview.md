@@ -718,3 +718,29 @@ replicates, or verified specimen identity. Synthetic controls distinguish
 frequency bias with exactly constant raw RGB frequencies. Standalone endpoint
 results and twice-executed persisted executable typed Workflow Builder
 scientific artifacts remain under deterministic SHA-256 regression checks.
+
+### Exact spatial-versus-color preview TV gap (November 23, 2026)
+
+For a colored PLY preview, the joint XYZ/RGB acquisition-row distribution
+cannot have less total-variation distance from its source than the marginal
+RGB-triplet frequency distribution: discarding XYZ cannot increase total
+variation. `preview_xyz_rgb_vs_rgb_marginal_tv_gap` is the nonnegative
+difference between these two distances. Its companion
+`preview_xyz_rgb_vs_rgb_marginal_tv_gap_exact_fraction` retains the reduced,
+integer-count rational witness. A positive difference emits
+`preview_xyz_rgb_tv_exceeds_rgb_marginal_tv`. This diagnostic identifies
+spatial observation-frequency variation that a color-only frequency
+comparison **cannot reveal**; it is not an additive attribution of variance,
+a spatial-registration measure, an estimate of missing coral tissue, or a
+calibrated color/health metric.
+
+Synthetic checks cover two limiting cases: a 600-row acquisition in which
+raw RGB frequencies remain exactly balanced while 88 of 600 observations
+at different XYZ loci are hidden (TV gap = 11/75), and another in which
+each color uniquely identifies its XYZ/RGB pair (TV gap = 0 despite
+nonzero sampling variation). The tests assert exact fractions, QC warnings,
+the standalone imported PLY API, and full JSON/SHA-256 artifact parity
+across two replays of an executable persisted typed Workflow Builder graph.
+Complete source evidence, calibration status, and human-verification flags
+remain intact. Representative coral, independent reviewer and
+installed Windows MSI/CAB/GUI/GPU acceptance remain release gates.
