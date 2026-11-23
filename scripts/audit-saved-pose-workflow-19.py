@@ -50,6 +50,8 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
         ExperimentRecord,
         Job,
         ModelRegistration,
+        PoseLandmarkSchemaRevision,
+        PoseModelSchemaBinding,
         PoseTrainingDataset,
         PoseTrainingDatasetItem,
         TrainingRun,
@@ -328,6 +330,25 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 "Model is not registered",
             )
             _require(model.task == "pose", "Registered model is not a pose model")
+            # The registration service independently binds the model to a
+            # concrete landmark-schema revision. Metadata alone can remain
+            # checksum-consistent after that binding is deleted or relinked.
+            binding = session.get(PoseModelSchemaBinding, model.id)
+            revision = session.scalar(
+                select(PoseLandmarkSchemaRevision).where(
+                    PoseLandmarkSchemaRevision.schema_id == dataset.pose_schema_id,
+                    PoseLandmarkSchemaRevision.revision == dataset.pose_schema_revision,
+                )
+            )
+            _require(
+                binding is not None
+                and binding.schema_id == dataset.pose_schema_id
+                and binding.schema_revision == dataset.pose_schema_revision
+                and revision is not None
+                and revision.content_hash == dataset.pose_schema_content_hash
+                and revision.keypoint_count > 0,
+                "Registered pose model binding or frozen landmark revision changed",
+            )
             _require(
                 model.sha256 == registered.get("model_sha256"),
                 "Model registration digest changed",
