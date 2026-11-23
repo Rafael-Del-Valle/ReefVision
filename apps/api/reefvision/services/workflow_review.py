@@ -17,6 +17,7 @@ from reefvision.db.models import (
     VideoAsset,
     VideoTrack,
     WorkflowArtifact,
+    WorkflowGraphRecord,
     WorkflowNodeRun,
     WorkflowRun,
 )
@@ -67,6 +68,75 @@ REVIEW_GATE_INPUT_TYPES: dict[str, frozenset[str]] = {
 }
 
 
+
+def _verify_review_graph_binding(
+    session: Session,
+    node_run: WorkflowNodeRun,
+    producer: WorkflowNodeRun,
+    artifact: WorkflowArtifact,
+    *,
+    project_id: str,
+) -> None:
+    """Bind an approval to its immutable saved graph edge, not only a producer row.
+
+    A re-signed artifact from another succeeded node in the same run must not
+    replace the research cohort originally wired to the human-review gate.
+    """
+    run = session.get(WorkflowRun, node_run.workflow_run_id)
+    graph = (
+        session.get(WorkflowGraphRecord, run.workflow_graph_record_id)
+        if run is not None
+        else None
+    )
+    graph_json = graph.graph_json if graph is not None else None
+    if (
+        run is None
+        or run.project_id != project_id
+        or graph is None
+        or graph.project_id != project_id
+        or graph.graph_sha256 != run.graph_sha256
+        or not isinstance(graph_json, dict)
+        or canonical_json_sha256(graph_json) != graph.graph_sha256
+    ):
+        raise ValidationError("Workflow review saved graph provenance failed validation")
+
+    nodes = graph_json.get("nodes")
+    edges = graph_json.get("edges")
+    if not isinstance(nodes, list) or not isinstance(edges, list):
+        raise ValidationError("Workflow review saved graph is missing node or edge evidence")
+
+    review_nodes = [
+        item
+        for item in nodes
+        if isinstance(item, dict) and item.get("node_id") == node_run.node_id
+    ]
+    producer_nodes = [
+        item
+        for item in nodes
+        if isinstance(item, dict) and item.get("node_id") == producer.node_id
+    ]
+    if (
+        len(review_nodes) != 1
+        or review_nodes[0].get("node_type") != node_run.node_type
+        or len(producer_nodes) != 1
+        or producer_nodes[0].get("node_type") != producer.node_type
+    ):
+        raise ValidationError("Workflow review node or producer differs from saved graph")
+
+    incoming = [
+        edge
+        for edge in edges
+        if isinstance(edge, dict) and edge.get("target_node_id") == node_run.node_id
+    ]
+    if (
+        len(incoming) != 1
+        or incoming[0].get("source_node_id") != producer.node_id
+        or incoming[0].get("source_port_id") != artifact.producer_port_id
+        or not isinstance(incoming[0].get("target_port_id"), str)
+        or not incoming[0]["target_port_id"]
+    ):
+        raise ValidationError("Workflow review input is not connected to its saved graph edge")
+
 def _input_artifacts(
     session: Session, node_run: WorkflowNodeRun, *, project_id: str
 ) -> list[WorkflowArtifact]:
@@ -96,6 +166,9 @@ def _input_artifacts(
         or artifact.id not in producer.output_artifact_ids_json
     ):
         raise ValidationError("Workflow review input lost its saved producer provenance")
+    _verify_review_graph_binding(
+        session, node_run, producer, artifact, project_id=project_id
+    )
     payload = artifact.payload_json
     if (
         not isinstance(payload, dict)

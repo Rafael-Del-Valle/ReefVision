@@ -9,7 +9,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import Job, WorkflowArtifact, WorkflowNodeRun
+from reefvision.db.models import (
+    Job,
+    WorkflowArtifact,
+    WorkflowGraphRecord,
+    WorkflowNodeRun,
+    WorkflowRun,
+)
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.workflow_review import _input_artifacts, _pending_review_count
@@ -182,3 +188,82 @@ def test_standalone_review_rejects_repeated_prediction_evidence(
         pytest.raises(ValidationError, match="duplicate prediction identifiers"),
     ):
         _pending_review_count(session, [artifact], project_id="synthetic-project")
+
+
+@pytest.mark.parametrize(
+    ("alteration", "error_text"),
+    [
+        ("foreign_same_run_producer", "not connected to its saved graph edge"),
+        ("wrong_output_port", "not connected to its saved graph edge"),
+        ("wrong_producer_type", "node or producer differs from saved graph"),
+        ("changed_graph_without_hash", "saved graph provenance failed validation"),
+        ("changed_run_graph_hash", "saved graph provenance failed validation"),
+    ],
+)
+def test_saved_review_rejects_rebound_graph_or_borrowed_producer(
+    client: TestClient, alteration: str, error_text: str
+) -> None:
+    """Standalone and persisted workflow review cannot approve rewired biological input."""
+    project, run_id, job_id = _queue_seeded_review_run(client)
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id)
+    paused = client.get(f"/api/v1/workflow-runs/{run_id}").json()
+    assert paused["run"]["status"] == "waiting_for_review"
+    review_id = next(node["id"] for node in paused["nodes"] if node["node_id"] == "review")
+
+    with app.state.session_factory() as session:
+        run = session.get(WorkflowRun, run_id)
+        review = session.get(WorkflowNodeRun, review_id)
+        assert run is not None and review is not None
+        artifact = session.get(WorkflowArtifact, review.input_artifact_ids_json[0])
+        assert artifact is not None
+        producer = session.get(WorkflowNodeRun, artifact.producer_node_run_id)
+        assert producer is not None
+        graph = session.get(WorkflowGraphRecord, run.workflow_graph_record_id)
+        assert graph is not None
+        if alteration == "foreign_same_run_producer":
+            # A different succeeded node can claim the intact, correctly hashed
+            # artifact and publish it as its own output. Only the saved edge
+            # proves that the review gate was supposed to consume consensus.
+            unrelated = session.scalar(
+                select(WorkflowNodeRun).where(
+                    WorkflowNodeRun.workflow_run_id == run_id,
+                    WorkflowNodeRun.node_id == "detect",
+                )
+            )
+            assert unrelated is not None and unrelated.status == "succeeded"
+            producer.output_artifact_ids_json = []
+            unrelated.output_artifact_ids_json = [artifact.id]
+            artifact.producer_node_run_id = unrelated.id
+        elif alteration == "wrong_output_port":
+            artifact.producer_port_id = "unconnected-output"
+        elif alteration == "wrong_producer_type":
+            producer.node_type = "detection_inference"
+        elif alteration == "changed_graph_without_hash":
+            graph.graph_json = {**graph.graph_json, "name": "Unreviewed replacement graph"}
+        else:
+            run.graph_sha256 = "f" * 64
+        session.commit()
+
+    # Direct service caller and normal executable, persisted review endpoint
+    # must reach the same fail-closed result.
+    with app.state.session_factory() as session:
+        review = session.get(WorkflowNodeRun, review_id)
+        assert review is not None
+        with pytest.raises(ValidationError, match=error_text):
+            _input_artifacts(session, review, project_id=str(project["id"]))
+
+    resumed = client.post(
+        f"/api/v1/workflow-node-runs/{review_id}/resume-review",
+        json={"reviewed_by": "scientist", "note": "Do not approve changed source"},
+    )
+    assert resumed.status_code == 400, resumed.text
+    assert error_text in resumed.json()["detail"]
+    after = client.get(f"/api/v1/workflow-runs/{run_id}").json()
+    assert after["run"]["status"] == "waiting_for_review"
+    review_status = next(node for node in after["nodes"] if node["id"] == review_id)
+    assert review_status["status"] == "waiting_for_review"
+    assert "review_approval" not in (review_status["result_json"] or {})
+    with app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None and job.status == "waiting_for_review"
