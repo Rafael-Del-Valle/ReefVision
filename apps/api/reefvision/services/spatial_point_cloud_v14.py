@@ -1349,16 +1349,22 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         # integer cross-products, avoiding floating-point equality artifacts.
         source_pair_counts: dict[tuple[tuple[float, ...], tuple[int, ...]], int] = {}
         source_rgb_counts: dict[tuple[int, ...], int] = {}
+        source_xyz_counts: dict[tuple[float, ...], int] = {}
         for point, rgb in zip(points, point_colors, strict=True):
             pair = (tuple(point), tuple(rgb))
             source_pair_counts[pair] = source_pair_counts.get(pair, 0) + 1
+            locus = tuple(point)
+            source_xyz_counts[locus] = source_xyz_counts.get(locus, 0) + 1
             color = tuple(rgb)
             source_rgb_counts[color] = source_rgb_counts.get(color, 0) + 1
         preview_pair_counts: dict[tuple[tuple[float, ...], tuple[int, ...]], int] = {}
         preview_rgb_counts: dict[tuple[int, ...], int] = {}
+        preview_xyz_counts: dict[tuple[float, ...], int] = {}
         for index in result["preview_point_indices"]:
             pair = (tuple(points[index]), tuple(point_colors[index]))
             preview_pair_counts[pair] = preview_pair_counts.get(pair, 0) + 1
+            locus = tuple(points[index])
+            preview_xyz_counts[locus] = preview_xyz_counts.get(locus, 0) + 1
             color = tuple(point_colors[index])
             preview_rgb_counts[color] = preview_rgb_counts.get(color, 0) + 1
         represented_source_rows = sum(source_pair_counts[pair] for pair in preview_pairs)
@@ -1383,6 +1389,20 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
         )
         rgb_frequency_total_variation_exact = Fraction(
             rgb_frequency_shift_numerator, 2 * len(points) * displayed_row_count
+        )
+        # Marginalizing XYZ/RGB pairs to source XYZ loci cannot increase
+        # total variation either. This complementary exact diagnostic reveals
+        # raw RGB acquisition-frequency distortion hidden by a spatially
+        # balanced XYZ histogram; it is not calibrated biological color.
+        xyz_frequency_shift_numerator = sum(
+            abs(source_count * displayed_row_count - preview_xyz_counts.get(locus, 0) * len(points))
+            for locus, source_count in source_xyz_counts.items()
+        )
+        xyz_frequency_total_variation_exact = Fraction(
+            xyz_frequency_shift_numerator, 2 * len(points) * displayed_row_count
+        )
+        xyz_rgb_vs_xyz_marginal_tv_gap = (
+            frequency_total_variation_exact - xyz_frequency_total_variation_exact
         )
         # Marginalizing XYZ/RGB pairs to RGB triplets cannot increase total
         # variation. This exact nonnegative gap detects spatial sampling bias
@@ -1456,12 +1476,22 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
                 rgb_frequency_total_variation_exact.numerator,
                 rgb_frequency_total_variation_exact.denominator,
             ],
-            "preview_xyz_rgb_vs_rgb_marginal_tv_gap": float(
-                xyz_rgb_vs_rgb_marginal_tv_gap
-            ),
+            "preview_xyz_rgb_vs_rgb_marginal_tv_gap": float(xyz_rgb_vs_rgb_marginal_tv_gap),
             "preview_xyz_rgb_vs_rgb_marginal_tv_gap_exact_fraction": [
                 xyz_rgb_vs_rgb_marginal_tv_gap.numerator,
                 xyz_rgb_vs_rgb_marginal_tv_gap.denominator,
+            ],
+            "preview_vs_source_xyz_locus_total_variation": float(
+                xyz_frequency_total_variation_exact
+            ),
+            "preview_vs_source_xyz_locus_total_variation_exact_fraction": [
+                xyz_frequency_total_variation_exact.numerator,
+                xyz_frequency_total_variation_exact.denominator,
+            ],
+            "preview_xyz_rgb_vs_xyz_marginal_tv_gap": float(xyz_rgb_vs_xyz_marginal_tv_gap),
+            "preview_xyz_rgb_vs_xyz_marginal_tv_gap_exact_fraction": [
+                xyz_rgb_vs_xyz_marginal_tv_gap.numerator,
+                xyz_rgb_vs_xyz_marginal_tv_gap.denominator,
             ],
             "preview_repeated_xyz_rgb_observation_rows": repeated_preview_pair_rows,
             "fraction_of_source_xyz_rgb_pairs_displayed": (len(preview_pairs) / len(source_pairs)),
@@ -1511,6 +1541,10 @@ def preview_point_cloud_from_request(payload: Any) -> dict[str, Any]:
             result["qc_warnings"].append("preview_shifts_rgb_triplet_frequency_distribution")
         if xyz_rgb_vs_rgb_marginal_tv_gap > 0:
             result["qc_warnings"].append("preview_xyz_rgb_tv_exceeds_rgb_marginal_tv")
+        if xyz_frequency_shift_numerator:
+            result["qc_warnings"].append("preview_shifts_xyz_locus_frequency_distribution")
+        if xyz_rgb_vs_xyz_marginal_tv_gap > 0:
+            result["qc_warnings"].append("preview_xyz_rgb_tv_exceeds_xyz_marginal_tv")
     else:
         result["preview_rgb_variant_support"] = None
     result["provenance"]["source_format"] = source_format
