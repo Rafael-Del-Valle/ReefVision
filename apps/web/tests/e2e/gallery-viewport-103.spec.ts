@@ -742,6 +742,46 @@ test("initial image and gallery scrolling", async ({ page }) => {
   ).toEqual(fittedPageBefore);
   expect(await focused.boundingBox()).toEqual(fittedImageBefore);
   await assertDecodedAndContained(1600, 1200);
+
+  // A short gallery has no internal scroll range. Native finger gestures must
+  // still be contained: checking wheel preventDefault alone misses compositor
+  // pan gestures that can escape into the page in an installed WebView2.
+  // The page can scroll in both axes (asserted by enableDocumentScrollProbe).
+  const fittedTouchBounds = await filmstrip.boundingBox();
+  expect(fittedTouchBounds).not.toBeNull();
+  const fittedTouchPageBefore = await page.evaluate(() => ({
+    x: window.scrollX,
+    y: window.scrollY,
+  }));
+  const fittedTouchImageSource = await focused.getAttribute("src");
+  const fittedTouchImageBounds = await focused.boundingBox();
+  const fittedTouchSession = await page.context().newCDPSession(page);
+  try {
+    await fittedTouchSession.send("Emulation.setTouchEmulationEnabled", {
+      enabled: true,
+      maxTouchPoints: 1,
+    });
+    const x = Math.round(fittedTouchBounds!.x + fittedTouchBounds!.width / 2);
+    const y = Math.round(fittedTouchBounds!.y + fittedTouchBounds!.height / 2);
+    await dispatchNativeTouchPan(fittedTouchSession, x, y, "vertical");
+    await dispatchNativeTouchPan(fittedTouchSession, x, y, "horizontal");
+  } finally {
+    await fittedTouchSession.detach();
+  }
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  expect(await scrollOffset()).toBe(fittedScrollBefore);
+  expect(
+    await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY })),
+  ).toEqual(fittedTouchPageBefore);
+  expect(await focused.getAttribute("src")).toBe(fittedTouchImageSource);
+  expect(await focused.boundingBox()).toEqual(fittedTouchImageBounds);
+  await assertDecodedAndContained(1600, 1200);
+
   await filmstrip.evaluate((element, displays) => {
     Array.from(element.children).forEach((child, index) => {
       (child as HTMLElement).style.display = displays[index] ?? "";
