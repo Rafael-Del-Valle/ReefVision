@@ -619,6 +619,50 @@ test("initial image and gallery scrolling", async ({ page }) => {
   ).toEqual(pageAtFilmstripEnd);
   await assertDecodedAndContained(1600, 1200);
 
+  // Native finger/precision-touch gestures can bypass the JavaScript wheel
+  // handler in WebView2. At the LAST thumbnail, both vertical and rightward
+  // horizontal compositor pans must stay inside the filmstrip instead of
+  // scrolling the document or changing the source-resolution image.
+  // The document's two-axis scrollability was positively verified above.
+  const stripTouchBounds = await filmstrip.boundingBox();
+  expect(stripTouchBounds).not.toBeNull();
+  const stripTouchBefore = await scrollOffset();
+  const pageBeforeStripTouch = await page.evaluate(() => ({
+    x: window.scrollX,
+    y: window.scrollY,
+  }));
+  const focusedSourceBeforeStripTouch = await focused.getAttribute("src");
+  const focusedBoundsBeforeStripTouch = await focused.boundingBox();
+  await page.bringToFront();
+  const stripTouchSession = await page.context().newCDPSession(page);
+  try {
+    await stripTouchSession.send("Emulation.setTouchEmulationEnabled", {
+      enabled: true,
+      maxTouchPoints: 1,
+    });
+    const x = Math.round(stripTouchBounds!.x + stripTouchBounds!.width / 2);
+    const y = Math.round(stripTouchBounds!.y + stripTouchBounds!.height / 2);
+    await dispatchNativeTouchPan(stripTouchSession, x, y, "vertical");
+    await dispatchNativeTouchPan(stripTouchSession, x, y, "horizontal");
+  } finally {
+    await stripTouchSession.detach();
+  }
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  expect(await scrollOffset()).toBe(stripTouchBefore);
+  expect(
+    await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY })),
+  ).toEqual(pageBeforeStripTouch);
+  expect(await focused.getAttribute("src")).toBe(
+    focusedSourceBeforeStripTouch,
+  );
+  expect(await focused.boundingBox()).toEqual(focusedBoundsBeforeStripTouch);
+  await assertDecodedAndContained(1600, 1200);
+
   // When the thumbnail strip fits, wheel input must still be consumed by the
   // gallery rather than scrolling the document behind the first camera image.
   // Temporarily hide surplus buttons to exercise the no-overflow branch in
