@@ -200,7 +200,6 @@ def test_skip_migrations_rejects_orphaned_references_at_valid_head_without_repai
         )
 
 
-
 def test_skip_migrations_lineage_and_revision_are_read_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -222,7 +221,7 @@ def test_skip_migrations_lineage_and_revision_are_read_only(
 
     def verify_read_only(connection: Connection) -> None:
         # A write-capable SQLAlchemy engine would silently accept this DDL.
-        with pytest.raises(OperationalError, match="readonly|read-only"):
+        with pytest.raises(OperationalError, match=r"readonly|read-only"):
             connection.exec_driver_sql("CREATE TABLE unexpected_scientific_write (id INTEGER)")
         verified_guard(connection)
 
@@ -238,9 +237,7 @@ def test_skip_migrations_lineage_and_revision_are_read_only(
     desktop.require_existing_desktop_schema(settings)
     assert database_path.read_bytes() == original_bytes
     with sqlite3.connect(database_path) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0041",
-        )
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0041",)
         assert connection.execute("SELECT note FROM preserved_observations").fetchone() == (
             "Swiftia review evidence",
         )
