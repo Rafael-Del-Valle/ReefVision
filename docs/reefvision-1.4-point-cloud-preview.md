@@ -780,3 +780,27 @@ the dropped repeated row. These are bounds on raw sensor/acquisition evidence,
 not limits on reconstructed coral morphology or verified tissue condition.
 Calibration, specimen identity, and biological interpretation remain
 provisional.
+
+
+## Opt-in distinct raw RGB-triplet retention (November 23, 2026)
+
+Colored ASCII PLY previews can request `preserve_distinct_rgb_triplets_in_preview=true`
+through the standalone project endpoint or a persisted executable typed
+`point_cloud_preview` Workflow Builder graph. This pins one original source
+acquisition row per **distinct uint8 RGB triplet**, even if many different XYZ
+locations or XYZ/RGB pairs share the same raw color. It differs from the
+existing stricter `preserve_distinct_xyz_rgb_pairs_in_preview` option, which
+requires a row for every distinct location/color combination. Neither option
+alters the unabridged source acquisition, the calibration, or measured geometry.
+
+The 512-row preview budget remains strict. An uncolored XYZ request cannot ask
+for RGB preservation. More than 512 distinct source RGB colors, or a combination
+of other protected requirements whose selected original rows exceed the budget,
+**fails closed** instead of silently omitting a protected color. A feasible
+512-color source with repeated colors retains every raw triplet, but it need
+not retain every XYZ observation or reproduce acquisition-row frequencies.
+`preview_distinct_rgb_triplets_preservation_requested` and the sampling
+strategy record the opt-in choice; existing palette-coverage, exact total-
+variation, source-fingerprint, QC and human-verification fields remain in the
+result. Raw camera colors do **not** establish verified reflectance, coral
+health, tissue condition, specimen reidentification or biological replication.
