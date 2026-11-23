@@ -391,6 +391,7 @@ def test_camera_import_never_promotes_conflicting_ifd0_exposure_to_utc(
         assert "UTC capture timestamp not inferred" in inspected.metadata["capture_time_warning"]
     assert path.read_bytes() == original
 
+
 @pytest.mark.parametrize(
     "filename",
     [
