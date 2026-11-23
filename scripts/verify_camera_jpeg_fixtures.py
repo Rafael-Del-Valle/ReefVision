@@ -650,6 +650,64 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
     return records, errors
 
 
+
+def compare_source_manifest(
+    root: Path, current: list[dict[str, object]], baseline: object
+) -> list[str]:
+    """Fail closed if the approved camera source set changed since inventory.
+
+    This checks a caller-supplied baseline, not its authenticity. Store the
+    baseline and its independent hash outside the fixture tree before import.
+    """
+    if not isinstance(baseline, dict):
+        return ["baseline JPEG manifest must be a JSON object"]
+    if baseline.get("root") != str(root):
+        return ["baseline JPEG manifest root differs from the inspected directory"]
+    if baseline.get("errors") != []:
+        return ["baseline JPEG manifest has missing or nonempty error evidence"]
+    source_files = baseline.get("files")
+    if not isinstance(source_files, list) or not source_files:
+        return ["baseline JPEG manifest must contain at least one source file"]
+
+    expected: dict[str, tuple[int, str]] = {}
+    for entry in source_files:
+        if not isinstance(entry, dict):
+            return ["baseline JPEG manifest contains a non-object file entry"]
+        relative, size, checksum = (
+            entry.get("path"), entry.get("bytes"), entry.get("sha256")
+        )
+        if (
+            not isinstance(relative, str)
+            or not relative
+            or "\\" in relative
+            or relative.startswith("/")
+            or any(component in ("", ".", "..") for component in relative.split("/"))
+            or Path(relative).suffix.lower() not in JPEG_SUFFIXES
+            or type(size) is not int
+            or size < 0
+            or not isinstance(checksum, str)
+            or re.fullmatch(r"[0-9a-f]{64}", checksum) is None
+            or entry.get("jpeg_boundary_markers") is not True
+        ):
+            return ["baseline JPEG manifest contains malformed source-file evidence"]
+        if relative in expected:
+            return ["baseline JPEG manifest contains duplicate source-file paths"]
+        expected[relative] = (size, checksum)
+
+    actual = {str(record["path"]): record for record in current}
+    errors: list[str] = []
+    for relative in sorted(expected.keys() - actual.keys()):
+        errors.append(f"source JPEG missing since baseline: {relative!r}")
+    for relative in sorted(actual.keys() - expected.keys()):
+        errors.append(f"source JPEG added since baseline: {relative!r}")
+    for relative in sorted(actual.keys() & expected.keys()):
+        record = actual[relative]
+        if (record["bytes"], record["sha256"]) != expected[relative]:
+            errors.append(f"source JPEG bytes changed since baseline: {relative!r}")
+    return errors
+
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path, help="Camera fixture directory (read-only)")
@@ -657,6 +715,11 @@ def main() -> int:
         "--verify-decode",
         action="store_true",
         help="Also require Pillow to decode every JPEG pixel stream (read-only).",
+    )
+    parser.add_argument(
+        "--compare-manifest",
+        type=Path,
+        help="Compare exact source filenames, sizes and SHA-256 against a saved JSON inventory (read-only).",
     )
     args = parser.parse_args()
     # Reject a linked root before resolve() can silently follow it outside the
@@ -673,6 +736,19 @@ def main() -> int:
     if not root.is_dir():
         parser.error("directory must be a directory")
     records, errors = inventory(root, verify_decode=args.verify_decode)
+    if args.compare_manifest is not None:
+        try:
+            # Bound untrusted JSON input; a camera-fixture inventory should
+            # never require reading an arbitrarily large baseline into memory.
+            with args.compare_manifest.open("rb") as stream:
+                baseline_bytes = stream.read(32 * 1024 * 1024 + 1)
+            if len(baseline_bytes) > 32 * 1024 * 1024:
+                raise ValueError("baseline JPEG manifest exceeds 32 MiB")
+            baseline = json.loads(baseline_bytes)
+        except (OSError, ValueError, UnicodeError) as exc:
+            errors.append(f"cannot read baseline JPEG manifest: {type(exc).__name__}")
+        else:
+            errors.extend(compare_source_manifest(root, records, baseline))
     print(json.dumps({"root": str(root), "files": records, "errors": errors},
                      indent=2, sort_keys=True))
     return 1 if errors else 0
