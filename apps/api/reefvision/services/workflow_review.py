@@ -263,31 +263,43 @@ def pose_temporal_review_status(
     if payload.get("project_id") not in {None, project_id}:
         raise ValidationError("Pose Review received temporal tracks from another project")
 
-    raw_track_ids = payload.get("track_ids", [])
+    raw_track_ids = payload.get("track_ids")
 
-    if not isinstance(raw_track_ids, list):
-        raise ValidationError("Pose Review artifact track_ids are invalid")
+    # A reviewed scientific cohort must not silently discard malformed or
+    # repeated identifiers. Every stored temporal build is evidence for one
+    # specific source track at the revision used to create its association.
+    if (
+        not isinstance(raw_track_ids, list)
+        or any(type(track_id) is not str or not track_id for track_id in raw_track_ids)
+        or len(raw_track_ids) != len(set(raw_track_ids))
+    ):
+        raise ValidationError("Pose Review artifact has invalid or duplicate track identifiers")
 
-    track_ids = list(
-        dict.fromkeys(str(value) for value in raw_track_ids if isinstance(value, str) and value)
-    )
-
+    track_ids = list(raw_track_ids)
     if not track_ids:
         raise ValidationError("Pose Review requires at least one temporal pose track")
+    if type(payload.get("count")) is not int or payload["count"] != len(track_ids):
+        raise ValidationError("Pose Review source track count does not match saved evidence")
+
+    raw_builds = payload.get("builds")
+    if not isinstance(raw_builds, list) or len(raw_builds) != len(track_ids):
+        raise ValidationError("Pose Review requires one saved temporal build per track")
 
     expected_revisions: dict[str, int] = {}
-
-    raw_builds = payload.get("builds", [])
-    if isinstance(raw_builds, list):
-        for raw in raw_builds:
-            if not isinstance(raw, dict):
-                continue
-
-            track_id = str(raw.get("parent_video_track_id") or "")
-            revision = raw.get("source_track_revision")
-
-            if track_id and isinstance(revision, int) and revision >= 1:
-                expected_revisions[track_id] = revision
+    for raw in raw_builds:
+        if not isinstance(raw, dict):
+            raise ValidationError("Pose Review has invalid saved temporal build evidence")
+        track_id = raw.get("parent_video_track_id")
+        revision = raw.get("source_track_revision")
+        if (
+            type(track_id) is not str
+            or track_id not in track_ids
+            or track_id in expected_revisions
+            or type(revision) is not int
+            or revision < 1
+        ):
+            raise ValidationError("Pose Review has missing or ambiguous temporal build lineage")
+        expected_revisions[track_id] = revision
 
     service = PoseTemporalTrackingService(session)
 
