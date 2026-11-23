@@ -13,12 +13,12 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from reefvision.tests.test_images import create_project, import_one
 from reefvision.storage.images import (
     InvalidImageError,
     ensure_supported_extension,
     inspect_staged_image,
 )
+from reefvision.tests.test_images import create_project, import_one
 
 
 @pytest.mark.parametrize(
