@@ -45,3 +45,25 @@ of the 1.1/1.6 Alembic-0038 collision, representative biological saved-workflow
 science review, genuine Windows MSI/CAB clean installation, upgrade/rollback
 and installed-GUI validation, and explicit researcher acceptance. No merge,
 tag, release, deployment, paid hosting or asset deletion is authorized.
+
+## 2026-11-23: unique model-prediction evidence (release HOLD)
+
+The review-gate audit found an independent scientific integrity gap in the
+already-typed saved input payload: duplicate IDs in `proposal_ids` or
+`prediction_ids` were silently collapsed into a set. This could mask
+malformed exported prediction evidence and make the saved model-output count
+disagree with the actual reviewed observations. After existing string and
+nonblank validation, all supported proposal and classification inputs now
+reject repeated identifiers **before** any approval or evidence count. This
+does not reject a legitimate empty list or require pretrained downloads, and
+does not alter older saved graphs or source observations.
+
+Regression coverage includes a *persisted and executable* review workflow with
+a rehashed but duplicate-ID input artifact, asserting an HTTP 400 refusal,
+the original waiting review/run/job status and no fabricated approval; plus
+standalone checks for detection, mask and classification prediction lists.
+The existing positive saved-workflow resume/finish test covers compatibility.
+No migration or new Workflow Builder node is required because this strengthens
+the execution-time validator for existing typed artifacts; explicit human
+review remains mandatory. Passing full exact-head CI and real Windows
+installed-GUI scientific acceptance must be verified before release.
