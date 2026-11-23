@@ -130,10 +130,10 @@ def _minimum_joint_locus_color_cover(
             covered.add(index)
             covered_loci.add(locus)
             covered_colors.add(tuple(colors[index]))
-    for rgb, index in first_color.items():
-        if rgb not in covered_colors:
+    for color_key, index in first_color.items():
+        if color_key not in covered_colors:
             covered.add(index)
-            covered_colors.add(rgb)
+            covered_colors.add(color_key)
     return covered
 
 
