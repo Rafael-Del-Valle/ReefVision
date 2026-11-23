@@ -53,6 +53,7 @@ const dispatchNativeTouchPan = async (
   session: import("@playwright/test").CDPSession,
   x: number,
   startY: number,
+  direction: "vertical" | "horizontal" = "vertical",
 ) => {
   await session.send("Input.dispatchTouchEvent", {
     type: "touchStart",
@@ -62,7 +63,13 @@ const dispatchNativeTouchPan = async (
     for (let delta = 10; delta <= 140; delta += 10) {
       await session.send("Input.dispatchTouchEvent", {
         type: "touchMove",
-        touchPoints: [{ x, y: startY - delta, id: 1 }],
+        touchPoints: [
+          {
+            x: direction === "horizontal" ? x - delta : x,
+            y: direction === "vertical" ? startY - delta : startY,
+            id: 1,
+          },
+        ],
       });
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
@@ -390,15 +397,18 @@ test("initial image and gallery scrolling", async ({ page }) => {
     x: window.scrollX,
     y: window.scrollY,
   }));
+  await page.bringToFront();
   const touchSession = await page.context().newCDPSession(page);
   try {
-    await touchSession.send("Input.synthesizeScrollGesture", {
-      x: Math.round(touchStart!.x + touchStart!.width / 2),
-      y: Math.round(touchStart!.y + touchStart!.height / 2),
-      yDistance: -380,
-      gestureSourceType: "touch",
-      speed: 800,
+    await touchSession.send("Emulation.setTouchEmulationEnabled", {
+      enabled: true,
+      maxTouchPoints: 1,
     });
+    await dispatchNativeTouchPan(
+      touchSession,
+      Math.round(touchStart!.x + touchStart!.width / 2),
+      Math.round(touchStart!.y + touchStart!.height / 2),
+    );
   } finally {
     await touchSession.detach();
   }
@@ -430,15 +440,19 @@ test("initial image and gallery scrolling", async ({ page }) => {
     x: window.scrollX,
     y: window.scrollY,
   }));
+  await page.bringToFront();
   const horizontalTouchSession = await page.context().newCDPSession(page);
   try {
-    await horizontalTouchSession.send("Input.synthesizeScrollGesture", {
-      x: Math.round(horizontalTouchStart!.x + horizontalTouchStart!.width / 2),
-      y: Math.round(horizontalTouchStart!.y + horizontalTouchStart!.height / 2),
-      xDistance: -380,
-      gestureSourceType: "touch",
-      speed: 800,
+    await horizontalTouchSession.send("Emulation.setTouchEmulationEnabled", {
+      enabled: true,
+      maxTouchPoints: 1,
     });
+    await dispatchNativeTouchPan(
+      horizontalTouchSession,
+      Math.round(horizontalTouchStart!.x + horizontalTouchStart!.width / 2),
+      Math.round(horizontalTouchStart!.y + horizontalTouchStart!.height / 2),
+      "horizontal",
+    );
   } finally {
     await horizontalTouchSession.detach();
   }
