@@ -198,7 +198,9 @@ def test_saved_executable_pose_review_refuses_resigned_incomplete_lineage(
             payload["track_ids"].append(payload["track_ids"][0])
             payload["count"] += 1
         else:
-            payload["builds"][0]["source_track_revision"] = True
+            # Persist a nonpositive integer: its JSON round-trip preserves the exact
+            # signed invalid lineage so the domain validator, not the hash gate, fires.
+            payload["builds"][0]["source_track_revision"] = 0
         artifact.payload_json = payload
         artifact.payload_sha256 = canonical_json_sha256(payload)
         session.commit()
