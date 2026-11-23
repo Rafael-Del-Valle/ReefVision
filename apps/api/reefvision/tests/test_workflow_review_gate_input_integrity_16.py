@@ -177,6 +177,8 @@ def test_standalone_review_rejects_repeated_prediction_evidence(
         payload_json={field: ["same-scientific-prediction", "same-scientific-prediction"]},
         payload_sha256="a" * 64,
     )
-    with app.state.session_factory() as session:
-        with pytest.raises(ValidationError, match="duplicate prediction identifiers"):
-            _pending_review_count(session, [artifact], project_id="synthetic-project")
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="duplicate prediction identifiers"),
+    ):
+        _pending_review_count(session, [artifact], project_id="synthetic-project")
