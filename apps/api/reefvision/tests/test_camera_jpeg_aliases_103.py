@@ -484,9 +484,7 @@ def test_cmyk_camera_api_import_thumbnail_and_uncertain_time(
     exif[274] = 6
     exif[36867] = "2026:04:03 14:25:30"
     stream = BytesIO()
-    Image.new("CMYK", (41, 23), (20, 50, 70, 5)).save(
-        stream, format="JPEG", exif=exif
-    )
+    Image.new("CMYK", (41, 23), (20, 50, 70, 5)).save(stream, format="JPEG", exif=exif)
     original = stream.getvalue()
     digest = hashlib.sha256(original).hexdigest()
 
@@ -509,9 +507,7 @@ def test_cmyk_camera_api_import_thumbnail_and_uncertain_time(
     assert metadata["media_type"] == "image/jpeg"
     assert (metadata["width_px"], metadata["height_px"]) == (41, 23)
     assert metadata["capture_timestamp"] is None
-    assert "UTC capture timestamp not inferred" in (
-        metadata["metadata_json"]["capture_time_warning"]
-    )
+    assert "UTC capture timestamp not inferred" in metadata["metadata_json"]["capture_time_warning"]
     assert metadata["metadata_json"]["exif"]["Orientation"] == 6
 
     original_response = client.get(f"/api/v1/images/{image_id}/content")
