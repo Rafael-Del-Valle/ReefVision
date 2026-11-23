@@ -145,6 +145,40 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 == dataset.manifest_sha256,
                 "Training's frozen dataset digest is missing or mismatched",
             )
+            # Training and registration must use the identical frozen anatomy
+            # and split contract. A matching training-dataset ID alone cannot
+            # prove landmark ordering or the held-out evaluation partition.
+            manifest = training.artifact_manifest_json
+            _require(
+                type(result.get("pose_schema_revision")) is int
+                and result.get("pose_schema_id") == dataset.pose_schema_id
+                and result.get("pose_schema_revision") == dataset.pose_schema_revision
+                and result.get("pose_schema_content_hash") == dataset.pose_schema_content_hash
+                and manifest.get("pose_schema_id") == dataset.pose_schema_id
+                and manifest.get("pose_schema_revision") == dataset.pose_schema_revision
+                and manifest.get("pose_schema_content_hash") == dataset.pose_schema_content_hash
+                and result.get("split_manifest_sha256") == training.split_manifest_sha256
+                and manifest.get("pose_split_manifest_sha256") == training.split_manifest_sha256
+                and isinstance(manifest.get("pose_split_manifest"), dict)
+                and canonical_json_sha256(manifest["pose_split_manifest"])
+                == training.split_manifest_sha256,
+                "Pose anatomy or train/validation split no longer matches frozen training",
+            )
+            validation_id = result.get("pose_validation_dataset_id")
+            _require(
+                validation_id == manifest.get("pose_validation_dataset_id"),
+                "Saved validation dataset differs from completed training",
+            )
+            if validation_id is not None:
+                validation_dataset = session.get(PoseTrainingDataset, validation_id)
+                _require(
+                    validation_dataset is not None
+                    and validation_dataset.project_id == run.project_id
+                    and validation_dataset.pose_schema_content_hash
+                    == dataset.pose_schema_content_hash,
+                    "Saved validation dataset is missing, foreign, or anatomically incompatible",
+                )
+                PoseTrainingDatasetService(session).manifest(validation_id)
             job = session.get(Job, training.job_id)
             _require(
                 job is not None and job.status == "succeeded",
@@ -282,6 +316,13 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 == dataset.manifest_sha256
                 and metadata.get("source_split_manifest_sha256") == training.split_manifest_sha256
                 and metadata.get("source_result_checkpoint_path") == training.result_checkpoint_path
+                and metadata.get("source_pose_schema_id") == dataset.pose_schema_id
+                and metadata.get("source_pose_schema_revision") == dataset.pose_schema_revision
+                and metadata.get("source_pose_schema_content_hash")
+                == dataset.pose_schema_content_hash
+                and metadata.get("source_pose_validation_dataset_id") == validation_id
+                and metadata.get("source_pose_validation_dataset_manifest_sha256")
+                == (validation_dataset.manifest_sha256 if validation_id is not None else None)
                 and metadata.get("source_experiment_id") == experiment.id,
                 "Registered model database provenance no longer matches completed training",
             )
