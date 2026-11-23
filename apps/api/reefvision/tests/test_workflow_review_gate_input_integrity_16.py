@@ -124,6 +124,5 @@ def test_legacy_nullable_project_scope_stays_bound_to_saved_run(client: TestClie
         artifacts = _input_artifacts(session, review, project_id=project["id"])
         assert len(artifacts) == 1
         assert artifacts[0].payload_json["project_id"] is None
-    assert client.get(f"/api/v1/workflow-runs/{run_id}").json()["run"][
-        "status"
-    ] == "waiting_for_review"
+    detail = client.get(f"/api/v1/workflow-runs/{run_id}").json()
+    assert detail["run"]["status"] == "waiting_for_review"
