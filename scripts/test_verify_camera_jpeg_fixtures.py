@@ -300,6 +300,39 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 errors, ["non-regular JPEG fixture not inspected: camera.JPG"]
             )
 
+    def test_fifo_substituted_at_camera_open_is_rejected_without_blocking(self) -> None:
+        """A file changed after stat must not hang the read-only inventory."""
+        import os
+
+        if not hasattr(os, "mkfifo") or not hasattr(os, "O_NONBLOCK"):
+            self.skipTest("Nonblocking FIFO access is unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            photo = root / "approved.JPG"
+            original = b"\xff\xd8camera\xff\xd9"
+            photo.write_bytes(original)
+            fifo = root / "substitute.pipe"
+            try:
+                os.mkfifo(fifo)
+            except OSError:
+                self.skipTest("Filesystem does not support FIFOs")
+            real_open = os.open
+
+            def substitute_at_open(path, flags):
+                self.assertEqual(path, photo)
+                self.assertTrue(flags & os.O_NONBLOCK)
+                if hasattr(os, "O_NOFOLLOW"):
+                    self.assertTrue(flags & os.O_NOFOLLOW)
+                return real_open(fifo, flags)
+
+            with mock.patch.object(MODULE.os, "open", side_effect=substitute_at_open):
+                records, errors = MODULE.inventory(root)
+            self.assertEqual(records, [])
+            self.assertEqual(
+                errors, ["JPEG fixture changed during inventory: approved.JPG"]
+            )
+            self.assertEqual(photo.read_bytes(), original)
+
     def test_external_hardlink_cannot_masquerade_as_approved_camera_capture(self) -> None:
         """One approved path to another study's inode is not provenance evidence."""
         import os
@@ -1428,14 +1461,14 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             good = root / "good.jpeg"
             blocked.write_bytes(b"\xff\xd8blocked\xff\xd9")
             good.write_bytes(b"\xff\xd8good\xff\xd9")
-            original_open = Path.open
+            original_open = MODULE._open_camera_file
 
             def selective_open(path: Path, *args: object, **kwargs: object):
                 if path == blocked:
                     raise PermissionError("fixture is locked")
                 return original_open(path, *args, **kwargs)
 
-            with mock.patch.object(Path, "open", selective_open):
+            with mock.patch.object(MODULE, "_open_camera_file", selective_open):
                 records, errors = MODULE.inventory(root)
             self.assertEqual([record["path"] for record in records], ["good.jpeg"])
             self.assertEqual(errors, ["cannot read JPEG fixture: blocked.jpg: PermissionError"])
@@ -1446,14 +1479,14 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             root = Path(directory)
             blocked = root / "locked.JPG"
             blocked.write_bytes(bytes.fromhex("ffd8") + b"payload" + bytes.fromhex("ffd9"))
-            original_open = Path.open
+            original_open = MODULE._open_camera_file
 
             def deny_fixture(path: Path, *args: object, **kwargs: object):
                 if path == blocked:
                     raise PermissionError("camera file locked")
                 return original_open(path, *args, **kwargs)
 
-            with mock.patch.object(Path, "open", deny_fixture):
+            with mock.patch.object(MODULE, "_open_camera_file", deny_fixture):
                 records, errors = MODULE.inventory(root)
             self.assertEqual(records, [])
             self.assertEqual(errors, ["cannot read JPEG fixture: locked.JPG: PermissionError"])
@@ -1498,7 +1531,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             original = bytes.fromhex("ffd8") + b"payload" + bytes.fromhex("ffd9")
             fixture.write_bytes(original)
             original_stat = Path.stat
-            original_open = Path.open
+            original_open = MODULE._open_camera_file
             reading_complete = False
 
             def observed_open(path: Path, *args: object, **kwargs: object):
@@ -1539,7 +1572,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                     )
                 return result
 
-            with mock.patch.object(Path, "stat", changed_stat), mock.patch.object(Path, "open", observed_open):
+            with mock.patch.object(Path, "stat", changed_stat), mock.patch.object(MODULE, "_open_camera_file", observed_open):
                 records, errors = MODULE.inventory(root)
             self.assertEqual(records, [])
             self.assertIn("JPEG fixture changed during inventory: changing.jpg", errors)
@@ -1556,14 +1589,14 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             private_bytes = b"\xff\xd8different-camera\xff\xd9"
             photo.write_bytes(approved_bytes)
             private.write_bytes(private_bytes)
-            original_open = Path.open
+            original_open = MODULE._open_camera_file
 
             def substituted_open(path: Path, *args: object, **kwargs: object):
                 if path == photo:
                     return original_open(private, *args, **kwargs)
                 return original_open(path, *args, **kwargs)
 
-            with mock.patch.object(Path, "open", substituted_open):
+            with mock.patch.object(MODULE, "_open_camera_file", substituted_open):
                 records, errors = MODULE.inventory(root)
             self.assertEqual(records, [])
             self.assertEqual(errors, ["JPEG fixture changed during inventory: approved.JPG"])
@@ -1584,7 +1617,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             Image.new("RGB", (8, 12), (90, 30, 10)).save(private, format="JPEG")
             approved_bytes = photo.read_bytes()
             private_bytes = private.read_bytes()
-            original_open = Path.open
+            original_open = MODULE._open_camera_file
             opened = 0
 
             def substituted_decode_open(path: Path, *args: object, **kwargs: object):
@@ -1595,7 +1628,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                         return original_open(private, *args, **kwargs)
                 return original_open(path, *args, **kwargs)
 
-            with mock.patch.object(Path, "open", substituted_decode_open):
+            with mock.patch.object(MODULE, "_open_camera_file", substituted_decode_open):
                 records, errors = MODULE.inventory(root, verify_decode=True)
             self.assertEqual(opened, 2)
             self.assertEqual(len(records), 1)
