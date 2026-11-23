@@ -22,6 +22,9 @@ on:
       - apps/api/reefvision/tests/test_camera_*_103.py
       - scripts/verify_camera_jpeg_fixtures.py
       - scripts/test_verify_camera_jpeg_fixtures.py
+      # Evidence protocol changes affect the release-gate semantics and
+      # must be checked against the same candidate SHA as the code/tests.
+      - docs/acceptance/REEFVISION_103_WINDOWS_RELEASE_EVIDENCE.md
       - apps/api/reefvision/tests/test_image_import_collision_103.py
       - apps/api/reefvision/api/routes/training.py
       - apps/api/reefvision/tests/test_training_log_tail_103.py
