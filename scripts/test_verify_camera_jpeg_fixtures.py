@@ -1940,8 +1940,8 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             camera = staging / "camera originals"
             camera.mkdir()
             photo = camera / "DSC_0001.JPG"
-            original = b"\\xff\\xd8capture-original\\xff\\xd9"
-            altered = b"\\xff\\xd8capture-modified\\xff\\xd9"
+            original = b"\xff\xd8capture-original\xff\xd9"
+            altered = b"\xff\xd8capture-modified\xff\xd9"
             self.assertEqual(len(original), len(altered))
             photo.write_bytes(original)
             command = [sys.executable, str(SCRIPT), str(camera)]
