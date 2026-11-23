@@ -33,6 +33,9 @@ from reefvision.tests.test_workflow_review_phase10 import _queue_seeded_review_r
         "foreign_project",
         "wrong_type",
         "missing_producer_output",
+        "duplicate_producer_output",
+        "nonstring_producer_output",
+        "empty_producer_output",
         "missing_prediction",
         "missing_classification",
         "duplicate_identifiers",
@@ -71,6 +74,19 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
             producer = session.get(WorkflowNodeRun, artifact.producer_node_run_id)
             assert producer is not None
             producer.output_artifact_ids_json = []
+        elif corruption in {
+            "duplicate_producer_output",
+            "nonstring_producer_output",
+            "empty_producer_output",
+        }:
+            producer = session.get(WorkflowNodeRun, artifact.producer_node_run_id)
+            assert producer is not None
+            if corruption == "duplicate_producer_output":
+                producer.output_artifact_ids_json = [artifact_id, artifact_id]
+            elif corruption == "nonstring_producer_output":
+                producer.output_artifact_ids_json = cast(list[str], [artifact_id, 7])
+            else:
+                producer.output_artifact_ids_json = [artifact_id, ""]
         elif corruption == "duplicate_identifiers":
             # A consensus producer cannot emit detection proposals, even if
             # the payload checksum is deliberately recomputed.
@@ -94,6 +110,19 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
             artifact.payload_sha256 = canonical_json_sha256(artifact.payload_json)
         session.commit()
 
+    if corruption in {
+        "duplicate_producer_output",
+        "nonstring_producer_output",
+        "empty_producer_output",
+    }:
+        # A direct consumer must refuse the same damaged producer manifest
+        # before the normal saved-workflow HTTP approval endpoint is called.
+        with app.state.session_factory() as session:
+            review = session.get(WorkflowNodeRun, review_id)
+            assert review is not None
+            with pytest.raises(ValidationError, match="producer output identifiers"):
+                _input_artifacts(session, review, project_id=str(project["id"]))
+
     resumed = client.post(
         f"/api/v1/workflow-node-runs/{review_id}/resume-review",
         json={"reviewed_by": "scientist", "note": "Attempted approval"},
@@ -107,6 +136,9 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
         "foreign_project": "project or checksum validation",
         "wrong_type": "invalid run or scientific data type",
         "missing_producer_output": "producer provenance",
+        "duplicate_producer_output": "producer output identifiers are invalid or duplicated",
+        "nonstring_producer_output": "producer output identifiers are invalid or duplicated",
+        "empty_producer_output": "producer output identifiers are invalid or duplicated",
         "missing_prediction": "violates saved typed port contract",
         "missing_classification": "invalid run or scientific data type",
         "duplicate_identifiers": "violates saved typed port contract",

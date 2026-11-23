@@ -176,14 +176,23 @@ def _input_artifacts(
     ):
         raise ValidationError("Workflow review input has invalid run or scientific data type")
     producer = session.get(WorkflowNodeRun, artifact.producer_node_run_id)
+    producer_outputs = producer.output_artifact_ids_json if producer is not None else None
     if (
         producer is None
         or producer.workflow_run_id != node_run.workflow_run_id
         or producer.status != "succeeded"
-        or not isinstance(producer.output_artifact_ids_json, list)
-        or artifact.id not in producer.output_artifact_ids_json
+        or not isinstance(producer_outputs, list)
+        or artifact.id not in producer_outputs
     ):
         raise ValidationError("Workflow review input lost its saved producer provenance")
+    # Every declared producer output is part of the persisted scientific
+    # lineage. Repeated, empty or non-string IDs cannot establish an
+    # unambiguous link to the exact artifact submitted for human approval.
+    if (
+        any(type(output_id) is not str or not output_id for output_id in producer_outputs)
+        or len(producer_outputs) != len(set(producer_outputs))
+    ):
+        raise ValidationError("Workflow review producer output identifiers are invalid or duplicated")
     _verify_review_graph_binding(session, node_run, producer, artifact, project_id=project_id)
     payload = artifact.payload_json
     if (

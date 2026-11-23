@@ -1,3 +1,10 @@
+## 2026-11-23 — Fail-closed review producer output identifiers (Track D; RELEASE HOLD)
+
+- **Overlap audit and scope:** Reviewed inherited 1.0–1.5 saved/executable Workflow Builder, 1.6 QC, class visibility and existing checksummed graph/typed-port reviewer gates. The reviewer already validates a single input artifact and its producer membership but did not reject malformed, empty, or duplicate IDs in the producer's complete declared output list. That left approval associated with an ambiguous saved producer manifest even when the reviewed artifact itself was intact.
+- **Implementation:** The original reviewer now refuses any non-string, empty or repeated producer output identifier before allowing human approval. It does not synthesize outputs, renumber observations, modify user records or alter the saved graph. Multiple *different* valid producer outputs remain supported. No migration or duplicate Workflow Builder node is necessary because this validates the existing typed saved execution evidence.
+- **Regressions:** Three genuine paused, persisted, executable Workflow Builder corruptions exercise both direct-service and HTTP approval refusal and require the review node, parent run and job to remain paused without an approval record; the original successful workflow and nullable historic project compatibility tests remain intact. Exact-head Ruff/mypy/pytest, frontend/E2E, biological representative saved-workflow, physical Windows MSI/CAB/GUI install/upgrade/rollback and approval remain independently required; this change is not release acceptance.
+- **Safety:** Offline/local project/model policy, scientific units, source assets, immutable datasets, QC decisions, provenance, review gates and retries unchanged. Alembic-0038 history between isolated 1.1/1.6 branches remains a release HOLD; no cross-branch merge, version advancement or installer claim.
+
 # ReefVision 1.6.0 Report
 
 ## 2026-11-22 — Scientific viewport keyboard shortcut isolation (Track D; RELEASE HOLD)
