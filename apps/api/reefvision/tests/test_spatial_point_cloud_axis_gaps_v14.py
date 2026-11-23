@@ -692,7 +692,10 @@ def test_rgb_ply_duplicate_xyz_color_variants_are_audited_in_saved_graph(
     )
     assert xyz_response.status_code == 200, xyz_response.text
     assert xyz_response.json()["preview_rgb_variant_support"] is None
-    assert "preview_shifts_xyz_locus_frequency_distribution" not in xyz_response.json()["qc_warnings"]
+    assert (
+        "preview_shifts_xyz_locus_frequency_distribution"
+        not in xyz_response.json()["qc_warnings"]
+    )
     assert "preview_xyz_rgb_tv_exceeds_xyz_marginal_tv" not in xyz_response.json()["qc_warnings"]
     assert "preview_omits_distinct_xyz_rgb_observations" not in xyz_response.json()["qc_warnings"]
     assert "preview_omits_distinct_rgb_triplets" not in xyz_response.json()["qc_warnings"]
@@ -775,6 +778,28 @@ def test_complete_multi_rgb_locus_stays_distinct_from_biological_condition(
     assert support["source_xyz_loci_with_multiple_rgb_values"] == 1
     assert support["multi_rgb_xyz_loci_with_complete_preview"] == 1
     assert support["multi_rgb_xyz_loci_with_incomplete_preview"] == 0
+    # A full three-row preview retains the joint XYZ/RGB observation
+    # distribution AND both marginals exactly. Multiple observed colors at
+    # one locus must not by itself create a false display-drift warning.
+    assert expected["preview_point_indices"] == [0, 1, 2]
+    for prefix in (
+        "preview_vs_source_xyz_rgb_observation",
+        "preview_vs_source_rgb_triplet",
+        "preview_vs_source_xyz_locus",
+    ):
+        assert support[f"{prefix}_total_variation"] == 0.0
+        assert support[f"{prefix}_total_variation_exact_fraction"] == [0, 1]
+    for marginal in ("rgb", "xyz"):
+        assert support[f"preview_xyz_rgb_vs_{marginal}_marginal_tv_gap"] == 0.0
+        assert support[f"preview_xyz_rgb_vs_{marginal}_marginal_tv_gap_exact_fraction"] == [0, 1]
+    for warning in (
+        "preview_shifts_xyz_rgb_observation_frequency_distribution",
+        "preview_shifts_rgb_triplet_frequency_distribution",
+        "preview_shifts_xyz_locus_frequency_distribution",
+        "preview_xyz_rgb_tv_exceeds_rgb_marginal_tv",
+        "preview_xyz_rgb_tv_exceeds_xyz_marginal_tv",
+    ):
+        assert warning not in expected["qc_warnings"]
     assert "source_xyz_loci_have_multiple_rgb_values" in expected["qc_warnings"]
     assert "preview_omits_distinct_xyz_rgb_observations" not in expected["qc_warnings"]
     assert "preview_omits_distinct_rgb_triplets" not in expected["qc_warnings"]
