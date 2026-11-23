@@ -206,9 +206,7 @@ def build_settings(options: DesktopLaunchOptions) -> Settings:
 def _write_atomic_desktop_text(target: Path, content: str) -> None:
     """Use an exclusive staging file so a planted fixed .tmp link cannot alter data."""
     target.parent.mkdir(parents=True, exist_ok=True)
-    fd, staging_name = tempfile.mkstemp(
-        prefix=f".{target.name}.", suffix=".tmp", dir=target.parent
-    )
+    fd, staging_name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
     staging = Path(staging_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
