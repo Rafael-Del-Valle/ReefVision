@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 from uuid import uuid4
 
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -194,11 +195,19 @@ class WorkflowExecutionService:
                 .order_by(WorkflowArtifact.created_at, WorkflowArtifact.id)
             )
         )
-        return WorkflowRunDetailResponse(
-            run=WorkflowRunResponse.model_validate(run),
-            nodes=[WorkflowNodeRunResponse.model_validate(node) for node in nodes],
-            artifacts=[WorkflowArtifactResponse.model_validate(item) for item in artifacts],
-        )
+        try:
+            return WorkflowRunDetailResponse(
+                run=WorkflowRunResponse.model_validate(run),
+                nodes=[WorkflowNodeRunResponse.model_validate(node) for node in nodes],
+                artifacts=[WorkflowArtifactResponse.model_validate(item) for item in artifacts],
+            )
+        except PydanticValidationError as exc:
+            # Refuse corrupted persisted scientific data without coercing away
+            # invalid output IDs or exposing an unhandled serializer exception.
+            raise ValidationError(
+                "Workflow run contains invalid saved scientific evidence; "
+                "researcher review required"
+            ) from exc
 
     def queue_run(
         self,

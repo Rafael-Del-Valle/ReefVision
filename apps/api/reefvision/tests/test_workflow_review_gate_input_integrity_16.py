@@ -98,13 +98,27 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
             elif corruption == "missing_additional_producer_output":
                 producer.output_artifact_ids_json = [artifact_id, "deleted-producer-output"]
             else:
-                other_output = session.scalar(
-                    select(WorkflowArtifact).where(
-                        WorkflowArtifact.workflow_run_id == run_id,
-                        WorkflowArtifact.producer_node_run_id != producer.id,
+                # The base fixture has only one artifact. Build an independent,
+                # valid succeeded-detector output before forging consensus lineage.
+                other_producer = session.scalar(
+                    select(WorkflowNodeRun).where(
+                        WorkflowNodeRun.workflow_run_id == run_id,
+                        WorkflowNodeRun.node_id == "detect",
                     )
                 )
-                assert other_output is not None
+                assert other_producer is not None
+                other_payload = {"project_id": project["id"], "proposal_ids": []}
+                other_output = WorkflowArtifact(
+                    workflow_run_id=run_id,
+                    producer_node_run_id=other_producer.id,
+                    producer_port_id="proposals",
+                    data_type="detection_proposals",
+                    payload_json=other_payload,
+                    payload_sha256=canonical_json_sha256(other_payload),
+                )
+                session.add(other_output)
+                session.flush()
+                other_producer.output_artifact_ids_json = [other_output.id]
                 producer.output_artifact_ids_json = [artifact_id, other_output.id]
         elif corruption == "duplicate_identifiers":
             # A consensus producer cannot emit detection proposals, even if
@@ -170,11 +184,19 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
     }
     assert resumed.status_code == 400, resumed.text
     assert expected_details[corruption] in resumed.json()["detail"]
-    after = client.get(f"/api/v1/workflow-runs/{run_id}").json()
-    assert after["run"]["status"] == "waiting_for_review"
-    node = next(node for node in after["nodes"] if node["id"] == review_id)
-    assert node["status"] == "waiting_for_review"
-    assert "review_approval" not in (node["result_json"] or {})
+    after_response = client.get(f"/api/v1/workflow-runs/{run_id}")
+    if corruption == "nonstring_producer_output":
+        # A corrupt saved node must be reported safely, not silently coerced
+        # into credible evidence or leaked as an HTTP 500.
+        assert after_response.status_code == 400, after_response.text
+        assert "invalid saved scientific evidence" in after_response.json()["detail"]
+    else:
+        assert after_response.status_code == 200, after_response.text
+        after = after_response.json()
+        assert after["run"]["status"] == "waiting_for_review"
+        node = next(node for node in after["nodes"] if node["id"] == review_id)
+        assert node["status"] == "waiting_for_review"
+        assert "review_approval" not in (node["result_json"] or {})
     with app.state.session_factory() as session:
         assert (
             session.scalar(select(WorkflowNodeRun.status).where(WorkflowNodeRun.id == review_id))
