@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from reefvision.db.models import (
@@ -439,11 +441,43 @@ def pose_active_learning_review_status(
     }
 
 
+def _begin_serialized_workflow_review(session: Session) -> None:
+    """Claim SQLite's writer turn before reading any review or scientific state.
+
+    Concurrent local approvals must not both observe a waiting review gate and
+    materialize duplicate consensus annotations. Also recheck a cancellation
+    or prediction update committed by another writer before approval.
+    """
+    connection = session.connection()
+    if connection.dialect.name != "sqlite":
+        return
+    if getattr(connection.connection.driver_connection, "in_transaction", False):
+        raise ConflictError(
+            "Workflow approval requires a fresh transaction; reload before approving"
+        )
+    try:
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+    except OperationalError as exc:
+        session.rollback()
+        raw = exc.orig
+        code = getattr(raw, "sqlite_errorcode", None)
+        if (
+            isinstance(raw, sqlite3.OperationalError)
+            and isinstance(code, int)
+            and (code & 0xFF) in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}
+        ):
+            raise ConflictError(
+                "Workflow review database is busy; reload and retry approval"
+            ) from exc
+        raise
+
+
 def resume_review_gate(
     session: Session,
     node_run_id: str,
     request: WorkflowReviewResumeRequest,
 ) -> WorkflowRunResponse:
+    _begin_serialized_workflow_review(session)
     node_run = session.get(WorkflowNodeRun, node_run_id)
     if node_run is None:
         raise NotFoundError("Workflow review node was not found")
