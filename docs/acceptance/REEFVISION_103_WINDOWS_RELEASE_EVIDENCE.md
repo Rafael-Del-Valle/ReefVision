@@ -96,6 +96,35 @@ a nonzero exit blocks acceptance. Keep both reports outside the source directory
 Neither this scanner nor the PowerShell hash check substitutes for installed
 WebView2 or physical Canon/Sony image-compatibility evidence.
 
+
+The scanner can now enforce a saved **pre-import source inventory** directly,
+in addition to the separate PowerShell CSV check. Use a dedicated evidence
+directory **outside** the approved camera fixture tree, preserve its SHA-256
+separately, and keep the same absolute fixture path between runs:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$cameraRoot = 'C:\camera-test-copies'
+$evidenceRoot = 'C:\camera-evidence'
+New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
+$before = Join-Path $evidenceRoot 'jpeg-before.json'
+$after = Join-Path $evidenceRoot 'jpeg-after.json'
+python scripts/verify_camera_jpeg_fixtures.py $cameraRoot --verify-decode > $before
+if ($LASTEXITCODE -ne 0) { throw 'Camera pre-import inventory failed.' }
+$beforeSha256 = (Get-FileHash -LiteralPath $before -Algorithm SHA256).Hash
+# Perform approved installed-app import/reopen; never modify camera originals.
+python scripts/verify_camera_jpeg_fixtures.py $cameraRoot --verify-decode --compare-manifest $before > $after
+if ($LASTEXITCODE -ne 0) { throw 'Camera originals changed, disappeared, or were added after import.' }
+"PASS: verified pre/post JPEG names, byte counts and SHA-256; saved baseline hash $beforeSha256"
+```
+
+The baseline must be a well-formed, error-free scanner JSON inventory. Comparison
+rejects a different source root, duplicate/unsafe manifest paths, changed source
+hashes even when file size is unchanged, missing files and new JPEG files. It
+**cannot authenticate an altered baseline**: keep the original baseline hash in
+an independent experiment record. This is still source-integrity evidence only,
+not proof of physical camera compatibility, GUI rendering or scientific validity.
+
 **Limitations:** This comparison assumes a trusted, unchanged manifest and a dedicated staging directory. Reject filesystem reparse points/symlinks in the staging tree: lexical path checks do not prove physical containment. Preserve the manifest and its SHA-256 separately. This verifies original-file integrity, **not** decoding or GUI compatibility. Record application commit, Windows/WebView2 version, per-file results and decode errors; missing real-camera samples are **BLOCKED**, not PASS.
 
 ## Read-only external training console: process-continuity acceptance
