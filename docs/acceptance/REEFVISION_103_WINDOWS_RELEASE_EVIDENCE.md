@@ -125,7 +125,14 @@ rejects a different source root, duplicate/unsafe manifest paths, changed source
 hashes even when file size is unchanged, missing files and new JPEG files.
 The optional `--expected-manifest-sha256` flag also rejects a baseline whose
 JSON bytes differ from the separately recorded pre-import digest, including
-when altered JPEGs and baseline hashes have been co-edited. Preserve that digest
+when altered JPEGs and baseline hashes have been co-edited. A baseline created
+with `--verify-decode` also requires `--verify-decode` during the post-import
+comparison: the scanner now rejects missing pixel-decode evidence and checks
+that emitted native/display dimensions, EXIF orientation/exposure provenance,
+and ICC payload fingerprint still agree. Matching JPEG SHA-256 alone cannot
+establish stable decoder interpretation across application or library versions.
+A baseline created without pixel decoding only verifies source-byte integrity;
+it cannot establish camera-codec compatibility. Preserve that digest
 in an independent experiment record; hashing an already altered baseline at
 comparison time cannot establish authenticity. This is still source-integrity
 evidence only, not proof of physical camera compatibility, GUI rendering or
