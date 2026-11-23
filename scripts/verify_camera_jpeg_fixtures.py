@@ -701,7 +701,17 @@ def compare_source_manifest(
                 return ["baseline JPEG manifest contains unverified pixel-decode evidence"]
             expected_decoded[relative] = entry
 
-    actual = {str(record["path"]): record for record in current}
+    # Do not let a duplicated current path overwrite an earlier record.
+    # A dict comprehension would silently discard one source observation and
+    # could certify a malformed inventory against a valid saved baseline.
+    actual: dict[str, dict[str, object]] = {}
+    for record in current:
+        relative = record.get("path")
+        if not isinstance(relative, str):
+            return ["current JPEG inventory contains malformed source-file evidence"]
+        if relative in actual:
+            return ["current JPEG inventory contains duplicate source-file paths"]
+        actual[relative] = record
     errors: list[str] = []
     for relative in sorted(expected.keys() - actual.keys()):
         errors.append(f"source JPEG missing since baseline: {relative!r}")
