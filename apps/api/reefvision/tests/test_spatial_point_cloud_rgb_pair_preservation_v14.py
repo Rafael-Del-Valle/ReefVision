@@ -292,6 +292,17 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
             / 2
         )
         observed = artifact["preview_rgb_variant_support"]
+        # Each color is unique to one XYZ/RGB pair in this synthetic scan.
+        # Color-frequency and spatial-pair frequency shifts must therefore
+        # agree, independently of the service's counting implementation.
+        assert observed["preview_vs_source_rgb_triplet_total_variation"] == pytest.approx(
+            float(reference_tv)
+        )
+        assert observed["preview_vs_source_rgb_triplet_total_variation_exact_fraction"] == [
+            reference_tv.numerator,
+            reference_tv.denominator,
+        ]
+        assert "preview_shifts_rgb_triplet_frequency_distribution" in artifact["qc_warnings"]
         assert observed["preview_vs_source_xyz_rgb_observation_total_variation"] == (
             pytest.approx(float(reference_tv))
         )
@@ -337,6 +348,8 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
     assert support["fraction_of_source_rgb_triplets_displayed"] == 1.0
     assert support["preview_omitted_distinct_rgb_triplets"] == 0
     assert "preview_omits_distinct_rgb_triplets" not in pinned["qc_warnings"]
+    # Full RGB palette retention alone does not preserve row frequencies.
+    assert "preview_shifts_rgb_triplet_frequency_distribution" in pinned["qc_warnings"]
     assert support["preview_distinct_xyz_rgb_pairs"] == 3
     assert support["source_repeated_xyz_rgb_observation_rows"] == 597
     assert support["preview_repeated_xyz_rgb_observation_rows"] == 509
@@ -412,6 +425,42 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
         digests.append(artifact["payload_sha256"])
     assert len(set(digests)) == 1
     assert len(digests[0]) == 64
+
+
+def test_rgb_frequency_can_remain_stable_while_spatial_pair_frequency_shifts(
+    client: TestClient,
+) -> None:
+    """A frequency-balanced single-color preview need not be spatially representative."""
+    project_id = str(create_project(client, "Same-color spatial sampling control")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    # The rare final XYZ acquisition remains displayed, but at 1/512 rather
+    # than 1/600 of rows. Every row has precisely the same raw RGB triplet.
+    rows = ["0 0 0 10 20 30"] * 599 + ["1 0 0 10 20 30"]
+    response = client.post(
+        f"{base}/spatial/point-cloud-preview",
+        json={**CALIBRATION, "ply_text": _colored_ply(rows)},
+    )
+    assert response.status_code == 200, response.text
+    artifact = response.json()
+    support = artifact["preview_rgb_variant_support"]
+    assert len(artifact["preview_point_indices"]) == 512
+    assert 599 in artifact["preview_point_indices"]
+    assert support["source_distinct_rgb_triplets"] == 1
+    assert support["preview_distinct_rgb_triplets"] == 1
+    assert support["preview_omitted_distinct_rgb_triplets"] == 0
+    assert support["preview_vs_source_rgb_triplet_total_variation"] == 0.0
+    assert support["preview_vs_source_rgb_triplet_total_variation_exact_fraction"] == [0, 1]
+    expected_pair_tv = abs(Fraction(1, 512) - Fraction(1, 600))
+    assert support["preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction"] == [
+        expected_pair_tv.numerator,
+        expected_pair_tv.denominator,
+    ]
+    assert support["preview_vs_source_xyz_rgb_observation_total_variation"] > 0.0
+    assert "preview_shifts_xyz_rgb_observation_frequency_distribution" in artifact["qc_warnings"]
+    assert "preview_shifts_rgb_triplet_frequency_distribution" not in artifact["qc_warnings"]
+    assert "preview_omits_distinct_rgb_triplets" not in artifact["qc_warnings"]
+    assert artifact["provenance"]["calibration_verified"] is False
+    assert artifact["provenance"]["specimen_identity_verified"] is False
 
 
 def test_rgb_pair_preservation_strict_source_and_capacity(
