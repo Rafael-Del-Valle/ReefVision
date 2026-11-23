@@ -33,18 +33,14 @@ def _alternating_source() -> tuple[list[list[float]], list[list[int]], str]:
         (2, [1, 0, 0]),
     ]
     observations.extend(
-        (locus, [locus % 256, locus // 256, 1])
-        for locus in range(3, 512)
+        (locus, [locus % 256, locus // 256, 1]) for locus in range(3, 512)
     )
     points = [[float(locus), 0.0, 0.0] for locus, _ in observations]
     colors = [rgb for _, rgb in observations]
     assert len(points) == 514
     assert len({tuple(point) for point in points}) == 512
     assert len({tuple(rgb) for rgb in colors}) == 512
-    rows = [
-        f"{locus} 0 0 {rgb[0]} {rgb[1]} {rgb[2]}"
-        for locus, rgb in observations
-    ]
+    rows = [f"{locus} 0 0 {rgb[0]} {rgb[1]} {rgb[2]}" for locus, rgb in observations]
     ply_text = (
         "ply\nformat ascii 1.0\n"
         f"element vertex {len(rows)}\n"
@@ -79,7 +75,8 @@ def test_alternating_joint_cover_minimal_rows_and_saved_workflow(
     client: TestClient,
 ) -> None:
     points, colors, ply_text = _alternating_source()
-    project_id = str(create_project(client, "Alternating joint point-cloud cover")["id"])
+    project = create_project(client, "Alternating joint point-cloud cover")
+    project_id = str(project["id"])
     base = f"/api/v1/projects/{project_id}"
     params = {
         **CALIBRATION,
@@ -120,14 +117,20 @@ def test_alternating_joint_cover_minimal_rows_and_saved_workflow(
     assert "preview_omits_acquisition_endpoint_row" in artifact["qc_warnings"]
     assert "preview_omits_distinct_rgb_triplets" not in artifact["qc_warnings"]
     assert "preview_omits_distinct_xyz_rgb_observations" in artifact["qc_warnings"]
-    assert "preview_shifts_rgb_triplet_frequency_distribution" in artifact["qc_warnings"]
-    assert artifact["provenance"]["geometry_sha256"] == direct["provenance"]["geometry_sha256"]
+    assert (
+        "preview_shifts_rgb_triplet_frequency_distribution" in artifact["qc_warnings"]
+    )
+    assert (
+        artifact["provenance"]["geometry_sha256"] == direct["provenance"]["geometry_sha256"]
+    )
     assert artifact["provenance"]["calibration_verified"] is False
     assert artifact["provenance"]["specimen_identity_verified"] is False
 
     pair_required = {**params, "preserve_distinct_xyz_rgb_pairs_in_preview": True}
     extrema_required = {**params, "preserve_axis_extrema_in_preview": True}
-    with pytest.raises(ValueError, match="Protected point indices exceed the display budget"):
+    with pytest.raises(
+        ValueError, match="Protected point indices exceed the display budget"
+    ):
         measure_point_cloud_preview(
             points=points,
             point_colors=colors,
