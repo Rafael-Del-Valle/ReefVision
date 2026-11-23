@@ -734,7 +734,9 @@ def main() -> int:
         if args.compare_manifest is None:
             parser.error("--expected-manifest-sha256 requires --compare-manifest")
         if re.fullmatch(r"[0-9a-fA-F]{64}", args.expected_manifest_sha256) is None:
-            parser.error("--expected-manifest-sha256 must contain 64 hexadecimal digits")
+            parser.error(
+                "--expected-manifest-sha256 must contain 64 hexadecimal digits"
+            )
     # Reject a linked root before resolve() can silently follow it outside the
     # owner-approved camera fixture directory.
     # Reject symlinks in any supplied path component, not only the final
