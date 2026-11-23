@@ -106,9 +106,7 @@ def _minimum_joint_locus_color_cover(
     matched_color_locus: dict[tuple[int, ...], tuple[float, float, float]] = {}
     matched_locus_row: dict[tuple[float, float, float], int] = {}
 
-    def augment(
-        locus: tuple[float, float, float], visited: set[tuple[int, ...]]
-    ) -> bool:
+    def augment(locus: tuple[float, float, float], visited: set[tuple[int, ...]]) -> bool:
         for index in candidate_rows[locus]:
             rgb = tuple(colors[index])
             if rgb in visited:
