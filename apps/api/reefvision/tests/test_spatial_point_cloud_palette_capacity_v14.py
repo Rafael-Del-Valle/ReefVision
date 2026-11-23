@@ -298,8 +298,7 @@ def test_shared_locus_color_replacement_avoids_false_over_budget_saved_graph(
     points = [[float(index), 0.0, 0.0] for index in range(512)]
     points.append([0.0, 0.0, 0.0])
     colors = [[0, 0, 0], [0, 0, 0]] + [
-        [(index - 1) % 256, (index - 1) // 256, 0]
-        for index in range(2, 513)
+        [(index - 1) % 256, (index - 1) // 256, 0] for index in range(2, 513)
     ]
     rows = [
         f"{int(point[0])} 0 0 {rgb[0]} {rgb[1]} {rgb[2]}"
@@ -337,9 +336,34 @@ def test_shared_locus_color_replacement_avoids_false_over_budget_saved_graph(
     assert support["preview_omitted_distinct_rgb_triplets"] == 0
     assert support["source_distinct_xyz_rgb_pairs"] == 513
     assert support["preview_distinct_xyz_rgb_pairs"] == 512
+    # The missing pair has 1/513 exact joint TV, but the repeated
+    # locus/color makes each marginal drift only 511/(513*512).
+    assert support["preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction"] == [
+        1,
+        513,
+    ]
+    assert support["preview_vs_source_xyz_locus_total_variation_exact_fraction"] == [
+        511,
+        262656,
+    ]
+    assert support["preview_vs_source_rgb_triplet_total_variation_exact_fraction"] == [
+        511,
+        262656,
+    ]
+    assert support["preview_xyz_rgb_vs_rgb_marginal_tv_gap_exact_fraction"] == [
+        1,
+        262656,
+    ]
+    assert support["preview_xyz_rgb_vs_xyz_marginal_tv_gap_exact_fraction"] == [
+        1,
+        262656,
+    ]
     assert "preview_omits_acquisition_endpoint_row" in artifact["qc_warnings"]
     assert "preview_omits_distinct_rgb_triplets" not in artifact["qc_warnings"]
     assert "preview_omits_distinct_xyz_rgb_observations" in artifact["qc_warnings"]
+    assert "preview_shifts_rgb_triplet_frequency_distribution" in artifact["qc_warnings"]
+    assert "preview_xyz_rgb_tv_exceeds_rgb_marginal_tv" in artifact["qc_warnings"]
+    assert "preview_xyz_rgb_tv_exceeds_xyz_marginal_tv" in artifact["qc_warnings"]
     assert artifact["provenance"]["calibration_verified"] is False
     assert artifact["provenance"]["specimen_identity_verified"] is False
     assert artifact["surface_area_m2"] is None
@@ -359,6 +383,24 @@ def test_shared_locus_color_replacement_avoids_false_over_budget_saved_graph(
     rejected = client.post(f"{base}/spatial/point-cloud-preview", json=impossible)
     assert rejected.status_code == 400, rejected.text
     assert "display budget" in rejected.text
+
+    # The first row also records the x-minimum and cannot be replaced
+    # when independent axis-extrema preservation is requested.
+    required_extrema = {**params, "preserve_axis_extrema_in_preview": True}
+    with pytest.raises(ValueError, match="Protected point indices exceed the display budget"):
+        measure_point_cloud_preview(
+            points=points,
+            point_colors=colors,
+            preserve_distinct_xyz_loci_in_preview=True,
+            preserve_distinct_rgb_triplets_in_preview=True,
+            preserve_axis_extrema_in_preview=True,
+            **CALIBRATION,
+        )
+    extrema_rejected = client.post(
+        f"{base}/spatial/point-cloud-preview", json=required_extrema
+    )
+    assert extrema_rejected.status_code == 400, extrema_rejected.text
+    assert "display budget" in extrema_rejected.text
 
     app = cast(FastAPI, client.app)
     for suffix, parameters, status in (
