@@ -1228,3 +1228,64 @@ def test_log_tail_rejects_same_inode_rewrite_hidden_by_append(
     assert len(observed_reads) == 2
     with original_open(log, "rb") as untouched:
         assert untouched.read() == original
+
+
+@pytest.mark.parametrize("race", ["append", "short_read", "boundary_rewrite"])
+def test_log_tail_freezes_snapshot_and_verifies_record_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, race: str
+) -> None:
+    """A bounded snapshot cannot include later bytes or trust a changed boundary."""
+    log = tmp_path / "training.log"
+    tail = b"epoch=1\n" * 2048
+    original = (
+        b"older epoch\n" + tail
+        if race == "boundary_rewrite"
+        else b"epoch=4\ntrain/box_loss=0.25\n"
+    )
+    appended = b"train/cls_loss=0.30\n"
+    log.write_bytes(original)
+    real_open = training_routes._open_training_log
+
+    class RacingHandle:
+        def __init__(self, handle):
+            self.handle = handle
+            self.reads = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.handle.close()
+
+        def __getattr__(self, name):
+            return getattr(self.handle, name)
+
+        def read(self, size=-1):
+            self.reads += 1
+            if self.reads == 1 and race == "append":
+                with log.open("ab") as writer:
+                    writer.write(appended)
+            data = self.handle.read(size)
+            if self.reads == 1 and race == "short_read":
+                return data[:-1]
+            if self.reads == 2 and race == "boundary_rewrite":
+                # Simulate an in-place change to the byte before the 16 KiB
+                # tail. The payload itself remains unchanged.
+                assert data[:1] == b"\n"
+                return b"x" + data[1:]
+            return data
+
+    monkeypatch.setattr(
+        training_routes, "_open_training_log", lambda path: RacingHandle(real_open(path))
+    )
+    if race == "append":
+        assert training_routes._training_log_tail("training.log", tmp_path) == {
+            "available": True,
+            "text": original.decode("utf-8"),
+        }
+        assert log.read_bytes() == original + appended
+    else:
+        with pytest.raises(HTTPException) as error:
+            training_routes._training_log_tail("training.log", tmp_path)
+        assert error.value.status_code == 403
+        assert log.read_bytes() == original
