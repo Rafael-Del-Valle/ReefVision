@@ -1929,6 +1929,70 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             )
             self.assertEqual(first.read_bytes(), first_bytes)
 
+    def test_pinned_baseline_detects_coedited_camera_source_and_manifest(self) -> None:
+        """An independently recorded digest must detect edits hidden in baseline JSON."""
+        import hashlib
+        import subprocess
+        import sys
+
+        with tempfile.TemporaryDirectory() as directory:
+            staging = Path(directory)
+            camera = staging / "camera originals"
+            camera.mkdir()
+            photo = camera / "DSC_0001.JPG"
+            original = b"\\xff\\xd8capture-original\\xff\\xd9"
+            altered = b"\\xff\\xd8capture-modified\\xff\\xd9"
+            self.assertEqual(len(original), len(altered))
+            photo.write_bytes(original)
+            command = [sys.executable, str(SCRIPT), str(camera)]
+            baseline_run = subprocess.run(
+                command, capture_output=True, text=True, check=False
+            )
+            self.assertEqual(baseline_run.returncode, 0, baseline_run.stderr)
+            baseline_path = staging / "baseline.json"
+            baseline_path.write_bytes(baseline_run.stdout.encode("utf-8"))
+            independent_digest = hashlib.sha256(baseline_path.read_bytes()).hexdigest()
+
+            def compare(*extra: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    [*command, "--compare-manifest", str(baseline_path), *extra],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+
+            verified = compare("--expected-manifest-sha256", independent_digest.upper())
+            self.assertEqual(verified.returncode, 0, verified.stderr)
+            self.assertEqual(json.loads(verified.stdout)["errors"], [])
+
+            # Rewriting the saved baseline to match a changed camera capture
+            # defeats an unpinned source comparison, but not the independent hash.
+            photo.write_bytes(altered)
+            rewritten = json.loads(baseline_path.read_text(encoding="utf-8"))
+            rewritten["files"][0]["sha256"] = hashlib.sha256(altered).hexdigest()
+            baseline_path.write_text(json.dumps(rewritten), encoding="utf-8")
+            self.assertEqual(compare().returncode, 0)
+            rejected = compare("--expected-manifest-sha256", independent_digest)
+            self.assertEqual(rejected.returncode, 1, rejected.stderr)
+            self.assertIn(
+                "baseline JPEG manifest SHA-256 mismatch",
+                json.loads(rejected.stdout)["errors"][0],
+            )
+            for invalid in ("0" * 63, "z" * 64):
+                with self.subTest(invalid=invalid):
+                    failure = compare("--expected-manifest-sha256", invalid)
+                    self.assertEqual(failure.returncode, 2)
+                    self.assertIn("64 hexadecimal digits", failure.stderr)
+            missing_baseline = subprocess.run(
+                [*command, "--expected-manifest-sha256", independent_digest],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(missing_baseline.returncode, 2)
+            self.assertIn("requires --compare-manifest", missing_baseline.stderr)
+            self.assertEqual(photo.read_bytes(), altered)
+
     def test_untrusted_camera_manifest_is_not_accepted_as_immutable_evidence(self) -> None:
         """Malformed, duplicated or wrong-root baselines cannot certify source QC."""
         with tempfile.TemporaryDirectory() as directory:
