@@ -317,14 +317,16 @@ def _disagreement_artifact_for_consensus(
     *,
     project_id: str,
 ) -> WorkflowArtifact | None:
-    """Validate an optional original sibling before scientific AL handoff."""
+    """Validate the consensus producer\'s optional second output before AL handoff."""
+    # Inspect every other producer output: filtering only by data type would
+    # let a mislabeled disagreement masquerade as a historical absent output.
     siblings = list(
         session.scalars(
             select(WorkflowArtifact)
             .where(
                 WorkflowArtifact.workflow_run_id == consensus_artifact.workflow_run_id,
                 WorkflowArtifact.producer_node_run_id == consensus_artifact.producer_node_run_id,
-                WorkflowArtifact.data_type == "detection_disagreements",
+                WorkflowArtifact.id != consensus_artifact.id,
             )
             .order_by(WorkflowArtifact.created_at, WorkflowArtifact.id)
         )
@@ -343,6 +345,7 @@ def _disagreement_artifact_for_consensus(
         not isinstance(output_ids, list)
         or sibling.id not in output_ids
         or sibling.producer_port_id != "disagreements"
+        or sibling.data_type != "detection_disagreements"
         or not isinstance(payload, dict)
         or payload.get("project_id") != project_id
         or sibling.payload_sha256 != canonical_json_sha256(payload)
