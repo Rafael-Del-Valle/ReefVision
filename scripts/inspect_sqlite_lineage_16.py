@@ -112,6 +112,20 @@ def inspect(path: Path) -> dict:
                 ).fetchone()
                 if version_trigger is not None and alembic_stamp_constraint_error is None:
                     alembic_stamp_constraint_error = "alembic_version_triggers_require_review"
+                # Even a valid stamp and a clean foreign_key_check can conceal
+                # relationships that cascade a stamp update/delete into research
+                # records or bind the stamp to an unrelated parent table.
+                version_fk = connection.execute(
+                    "SELECT 1 FROM sqlite_master AS objects "
+                    "JOIN pragma_foreign_key_list(objects.name) AS links "
+                    "WHERE objects.type = 'table' AND ("
+                    "objects.name = 'alembic_version' COLLATE NOCASE OR "
+                    "links.\"table\" = 'alembic_version' COLLATE NOCASE) LIMIT 1"
+                ).fetchone()
+                if version_fk is not None and alembic_stamp_constraint_error is None:
+                    alembic_stamp_constraint_error = (
+                        "alembic_version_foreign_keys_require_review"
+                    )
                 # Do not sort SQLite mixed-type values or serialize raw BLOBs:
                 # malformed stamps must remain structured, JSON-safe evidence.
                 raw_stamps = [row[0] for row in connection.execute(
