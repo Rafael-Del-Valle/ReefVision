@@ -232,3 +232,28 @@ This strengthens the independent migration evidence gate only. It neither
 rewrites the migration graph nor changes Workflow Builder or scientific
 records. Integrated lineage, representative biological saved-workflow
 acceptance, installed Windows validation and explicit approval remain HOLD.
+
+
+## Desktop startup and primary inspector parity (2026-11-23)
+
+The independent comparison gate is not sufficient if a desktop startup can
+still advance a revision with incoming or outgoing foreign keys. Both the
+desktop guard and primary read-only Alembic inventory now inspect the same
+revision-table relationship topology before accepting a known revision.
+The inventory reports only a boolean and a review warning; the desktop
+refuses migration even when foreign_key_check is clean. Ordinary foreign
+keys between scientific tables are unaffected.
+
+Five parameterized regression configurations cover incoming UPDATE and
+DELETE cascades, outgoing and self references, and an unrelated scientific
+foreign-key control. Unsafe cases exercise two actual desktop preflight
+calls with Alembic upgrade prohibited; the stamp and research rows must
+remain unchanged. Six independent disposable SQLite/SQLAlchemy probes
+passed for the relationship query, including the plain schema control.
+Repository pytest and exact-head CI remain separate acceptance requirements.
+
+No migration IDs, workflow operations, scientific units, review decisions
+or existing research data are changed. The inherited typed executable QC
+Workflow Builder is unchanged. Cross-version lineage reconciliation,
+representative biology and genuine installed Windows MSI/GUI validation
+remain release gates.
