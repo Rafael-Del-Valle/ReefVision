@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from fractions import Fraction
 from itertools import combinations
 from typing import cast
 
@@ -124,6 +125,30 @@ def test_alternating_joint_cover_minimal_rows_and_saved_workflow(
     assert support["preview_omitted_distinct_rgb_triplets"] == 0
     assert support["source_distinct_xyz_rgb_pairs"] == 514
     assert support["preview_distinct_xyz_rgb_pairs"] == 512
+    assert support["source_repeated_xyz_rgb_observation_rows"] == offset
+    assert support["preview_repeated_xyz_rgb_observation_rows"] == 0
+
+    # Independent analytic frequency oracle: every displayed locus and color
+    # occurs once, but the original repeated observations remain evidence.
+    source_count = len(points)
+    unit = Fraction(1, 512)
+    delta = unit - Fraction(1, source_count)
+    joint_tv = 511 * delta + max(unit - Fraction(repeated_rows + 1, source_count), 0)
+    xyz_tv = (
+        510 * delta
+        + max(unit - Fraction(2, source_count), 0)
+        + max(unit - Fraction(offset + 2, source_count), 0)
+    )
+    rgb_tv = 510 * delta + 2 * max(unit - Fraction(repeated_rows + 2, source_count), 0)
+    for key, value in (
+        ("xyz_rgb_observation", joint_tv),
+        ("xyz_locus", xyz_tv),
+        ("rgb_triplet", rgb_tv),
+    ):
+        assert support[f"preview_vs_source_{key}_total_variation_exact_fraction"] == [
+            value.numerator,
+            value.denominator,
+        ]
     assert "preview_omits_acquisition_endpoint_row" in artifact["qc_warnings"]
     assert "preview_omits_distinct_rgb_triplets" not in artifact["qc_warnings"]
     assert "preview_omits_distinct_xyz_rgb_observations" in artifact["qc_warnings"]
