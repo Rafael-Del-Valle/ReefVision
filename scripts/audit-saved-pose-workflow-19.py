@@ -345,7 +345,10 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 model is not None and model.project_id == run.project_id,
                 "Model is not registered",
             )
-            _require(model.task == "pose", "Registered model is not a pose model")
+            _require(
+                model.task == "pose" and model.provider_name == training.provider_id,
+                "Registered pose model provider differs from completed training",
+            )
             # The registration service independently binds the model to a
             # concrete landmark-schema revision. Metadata alone can remain
             # checksum-consistent after that binding is deleted or relinked.
@@ -396,7 +399,13 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 and metadata.get("source_pose_validation_dataset_id") == validation_id
                 and metadata.get("source_pose_validation_dataset_manifest_sha256")
                 == (validation_dataset.manifest_sha256 if validation_id is not None else None)
-                and metadata.get("source_experiment_id") == experiment.id,
+                and metadata.get("source_experiment_id") == experiment.id
+                and metadata.get("source_architecture") == training.architecture
+                and metadata.get("source_initial_pose_model_id")
+                == training.initial_checkpoint_model_id
+                and metadata.get("source_initial_pose_model_sha256")
+                == training.resolved_model_checksum
+                and metadata.get("source_metrics") == training.metrics_json,
                 "Registered model database provenance no longer matches completed training",
             )
             model_sha = _digest(_managed_file(root, model.managed_path))
