@@ -287,6 +287,7 @@ def test_combined_palette_and_locus_preservation_reuses_shared_rows_in_saved_gra
     assert len(set(hashes)) == 1
     assert len(hashes[0]) == 64
 
+
 def test_shared_locus_color_replacement_avoids_false_over_budget_saved_graph(
     client: TestClient,
 ) -> None:
@@ -396,9 +397,7 @@ def test_shared_locus_color_replacement_avoids_false_over_budget_saved_graph(
             preserve_axis_extrema_in_preview=True,
             **CALIBRATION,
         )
-    extrema_rejected = client.post(
-        f"{base}/spatial/point-cloud-preview", json=required_extrema
-    )
+    extrema_rejected = client.post(f"{base}/spatial/point-cloud-preview", json=required_extrema)
     assert extrema_rejected.status_code == 400, extrema_rejected.text
     assert "display budget" in extrema_rejected.text
 
@@ -406,6 +405,7 @@ def test_shared_locus_color_replacement_avoids_false_over_budget_saved_graph(
     for suffix, parameters, status in (
         ("reused-locus-color", params, "succeeded"),
         ("full-pair-rejected", impossible, "failed"),
+        ("axis-extrema-rejected", required_extrema, "failed"),
     ):
         graph = _graph(parameters, suffix)
         plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
@@ -439,4 +439,3 @@ def test_shared_locus_color_replacement_avoids_false_over_budget_saved_graph(
         if status == "succeeded":
             assert len(set(hashes)) == 1
             assert len(hashes[0]) == 64
-
