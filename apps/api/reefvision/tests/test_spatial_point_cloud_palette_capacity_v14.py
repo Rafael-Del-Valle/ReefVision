@@ -120,9 +120,7 @@ def test_exact_palette_capacity_and_conflicting_pair_preservation_in_saved_graph
         assert saved.status_code == 201, saved.text
         hashes: list[str] = []
         for _ in range(2):
-            run = client.post(
-                f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]}
-            )
+            run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
             assert run.status_code == 202, run.text
             succeeded = process_workflow_run_job(
                 app.state.settings, app.state.session_factory, str(run.json()["job_id"])
