@@ -2172,6 +2172,34 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual(photo.read_bytes(), original)
             self.assertTrue(baseline.read_text(encoding="utf-8").startswith("{"))
 
+    def test_duplicate_current_records_cannot_mask_altered_camera_source(self) -> None:
+        """Reject a duplicated scanner path instead of silently taking its last row."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            original = b"\xff\xd8camera-original\xff\xd9"
+            photo = root / "CAMERA.JPG"
+            photo.write_bytes(original)
+            records, errors = MODULE.inventory(root)
+            self.assertEqual(errors, [])
+            baseline = {"root": str(root), "files": records, "errors": []}
+            self.assertEqual(MODULE.compare_source_manifest(root, records, baseline), [])
+
+            changed = {**records[0], "sha256": "0" * 64}
+            for current in ([records[0], records[0]], [changed, records[0]]):
+                with self.subTest(current=current):
+                    self.assertEqual(
+                        MODULE.compare_source_manifest(root, current, baseline),
+                        ["current JPEG inventory contains duplicate source-file paths"],
+                    )
+
+            self.assertEqual(
+                MODULE.compare_source_manifest(
+                    root, [{**records[0], "path": None}], baseline
+                ),
+                ["current JPEG inventory contains malformed source-file evidence"],
+            )
+            self.assertEqual(photo.read_bytes(), original)
+
     def test_untrusted_camera_manifest_is_not_accepted_as_immutable_evidence(self) -> None:
         """Malformed, duplicated or wrong-root baselines cannot certify source QC."""
         with tempfile.TemporaryDirectory() as directory:
