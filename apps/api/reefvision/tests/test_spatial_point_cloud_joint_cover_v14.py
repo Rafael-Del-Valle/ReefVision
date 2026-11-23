@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from itertools import combinations
 from typing import cast
 
 import pytest
@@ -9,7 +10,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
-from reefvision.services.spatial_point_cloud_v14 import measure_point_cloud_preview
+from reefvision.services.spatial_point_cloud_v14 import (
+    _minimum_joint_locus_color_cover,
+    measure_point_cloud_preview,
+)
 from reefvision.tests.test_annotations import create_project
 
 CALIBRATION = {
@@ -32,9 +36,7 @@ def _alternating_source() -> tuple[list[list[float]], list[list[int]], str]:
         (1, [3, 0, 0]),
         (2, [1, 0, 0]),
     ]
-    observations.extend(
-        (locus, [locus % 256, locus // 256, 1]) for locus in range(3, 512)
-    )
+    observations.extend((locus, [locus % 256, locus // 256, 1]) for locus in range(3, 512))
     points = [[float(locus), 0.0, 0.0] for locus, _ in observations]
     colors = [rgb for _, rgb in observations]
     assert len(points) == 514
@@ -117,20 +119,14 @@ def test_alternating_joint_cover_minimal_rows_and_saved_workflow(
     assert "preview_omits_acquisition_endpoint_row" in artifact["qc_warnings"]
     assert "preview_omits_distinct_rgb_triplets" not in artifact["qc_warnings"]
     assert "preview_omits_distinct_xyz_rgb_observations" in artifact["qc_warnings"]
-    assert (
-        "preview_shifts_rgb_triplet_frequency_distribution" in artifact["qc_warnings"]
-    )
-    assert (
-        artifact["provenance"]["geometry_sha256"] == direct["provenance"]["geometry_sha256"]
-    )
+    assert "preview_shifts_rgb_triplet_frequency_distribution" in artifact["qc_warnings"]
+    assert artifact["provenance"]["geometry_sha256"] == direct["provenance"]["geometry_sha256"]
     assert artifact["provenance"]["calibration_verified"] is False
     assert artifact["provenance"]["specimen_identity_verified"] is False
 
     pair_required = {**params, "preserve_distinct_xyz_rgb_pairs_in_preview": True}
     extrema_required = {**params, "preserve_axis_extrema_in_preview": True}
-    with pytest.raises(
-        ValueError, match="Protected point indices exceed the display budget"
-    ):
+    with pytest.raises(ValueError, match="Protected point indices exceed the display budget"):
         measure_point_cloud_preview(
             points=points,
             point_colors=colors,
@@ -140,9 +136,7 @@ def test_alternating_joint_cover_minimal_rows_and_saved_workflow(
             **CALIBRATION,
         )
     for rejected_params in (pair_required, extrema_required):
-        rejected = client.post(
-            f"{base}/spatial/point-cloud-preview", json=rejected_params
-        )
+        rejected = client.post(f"{base}/spatial/point-cloud-preview", json=rejected_params)
         assert rejected.status_code == 400, rejected.text
         assert "display budget" in rejected.text
 
@@ -191,3 +185,59 @@ def test_alternating_joint_cover_minimal_rows_and_saved_workflow(
         if expected_status == "succeeded":
             assert len(set(hashes)) == 1
             assert len(hashes[0]) == 64
+
+def test_joint_matching_minimum_cover_against_exhaustive_original_rows() -> None:
+    """Small independent oracle guards duplicates, anchors and augmenting chains.
+
+    Enumerate original acquisition subsets rather than replicating the matching
+    algorithm. The oracle only establishes exact row-cover minimality, not
+    calibrated organism geometry or RGB reflectance validity.
+    """
+    # 3 exact XYZ loci x 3 raw uint8 RGB triplets, with varying missing edges.
+    # This covers disconnected components, isolated obligations, alternating
+    # paths, and source-row duplicates. Some cases force an acquisition anchor.
+    for mask in range(1, 1 << 9, 5):
+        observations = [
+            (locus, color)
+            for locus in range(3)
+            for color in range(3)
+            if mask & (1 << (3 * locus + color))
+        ]
+        if mask % 4 == 0:
+            observations.append(observations[0])
+        vertices = [(float(locus), 0.0, 0.0) for locus, _ in observations]
+        colors = [[color, 0, 0] for _, color in observations]
+        if mask % 3 == 0:
+            mandatory = {0}
+        elif mask % 3 == 1:
+            mandatory = {len(observations) - 1}
+        else:
+            mandatory = set()
+
+        selected = _minimum_joint_locus_color_cover(vertices, colors, mandatory)
+        assert mandatory.issubset(selected)
+        assert selected.issubset(set(range(len(observations))))
+        assert {vertices[index] for index in selected} == set(vertices)
+        assert {tuple(colors[index]) for index in selected} == {
+            tuple(color) for color in colors
+        }
+
+        # Independent brute-force certificate for the true minimum number of
+        # rows satisfying both cover constraints and all mandatory acquisitions.
+        remaining = sorted(set(range(len(observations))) - mandatory)
+        best_size = None
+        for extra_count in range(len(remaining) + 1):
+            for extra in combinations(remaining, extra_count):
+                candidate = mandatory | set(extra)
+                if {vertices[index] for index in candidate} != set(vertices):
+                    continue
+                if {tuple(colors[index]) for index in candidate} != {
+                    tuple(color) for color in colors
+                }:
+                    continue
+                best_size = len(candidate)
+                break
+            if best_size is not None:
+                break
+        assert best_size is not None
+        assert len(selected) == best_size, f"mask={mask}, anchored={mandatory}"
