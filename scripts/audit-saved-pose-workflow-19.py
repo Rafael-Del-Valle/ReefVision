@@ -210,6 +210,22 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 checkpoint_sha == result.get("result_checkpoint_sha256"),
                 "Checkpoint bytes differ from saved workflow provenance",
             )
+            # The saved training_result, finalized worker manifest and actual
+            # checkpoint are three independent scientific records. A valid
+            # workflow artifact checksum alone cannot reconcile drift between
+            # them after first completion.
+            checkpoint_manifest = training.artifact_manifest_json
+            checkpoint_size = checkpoint.stat().st_size
+            _require(
+                checkpoint_manifest.get("result_checkpoint_path") == training.result_checkpoint_path
+                and checkpoint_manifest.get("result_checkpoint_sha256") == checkpoint_sha
+                and result.get("result_checkpoint_path") == training.result_checkpoint_path
+                and result.get("artifact_manifest") == checkpoint_manifest
+                and type(result.get("result_checkpoint_size_bytes")) is int
+                and result["result_checkpoint_size_bytes"] == checkpoint_size
+                and checkpoint_size > 0,
+                "Saved training result or worker manifest differs from checkpoint evidence",
+            )
 
             # Scientific acceptance covers *all* checkpoint files frozen by
             # the worker, not just the selected checkpoint registered as a model.
