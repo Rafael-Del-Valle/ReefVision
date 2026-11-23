@@ -122,7 +122,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Camera originals changed, disappeared, or were
 
 The baseline must be a well-formed, error-free scanner JSON inventory. Comparison
 rejects a different source root, duplicate/unsafe manifest paths, changed source
-hashes even when file size is unchanged, missing files and new JPEG files. The optional `--expected-manifest-sha256` flag also rejects a baseline whose
+hashes even when file size is unchanged, missing files and new JPEG files.
+The optional `--expected-manifest-sha256` flag also rejects a baseline whose
 JSON bytes differ from the separately recorded pre-import digest, including
 when altered JPEGs and baseline hashes have been co-edited. Preserve that digest
 in an independent experiment record; hashing an already altered baseline at
