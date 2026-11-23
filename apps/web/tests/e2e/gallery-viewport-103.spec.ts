@@ -657,9 +657,7 @@ test("initial image and gallery scrolling", async ({ page }) => {
   expect(
     await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY })),
   ).toEqual(pageBeforeStripTouch);
-  expect(await focused.getAttribute("src")).toBe(
-    focusedSourceBeforeStripTouch,
-  );
+  expect(await focused.getAttribute("src")).toBe(focusedSourceBeforeStripTouch);
   expect(await focused.boundingBox()).toEqual(focusedBoundsBeforeStripTouch);
   await assertDecodedAndContained(1600, 1200);
 
