@@ -516,6 +516,18 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
             if version_table_present
             else 0
         )
+        version_has_foreign_keys = (
+            db.execute(
+                "SELECT 1 FROM sqlite_master AS objects "
+                "JOIN pragma_foreign_key_list(objects.name) AS links "
+                "WHERE objects.type = 'table' AND ("
+                "objects.name = 'alembic_version' COLLATE NOCASE OR "
+                "links.\"table\" = 'alembic_version' COLLATE NOCASE) LIMIT 1"
+            ).fetchone()
+            is not None
+            if version_table_present
+            else False
+        )
         version_table_info = (
             list(db.execute('PRAGMA table_xinfo("alembic_version")'))
             if version_table_present
@@ -607,6 +619,8 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
                 warnings.append(warning)
         if version_trigger_count:
             warnings.append("alembic_version_triggers_require_review")
+        if version_has_foreign_keys:
+            warnings.append("alembic_version_foreign_keys_require_review")
         if not version_table_present:
             warnings.append("missing_alembic_version_table")
         else:
@@ -744,6 +758,7 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
             # Keep the report JSON-safe without exposing arbitrary binary payloads.
             "revision_rows": [value if isinstance(value, str) else None for value in revisions],
             "alembic_version_trigger_count": version_trigger_count,
+            "alembic_version_has_foreign_keys": version_has_foreign_keys,
             "canonical_alembic_stamp_constraints": canonical_stamp_constraints,
             "lineage_hint": lineage,
             "upgrade_authorized": False,
