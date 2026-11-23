@@ -67,3 +67,33 @@ No migration or new Workflow Builder node is required because this strengthens
 the execution-time validator for existing typed artifacts; explicit human
 review remains mandatory. Passing full exact-head CI and real Windows
 installed-GUI scientific acceptance must be verified before release.
+
+## 2026-11-23: complete temporal pose review lineage (release HOLD)
+
+The existing 1.2 pose temporal-association Workflow Builder adapter emits
+`pose_temporal_tracks` with explicit `track_ids`, `count`, and one
+`builds[]` entry per source track. Track D 1.6 audits the review boundary
+rather than creating a duplicate workflow node or changing the source model.
+
+Previously the review service silently filtered duplicate/invalid track IDs,
+ignored missing or malformed builds, and overwrote repeated build entries.
+When revision evidence disappeared it skipped the stale-track guard, so a
+re-signed saved artifact could be accepted without proving which video-track
+revision produced each temporal association. The review service now requires
+unique nonblank string IDs, an exact integer count, one unique build for each
+source track, and strictly positive *integer* (not boolean) revisions.
+Unknown, duplicated or missing build associations fail closed before any
+researcher approval, without rewriting observations. Existing genuine
+`pose-temporal-workflow-0001` producer outputs already carry these fields.
+
+`test_workflow_pose_review_lineage_16.py` exercises twelve standalone
+invalid-evidence shapes and three independently persisted *executable* pose
+graphs. Each saved-graph corruption re-signs the original typed input, then
+tests that API approval is refused and the review node, parent job and run
+remain paused with no fabricated scientist approval. The existing positive
+pose review-resume test remains the compatibility/recovery control.
+
+No migration, new research model, pretrained weights, external service or
+workflow registration is introduced. Full exact-head CI, representative
+scientific data, migration-lineage reconciliation, Windows installed GUI and
+researcher approval remain release blockers.
