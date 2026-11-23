@@ -375,6 +375,31 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 == training.split_manifest_sha256,
                 "Frozen pose-training draft differs from saved workflow or validation split",
             )
+            # The saved result also records the requested scientific run settings.
+            # A rehashed result must not misrepresent the device, provider, seed
+            # or registry version while still pointing at the same checkpoint.
+            _require(
+                result.get("schema_version") == "workflow-training-result-0001"
+                and result.get("project_id") == run.project_id
+                and result.get("created_by_workflow") is True
+                and result.get("dataset_version_id") == training.dataset_version_id
+                and result.get("dataset_manifest_sha256") == training.dataset_manifest_sha256
+                and result.get("task") == training.task
+                and result.get("provider_id") == training.provider_id == "ultralytics"
+                and result.get("architecture") == training.architecture
+                and result.get("device") == training.device
+                and result.get("precision") == training.precision
+                and result.get("run_name") == training.run_name
+                and type(result.get("random_seed")) is type(training.random_seed)
+                and result.get("random_seed") == training.random_seed
+                and isinstance(snapshot.get("parameter_registry_version"), str)
+                and bool(snapshot["parameter_registry_version"])
+                and result.get("parameter_registry_version")
+                == training.parameter_registry_version
+                == snapshot["parameter_registry_version"]
+                and result.get("warnings") == training.warnings_json,
+                "Saved pose-training result misstates persisted scientific configuration",
+            )
             # First completion freezes the complete epoch history separately
             # from the final scores. Compare both persisted training records
             # with the saved Workflow Builder result: altered learning curves
