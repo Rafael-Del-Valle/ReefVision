@@ -168,9 +168,7 @@ def _paused_real_pose_workflow(
     response = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert response.status_code == 200, response.text
     assert response.json()["run"]["status"] == "waiting_for_review"
-    review_id = next(
-        item["id"] for item in response.json()["nodes"] if item["node_id"] == "review"
-    )
+    review_id = next(item["id"] for item in response.json()["nodes"] if item["node_id"] == "review")
     return app, run_id, job_id, review_id, str(project["id"])
 
 
@@ -185,9 +183,7 @@ def _paused_real_pose_workflow(
 def test_saved_executable_pose_review_refuses_resigned_incomplete_lineage(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, corruption: str, message: str
 ) -> None:
-    app, run_id, job_id, review_id, project_id = _paused_real_pose_workflow(
-        client, monkeypatch
-    )
+    app, run_id, job_id, review_id, project_id = _paused_real_pose_workflow(client, monkeypatch)
     with app.state.session_factory() as session:
         review = session.get(WorkflowNodeRun, review_id)
         assert review is not None
