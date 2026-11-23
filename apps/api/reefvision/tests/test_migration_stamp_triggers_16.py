@@ -12,7 +12,9 @@ from pathlib import Path
 import pytest
 from sqlalchemy import create_engine, text
 
+from reefvision.config import Settings
 from reefvision.db.migration_lineage_guard import assert_compatible_revision_0038
+from reefvision.desktop import run_pending_migrations
 
 SCRIPT = Path(__file__).resolve().parents[4] / "scripts" / "inspect-alembic-lineage.py"
 SPEC = importlib.util.spec_from_file_location("inspect_alembic_lineage", SCRIPT)
@@ -129,3 +131,72 @@ def test_unrelated_research_trigger_is_not_falsely_classified_as_stamp_trigger(
         assert connection.scalar(text("SELECT note FROM coral_sentinel")) == "preserved"
     engine.dispose()
     assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("relationship", ["update", "delete", "outgoing", "self", "unrelated"])
+def test_revision_foreign_key_preservation_across_preflight_and_inspector(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, relationship: str
+) -> None:
+    path = tmp_path / "research.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute("PRAGMA foreign_keys=ON")
+        db.execute("CREATE TABLE specimens (id TEXT PRIMARY KEY)")
+        db.execute("INSERT INTO specimens VALUES ('0037')")
+        reference = {
+            "outgoing": " REFERENCES specimens(id)",
+            "self": " REFERENCES alembic_version(version_num)",
+        }.get(relationship, "")
+        db.execute(
+            "CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY"
+            f"{reference})"
+        )
+        db.execute("INSERT INTO alembic_version VALUES ('0037')")
+        if relationship in {"update", "delete"}:
+            db.execute(
+                "CREATE TABLE observations (revision TEXT "
+                f"REFERENCES ALEMBIC_VERSION(version_num) ON {relationship.upper()} CASCADE)"
+            )
+        else:
+            db.execute("CREATE TABLE observations (revision TEXT REFERENCES specimens(id))")
+        db.execute("INSERT INTO observations VALUES ('0037')")
+        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+
+    original = path.read_bytes()
+    unsafe = relationship != "unrelated"
+    report = module.inspect(path)
+    warning = "alembic_version_foreign_keys_require_review"
+    assert report["sqlite_foreign_key_violations"] == 0
+    assert report["alembic_version_has_foreign_keys"] is unsafe
+    assert (warning in report["warnings"]) is unsafe
+    assert report["upgrade_authorized"] is False
+
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    try:
+        with engine.connect() as connection:
+            if unsafe:
+                with pytest.raises(RuntimeError, match="version-table foreign key"):
+                    assert_compatible_revision_0038(connection)
+            else:
+                assert_compatible_revision_0038(connection)
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0037"
+            assert connection.scalar(text("SELECT revision FROM observations")) == "0037"
+    finally:
+        engine.dispose()
+    assert path.read_bytes() == original
+
+    if unsafe:
+        settings = Settings(data_dir=tmp_path, database_url=f"sqlite:///{path.as_posix()}")
+        settings.ensure_directories()
+
+        def unexpected_upgrade(*args: object, **kwargs: object) -> None:
+            pytest.fail("Alembic upgrade must not run against unsafe revision relationships")
+
+        monkeypatch.setattr("reefvision.desktop.command.upgrade", unexpected_upgrade)
+        for _ in range(2):
+            with pytest.raises(RuntimeError, match="version-table foreign key"):
+                run_pending_migrations(settings)
+        with sqlite3.connect(path) as db:
+            assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037",)
+            assert db.execute("SELECT revision FROM observations").fetchone() == ("0037",)
+            assert db.execute("SELECT id FROM specimens").fetchone() == ("0037",)
+            assert db.execute("PRAGMA foreign_key_check").fetchall() == []
