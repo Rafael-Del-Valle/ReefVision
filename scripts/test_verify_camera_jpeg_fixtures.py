@@ -2108,7 +2108,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             staging = Path(directory)
             camera = staging / "approved-camera-originals"
             camera.mkdir()
-            original = b"\\xff\\xd8original-camera-capture\\xff\\xd9"
+            original = b"\xff\xd8original-camera-capture\xff\xd9"
             photo = camera / "DSC_0001.JPG"
             photo.write_bytes(original)
             records, errors = MODULE.inventory(camera.resolve())
@@ -2170,7 +2170,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 self.assertIn("symbolic link or junction", denied.stderr)
 
             self.assertEqual(photo.read_bytes(), original)
-            self.assertEqual(baseline.read_text(encoding="utf-8").startswith("{"), True)
+            self.assertTrue(baseline.read_text(encoding="utf-8").startswith("{"))
 
     def test_untrusted_camera_manifest_is_not_accepted_as_immutable_evidence(self) -> None:
         """Malformed, duplicated or wrong-root baselines cannot certify source QC."""
