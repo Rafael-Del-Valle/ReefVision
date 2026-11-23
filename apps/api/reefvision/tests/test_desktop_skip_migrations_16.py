@@ -330,13 +330,11 @@ def test_skip_migrations_refuses_wal_only_changes_between_preflights(
         with pytest.raises(RuntimeError, match="SQLite WAL changed during validation"):
             desktop.require_existing_desktop_schema(settings)
         assert changed_during_preflight
-        assert writer.execute("SELECT note FROM biological_notes ORDER BY rowid").fetchall() == (
-            [
-                ("original Swiftia note",),
-                *([("prior reviewed note",)] if preexisting_wal else []),
-                ("later biological note",),
-            ]
-        )
+        assert writer.execute("SELECT note FROM biological_notes ORDER BY rowid").fetchall() == [
+            ("original Swiftia note",),
+            *([("prior reviewed note",)] if preexisting_wal else []),
+            ("later biological note",),
+        ]
     finally:
         writer.close()
 
