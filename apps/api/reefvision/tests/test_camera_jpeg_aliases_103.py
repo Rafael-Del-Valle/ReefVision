@@ -7,6 +7,7 @@ must not alter pixel decoding, canonical media type, or the original bytes.
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime
 from io import BytesIO
 
 import pytest
@@ -442,7 +443,8 @@ def test_camera_alias_api_import_gallery_display_and_original_roundtrip(
     assert metadata["original_filename"] == filename
     assert metadata["media_type"] == "image/jpeg"
     assert (metadata["width_px"], metadata["height_px"]) == (31, 17)
-    assert metadata["capture_timestamp"].startswith("2026-04-03T11:55:30")
+    capture_time = datetime.fromisoformat(metadata["capture_timestamp"])
+    assert capture_time.isoformat() == "2026-04-03T11:55:30+00:00"
     assert metadata["metadata_json"]["exif"]["Orientation"] == 6
 
     gallery = client.get(f"/api/v1/projects/{project['id']}/images")
