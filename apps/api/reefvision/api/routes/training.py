@@ -401,6 +401,10 @@ def _training_log_tail(
             start = max(0, size - 16384)
             handle.seek(start)
             payload = handle.read(16384)
+            # Snapshot the exact source bytes before trimming incomplete records.
+            # Metadata checks alone cannot distinguish a valid worker append
+            # from an in-place rewrite followed by an append.
+            snapshot_payload = payload
             if start:
                 # Never present the middle of a truncated line as a complete
                 # epoch or loss value in the read-only PowerShell monitor.
@@ -451,6 +455,14 @@ def _training_log_tail(
                     and current_identity.st_mtime_ns != opened_identity.st_mtime_ns
                 )
             ):
+                raise HTTPException(status_code=403, detail="Training log changed during read")
+            # Read only the original bounded byte range a second time. A
+            # background worker may append to the end of its log, but it must
+            # not rewrite already observed epoch/loss evidence. This protects
+            # against same-inode overwrite-plus-append races that evade the
+            # size/mtime checks above, without ever modifying the training job.
+            handle.seek(start)
+            if handle.read(len(snapshot_payload)) != snapshot_payload:
                 raise HTTPException(status_code=403, detail="Training log changed during read")
     except (OSError, RuntimeError, ValueError):
         # Transient filesystem failures or a symlink loop after the initial
