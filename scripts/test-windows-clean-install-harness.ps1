@@ -500,6 +500,18 @@ try {
     $cameraBitmap.Save($cameraPngStream, [System.Drawing.Imaging.ImageFormat]::Png)
     $cameraJpegBytes = [byte[]]$cameraJpegStream.ToArray()
     $cameraPngBytes = [byte[]]$cameraPngStream.ToArray()
+    $cameraDigest = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $cameraSourceHash = [BitConverter]::ToString($cameraDigest.ComputeHash($cameraJpegBytes)).Replace('-', '')
+    } finally { $cameraDigest.Dispose() }
+    Assert-ReefVisionCameraPayloadMatchesDiskHash -Bytes $cameraJpegBytes -ExpectedSha256 $cameraSourceHash.ToLowerInvariant()
+    Assert-True $true 'Unchanged camera upload buffer must match the independently recorded source hash.'
+    $modifiedCameraBytes = [byte[]]$cameraJpegBytes.Clone()
+    $modifiedCameraBytes[6] = $modifiedCameraBytes[6] -bxor 1
+    Assert-Throws { Assert-ReefVisionCameraPayloadMatchesDiskHash -Bytes $modifiedCameraBytes -ExpectedSha256 $cameraSourceHash } 'A transient same-length camera payload rewrite must fail source integrity.'
+    Assert-Throws { Assert-ReefVisionCameraPayloadMatchesDiskHash -Bytes $cameraJpegBytes -ExpectedSha256 ('0' * 64) } 'A different but well-formed source hash must fail.'
+    Assert-Throws { Assert-ReefVisionCameraPayloadMatchesDiskHash -Bytes $cameraJpegBytes -ExpectedSha256 'not-a-sha' } 'Invalid source SHA-256 must fail closed.'
+    Assert-Throws { Assert-ReefVisionCameraPayloadMatchesDiskHash -Bytes ([byte[]]@()) -ExpectedSha256 $cameraSourceHash } 'Empty camera upload bytes must fail closed.'
     $jpegRaster = Assert-ReefVisionCameraRaster -Bytes $cameraJpegBytes -ContentType 'image/jpeg' -ExpectedWidth 7 -ExpectedHeight 5
     Assert-True ($jpegRaster.width -eq 7 -and $jpegRaster.height -eq 5) 'JPEG source raster dimensions were not decoded.'
     $pngRaster = Assert-ReefVisionCameraRaster -Bytes $cameraPngBytes -ContentType 'image/png' -ExpectedWidth 7 -ExpectedHeight 5
@@ -555,6 +567,9 @@ Assert-True ($acceptanceScript.Contains('[string]$CameraFixturePath')) 'Real cam
 Assert-True ($acceptanceScript.Contains('camera_jpeg = if ($CameraFixturePath)')) 'Missing camera fixture must be reported as SKIPPED, never PASS.'
 Assert-True ($acceptanceScript.Contains("-ContentType 'image/jpeg'")) 'Camera acceptance must submit actual JPEG media type.'
 Assert-True ($acceptanceScript.Contains('$api/images/$cameraId/content')) 'Camera acceptance must retrieve the persisted original bytes.'
+$cameraPayloadGuardIndex = $acceptanceScript.IndexOf('Assert-ReefVisionCameraPayloadMatchesDiskHash -Bytes $cameraBytes -ExpectedSha256 $cameraHashBefore')
+$cameraUploadIndex = $acceptanceScript.IndexOf('$cameraImport = Import-AcceptanceImage')
+Assert-True ($cameraPayloadGuardIndex -ge 0 -and $cameraUploadIndex -gt $cameraPayloadGuardIndex) 'Camera acceptance must verify the exact upload bytes against the source SHA-256 before import.'
 Assert-True ($acceptanceScript.Contains('$api/images/$cameraId/display')) 'Camera acceptance must exercise the installed display endpoint.'
 Assert-True (($acceptanceScript -split 'Assert-ReefVisionCameraRaster').Count -eq 4) 'Camera acceptance must decode the original, initial display, and restarted display rasters.'
 Assert-True ($acceptanceScript.Contains('$persistedCamera = Invoke-RestMethod "$api/images/$cameraId"')) 'Camera metadata must be checked after desktop restart.'
