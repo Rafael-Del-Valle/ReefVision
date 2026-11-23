@@ -10,9 +10,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.spatial_mesh_obj_v14 import MAX_VERTICES
 from reefvision.services.spatial_point_cloud_v14 import (
     _minimum_joint_locus_color_cover,
     measure_point_cloud_preview,
+    parse_ascii_ply_points,
 )
 from reefvision.tests.test_annotations import create_project
 
@@ -77,7 +79,7 @@ def _graph(params: dict, suffix: str) -> dict:
     }
 
 
-@pytest.mark.parametrize("repeated_rows", [0, 1000])
+@pytest.mark.parametrize("repeated_rows", [0, (MAX_VERTICES - 514) // 2])
 def test_alternating_joint_cover_minimal_rows_and_saved_workflow(
     client: TestClient, repeated_rows: int
 ) -> None:
@@ -191,6 +193,26 @@ def test_alternating_joint_cover_minimal_rows_and_saved_workflow(
         if expected_status == "succeeded":
             assert len(set(hashes)) == 1
             assert len(hashes[0]) == 64
+
+
+def test_duplicate_acquisitions_above_source_limit_fail_closed() -> None:
+    # The source acquisition limit is independent of the display row budget.
+    # Do not silently deduplicate oversized source data to make it admissible.
+    repeated_rows = (MAX_VERTICES - 514) // 2 + 1
+    points, colors, ply_text = _alternating_source(repeated_rows)
+    assert len(points) > MAX_VERTICES
+    staged_colors: list[list[int]] = []
+    with pytest.raises(ValueError, match="vertex count outside preview bounds"):
+        parse_ascii_ply_points(ply_text, colors_out=staged_colors)
+    assert staged_colors == []
+    with pytest.raises(ValueError, match="Point-cloud size outside preview bounds"):
+        measure_point_cloud_preview(
+            points=points,
+            point_colors=colors,
+            preserve_distinct_xyz_loci_in_preview=True,
+            preserve_distinct_rgb_triplets_in_preview=True,
+            **CALIBRATION,
+        )
 
 
 def test_joint_matching_minimum_cover_against_exhaustive_original_rows() -> None:
