@@ -250,17 +250,11 @@ def test_saved_review_rejects_rebound_graph_or_borrowed_producer(
         elif alteration in {"rewired_target_port", "rewired_source_port"}:
             # Rehash the entire saved graph and its run provenance to prove
             # that checksum agreement alone cannot authorize a forged port.
-            key = (
-                "target_port_id"
-                if alteration == "rewired_target_port"
-                else "source_port_id"
-            )
+            key = "target_port_id" if alteration == "rewired_target_port" else "source_port_id"
             forged_port = "invented-scientific-port"
             changed = dict(graph.graph_json)
             changed["edges"] = [
-                {**edge, key: forged_port}
-                if edge.get("target_node_id") == "review"
-                else edge
+                {**edge, key: forged_port} if edge.get("target_node_id") == "review" else edge
                 for edge in changed["edges"]
             ]
             graph.graph_json = changed
