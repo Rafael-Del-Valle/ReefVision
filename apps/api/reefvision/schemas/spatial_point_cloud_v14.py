@@ -59,6 +59,9 @@ class PointCloudPreviewRequest(BaseModel):
     # Pin each unique XYZ/RGB observation in colored ASCII PLY, or fail closed
     # when the 512-point display cannot represent all observed color variants.
     preserve_distinct_xyz_rgb_pairs_in_preview: StrictBool = False
+    # Retain one original acquisition per unique source RGB triplet even when
+    # more than 512 distinct XYZ/RGB pairs exist. This is raw sensor QC only.
+    preserve_distinct_rgb_triplets_in_preview: StrictBool = False
 
     @field_validator("meters_per_unit", "relative_scale_uncertainty", mode="before")
     @classmethod
