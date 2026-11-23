@@ -53,6 +53,7 @@ def test_selected_route_cumulative_roundoff_is_exposed_and_replayed(
         1_000_000_000.0,
     ]
     assert affected["path_cumulative_lost_positive_segment_indices"] == [1]
+    assert affected["path_calibrated_underflow_segment_indices"] == []
     exact_total = Fraction(1_000_000_000.0) + Fraction(1e-8)
     assert affected["path_calibrated_edge_sum_exact_fraction_m"] == str(exact_total)
     assert affected["path_cumulative_total_exact_match"] is False
@@ -88,6 +89,7 @@ def test_selected_route_cumulative_roundoff_is_exposed_and_replayed(
         1e-8 * 1.01,
     ]
     assert unaffected["path_cumulative_lost_positive_segment_indices"] == []
+    assert unaffected["path_calibrated_underflow_segment_indices"] == []
     assert unaffected["path_calibrated_edge_sum_exact_fraction_m"] == "1000000000"
     assert unaffected["path_cumulative_total_exact_match"] is True
     assert unaffected["path_cumulative_roundoff_exact_fraction_m"] == "0"
@@ -186,6 +188,7 @@ def test_unreferenced_route_has_no_nominal_exact_audit() -> None:
     assert missing["path_nominal_total_exact_match"] is None
     assert missing["path_nominal_total_vs_edge_sum_exact_fraction_m"] is None
     assert missing["path_source_edge_sum_minus_chord_exact_fraction"] is None
+    assert missing["path_calibrated_underflow_segment_indices"] is None
     assert missing["path_qc_warnings"] is None
 
 
@@ -444,6 +447,10 @@ def test_positive_source_edge_underflow_withholds_false_zero_intervals(
     assert underflowed["length_m"] == 0.0
     assert underflowed["endpoint_chord_length_m"] == 0.0
     assert underflowed["path_edge_lengths_m"] == [0.0]
+    assert underflowed["path_calibrated_underflow_segment_indices"] == [0]
+    # Loss on conversion to calibrated meters is not the same as a positive
+    # calibrated segment lost during accumulation of a large preceding total.
+    assert underflowed["path_cumulative_lost_positive_segment_indices"] == []
     assert underflowed["length_scale_interval_m"] is None
     assert underflowed["endpoint_chord_scale_interval_m"] is None
     assert underflowed["path_edge_length_scale_intervals_m"] == [None]
@@ -455,12 +462,24 @@ def test_positive_source_edge_underflow_withholds_false_zero_intervals(
     assert "path_scale_interval_below_numeric_resolution" in underflowed["path_qc_warnings"]
     assert control["status"] == "connected"
     assert control["path_vertex_indices"] == [0, 2]
+    assert control["path_calibrated_underflow_segment_indices"] == []
     assert control["length_m"] == 1e-155
     assert control["length_scale_interval_m"] == [1e-155 * 0.95, 1e-155 * 1.05]
-    assert control["path_edge_length_scale_intervals_m"] == [
-        [1e-155 * 0.95, 1e-155 * 1.05]
-    ]
+    assert control["path_edge_length_scale_intervals_m"] == [[1e-155 * 0.95, 1e-155 * 1.05]]
     assert "calibrated_path_length_underflow" not in control["path_qc_warnings"]
+
+    without_uncertainty = mesh_edge_paths(
+        points=[tuple(vertex) for vertex in geometry["vertices"]],
+        faces=geometry["faces"],
+        pairs=geometry["surface_path_vertex_pairs"],
+        scale=1e-155,
+        scale_uncertainty=None,
+    )
+    assert without_uncertainty is not None
+    assert without_uncertainty[0]["path_calibrated_underflow_segment_indices"] == [0]
+    assert without_uncertainty[0]["path_edge_length_scale_intervals_m"] is None
+    assert "calibrated_path_segment_underflow" in without_uncertainty[0]["path_qc_warnings"]
+    assert without_uncertainty[1]["path_calibrated_underflow_segment_indices"] == []
 
     direct = measure_mesh_preview(**geometry)
     assert direct["surface_edge_paths"] == paths
@@ -514,3 +533,22 @@ def test_positive_source_edge_underflow_withholds_false_zero_intervals(
         digests.append(artifact["payload_sha256"])
     assert len(set(digests)) == 1
     assert len(digests[0]) == 64
+
+
+def test_genuine_zero_source_edge_does_not_report_calibration_underflow() -> None:
+    """Exact source-frame zero must not be mistaken for a numerically lost edge."""
+    result = mesh_edge_paths(
+        points=[(0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        faces=[[0, 1, 2]],
+        pairs=[[0, 1]],
+        scale=1e-155,
+        scale_uncertainty=0.05,
+    )
+    assert result is not None
+    route = result[0]
+    assert route["status"] == "connected"
+    assert route["path_edge_lengths_m"] == [0.0]
+    assert route["path_calibrated_underflow_segment_indices"] == []
+    assert route["path_edge_length_scale_intervals_m"] == [[0.0, 0.0]]
+    assert "zero_length_edge_on_path" in route["path_qc_warnings"]
+    assert "calibrated_path_segment_underflow" not in route["path_qc_warnings"]
