@@ -656,6 +656,8 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             )
             return {
                 "status": "PASS",
+                "evidence_schema_version": "saved-pose-workflow-audit-0001",
+                "project_id": run.project_id,
                 "workflow_run_id": run.id,
                 "workflow_job_id": parent_job.id,
                 "frozen_dataset_id": dataset.id,
@@ -664,13 +666,39 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 "verified_source_video_bytes": verified_source_bytes,
                 "dataset_manifest_sha256": dataset.manifest_sha256,
                 "validation_dataset_id": validation_id,
+                "validation_dataset_manifest_sha256": (
+                    validation_dataset.manifest_sha256 if validation_id is not None else None
+                ),
+                "validation_items": (
+                    validation_dataset.item_count if validation_id is not None else 0
+                ),
+                "validation_mode": expected_validation_mode,
+                "split_manifest_sha256": training.split_manifest_sha256,
+                "pose_schema_id": dataset.pose_schema_id,
+                "pose_schema_revision": dataset.pose_schema_revision,
+                "pose_schema_content_hash": dataset.pose_schema_content_hash,
+                "verified_source_video_sha256": video_digests,
+                "separate_validation_source_video_overlap_checked": validation_id is not None,
                 "separate_validation_frame_overlap_checked": (
                     validation_id is not None and validation_id != dataset.id
                 ),
                 "training_run_id": training.id,
                 "training_job_id": job.id,
                 "experiment_id": experiment.id,
+                "experiment_package_versions_sha256": snapshot[
+                    "experiment_package_versions_sha256"
+                ],
+                "child_job_request_sha256": snapshot["pose_child_job_request_sha256"],
+                "metrics_history_sha256": snapshot["metrics_history_sha256"],
+                "provider_id": training.provider_id,
+                "architecture": training.architecture,
+                "requested_device": training.device,
+                "precision": training.precision,
+                "random_seed": training.random_seed,
+                "seed_model_id": seed_id,
+                "seed_model_sha256": training.resolved_model_checksum,
                 "checkpoint_sha256": checkpoint_sha,
+                "checkpoint_size_bytes": checkpoint_size,
                 "registered_model_id": model.id,
                 "registered_model_sha256": model_sha,
                 "scope": "saved workflow, frozen truth, training and local model bytes only",
