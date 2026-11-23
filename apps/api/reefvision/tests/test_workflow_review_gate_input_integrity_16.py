@@ -72,8 +72,8 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
             assert producer is not None
             producer.output_artifact_ids_json = []
         elif corruption == "duplicate_identifiers":
-            # Persisted, correctly rehashed evidence can still claim the same
-            # scientific prediction twice; it must not silently deduplicate.
+            # A consensus producer cannot emit detection proposals, even if
+            # the payload checksum is deliberately recomputed.
             artifact.data_type = "detection_proposals"
             artifact.payload_json = {
                 "project_id": project["id"],
@@ -107,9 +107,9 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
         "foreign_project": "project or checksum validation",
         "wrong_type": "invalid run or scientific data type",
         "missing_producer_output": "producer provenance",
-        "missing_prediction": "missing or foreign prediction proposals",
+        "missing_prediction": "violates saved typed port contract",
         "missing_classification": "invalid run or scientific data type",
-        "duplicate_identifiers": "duplicate prediction identifiers",
+        "duplicate_identifiers": "violates saved typed port contract",
     }
     assert resumed.status_code == 400, resumed.text
     assert expected_details[corruption] in resumed.json()["detail"]
@@ -126,6 +126,62 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
         parent_job = session.get(Job, job_id)
         assert parent_job is not None
         assert parent_job.status == "waiting_for_review"
+
+
+@pytest.mark.parametrize(
+    ("proposal_ids", "expected_refusal"),
+    [
+        (["missing-research-observation"], "missing or foreign prediction proposals"),
+        (["same-prediction", "same-prediction"], "duplicate prediction identifiers"),
+    ],
+)
+def test_saved_typed_detection_review_rejects_invalid_prediction_evidence(
+    client: TestClient, proposal_ids: list[str], expected_refusal: str
+) -> None:
+    """Exercise the prediction checks behind a *valid* detect-to-review port."""
+    project, run_id, job_id = _queue_seeded_review_run(client, proposals_only=True)
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id)
+    paused = client.get(f"/api/v1/workflow-runs/{run_id}").json()
+    assert paused["run"]["status"] == "waiting_for_review"
+    review_id = next(node["id"] for node in paused["nodes"] if node["node_id"] == "review")
+
+    with app.state.session_factory() as session:
+        review = session.get(WorkflowNodeRun, review_id)
+        assert review is not None
+        artifact = session.get(WorkflowArtifact, review.input_artifact_ids_json[0])
+        assert artifact is not None
+        assert artifact.data_type == "detection_proposals"
+        producer = session.get(WorkflowNodeRun, artifact.producer_node_run_id)
+        assert producer is not None and producer.node_id == "detect"
+        artifact.payload_json = {"project_id": project["id"], "proposal_ids": proposal_ids}
+        artifact.payload_sha256 = canonical_json_sha256(artifact.payload_json)
+        session.commit()
+
+    # Direct service and persisted HTTP execution must pass typed provenance
+    # first, then refuse missing or repeated biological prediction identities.
+    with app.state.session_factory() as session:
+        review = session.get(WorkflowNodeRun, review_id)
+        assert review is not None
+        typed_inputs = _input_artifacts(session, review, project_id=str(project["id"]))
+        assert len(typed_inputs) == 1
+        with pytest.raises(ValidationError, match=expected_refusal):
+            _pending_review_count(session, typed_inputs, project_id=str(project["id"]))
+
+    resumed = client.post(
+        f"/api/v1/workflow-node-runs/{review_id}/resume-review",
+        json={"reviewed_by": "scientist", "note": "Invalid research evidence"},
+    )
+    assert resumed.status_code == 400, resumed.text
+    assert expected_refusal in resumed.json()["detail"]
+    after = client.get(f"/api/v1/workflow-runs/{run_id}").json()
+    assert after["run"]["status"] == "waiting_for_review"
+    node = next(node for node in after["nodes"] if node["id"] == review_id)
+    assert node["status"] == "waiting_for_review"
+    assert "review_approval" not in (node["result_json"] or {})
+    with app.state.session_factory() as session:
+        job = session.get(Job, job_id)
+        assert job is not None and job.status == "waiting_for_review"
 
 
 def test_legacy_nullable_project_scope_stays_bound_to_saved_run(client: TestClient) -> None:

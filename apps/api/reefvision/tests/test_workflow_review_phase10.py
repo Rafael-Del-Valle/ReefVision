@@ -17,8 +17,8 @@ from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project
 
 
-def _review_graph(model_id: str) -> dict[str, object]:
-    return {
+def _review_graph(model_id: str, *, proposals_only: bool = False) -> dict[str, object]:
+    graph = {
         "graph_id": "review-resume-consensus",
         "name": "Consensus human review",
         "nodes": [
@@ -82,9 +82,29 @@ def _review_graph(model_id: str) -> dict[str, object]:
             },
         ],
     }
+    if proposals_only:
+        nodes = cast(list[dict[str, object]], graph["nodes"])
+        edges = cast(list[dict[str, object]], graph["edges"])
+        graph["nodes"] = [node for node in nodes if node["node_id"] != "consensus"]
+        graph["edges"] = [
+            edge
+            for edge in edges
+            if edge["source_node_id"] != "consensus" and edge["target_node_id"] != "consensus"
+        ] + [
+            {
+                "edge_id": "detect-review",
+                "source_node_id": "detect",
+                "source_port_id": "proposals",
+                "target_node_id": "review",
+                "target_port_id": "proposals",
+            }
+        ]
+    return graph
 
 
-def _queue_seeded_review_run(client: TestClient) -> tuple[dict[str, object], str, str]:
+def _queue_seeded_review_run(
+    client: TestClient, *, proposals_only: bool = False
+) -> tuple[dict[str, object], str, str]:
     project = create_project(client, "Workflow review lifecycle")
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
@@ -110,7 +130,7 @@ def _queue_seeded_review_run(client: TestClient) -> tuple[dict[str, object], str
 
     save = client.post(
         f"/api/v1/projects/{project['id']}/workflow-graphs",
-        json={"graph": _review_graph(model_id)},
+        json={"graph": _review_graph(model_id, proposals_only=proposals_only)},
     )
     assert save.status_code == 201, save.text
     queued = client.post(
@@ -152,19 +172,31 @@ def _queue_seeded_review_run(client: TestClient) -> tuple[dict[str, object], str
                 select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run_id)
             )
         }
-        for node_id in ("project", "images", "model", "detect", "consensus"):
+        completed_nodes: tuple[str, ...] = ("project", "images", "model", "detect")
+        if not proposals_only:
+            completed_nodes += ("consensus",)
+        for node_id in completed_nodes:
             nodes[node_id].status = "succeeded"
+        producer_name = "consensus"
+        producer_port = "consensus"
+        data_type = "detection_consensus"
+        payload = consensus_payload
+        if proposals_only:
+            producer_name = "detect"
+            producer_port = "proposals"
+            data_type = "detection_proposals"
+            payload = {"project_id": project["id"], "proposal_ids": []}
         artifact = WorkflowArtifact(
             workflow_run_id=run_id,
-            producer_node_run_id=nodes["consensus"].id,
-            producer_port_id="consensus",
-            data_type="detection_consensus",
-            payload_json=consensus_payload,
-            payload_sha256=canonical_json_sha256(consensus_payload),
+            producer_node_run_id=nodes[producer_name].id,
+            producer_port_id=producer_port,
+            data_type=data_type,
+            payload_json=payload,
+            payload_sha256=canonical_json_sha256(payload),
         )
         session.add(artifact)
         session.flush()
-        nodes["consensus"].output_artifact_ids_json = [artifact.id]
+        nodes[producer_name].output_artifact_ids_json = [artifact.id]
         session.commit()
 
     return project, run_id, job_id

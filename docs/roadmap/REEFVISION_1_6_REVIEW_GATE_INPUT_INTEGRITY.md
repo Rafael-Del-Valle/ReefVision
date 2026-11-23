@@ -72,3 +72,33 @@ preexisting successful consensus review regression is the positive control.
 Full new-head CI, biological domain checks, the independent 1.1/1.6
 Alembic-0038 reconciliation and installed Windows MSI/CAB GUI/upgrade/rollback
 remain release blockers pending independent proof and researcher signoff.
+
+
+## 23 November 2026 — typed-producer regression repair (release HOLD)
+
+The predecessor exact-head [CI #45187503411](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/45187503411)
+reported **2,455 passing, 32 skipped, two failing backend assertions**, with
+frontend and native-Windows preservation passing. Both failures were test
+expectations: a forged `detection_proposals` artifact attached to the saved
+**consensus** producer correctly fails the newer executable typed-port gate
+*before* checking any prediction ID. Do not weaken that production guard.
+
+The original persisted consensus corruption cases now assert this correct
+fail-closed refusal. To preserve the scientific intent behind the old
+assertions, the existing reusable test fixture can also create a legitimate
+`project_source → project_images / registered_model_source → detection_inference
+→ detection_review_gate` executable graph (no consensus node). Two new
+persisted-run regressions feed correctly checksummed detection proposal
+artifacts from the real `proposals` output into the real `proposals` review
+port. They independently verify typed graph provenance succeeds, then enforce
+**missing proposal refusal** and **duplicate prediction ID refusal** through
+both the backend service and approval endpoint. Both must leave the run,
+review node and parent job paused with no approval record. Existing consensus
+success remains the non-regression control.
+
+This is test-fixture/acceptance documentation only; no migration, production
+review logic, scientific units, workflow graph implementation, download,
+research-data mutation or explicit-human-approval semantics changed. The
+new exact-head CI remains unverified until GitHub Actions finishes. Windows
+MSI/CAB installed-GUI testing, biology acceptance and 1.1/1.6 Alembic-0038
+integration still block release.
