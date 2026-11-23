@@ -83,19 +83,26 @@ def test_exact_palette_capacity_and_conflicting_pair_preservation_in_saved_graph
     # originals: one omitted XYZ/RGB pair, but RGB 0 was acquired twice.
     # Marginal RGB drift is smaller than joint observation drift, not a
     # biological-condition measurement.
-    assert support["preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction"] == [
+    assert support[
+        "preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction"
+    ] == [1, 513]
+    assert support["preview_vs_source_xyz_locus_total_variation_exact_fraction"] == [
         1,
         513,
     ]
-    assert support["preview_vs_source_xyz_locus_total_variation_exact_fraction"] == [1, 513]
     assert support["preview_vs_source_rgb_triplet_total_variation_exact_fraction"] == [
         511,
         262656,
     ]
-    assert support["preview_xyz_rgb_vs_rgb_marginal_tv_gap_exact_fraction"] == [1, 262656]
+    assert support["preview_xyz_rgb_vs_rgb_marginal_tv_gap_exact_fraction"] == [
+        1,
+        262656,
+    ]
     assert support["preview_xyz_rgb_vs_xyz_marginal_tv_gap_exact_fraction"] == [0, 1]
     assert "preview_omits_distinct_rgb_triplets" not in artifact["qc_warnings"]
     assert "preview_omits_distinct_xyz_rgb_observations" in artifact["qc_warnings"]
+    assert "preview_shifts_rgb_triplet_frequency_distribution" in artifact["qc_warnings"]
+    assert "preview_xyz_rgb_tv_exceeds_rgb_marginal_tv" in artifact["qc_warnings"]
     assert artifact["provenance"]["calibration_verified"] is False
     assert artifact["provenance"]["specimen_identity_verified"] is False
     assert artifact["surface_area_m2"] is None
@@ -211,10 +218,9 @@ def test_combined_palette_and_locus_preservation_reuses_shared_rows_in_saved_gra
     assert support["preview_distinct_xyz_rgb_pairs"] == 512
     # One source XYZ locus and one raw RGB triplet each occur twice.
     # Every unique location/color survives, but one acquisition is omitted.
-    assert support["preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction"] == [
-        1,
-        513,
-    ]
+    assert support[
+        "preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction"
+    ] == [1, 513]
     assert support["preview_vs_source_xyz_locus_total_variation_exact_fraction"] == [
         511,
         262656,
@@ -223,10 +229,19 @@ def test_combined_palette_and_locus_preservation_reuses_shared_rows_in_saved_gra
         511,
         262656,
     ]
-    assert support["preview_xyz_rgb_vs_rgb_marginal_tv_gap_exact_fraction"] == [1, 262656]
-    assert support["preview_xyz_rgb_vs_xyz_marginal_tv_gap_exact_fraction"] == [1, 262656]
+    assert support["preview_xyz_rgb_vs_rgb_marginal_tv_gap_exact_fraction"] == [
+        1,
+        262656,
+    ]
+    assert support["preview_xyz_rgb_vs_xyz_marginal_tv_gap_exact_fraction"] == [
+        1,
+        262656,
+    ]
     assert "preview_omits_distinct_rgb_triplets" not in artifact["qc_warnings"]
     assert "preview_omits_distinct_xyz_rgb_observations" in artifact["qc_warnings"]
+    assert "preview_shifts_rgb_triplet_frequency_distribution" in artifact["qc_warnings"]
+    assert "preview_xyz_rgb_tv_exceeds_rgb_marginal_tv" in artifact["qc_warnings"]
+    assert "preview_xyz_rgb_tv_exceeds_xyz_marginal_tv" in artifact["qc_warnings"]
     assert artifact["provenance"]["calibration_verified"] is False
     assert artifact["provenance"]["specimen_identity_verified"] is False
     assert artifact["surface_area_m2"] is None
