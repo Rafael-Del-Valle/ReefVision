@@ -342,6 +342,9 @@ try {
         # This is backend evidence, not a substitute for interactive WebView2 QA.
         $cameraHashBefore = (Get-FileHash -LiteralPath $CameraFixturePath -Algorithm SHA256).Hash
         $cameraBytes = [System.IO.File]::ReadAllBytes($CameraFixturePath)
+        # Hash the actual upload buffer, not just the path before/after reading.
+        # A transient source rewrite must never be certified as original bytes.
+        Assert-ReefVisionCameraPayloadMatchesDiskHash -Bytes $cameraBytes -ExpectedSha256 $cameraHashBefore
         $cameraName = [System.IO.Path]::GetFileName($CameraFixturePath)
         $cameraImport = Import-AcceptanceImage -Url "$api/projects/$projectId/imports/images" -ImageBytes $cameraBytes -Filename $cameraName -RelativePath "camera/$cameraName" -ContentType 'image/jpeg'
         if (@($cameraImport.successful).Count -ne 1) {
