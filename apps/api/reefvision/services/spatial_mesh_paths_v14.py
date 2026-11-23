@@ -303,6 +303,7 @@ def mesh_edge_paths(
         path_edge_lengths_m: list[float] | None = None
         path_cumulative_lengths_m: list[float] | None = None
         path_cumulative_lost_positive_segment_indices: list[int] | None = None
+        path_calibrated_underflow_segment_indices: list[int] | None = None
         path_calibrated_edge_sum_exact_fraction_m: str | None = None
         path_cumulative_total_exact_match: bool | None = None
         path_cumulative_roundoff_exact_fraction_m: str | None = None
@@ -362,6 +363,16 @@ def mesh_edge_paths(
             path_edge_lengths_m = [adjacency[a][b] * scale for a, b in pairwise(route)]
             if any(not isfinite(length) for length in path_edge_lengths_m):
                 raise ValueError("Calibrated mesh path segment length overflowed")
+            # Distinguish a strictly positive imported edge that calibrates to
+            # binary64 zero from an actual zero-length source edge. These are
+            # zero-based route segment positions for full-resolution review.
+            path_calibrated_underflow_segment_indices = [
+                index
+                for index, ((a, b), calibrated) in enumerate(
+                    zip(pairwise(route), path_edge_lengths_m, strict=True)
+                )
+                if adjacency[a][b] > 0 and calibrated == 0
+            ]
             # One cumulative distance per ordered route vertex allows a reviewer
             # to inspect the full geometric route, including decimated previews.
             # This is not a verified biological centerline or growth estimate.
@@ -518,12 +529,7 @@ def mesh_edge_paths(
                         and geometric_excess_source_units > 0
                         and geometric_excess_m == 0
                     )
-                    or any(
-                        adjacency[a][b] > 0 and length == 0
-                        for (a, b), length in zip(
-                            pairwise(route), path_edge_lengths_m, strict=True
-                        )
-                    )
+                    or bool(path_calibrated_underflow_segment_indices)
                 )
                 if shortest[end] > 0 and meters == 0:
                     length_scale_interval_m = None
@@ -613,10 +619,7 @@ def mesh_edge_paths(
                 for edge in route_edges
             ):
                 path_qc_warnings.append("inconsistent_winding_edge_on_path")
-            if any(
-                adjacency[a][b] > 0 and calibrated == 0
-                for (a, b), calibrated in zip(pairwise(route), path_edge_lengths_m, strict=True)
-            ):
+            if path_calibrated_underflow_segment_indices:
                 path_qc_warnings.append("calibrated_path_segment_underflow")
             if any(adjacency[a][b] == 0 for a, b in pairwise(route)):
                 path_qc_warnings.append("zero_length_edge_on_path")
@@ -652,6 +655,9 @@ def mesh_edge_paths(
                 "path_cumulative_lengths_m": path_cumulative_lengths_m,
                 "path_cumulative_lost_positive_segment_indices": (
                     path_cumulative_lost_positive_segment_indices
+                ),
+                "path_calibrated_underflow_segment_indices": (
+                    path_calibrated_underflow_segment_indices
                 ),
                 "path_calibrated_edge_sum_exact_fraction_m": (
                     path_calibrated_edge_sum_exact_fraction_m
