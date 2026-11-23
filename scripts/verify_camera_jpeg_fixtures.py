@@ -743,6 +743,24 @@ def compare_source_manifest(
                 "jpeg_exif_datetime_original_local",
                 "jpeg_exif_offset_time_original",
                 "jpeg_exif_subsec_time_original",
+                # Preserve the QC/uncertainty verdict, not merely the parsed
+                # values. Decoder drift that turns an unknown timezone or a
+                # conflicting EXIF tag into an apparent valid measurement must
+                # invalidate the approved read-only scientific baseline.
+                "jpeg_exif_camera_make_malformed",
+                "jpeg_exif_camera_model_malformed",
+                "jpeg_exif_datetime_original_malformed",
+                "jpeg_exif_offset_time_original_malformed",
+                "jpeg_exif_subsec_time_original_malformed",
+                "jpeg_exif_exposure_ifd_conflict",
+                "jpeg_exif_offset_without_datetime_original",
+                "jpeg_exif_subsec_without_datetime_original",
+                "jpeg_exif_capture_timezone_unknown",
+                "jpeg_exif_pixel_width",
+                "jpeg_exif_pixel_height",
+                "jpeg_exif_pixel_width_invalid_type",
+                "jpeg_exif_pixel_height_invalid_type",
+                "jpeg_exif_ifd0_dimension_conflict",
                 "jpeg_exif_dimensions_match_raster",
                 "jpeg_icc_profile_present",
                 "jpeg_icc_profile_bytes",
