@@ -143,6 +143,13 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 result.get("pose_training_dataset_id") == dataset.id,
                 "Training used another dataset",
             )
+            # TrainingRun has its own canonical dataset digest, independent
+            # of the pose-specific worker artifact manifest. Both must name
+            # the same scientist-reviewed frozen source at acceptance.
+            _require(
+                training.dataset_manifest_sha256 == dataset.manifest_sha256,
+                "Training run dataset digest differs from frozen pose truth",
+            )
             _require(
                 training.artifact_manifest_json.get("pose_training_dataset_manifest_sha256")
                 == dataset.manifest_sha256,
