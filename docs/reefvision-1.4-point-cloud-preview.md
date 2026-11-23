@@ -672,3 +672,25 @@ likewise withholds unresolvable scale-only bounds instead of suggesting false
 certainty. The strict-mypy regression and direct/API/twice-replayed executable
 persisted typed Workflow Builder test guard this behavior. Calibration and
 biological identity remain unverified pending independent scientific review.
+
+### RGB triplet palette retention QC (November 22, 2026)
+
+For imported **colored** ASCII PLY previews, `preview_rgb_variant_support`
+now reports `source_distinct_rgb_triplets`,
+`preview_distinct_rgb_triplets`,
+`fraction_of_source_rgb_triplets_displayed`, and
+`preview_omitted_distinct_rgb_triplets`. The
+`preview_omits_distinct_rgb_triplets` QC warning identifies a raw source
+RGB color entirely absent from the bounded 512-row display sample, even
+when sampled channel extrema or geometric XYZ coverage are unchanged.
+These fields compare distinct **raw uint8 triplets**, not XYZ/RGB pairs,
+acquisition frequencies, calibrated reflectance, biological condition, or
+specimen identity. They complement existing pair-retention and
+total-variation diagnostics; RGB triplet retention of 100% does not
+establish complete spatial observation coverage.
+
+A rare-color/identical-palette synthetic regression checks missing versus
+retained triplets, and the opt-in XYZ/RGB pair-preserving standalone endpoint
+is checked against two executions of the persisted typed Workflow Builder
+graph, including complete artifacts and their SHA-256 fingerprints. Colored
+source provenance remains provisional and requires scientist review.
