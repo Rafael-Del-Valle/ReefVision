@@ -24,10 +24,7 @@ def _source() -> tuple[list[list[float]], list[list[int]], str]:
     # 513 spatial/color pairs but exactly 512 distinct raw RGB triplets.
     points = [[float(i), 0.0, 0.0] for i in range(513)]
     colors = [[i % 256, i // 256, 0] for i in range(512)] + [[0, 0, 0]]
-    rows = [
-        f"{i} 0 0 {rgb[0]} {rgb[1]} {rgb[2]}"
-        for i, rgb in enumerate(colors)
-    ]
+    rows = [f"{i} 0 0 {rgb[0]} {rgb[1]} {rgb[2]}" for i, rgb in enumerate(colors)]
     text = (
         "ply\nformat ascii 1.0\n"
         f"element vertex {len(rows)}\n"
