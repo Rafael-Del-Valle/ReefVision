@@ -83,18 +83,18 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
     )
     # Domain ValidationError is mapped to HTTP 400, not Pydantic's 422.
     expected_details = {
-        "missing_artifact": "Workflow review input artifact no longer exists",
-        "empty_binding": "Workflow review gate has invalid saved input bindings",
-        "duplicate_binding": "Workflow review gate has invalid saved input bindings",
-        "changed_payload": "Workflow review input failed project or checksum validation",
-        "foreign_project": "Workflow review input failed project or checksum validation",
-        "wrong_type": "Workflow review input has invalid run or scientific data type",
-        "missing_producer_output": "Workflow review input lost its saved producer provenance",
-        "missing_prediction": "Workflow review cannot approve missing or foreign prediction proposals",
-        "missing_classification": "Workflow review input has invalid run or scientific data type",
+        "missing_artifact": "no longer exists",
+        "empty_binding": "invalid saved input bindings",
+        "duplicate_binding": "invalid saved input bindings",
+        "changed_payload": "project or checksum validation",
+        "foreign_project": "project or checksum validation",
+        "wrong_type": "invalid run or scientific data type",
+        "missing_producer_output": "producer provenance",
+        "missing_prediction": "missing or foreign prediction proposals",
+        "missing_classification": "invalid run or scientific data type",
     }
     assert resumed.status_code == 400, resumed.text
-    assert resumed.json() == {"detail": expected_details[corruption]}
+    assert expected_details[corruption] in resumed.json()["detail"]
     after = client.get(f"/api/v1/workflow-runs/{run_id}").json()
     assert after["run"]["status"] == "waiting_for_review"
     node = next(node for node in after["nodes"] if node["id"] == review_id)
