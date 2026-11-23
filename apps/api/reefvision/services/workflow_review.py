@@ -130,6 +130,30 @@ def _verify_review_graph_binding(
     ):
         raise ValidationError("Workflow review input is not connected to its saved graph edge")
 
+    # The graph checksum binds the port labels, but does not prove that a
+    # rehashed graph still uses declared, type-compatible scientific ports.
+    # Resolve the live executable registry lazily to avoid a pose-adapter
+    # import cycle during startup and retain registered 1.0 extensions.
+    from reefvision.services.workflow_graphs import WorkflowGraphService
+
+    registry = WorkflowGraphService(session).registry
+    producer_definition = registry.get(producer.node_type)
+    review_definition = registry.get(node_run.node_type)
+    if producer_definition is None or review_definition is None:
+        raise ValidationError("Workflow review input violates saved typed port contract")
+
+    producer_ports = {port.port_id: port for port in producer_definition.output_ports}
+    review_ports = {port.port_id: port for port in review_definition.input_ports}
+    source_port = producer_ports.get(artifact.producer_port_id)
+    target_port = review_ports.get(incoming[0]["target_port_id"])
+    if (
+        source_port is None
+        or target_port is None
+        or artifact.data_type not in source_port.accepted_types
+        or artifact.data_type not in target_port.accepted_types
+    ):
+        raise ValidationError("Workflow review input violates saved typed port contract")
+
 
 def _input_artifacts(
     session: Session, node_run: WorkflowNodeRun, *, project_id: str

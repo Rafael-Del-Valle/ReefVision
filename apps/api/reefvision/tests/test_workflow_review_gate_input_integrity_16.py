@@ -198,6 +198,9 @@ def test_standalone_review_rejects_repeated_prediction_evidence(
         ("wrong_producer_type", "node or producer differs from saved graph"),
         ("changed_graph_without_hash", "saved graph provenance failed validation"),
         ("changed_run_graph_hash", "saved graph provenance failed validation"),
+        ("rewired_target_port", "violates saved typed port contract"),
+        ("rewired_source_port", "violates saved typed port contract"),
+        ("incompatible_produced_type", "violates saved typed port contract"),
     ],
 )
 def test_saved_review_rejects_rebound_graph_or_borrowed_producer(
@@ -239,6 +242,32 @@ def test_saved_review_rejects_rebound_graph_or_borrowed_producer(
             artifact.producer_port_id = "unconnected-output"
         elif alteration == "wrong_producer_type":
             producer.node_type = "detection_inference"
+        elif alteration == "incompatible_produced_type":
+            # A consensus producer can never output detection_proposals.
+            # The review gate accepts both types, so the node type alone
+            # cannot establish the actual output-port contract.
+            artifact.data_type = "detection_proposals"
+        elif alteration in {"rewired_target_port", "rewired_source_port"}:
+            # Rehash the entire saved graph and its run provenance to prove
+            # that checksum agreement alone cannot authorize a forged port.
+            key = (
+                "target_port_id"
+                if alteration == "rewired_target_port"
+                else "source_port_id"
+            )
+            forged_port = "invented-scientific-port"
+            changed = dict(graph.graph_json)
+            changed["edges"] = [
+                {**edge, key: forged_port}
+                if edge.get("target_node_id") == "review"
+                else edge
+                for edge in changed["edges"]
+            ]
+            graph.graph_json = changed
+            graph.graph_sha256 = canonical_json_sha256(changed)
+            run.graph_sha256 = graph.graph_sha256
+            if alteration == "rewired_source_port":
+                artifact.producer_port_id = forged_port
         elif alteration == "changed_graph_without_hash":
             graph.graph_json = {**graph.graph_json, "name": "Unreviewed replacement graph"}
         else:

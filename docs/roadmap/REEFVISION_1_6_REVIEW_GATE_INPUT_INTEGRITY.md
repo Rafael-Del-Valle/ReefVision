@@ -42,3 +42,33 @@ consensus-review positive path is still covered separately.
 Do not claim the updated tests pass until exact-head CI completes. Genuine
 Windows installer/GUI, representative biological acceptance, Alembic-0038
 cross-version reconciliation and explicit researcher approval remain open.
+
+## Rehashed saved-graph typed-port enforcement (23 November 2026)
+
+A saved review's SHA-256 and the persisted graph edge are necessary, but an
+altered graph can be recomputed with matching hashes. The previous edge check
+confirmed source node/output labels and only required a nonempty target port:
+it did not verify those labels against the executable node registry. A
+consensus artifact could also have its data type switched to another
+review-gate-accepted type even though its original producer cannot emit it.
+
+At approval, the existing pause gate now resolves the node types through the
+same installed Workflow Builder registry used for executable graph planning.
+The exact source output and target input ports must exist and **both** must
+accept the original artifact's stored scientific data type. Unknown or
+incompatible port claims fail closed without reassigning or deleting media,
+observations, original review records or predictions. The check applies
+equally to detection, segmentation, classification, pose and pose Active
+Learning review nodes, including earlier registered pose extensions. The
+Workflow Builder graph, persisted run, units, retry behavior and human approval
+requirement remain unchanged; no duplicate workflow nodes or migration.
+
+Three additional parameterized persisted-graph regressions rehash forged
+source/target edges or substitute a producer-incompatible data type, assert
+the direct service and HTTP approval both reject them, and preserve the
+waiting run, review node, original parent job and unrecorded approval. The
+preexisting successful consensus review regression is the positive control.
+
+Full new-head CI, biological domain checks, the independent 1.1/1.6
+Alembic-0038 reconciliation and installed Windows MSI/CAB GUI/upgrade/rollback
+remain release blockers pending independent proof and researcher signoff.
