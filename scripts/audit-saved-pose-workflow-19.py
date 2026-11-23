@@ -203,6 +203,25 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 validation_id == manifest.get("pose_validation_dataset_id"),
                 "Saved validation dataset differs from completed training",
             )
+            # A completed pose worker runs with AMP disabled and controls
+            # validation exclusively from a separate frozen dataset. Check
+            # effective persisted settings, not only the split manifest:
+            # otherwise the audit could certify scores from an altered run
+            # claiming AMP or independent validation it never performed.
+            expected_validation_mode = (
+                "separate_frozen_pose_dataset" if validation_id is not None else "none"
+            )
+            _require(
+                training.precision == "fp32"
+                and isinstance(training.training_config_json, dict)
+                and training.training_config_json.get("amp") is False
+                and type(training.training_config_json.get("val")) is bool
+                and training.training_config_json["val"] == (validation_id is not None)
+                and isinstance(training.evaluation_config_json, dict)
+                and training.evaluation_config_json.get("validation_mode")
+                == expected_validation_mode,
+                "Effective pose precision or independent validation policy changed",
+            )
             if validation_id is not None:
                 validation_dataset = session.get(PoseTrainingDataset, validation_id)
                 _require(
