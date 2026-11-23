@@ -804,3 +804,20 @@ strategy record the opt-in choice; existing palette-coverage, exact total-
 variation, source-fingerprint, QC and human-verification fields remain in the
 result. Raw camera colors do **not** establish verified reflectance, coral
 health, tissue condition, specimen reidentification or biological replication.
+
+
+When users combine XYZ-locus retention with raw RGB-palette retention, the
+sampler reuses an acquisition already protected for a location (or other
+requested constraint) if that row also represents the requested color. A
+513-row synthetic PLY with **512 distinct XYZ loci, 512 raw RGB colors, and
+513 distinct XYZ/RGB pairs** thus fits a 512-row preview: a redundant
+location/color acquisition can be omitted without losing either a locus
+or an RGB triplet. The omitted XYZ/RGB pair is still reported by QC.
+Standalone API and twice-executed saved typed workflows compare complete
+artifacts and reproducible fingerprints for this boundary.
+
+Representative selection is deterministic and greedy, **not an optimal
+minimum-row-cover solver**; unusual combinations of preservation
+requirements may still fail closed rather than silently discard protected
+acquisitions. Source geometry, raw RGB, and unverified biological
+interpretation remain separate.
