@@ -134,6 +134,7 @@ def extend_mesh_registry(
                 "preserve_largest_axis_gap_boundary_loci_in_preview": False,
                 "preserve_distinct_xyz_loci_in_preview": False,
                 "preserve_distinct_xyz_rgb_pairs_in_preview": False,
+                "preserve_distinct_rgb_triplets_in_preview": False,
                 "expected_source_payload_sha256": None,
                 "relative_scale_uncertainty": None,
                 "calibration_review": None,
@@ -160,7 +161,10 @@ def extend_mesh_registry(
                 "source location for display, or rejects over-512-location requests.",
                 "Retained source locations are not tissue completeness or replicates.",
                 "Optional distinct XYZ/RGB observation retention requires colored PLY "
-                "and rejects over-512-pair previews; RGB is not biological condition."
+                "and rejects over-512-pair previews; RGB is not biological condition.",
+                "Optional distinct RGB-triplet preservation pins one row per raw color; "
+                "a >512-color or jointly over-budget request fails closed.",
+                "Raw RGB palette retention is not calibration or biological condition.",
                 "Optional source SHA-256 binding rejects changed ASCII PLY bytes on replay.",
                 "Project-owned PLY originals are verified at run time, not on graph save.",
                 "Not an asset importer or a full interactive asset picker.",
