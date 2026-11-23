@@ -51,6 +51,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
         Job,
         ModelRegistration,
         PoseTrainingDataset,
+        PoseTrainingDatasetItem,
         TrainingRun,
         WorkflowArtifact,
         WorkflowNodeRun,
@@ -179,6 +180,24 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                     "Saved validation dataset is missing, foreign, or anatomically incompatible",
                 )
                 PoseTrainingDatasetService(session).manifest(validation_id)
+                # A separately frozen validation set must be genuinely held out.
+                # Video IDs may change on re-import, so compare source file
+                # digests and frame indices instead of database asset IDs.
+                if validation_id != dataset.id:
+                    def source_frames(frozen_id: str) -> set[tuple[str, int]]:
+                        return set(
+                            session.execute(
+                                select(
+                                    PoseTrainingDatasetItem.video_sha256,
+                                    PoseTrainingDatasetItem.frame_index,
+                                ).where(PoseTrainingDatasetItem.dataset_id == frozen_id)
+                            ).tuples().all()
+                        )
+
+                    _require(
+                        not source_frames(dataset.id).intersection(source_frames(validation_id)),
+                        "Separate frozen validation dataset reuses training video frames",
+                    )
             job = session.get(Job, training.job_id)
             _require(
                 job is not None and job.status == "succeeded",
@@ -359,6 +378,10 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 "frozen_dataset_id": dataset.id,
                 "verified_items": dataset.item_count,
                 "dataset_manifest_sha256": dataset.manifest_sha256,
+                "validation_dataset_id": validation_id,
+                "separate_validation_frame_overlap_checked": (
+                    validation_id is not None and validation_id != dataset.id
+                ),
                 "training_run_id": training.id,
                 "training_job_id": job.id,
                 "experiment_id": experiment.id,
