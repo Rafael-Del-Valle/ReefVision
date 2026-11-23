@@ -68,6 +68,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
         PoseLandmarkSchemaRevision,
         PoseModelSchemaBinding,
         PoseTrainingDataset,
+        Project,
         TrainingRun,
         WorkflowArtifact,
         WorkflowNodeRun,
@@ -322,6 +323,19 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 == training.artifact_manifest_json.get("experiment_package_versions_sha256"),
                 "Recorded experiment package versions differ from training evidence",
             )
+            # The production replay contract only accepts best.pt/last.pt
+            # inside *this* training run's output tree. A valid checksum in
+            # a different run's weights file does not prove local lineage.
+            project = session.get(Project, run.project_id)
+            _require(project is not None, "Training project was not found")
+            expected_weights_prefix = (
+                f"{project.storage_root}/training/{training.id}/runs/pose/weights/"
+            )
+            _require(
+                training.result_checkpoint_path
+                in {expected_weights_prefix + "best.pt", expected_weights_prefix + "last.pt"},
+                "Selected checkpoint belongs to a different training run",
+            )
             checkpoint = _managed_file(root, training.result_checkpoint_path)
             checkpoint_sha = _digest(checkpoint)
             _require(
@@ -349,9 +363,9 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             # the worker, not just the selected checkpoint registered as a model.
             # Non-selected best/last weights are independent research artifacts.
             checkpoint_manifest = training.artifact_manifest_json
-            for path_key, sha_key in (
-                ("best_checkpoint_path", "best_checkpoint_sha256"),
-                ("last_checkpoint_path", "last_checkpoint_sha256"),
+            for path_key, sha_key, filename in (
+                ("best_checkpoint_path", "best_checkpoint_sha256", "best.pt"),
+                ("last_checkpoint_path", "last_checkpoint_sha256", "last.pt"),
             ):
                 advertised_path = checkpoint_manifest.get(path_key)
                 advertised_sha = checkpoint_manifest.get(sha_key)
@@ -364,6 +378,10 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                     and len(advertised_sha) == 64
                     and all(char in "0123456789abcdef" for char in advertised_sha),
                     f"{path_key} and {sha_key} must be paired and valid",
+                )
+                _require(
+                    advertised_path == expected_weights_prefix + filename,
+                    f"{path_key} belongs to another training run",
                 )
                 _require(
                     _digest(_managed_file(root, advertised_path)) == advertised_sha,
