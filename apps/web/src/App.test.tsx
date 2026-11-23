@@ -1476,27 +1476,31 @@ describe("App", () => {
   });
 
   // This multi-view navigation can exceed the default budget on a busy CI worker.
-  it("opens the annotation editor from the gallery", { timeout: 10_000 }, async () => {
-    mockApi({ projects: [project], images: [image] });
-    renderApp();
+  it(
+    "opens the annotation editor from the gallery",
+    { timeout: 10_000 },
+    async () => {
+      mockApi({ projects: [project], images: [image] });
+      renderApp();
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: /CPT Coral Study/ }),
-    );
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Annotate" }),
-    );
+      await userEvent.click(
+        await screen.findByRole("button", { name: /CPT Coral Study/ }),
+      );
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Annotate" }),
+      );
 
-    await waitFor(() =>
-      expect(screen.getByTestId("annotation-save-state")).toHaveTextContent(
-        "Ready",
-      ),
-    );
-    expect(screen.getByText("Manual annotation editor")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Back to gallery" }),
-    ).toBeInTheDocument();
-  });
+      await waitFor(() =>
+        expect(screen.getByTestId("annotation-save-state")).toHaveTextContent(
+          "Ready",
+        ),
+      );
+      expect(screen.getByText("Manual annotation editor")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Back to gallery" }),
+      ).toBeInTheDocument();
+    },
+  );
 
   it("supports arrow-key navigation between workspace groups", async () => {
     mockApi({ projects: [project] });
