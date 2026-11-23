@@ -242,7 +242,6 @@ def test_joint_matching_minimum_cover_against_exhaustive_original_rows() -> None
         assert len(selected) == best_size, f"mask={mask}, anchored={mandatory}"
 
 
-
 @pytest.mark.parametrize(
     "anchored_source_rows",
     [
