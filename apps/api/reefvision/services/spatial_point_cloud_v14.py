@@ -732,25 +732,51 @@ def measure_point_cloud_preview(
         for index, (vertex, rgb) in enumerate(zip(vertices, point_colors, strict=True)):
             first_index_per_pair.setdefault((vertex, tuple(rgb)), index)
         distinct_rgb_pair_indices.update(first_index_per_pair.values())
-    # Raw palette coverage can be feasible even when preserving every
-    # spatial XYZ/RGB pair is not. Reuse already-protected acquisitions for
-    # their colors before pinning additional first-occurrence RGB rows.
-    # Otherwise two compatible retention requests can falsely exceed 512.
-    # This is a deterministic greedy reuse, not a globally minimal cover.
+    # Reuse already-protected acquisitions for palette coverage before
+    # reserving new display rows. A first-occurrence locus representative
+    # can also be replaced by another acquisition at that *same* XYZ locus,
+    # but only when its old RGB is still represented elsewhere. Never
+    # replace an axis, chord, gap-boundary or XYZ/RGB-pair protected row.
+    # This deterministic local repair is not an optimal set-cover solver.
     distinct_rgb_triplet_indices: set[int] = set()
     if preserve_distinct_rgb_triplets_in_preview:
         assert point_colors is not None
-        already_pinned = distinct_locus_indices | distinct_rgb_pair_indices | gap_boundary_indices
+        immovable = distinct_rgb_pair_indices | gap_boundary_indices
         if preserve_axis_extrema_in_preview:
-            already_pinned.update(extrema_indices)
+            immovable.update(extrema_indices)
         if pin_chords:
-            already_pinned.update(selected_endpoint_indices)
-        retained_colors = {tuple(point_colors[index]) for index in already_pinned}
+            immovable.update(selected_endpoint_indices)
+        already_pinned = distinct_locus_indices | immovable
+        pinned_color_counts = Counter(tuple(point_colors[index]) for index in already_pinned)
+        retained_colors = set(pinned_color_counts)
+        pinned_locus_index = {vertices[index]: index for index in distinct_locus_indices}
         for index, rgb in enumerate(point_colors):
             color = tuple(rgb)
-            if color not in retained_colors:
-                retained_colors.add(color)
+            if color in retained_colors:
+                continue
+            previous = (
+                pinned_locus_index.get(vertices[index])
+                if preserve_distinct_xyz_loci_in_preview
+                else None
+            )
+            if (
+                previous is not None
+                and previous not in immovable
+                and pinned_color_counts[tuple(point_colors[previous])] > 1
+            ):
+                old_color = tuple(point_colors[previous])
+                distinct_locus_indices.remove(previous)
+                distinct_locus_indices.add(index)
+                already_pinned.remove(previous)
+                already_pinned.add(index)
+                pinned_locus_index[vertices[index]] = index
+                pinned_color_counts[old_color] -= 1
+                pinned_color_counts[color] += 1
+            else:
                 distinct_rgb_triplet_indices.add(index)
+                already_pinned.add(index)
+                pinned_color_counts[color] += 1
+            retained_colors.add(color)
     if (
         preserve_axis_extrema_in_preview
         or pin_chords
