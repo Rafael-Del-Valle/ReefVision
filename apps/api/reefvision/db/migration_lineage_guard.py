@@ -128,6 +128,22 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "Preserve the database and reconcile provenance from a reviewed "
                 "backup without running migrations, stamping or deleting records."
             )
+        # A clean foreign_key_check does not exclude cascades when Alembic
+        # changes its revision. Match the independent read-only comparison gate.
+        version_fk = connection.exec_driver_sql(
+            "SELECT 1 FROM sqlite_master AS objects "
+            "JOIN pragma_foreign_key_list(objects.name) AS links "
+            "WHERE objects.type = 'table' AND ("
+            "objects.name = 'alembic_version' COLLATE NOCASE OR "
+            "links.\"table\" = 'alembic_version' COLLATE NOCASE) LIMIT 1"
+        ).scalar()
+        if version_fk is not None:
+            raise RuntimeError(
+                "Unsafe ReefVision Alembic version-table foreign key: revision "
+                "stamping could change linked research data or depend on unrelated rows. "
+                "Preserve the database and reconcile provenance from a reviewed "
+                "backup without running migrations, stamping or deleting records."
+            )
     # Preserve row multiplicity: two identical stamps are still an invalid
     # Alembic state and must not be hidden by set deduplication.
     version_columns = {column["name"] for column in inspector.get_columns("alembic_version")}
