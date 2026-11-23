@@ -155,19 +155,18 @@ def test_combined_palette_and_locus_preservation_reuses_shared_rows_in_saved_gra
     # row 2 covers both requirements and row 1 can safely be omitted.
     points = [[float(max(0, index - 1)), 0.0, 0.0] for index in range(513)]
     colors = [[0, 0, 0], [1, 0, 0]] + [
-        [(index - 1) % 256, (index - 1) // 256, 0]
-        for index in range(2, 513)
+        [(index - 1) % 256, (index - 1) // 256, 0] for index in range(2, 513)
     ]
     rows = [
         f"{int(point[0])} 0 0 {rgb[0]} {rgb[1]} {rgb[2]}"
         for point, rgb in zip(points, colors, strict=True)
     ]
     ply_text = (
-        "ply\\nformat ascii 1.0\\n"
-        f"element vertex {len(rows)}\\n"
-        "property float x\\nproperty float y\\nproperty float z\\n"
-        "property uchar red\\nproperty uchar green\\nproperty uchar blue\\n"
-        "end_header\\n" + "\\n".join(rows) + "\\n"
+        "ply\nformat ascii 1.0\n"
+        f"element vertex {len(rows)}\n"
+        "property float x\nproperty float y\nproperty float z\n"
+        "property uchar red\nproperty uchar green\nproperty uchar blue\n"
+        "end_header\n" + "\n".join(rows) + "\n"
     )
     params = {
         **CALIBRATION,
