@@ -200,6 +200,55 @@ def test_skip_migrations_rejects_orphaned_references_at_valid_head_without_repai
         )
 
 
+
+def test_skip_migrations_lineage_and_revision_are_read_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Even an accidental DDL in the lineage verifier must not alter study data."""
+    from sqlalchemy import Connection
+    from sqlalchemy.exc import OperationalError
+
+    from reefvision.db import session
+
+    settings = _desktop_settings(tmp_path)
+    settings.ensure_directories()
+    desktop.run_pending_migrations(settings)
+    database_path = settings.resolved_data_dir / "reefvision.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("CREATE TABLE preserved_observations (note TEXT NOT NULL)")
+        connection.execute("INSERT INTO preserved_observations VALUES ('Swiftia review evidence')")
+    original_bytes = database_path.read_bytes()
+    verified_guard = desktop.assert_compatible_revision_0038
+
+    def verify_read_only(connection: Connection) -> None:
+        # A write-capable SQLAlchemy engine would silently accept this DDL.
+        with pytest.raises(OperationalError, match="readonly|read-only"):
+            connection.exec_driver_sql("CREATE TABLE unexpected_scientific_write (id INTEGER)")
+        verified_guard(connection)
+
+    monkeypatch.setattr(desktop, "assert_compatible_revision_0038", verify_read_only)
+    monkeypatch.setattr(
+        session,
+        "create_database_engine",
+        lambda _settings: pytest.fail(
+            "--skip-migrations must not build the writable application engine"
+        ),
+    )
+
+    desktop.require_existing_desktop_schema(settings)
+    assert database_path.read_bytes() == original_bytes
+    with sqlite3.connect(database_path) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0041",
+        )
+        assert connection.execute("SELECT note FROM preserved_observations").fetchone() == (
+            "Swiftia review evidence",
+        )
+        assert connection.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='unexpected_scientific_write'"
+        ).fetchone() == (0,)
+
+
 def test_skip_migrations_allows_actual_packaged_head_without_upgrading(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

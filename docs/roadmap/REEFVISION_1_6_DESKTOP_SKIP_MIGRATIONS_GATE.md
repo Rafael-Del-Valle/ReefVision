@@ -201,3 +201,30 @@ acceptance and explicit researcher approval remain required for release.
 No new workflow node is appropriate for this out-of-band database-startup
 boundary; all existing typed saved QC workflows, provenance and review
 gates are preserved.
+
+## Follow-up: read-only Alembic inspection (2026-11-22)
+
+The physical health probe already used SQLite `mode=ro`, but the second
+`--skip-migrations` lineage/revision probe still opened the normal,
+write-capable SQLAlchemy application engine. That made the purportedly
+inspect-only startup dependent on no current or future lineage helper
+issuing a write. Both checks now use the **same resolved read-only SQLite
+URI**, and the Alembic probe uses a SQLAlchemy connection created from a
+SQLite DB-API connection opened in `mode=ro`. The ordinary migration-enabled
+startup path remains responsible for deliberate upgrades.
+
+A disposable genuinely migrated Alembic-0041 regression monkeypatches the
+lineage verifier to attempt DDL and requires SQLite to reject it before
+the real lineage check proceeds. It forbids construction of the write-capable
+application engine and verifies original Swiftia notes, revision and main
+SQLite file bytes remain intact. Prior stale/foreign-0038, SQLite/WAL
+substitution, corruption and stable-WAL checks remain in place.
+This is not a new scientific computation: existing typed saved QC Workflow
+Builder graphs/runs, units, provenance, retries and human-review gates
+remain unchanged.
+
+Exact-head backend/format/type, frontend/E2E, migration and scientific saved-
+workflow CI, genuine MSI/CAB Windows installed GUI and upgrade/rollback, and
+independent 1.1/1.6 Alembic-0038 reconciliation plus researcher approval
+remain mandatory **RELEASE HOLD** gates. Read-only inspection does not
+prevent a separate writer modifying data after validation.

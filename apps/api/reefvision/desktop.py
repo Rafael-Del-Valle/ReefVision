@@ -295,9 +295,8 @@ def require_existing_desktop_schema(settings: Settings) -> None:
     Inspect only: never stamp, upgrade, create a missing SQLite database or
     reinterpret a foreign 1.1/1.6 revision-0038 lineage as an accepted schema.
     """
+    from sqlalchemy import create_engine
     from sqlalchemy.engine import make_url
-
-    from reefvision.db.session import create_database_engine
 
     database_url = make_url(settings.resolved_database_url)
     if database_url.get_backend_name() != "sqlite":
@@ -306,6 +305,7 @@ def require_existing_desktop_schema(settings: Settings) -> None:
             "external database backends are unsupported for offline desktop startup."
         )
     sqlite_path: Path | None = None
+    read_only_uri: str | None = None
     if database_url.get_backend_name() == "sqlite":
         database_name = database_url.database
         if not database_name or database_name == ":memory:" or not Path(database_name).is_file():
@@ -410,7 +410,17 @@ def require_existing_desktop_schema(settings: Settings) -> None:
             )
 
     require_unchanged_sqlite_file()
-    engine = create_database_engine(settings)
+    if read_only_uri is None:
+        raise RuntimeError("ReefVision --skip-migrations has no verified read-only SQLite path.")
+    # The application engine is write-capable. Even accidental future DDL
+    # in a lineage check must be refused by this inspection-only connection.
+    # Reuse the exact physical file URI inspected by PRAGMA integrity_check.
+    import sqlite3
+
+    engine = create_engine(
+        "sqlite+pysqlite://",
+        creator=lambda: sqlite3.connect(read_only_uri, uri=True),
+    )
     try:
         with engine.connect() as connection:
             assert_compatible_revision_0038(connection)
