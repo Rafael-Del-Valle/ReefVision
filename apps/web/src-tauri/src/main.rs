@@ -425,12 +425,14 @@ while ($true) {
         Write-Host 'Training job log (last 20 lines, read-only)'
         # Training progress bars can use CR-only updates. Treat CR, LF, and CRLF as separate log lines.
         # Terminal OSC/DCS control strings can span CR/LF progress records.
-        # Strip complete control payloads before line splitting, or a forged
-        # loss on the next line could escape per-line Format-SafeText.
+        # Strip control payloads across CR/LF progress records BEFORE splitting.
+        # Insert a visible separator instead of joining adjacent characters:
+        # "0.2" + OSC + "5" must never become a fabricated "0.25" loss,
+        # and "train/" + DCS + "box_loss" must not become a new metric key.
         # Only sanitize the display copy: persisted worker logs are immutable.
         $safeTail = [string]$tail.text
-        $safeTail = [regex]::Replace($safeTail, '\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', '')
-        $safeTail = [regex]::Replace($safeTail, '[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', '')
+        $safeTail = [regex]::Replace($safeTail, '\x1b[\]PX^_][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', ' [terminal control removed] ')
+        $safeTail = [regex]::Replace($safeTail, '[\x90\x98\x9d\x9e\x9f][\s\S]*?(?:\x07|\x9c|\x1b\\|$)', ' [terminal control removed] ')
         # Progress-bar CR/LF updates can interrupt CSI sequences mid-command.
         # Strip numeric ESC/C1 CSI continuations before splitting the log into
         # lines; otherwise an ANSI parameter (e.g., 31m) could masquerade as

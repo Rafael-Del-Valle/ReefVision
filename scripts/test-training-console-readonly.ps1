@@ -102,10 +102,10 @@ $script:logText += ([string][char]13) + ([string][char]0x001B) + ']0;spoofed log
 # An imported worker log can split an OSC or C1/DCS control payload across
 # CR-only progress updates. Sanitizing each line after splitting would leak
 # the following line's forged loss into the monitor display.
-$script:logText += ([string][char]13) + 'before-osc' + ([string][char]0x001B) + ']0;forged title'
-$script:logText += ([string][char]13) + 'train/box_loss=0.00' + ([string][char]0x0007) + ' after-osc'
-$script:logText += ([string][char]13) + 'before-dcs' + ([string][char]0x0090) + 'forged title'
-$script:logText += ([string][char]10) + 'train/dfl_loss=0.00' + ([string][char]0x009C) + ' after-dcs'
+$script:logText += ([string][char]13) + 'before-osc train/box_loss=0.2' + ([string][char]0x001B) + ']0;forged title'
+$script:logText += ([string][char]13) + 'train/box_loss=0.00' + ([string][char]0x0007) + '5 after-osc'
+$script:logText += ([string][char]13) + 'before-dcs train/cls_loss=0.3' + ([string][char]0x0090) + 'forged title'
+$script:logText += ([string][char]10) + 'train/dfl_loss=0.00' + ([string][char]0x009C) + '0 after-dcs'
 # Windows worker progress bars can split CSI control codes over CR-only
 # updates. Numeric CSI continuations must not become separate log records.
 $script:logText += ([string][char]13) + 'before-csi' + ([string][char]0x001B) + '['
@@ -280,6 +280,18 @@ if (-not $output.Contains('worker-progress-24') -or
     $output.Contains('train/dfl_loss=0.00') -or
     $output.Contains('forged title')) {
   throw 'CR-only training progress updates were not split, tailed, and displayed correctly.'
+}
+# Strip-only preprocessing can splice numeric loss tokens across a terminal
+# OSC/DCS payload before per-line Format-SafeText ever sees the edit.
+# Preserve the genuine fragments and disclose the removed control gap,
+# instead of inventing a persisted box/cls loss that the trainer never wrote.
+if ($output.Contains('before-osc train/box_loss=0.25 after-osc') -or
+    $output.Contains('before-dcs train/cls_loss=0.30 after-dcs')) {
+  throw 'Cross-line terminal payload fabricated a training loss.'
+}
+if (-not $output.Contains('before-osc train/box_loss=0.2 [terminal control removed] 5 after-osc') -or
+    -not $output.Contains('before-dcs train/cls_loss=0.3 [terminal control removed] 0 after-dcs')) {
+  throw 'Terminal payload gaps were not attributed in worker log evidence.'
 }
 # A forged status or loss in an imported worker log must remain explicitly
 # attributed to that log; it must not impersonate the monitor's status line
