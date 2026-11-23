@@ -465,6 +465,7 @@ def test_calibrated_mesh_edge_underflow_warns_in_standalone_and_saved_graph(
         "unassessable_floating_point_cost_resolution"
     )
     assert route["path_qc_warnings"] == [
+        "path_scale_interval_below_numeric_resolution",
         "positive_mesh_edge_cost_rounded_away",
         "calibrated_path_length_underflow",
         "calibrated_endpoint_chord_underflow",
@@ -973,7 +974,9 @@ def test_tiny_calibrated_geometric_excess_retains_underflow_qc() -> None:
     assert route["endpoint_chord_length_m"] > 0
     assert route["geometric_excess_length_m"] == 0
     assert "calibrated_geometric_excess_underflow" in route["path_qc_warnings"]
-    assert route["geometric_excess_scale_interval_m"] == [0.0, 0.0]
+    # The source geometry has positive excess, but the calibrated binary64
+    # value underflows: [0, 0] would falsely imply an exact zero interval.
+    assert route["geometric_excess_scale_interval_m"] is None
 
 
 def test_tiny_geometric_excess_underflow_is_rejected_before_workflow_persistence(
