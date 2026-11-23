@@ -306,9 +306,7 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
             xyz_tv.numerator,
             xyz_tv.denominator,
         ]
-        assert observed["preview_xyz_rgb_vs_xyz_marginal_tv_gap"] == pytest.approx(
-            float(xyz_gap)
-        )
+        assert observed["preview_xyz_rgb_vs_xyz_marginal_tv_gap"] == pytest.approx(float(xyz_gap))
         assert observed["preview_xyz_rgb_vs_xyz_marginal_tv_gap_exact_fraction"] == [
             xyz_gap.numerator,
             xyz_gap.denominator,
@@ -675,6 +673,65 @@ def test_rgb_pair_preservation_strict_source_and_capacity(
     )
     assert over_budget.status_code == 400, over_budget.text
     assert "display budget" in over_budget.text
+
+    # Saved typed workflows must fail closed on the same scientific display
+    # constraint; an unsupported 513th distinct color acquisition must not
+    # silently produce a misleading complete-preview measurement artifact.
+    with pytest.raises(ValueError, match="Protected point indices exceed the display budget"):
+        measure_point_cloud_preview(
+            points=[[float(i // 256), 0.0, 0.0] for i in range(513)],
+            point_colors=[[i % 256, i // 256, 0] for i in range(513)],
+            preserve_distinct_xyz_rgb_pairs_in_preview=True,
+            **CALIBRATION,
+        )
+    project_base = f"/api/v1/projects/{pid}"
+    graph = {
+        "graph_id": "rgb-protected-over-budget-v14",
+        "name": "Refuse incomplete pinned acquisition previews",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {
+                "node_id": "cloud",
+                "node_type": "point_cloud_preview",
+                "parameters": {
+                    **colored,
+                    "preserve_distinct_xyz_rgb_pairs_in_preview": True,
+                },
+            },
+        ],
+        "edges": [
+            {
+                "edge_id": "project-to-cloud",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{project_base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{project_base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    for _ in range(2):
+        queued = client.post(
+            f"{project_base}/workflow-runs",
+            json={"graph_record_id": saved.json()["id"]},
+        )
+        assert queued.status_code == 202, queued.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(queued.json()["job_id"])
+        ) is False
+        detail = client.get(f"/api/v1/workflow-runs/{queued.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "failed"
+        assert "display budget" in detail.json()["run"]["error_message"]
+        assert not any(
+            artifact["data_type"] == "point_cloud_measurement_preview"
+            for artifact in detail.json()["artifacts"]
+        )
 
     # A repeated final acquisition row is not a distinct RGB observation.
     exact_rows = [*rows[:512], rows[0]]
