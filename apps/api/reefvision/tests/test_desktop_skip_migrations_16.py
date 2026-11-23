@@ -339,3 +339,37 @@ def test_skip_migrations_refuses_wal_only_changes_between_preflights(
         )
     finally:
         writer.close()
+
+
+def test_skip_migrations_accepts_stable_nonempty_wal_without_upgrading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = _desktop_settings(tmp_path)
+    settings.ensure_directories()
+    desktop.run_pending_migrations(settings)
+    database_path = settings.resolved_data_dir / "reefvision.db"
+    with sqlite3.connect(database_path) as setup:
+        setup.execute("CREATE TABLE biological_notes (note TEXT NOT NULL)")
+        setup.commit()
+        assert setup.execute("PRAGMA journal_mode=WAL").fetchone() == ("wal",)
+
+    writer = sqlite3.connect(database_path)
+    writer.execute("PRAGMA wal_autocheckpoint=0")
+    writer.execute("INSERT INTO biological_notes VALUES ('reviewed Swiftia record')")
+    writer.commit()
+    wal_path = Path(f"{database_path}-wal")
+    wal_before = desktop._sqlite_wal_identity(wal_path)
+    assert wal_before is not None
+
+    def never_upgrade(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("An unchanged WAL must not force a migration or stamp")
+
+    monkeypatch.setattr(desktop.command, "upgrade", never_upgrade)
+    try:
+        desktop.require_existing_desktop_schema(settings)
+        assert desktop._sqlite_wal_identity(wal_path) == wal_before
+        assert writer.execute("SELECT note FROM biological_notes").fetchall() == [
+            ("reviewed Swiftia record",)
+        ]
+    finally:
+        writer.close()
