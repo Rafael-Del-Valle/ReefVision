@@ -186,6 +186,7 @@ def test_alternating_joint_cover_minimal_rows_and_saved_workflow(
             assert len(set(hashes)) == 1
             assert len(hashes[0]) == 64
 
+
 def test_joint_matching_minimum_cover_against_exhaustive_original_rows() -> None:
     """Small independent oracle guards duplicates, anchors and augmenting chains.
 
@@ -218,9 +219,7 @@ def test_joint_matching_minimum_cover_against_exhaustive_original_rows() -> None
         assert mandatory.issubset(selected)
         assert selected.issubset(set(range(len(observations))))
         assert {vertices[index] for index in selected} == set(vertices)
-        assert {tuple(colors[index]) for index in selected} == {
-            tuple(color) for color in colors
-        }
+        assert {tuple(colors[index]) for index in selected} == {tuple(color) for color in colors}
 
         # Independent brute-force certificate for the true minimum number of
         # rows satisfying both cover constraints and all mandatory acquisitions.
@@ -241,3 +240,57 @@ def test_joint_matching_minimum_cover_against_exhaustive_original_rows() -> None
                 break
         assert best_size is not None
         assert len(selected) == best_size, f"mask={mask}, anchored={mandatory}"
+
+
+
+@pytest.mark.parametrize(
+    "anchored_source_rows",
+    [
+        (0, 1),
+        (0, 3),
+        (0, 4, 8),
+        (0, 1, 2),
+        (0, 1, 9),
+    ],
+)
+def test_joint_cover_multiple_mandatory_acquisitions_and_order(
+    anchored_source_rows: tuple[int, ...],
+) -> None:
+    """Independent minimum cover with multiple fixed acquisitions and duplicates.
+
+    Source-row ordering is not specimen identity or scientific calibration.
+    Reversing acquisition order must retain coverage and minimal row count;
+    repeated runs on the same order must produce identical selected indices.
+    """
+    acquisitions = [(locus, color) for locus in range(3) for color in range(3)]
+    acquisitions.append((0, 0))  # Separate source observation at an identical XYZ/RGB pair.
+    for order in (tuple(range(10)), tuple(reversed(range(10)))):
+        vertices = [(float(acquisitions[index][0]), 0.0, 0.0) for index in order]
+        colors = [[acquisitions[index][1], 0, 0] for index in order]
+        mandatory = {order.index(index) for index in anchored_source_rows}
+        selected = _minimum_joint_locus_color_cover(vertices, colors, mandatory)
+        assert selected == _minimum_joint_locus_color_cover(vertices, colors, mandatory)
+        assert mandatory.issubset(selected)
+        source_loci = set(vertices)
+        source_colors = {tuple(color) for color in colors}
+        assert {vertices[index] for index in selected} == source_loci
+        assert {tuple(colors[index]) for index in selected} == source_colors
+
+        # Enumerate original acquisition-row subsets, without calling matching.
+        remaining = sorted(set(range(len(order))) - mandatory)
+        optimal_size = None
+        for extra_count in range(len(remaining) + 1):
+            for extra in combinations(remaining, extra_count):
+                candidate = mandatory | set(extra)
+                if {vertices[index] for index in candidate} != source_loci:
+                    continue
+                if {tuple(colors[index]) for index in candidate} != source_colors:
+                    continue
+                optimal_size = len(candidate)
+                break
+            if optimal_size is not None:
+                break
+        assert optimal_size is not None
+        assert len(selected) == optimal_size, (
+            f"fixed={anchored_source_rows}, reversed={order[0] != 0}"
+        )
