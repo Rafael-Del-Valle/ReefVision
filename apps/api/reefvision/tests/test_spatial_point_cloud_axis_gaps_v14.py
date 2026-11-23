@@ -655,6 +655,8 @@ def test_rgb_ply_duplicate_xyz_color_variants_are_audited_in_saved_graph(
         "preview_omitted_distinct_rgb_triplets": 1,
         "preview_vs_source_rgb_triplet_total_variation": 1 / 600,
         "preview_vs_source_rgb_triplet_total_variation_exact_fraction": [1, 600],
+        "preview_xyz_rgb_vs_rgb_marginal_tv_gap": 0.0,
+        "preview_xyz_rgb_vs_rgb_marginal_tv_gap_exact_fraction": [0, 1],
         "source_distinct_xyz_rgb_pairs": 3,
         "preview_distinct_xyz_rgb_pairs": 2,
         "fraction_of_source_xyz_rgb_pairs_displayed": pytest.approx(2 / 3),
