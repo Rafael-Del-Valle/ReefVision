@@ -657,6 +657,10 @@ def test_rgb_ply_duplicate_xyz_color_variants_are_audited_in_saved_graph(
         "preview_vs_source_rgb_triplet_total_variation_exact_fraction": [1, 600],
         "preview_xyz_rgb_vs_rgb_marginal_tv_gap": 0.0,
         "preview_xyz_rgb_vs_rgb_marginal_tv_gap_exact_fraction": [0, 1],
+        "preview_vs_source_xyz_locus_total_variation": 0.0,
+        "preview_vs_source_xyz_locus_total_variation_exact_fraction": [0, 1],
+        "preview_xyz_rgb_vs_xyz_marginal_tv_gap": 1 / 600,
+        "preview_xyz_rgb_vs_xyz_marginal_tv_gap_exact_fraction": [1, 600],
         "source_distinct_xyz_rgb_pairs": 3,
         "preview_distinct_xyz_rgb_pairs": 2,
         "fraction_of_source_xyz_rgb_pairs_displayed": pytest.approx(2 / 3),
@@ -672,6 +676,8 @@ def test_rgb_ply_duplicate_xyz_color_variants_are_audited_in_saved_graph(
     assert "preview_omits_distinct_xyz_rgb_observations" in expected["qc_warnings"]
     assert "preview_omits_distinct_rgb_triplets" in expected["qc_warnings"]
     assert "preview_shifts_rgb_triplet_frequency_distribution" in expected["qc_warnings"]
+    assert "preview_shifts_xyz_locus_frequency_distribution" not in expected["qc_warnings"]
+    assert "preview_xyz_rgb_tv_exceeds_xyz_marginal_tv" in expected["qc_warnings"]
     assert "preview_omits_multi_rgb_locus_variants" in expected["qc_warnings"]
     assert [255, 0, 0] not in expected["preview_point_colors_rgb_uint8"]
     assert expected["provenance"]["calibration_verified"] is False
@@ -686,6 +692,8 @@ def test_rgb_ply_duplicate_xyz_color_variants_are_audited_in_saved_graph(
     )
     assert xyz_response.status_code == 200, xyz_response.text
     assert xyz_response.json()["preview_rgb_variant_support"] is None
+    assert "preview_shifts_xyz_locus_frequency_distribution" not in xyz_response.json()["qc_warnings"]
+    assert "preview_xyz_rgb_tv_exceeds_xyz_marginal_tv" not in xyz_response.json()["qc_warnings"]
     assert "preview_omits_distinct_xyz_rgb_observations" not in xyz_response.json()["qc_warnings"]
     assert "preview_omits_distinct_rgb_triplets" not in xyz_response.json()["qc_warnings"]
     assert (
