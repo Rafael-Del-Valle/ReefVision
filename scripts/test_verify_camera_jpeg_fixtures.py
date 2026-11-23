@@ -2217,6 +2217,64 @@ class CameraFixtureInventoryTests(unittest.TestCase):
             self.assertEqual(photo.read_bytes(), original)
             self.assertTrue(baseline.read_text(encoding="utf-8").startswith("{"))
 
+    def test_baseline_reader_rejects_nonregular_and_changed_files(self) -> None:
+        """A named pipe or substituted baseline must not hang or certify acceptance."""
+        import os
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = root / "baseline.json"
+            payload = b'{"files": []}'
+            baseline.write_bytes(payload)
+            self.assertEqual(MODULE._read_baseline_manifest(baseline), payload)
+            with self.assertRaisesRegex(ValueError, "not a regular file"):
+                MODULE._read_baseline_manifest(root)
+
+            # Simulate replacement between path.stat() and opening the handle.
+            substitute = root / "substitute.json"
+            substitute.write_bytes(b'{"files": [1]}')
+            original_open = os.open
+
+            def substituted_open(path, flags):
+                self.assertEqual(path, baseline)
+                return original_open(substitute, flags)
+
+            with mock.patch.object(MODULE.os, "open", side_effect=substituted_open):
+                with self.assertRaisesRegex(ValueError, "changed before reading"):
+                    MODULE._read_baseline_manifest(baseline)
+            self.assertEqual(baseline.read_bytes(), payload)
+
+    def test_cli_rejects_fifo_baseline_without_blocking(self) -> None:
+        import os
+        import subprocess
+        import sys
+
+        if not hasattr(os, "mkfifo"):
+            self.skipTest("FIFO creation unavailable on this platform")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            camera = root / "camera"
+            camera.mkdir()
+            image = camera / "approved.JPG"
+            original = bytes.fromhex("ffd8") + b"capture" + bytes.fromhex("ffd9")
+            image.write_bytes(original)
+            baseline = root / "baseline.json"
+            try:
+                os.mkfifo(baseline)
+            except OSError:
+                self.skipTest("Filesystem does not support FIFOs")
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), str(camera),
+                 "--compare-manifest", str(baseline)],
+                capture_output=True, text=True, check=False, timeout=10,
+            )
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn(
+                "cannot read baseline JPEG manifest: ValueError",
+                json.loads(result.stdout)["errors"],
+            )
+            self.assertEqual(image.read_bytes(), original)
+
     def test_cli_rejects_ambiguous_baseline_json_even_when_digest_matches(self) -> None:
         """Duplicate JSON members must not conceal a contradictory source record."""
         import hashlib
