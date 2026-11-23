@@ -26,9 +26,7 @@ def _colored_ply(rows: list[str]) -> str:
         f"element vertex {len(rows)}\n"
         "property float x\nproperty float y\nproperty float z\n"
         "property uchar red\nproperty uchar green\nproperty uchar blue\n"
-        "end_header\n"
-        + "\n".join(rows)
-        + "\n"
+        "end_header\n" + "\n".join(rows) + "\n"
     )
 
 
@@ -192,9 +190,12 @@ def test_palette_pinning_fails_closed_for_missing_rgb_or_more_than_512_colors(
     for _ in range(2):
         run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
-        assert process_workflow_run_job(
-            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-        ) is False
+        assert (
+            process_workflow_run_job(
+                app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+            )
+            is False
+        )
         detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
         assert detail.status_code == 200, detail.text
         assert detail.json()["run"]["status"] == "failed"
