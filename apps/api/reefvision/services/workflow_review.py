@@ -33,6 +33,7 @@ from reefvision.services.workflow_auto_label import (
     ensure_disagreement_active_learning_round,
     materialize_consensus_annotations,
 )
+from reefvision.storage.datasets import canonical_json_sha256
 
 REVIEW_GATE_NODE_TYPES = {
     "detection_review_gate",
@@ -55,43 +56,119 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _input_artifacts(session: Session, node_run: WorkflowNodeRun) -> list[WorkflowArtifact]:
-    artifact_ids = [str(value) for value in node_run.input_artifact_ids_json or []]
-    if not artifact_ids:
-        return []
-    artifacts = list(
-        session.scalars(select(WorkflowArtifact).where(WorkflowArtifact.id.in_(artifact_ids)))
-    )
-    by_id = {artifact.id: artifact for artifact in artifacts}
-    return [by_id[artifact_id] for artifact_id in artifact_ids if artifact_id in by_id]
+REVIEW_GATE_INPUT_TYPES: dict[str, frozenset[str]] = {
+    "detection_review_gate": frozenset({"detection_proposals", "detection_consensus"}),
+    "mask_review_gate": frozenset({"mask_proposals"}),
+    "classification_review_gate": frozenset({"classification_predictions"}),
+    "pose_review_gate": frozenset({"pose_temporal_tracks"}),
+    "pose_active_learning_review_gate": frozenset({"pose_active_learning_round"}),
+}
 
 
-def _pending_review_count(session: Session, artifacts: list[WorkflowArtifact]) -> int:
+def _input_artifacts(
+    session: Session, node_run: WorkflowNodeRun, *, project_id: str
+) -> list[WorkflowArtifact]:
+    """Require the original, intact, same-run scientific input before approval."""
+    artifact_ids = node_run.input_artifact_ids_json
+    if (
+        not isinstance(artifact_ids, list)
+        or len(artifact_ids) != 1
+        or type(artifact_ids[0]) is not str
+        or not artifact_ids[0]
+    ):
+        raise ValidationError("Workflow review gate has invalid saved input bindings")
+    artifact = session.get(WorkflowArtifact, artifact_ids[0])
+    if artifact is None:
+        raise ValidationError("Workflow review input artifact no longer exists")
+    if (
+        artifact.workflow_run_id != node_run.workflow_run_id
+        or artifact.data_type not in REVIEW_GATE_INPUT_TYPES[node_run.node_type]
+    ):
+        raise ValidationError("Workflow review input has invalid run or scientific data type")
+    producer = session.get(WorkflowNodeRun, artifact.producer_node_run_id)
+    if (
+        producer is None
+        or producer.workflow_run_id != node_run.workflow_run_id
+        or producer.status != "succeeded"
+        or not isinstance(producer.output_artifact_ids_json, list)
+        or artifact.id not in producer.output_artifact_ids_json
+    ):
+        raise ValidationError("Workflow review input lost its saved producer provenance")
+    payload = artifact.payload_json
+    if (
+        not isinstance(payload, dict)
+        or artifact.payload_sha256 != canonical_json_sha256(payload)
+        or payload.get("project_id", project_id) != project_id
+    ):
+        raise ValidationError("Workflow review input failed project or checksum validation")
+    return [artifact]
+
+
+def _pending_review_count(
+    session: Session, artifacts: list[WorkflowArtifact], *, project_id: str
+) -> int:
     proposal_ids: set[str] = set()
     classification_ids: set[str] = set()
     for artifact in artifacts:
-        payload = dict(artifact.payload_json or {})
         if artifact.data_type in {"detection_proposals", "mask_proposals"}:
-            proposal_ids.update(str(value) for value in payload.get("proposal_ids", []))
+            key = "proposal_ids"
+            target = proposal_ids
         elif artifact.data_type == "classification_predictions":
-            classification_ids.update(str(value) for value in payload.get("prediction_ids", []))
+            key = "prediction_ids"
+            target = classification_ids
+        else:
+            continue
+        raw_ids = artifact.payload_json.get(key, [])
+        if not isinstance(raw_ids, list) or any(
+            type(value) is not str or not value for value in raw_ids
+        ):
+            raise ValidationError("Workflow review input has malformed prediction identifiers")
+        target.update(raw_ids)
 
     pending = 0
     if proposal_ids:
+        matched = int(
+            session.scalar(
+                select(func.count(PredictionProposal.id)).where(
+                    PredictionProposal.id.in_(proposal_ids),
+                    PredictionProposal.project_id == project_id,
+                )
+            )
+            or 0
+        )
+        if matched != len(proposal_ids):
+            raise ValidationError(
+                "Workflow review cannot approve missing or foreign prediction proposals"
+            )
         pending += int(
             session.scalar(
                 select(func.count(PredictionProposal.id)).where(
                     PredictionProposal.id.in_(proposal_ids),
+                    PredictionProposal.project_id == project_id,
                     PredictionProposal.review_status == "pending",
                 )
             )
             or 0
         )
     if classification_ids:
+        matched = int(
+            session.scalar(
+                select(func.count(ClassificationPrediction.id)).where(
+                    ClassificationPrediction.id.in_(classification_ids),
+                    ClassificationPrediction.project_id == project_id,
+                )
+            )
+            or 0
+        )
+        if matched != len(classification_ids):
+            raise ValidationError(
+                "Workflow review cannot approve missing or foreign classification predictions"
+            )
         pending += int(
             session.scalar(
                 select(func.count(ClassificationPrediction.id)).where(
                     ClassificationPrediction.id.in_(classification_ids),
+                    ClassificationPrediction.project_id == project_id,
                     ClassificationPrediction.status == "pending",
                 )
             )
@@ -384,7 +461,7 @@ def resume_review_gate(
     if run.status != "waiting_for_review" or job.status != "waiting_for_review":
         raise ConflictError("Workflow run is not paused at this review node")
 
-    artifacts = _input_artifacts(session, node_run)
+    artifacts = _input_artifacts(session, node_run, project_id=run.project_id)
 
     review_context: dict[str, Any] = {}
 
@@ -429,6 +506,7 @@ def resume_review_gate(
         pending_count = _pending_review_count(
             session,
             artifacts,
+            project_id=run.project_id,
         )
 
         if pending_count:
