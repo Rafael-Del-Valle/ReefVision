@@ -81,6 +81,48 @@ const dispatchNativeTouchPan = async (
   }
 };
 
+// A non-scrolling gallery test can pass even if Chromium ignored every
+// synthetic touch event. Prove that the SAME CDP input helper actually moves
+// a scrollable document in both axes before trusting containment assertions.
+test("native touch compositor scroll positive control", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 820 });
+  await page.setContent(`
+    <style>
+      html, body { margin: 0; padding: 0; }
+      .touch-scroll-probe { width: 2400px; height: 2400px; }
+    </style>
+    <div class="touch-scroll-probe" aria-hidden="true"></div>
+  `);
+  const overflow = await page.evaluate(() => {
+    const root = document.scrollingElement;
+    if (!root) throw new Error("Missing document scroll root");
+    return {
+      x: root.scrollWidth - root.clientWidth,
+      y: root.scrollHeight - root.clientHeight,
+    };
+  });
+  expect(overflow.x).toBeGreaterThan(400);
+  expect(overflow.y).toBeGreaterThan(400);
+
+  const session = await page.context().newCDPSession(page);
+  try {
+    await session.send("Emulation.setTouchEmulationEnabled", {
+      enabled: true,
+      maxTouchPoints: 1,
+    });
+    await dispatchNativeTouchPan(session, 640, 580, "vertical");
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(20);
+    await dispatchNativeTouchPan(session, 640, 580, "horizontal");
+    await expect
+      .poll(() => page.evaluate(() => window.scrollX))
+      .toBeGreaterThan(20);
+  } finally {
+    await session.detach();
+  }
+});
+
 // Browser-generated JPEG bytes exercise the real camera-image decoder path
 // without network fixtures or changing scientific source-image metadata.
 test("initial image and gallery scrolling", async ({ page }) => {
