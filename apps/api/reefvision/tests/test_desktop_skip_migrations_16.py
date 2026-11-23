@@ -268,3 +268,74 @@ def test_skip_migrations_rejects_replaced_valid_database_between_preflights(
         assert connection.execute("SELECT note FROM biological_notes").fetchone() == (
             "original Swiftia note",
         )
+
+
+@pytest.mark.parametrize("preexisting_wal", [False, True])
+def test_skip_migrations_refuses_wal_only_changes_between_preflights(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, preexisting_wal: bool
+) -> None:
+    settings = _desktop_settings(tmp_path)
+    settings.ensure_directories()
+    desktop.run_pending_migrations(settings)
+    database_path = settings.resolved_data_dir / "reefvision.db"
+    with sqlite3.connect(database_path) as setup:
+        setup.execute("CREATE TABLE biological_notes (note TEXT NOT NULL)")
+        setup.execute("INSERT INTO biological_notes VALUES ('original Swiftia note')")
+        setup.commit()
+        assert setup.execute("PRAGMA journal_mode=WAL").fetchone() == ("wal",)
+
+    # Keep a separate writer open so committed frames stay in the WAL rather
+    # than being checkpointed into the main database. SQLite's main-file stat
+    # therefore cannot establish that the reviewed observations were stable.
+    writer = sqlite3.connect(database_path)
+    writer.execute("PRAGMA wal_autocheckpoint=0")
+    if preexisting_wal:
+        writer.execute("INSERT INTO biological_notes VALUES ('prior reviewed note')")
+        writer.commit()
+    initial_database_stat = database_path.stat()
+    wal_path = Path(f"{database_path}-wal")
+    initial_wal_state = desktop._sqlite_wal_identity(wal_path)
+    real_resolve = desktop.resolve_alembic_paths
+    changed_during_preflight = False
+
+    def change_wal_after_integrity(resource_root: Path | None = None) -> tuple[Path, Path]:
+        nonlocal changed_during_preflight
+        changed_during_preflight = True
+        writer.execute("INSERT INTO biological_notes VALUES ('later biological note')")
+        writer.commit()
+        current_database_stat = database_path.stat()
+        assert (
+            current_database_stat.st_dev,
+            current_database_stat.st_ino,
+            current_database_stat.st_size,
+            current_database_stat.st_mtime_ns,
+        ) == (
+            initial_database_stat.st_dev,
+            initial_database_stat.st_ino,
+            initial_database_stat.st_size,
+            initial_database_stat.st_mtime_ns,
+        )
+        assert desktop._sqlite_wal_identity(wal_path) != initial_wal_state
+        return real_resolve(resource_root)
+
+    monkeypatch.setattr(desktop, "resolve_alembic_paths", change_wal_after_integrity)
+    from reefvision.db import session
+
+    monkeypatch.setattr(
+        session,
+        "create_database_engine",
+        lambda _settings: pytest.fail("Changed WAL must not reach the write-capable engine"),
+    )
+    try:
+        with pytest.raises(RuntimeError, match="SQLite WAL changed during validation"):
+            desktop.require_existing_desktop_schema(settings)
+        assert changed_during_preflight
+        assert writer.execute("SELECT note FROM biological_notes ORDER BY rowid").fetchall() == (
+            [
+                ("original Swiftia note",),
+                *([("prior reviewed note",)] if preexisting_wal else []),
+                ("later biological note",),
+            ]
+        )
+    finally:
+        writer.close()
