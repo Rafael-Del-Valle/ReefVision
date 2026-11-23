@@ -178,3 +178,31 @@ is altered, and representative biological saved-workflow, Windows MSI/CAB,
 installed GUI and researcher approval remain release prerequisites. This
 preflight is outside executable scientific Workflow Builder because it
 inspects migration provenance without processing scientific observations.
+
+## Independent strict schema comparison: revision-table trigger parity (2026-11-23)
+
+The existing desktop migration guard and lightweight inspector already reject
+triggers attached to Alembic's version table. The independent
+`scripts/inspect_sqlite_lineage_16.py` comparison tool now rejects them too,
+even if two copied databases have identical schema hashes and revision
+strings. INSERT, UPDATE and DELETE triggers can change research records
+when a migration changes its stamp; matching unsafe copies are not an
+acceptable lineage baseline.
+
+The inspector performs a read-only, case-insensitive catalog lookup inside
+its existing pinned snapshot. It reports the fixed constraint diagnostic
+`alembic_version_triggers_require_review` without emitting trigger bodies.
+The existing strict stamp, integrity and collision flags return exit 2;
+non-strict reports still require researcher review. Unrelated triggers
+are not a stamp-contract failure. No triggers or records are altered.
+Nine regression combinations check the three event types and three strict
+flags against identical copies, plus an unrelated-trigger positive control.
+The SQLite catalog query was separately exercised locally with disposable
+databases for each event and the unrelated control.
+
+This is diagnostic parity, not a migration or authorization to upgrade.
+The integrated 1.1/1.6 migration graph, repository regression results,
+populated biological and saved-workflow replay acceptance, and genuine
+installed Windows MSI/CAB upgrade and rollback are still release gates.
+The existing executable QC workflow, typed ports, provenance and review
+gates are unchanged; this diagnostic is not a new scientific workflow node.
