@@ -318,10 +318,14 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 and isinstance(experiment.package_versions_json, dict),
                 "Persisted experiment registry no longer matches completed pose training",
             )
+            # First completion also freezes the environment digest in the v4
+            # training snapshot, separately from the worker's artifact manifest.
+            # Match replay's three-way package-version provenance contract.
             _require(
                 canonical_json_sha256(experiment.package_versions_json)
-                == training.artifact_manifest_json.get("experiment_package_versions_sha256"),
-                "Recorded experiment package versions differ from training evidence",
+                == training.artifact_manifest_json.get("experiment_package_versions_sha256")
+                == snapshot.get("experiment_package_versions_sha256"),
+                "Recorded experiment package versions differ from frozen training evidence",
             )
             # The production replay contract only accepts best.pt/last.pt
             # inside *this* training run's output tree. A valid checksum in
