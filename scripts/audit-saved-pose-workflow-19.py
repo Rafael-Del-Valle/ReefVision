@@ -383,6 +383,26 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             # registration relinked to another run. Verify the durable registry
             # metadata, not only the checksum-valid Workflow Builder reference.
             metadata = model.metadata_json
+            # Registration freezes the *full* landmark anatomy snapshot.
+            # Matching schema IDs and hashes alone cannot detect changes to
+            # the separately persisted label order, grouping, or keypoint count.
+            schema_snapshot = (
+                metadata.get("pose_landmark_schema") if isinstance(metadata, dict) else None
+            )
+            _require(
+                schema_snapshot
+                == {
+                    "schema_version": revision.schema_version,
+                    "schema_id": revision.schema_id,
+                    "schema_revision": revision.revision,
+                    "groups": revision.groups_json,
+                    "expanded_labels": revision.expanded_labels_json,
+                    "keypoint_count": revision.keypoint_count,
+                    "allows_repeated_labels": revision.allows_repeated_labels,
+                    "content_hash": revision.content_hash,
+                },
+                "Registered model landmark snapshot differs from frozen schema revision",
+            )
             _require(
                 isinstance(metadata, dict)
                 and metadata.get("registered_from") == "training_run"
