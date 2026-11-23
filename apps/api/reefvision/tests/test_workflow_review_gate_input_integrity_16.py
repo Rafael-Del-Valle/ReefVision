@@ -34,14 +34,10 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
 ) -> None:
     project, run_id, job_id = _queue_seeded_review_run(client)
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, job_id
-    ) is True
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is True
     before = client.get(f"/api/v1/workflow-runs/{run_id}").json()
     assert before["run"]["status"] == "waiting_for_review"
-    review_id = next(
-        node["id"] for node in before["nodes"] if node["node_id"] == "review"
-    )
+    review_id = next(node["id"] for node in before["nodes"] if node["node_id"] == "review")
 
     with app.state.session_factory() as session:
         review = session.get(WorkflowNodeRun, review_id)
@@ -72,11 +68,7 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
                 if corruption == "missing_prediction"
                 else "classification_predictions"
             )
-            field = (
-                "proposal_ids"
-                if corruption == "missing_prediction"
-                else "prediction_ids"
-            )
+            field = "proposal_ids" if corruption == "missing_prediction" else "prediction_ids"
             artifact.payload_json = {
                 "project_id": project["id"],
                 field: ["missing-research-observation"],
@@ -95,6 +87,7 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
     assert node["status"] == "waiting_for_review"
     assert "review_approval" not in (node["result_json"] or {})
     with app.state.session_factory() as session:
-        assert session.scalar(
-            select(WorkflowNodeRun.status).where(WorkflowNodeRun.id == review_id)
-        ) == "waiting_for_review"
+        assert (
+            session.scalar(select(WorkflowNodeRun.status).where(WorkflowNodeRun.id == review_id))
+            == "waiting_for_review"
+        )
