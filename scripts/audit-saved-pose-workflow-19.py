@@ -332,6 +332,48 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             # a different run's weights file does not prove local lineage.
             project = session.get(Project, run.project_id)
             _require(project is not None, "Training project was not found")
+            # A successful retraining run must still be traceable to its
+            # original local registered pose model, not only to the output
+            # checkpoint. Preserve and authenticate user-trained seed weights.
+            seed_id = training.initial_checkpoint_model_id
+            if seed_id is None:
+                _require(
+                    training.initial_checkpoint_source == "scratch"
+                    and training.resolved_model_asset_id
+                    == f"builtin_architecture:{training.architecture}"
+                    and training.resolved_model_checksum is None
+                    and snapshot.get("initialization_mode") == "random"
+                    and snapshot.get("seed_model_id") is None
+                    and snapshot.get("seed_model_sha256") is None,
+                    "Random-initialized pose training provenance changed",
+                )
+            else:
+                seed = session.get(ModelRegistration, seed_id)
+                seed_binding = session.get(PoseModelSchemaBinding, seed_id)
+                _require(
+                    seed is not None
+                    and seed.project_id == run.project_id
+                    and seed.purpose == "detector"
+                    and seed.task == "pose"
+                    and seed.provider_name == "ultralytics"
+                    and isinstance(seed.sha256, str)
+                    and len(seed.sha256) == 64
+                    and training.initial_checkpoint_source == "registered_model"
+                    and training.resolved_model_asset_id == f"registered_model:{seed_id}"
+                    and training.resolved_model_checksum == seed.sha256
+                    and snapshot.get("initialization_mode") == "registered_model"
+                    and snapshot.get("seed_model_id") == seed_id
+                    and snapshot.get("seed_model_sha256") == seed.sha256
+                    and seed_binding is not None
+                    and seed_binding.schema_id == dataset.pose_schema_id
+                    and seed_binding.schema_revision == dataset.pose_schema_revision,
+                    "Original registered pose seed or frozen initialization lineage changed",
+                )
+                seed_path = _managed_file(root, seed.managed_path)
+                _require(
+                    seed_path.stat().st_size > 0 and _digest(seed_path) == seed.sha256,
+                    "Original registered pose seed checkpoint is missing or changed",
+                )
             expected_weights_prefix = (
                 f"{project.storage_root}/training/{training.id}/runs/pose/weights/"
             )
