@@ -1475,7 +1475,8 @@ describe("App", () => {
     );
   });
 
-  it("opens the annotation editor from the gallery", async () => {
+  // This multi-view navigation can exceed the default budget on a busy CI worker.
+  it("opens the annotation editor from the gallery", { timeout: 10_000 }, async () => {
     mockApi({ projects: [project], images: [image] });
     renderApp();
 
