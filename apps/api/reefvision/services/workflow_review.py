@@ -192,7 +192,9 @@ def _input_artifacts(
         any(type(output_id) is not str or not output_id for output_id in producer_outputs)
         or len(producer_outputs) != len(set(producer_outputs))
     ):
-        raise ValidationError("Workflow review producer output identifiers are invalid or duplicated")
+        raise ValidationError(
+            "Workflow review producer output identifiers are invalid or duplicated"
+        )
     _verify_review_graph_binding(session, node_run, producer, artifact, project_id=project_id)
     payload = artifact.payload_json
     if (
