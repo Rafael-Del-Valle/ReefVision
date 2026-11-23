@@ -101,6 +101,19 @@ def test_ordered_rgb_acquisition_fingerprint_catches_hidden_observations(
         before["preview_rgb_variant_support"]["preview_sample_xyz_rgb_sha256"]
         == (after["preview_rgb_variant_support"]["preview_sample_xyz_rgb_sha256"])
     )
+    # The source keeps its rare RGB triplet even when decimation hides it.
+    before_palette = before["preview_rgb_variant_support"]
+    after_palette = after["preview_rgb_variant_support"]
+    assert before_palette["source_distinct_rgb_triplets"] == 1
+    assert before_palette["preview_distinct_rgb_triplets"] == 1
+    assert before_palette["fraction_of_source_rgb_triplets_displayed"] == 1.0
+    assert before_palette["preview_omitted_distinct_rgb_triplets"] == 0
+    assert "preview_omits_distinct_rgb_triplets" not in before["qc_warnings"]
+    assert after_palette["source_distinct_rgb_triplets"] == 2
+    assert after_palette["preview_distinct_rgb_triplets"] == 1
+    assert after_palette["fraction_of_source_rgb_triplets_displayed"] == 0.5
+    assert after_palette["preview_omitted_distinct_rgb_triplets"] == 1
+    assert "preview_omits_distinct_rgb_triplets" in after["qc_warnings"]
     assert before["provenance"]["calibration_verified"] is False
     assert before["provenance"]["specimen_identity_verified"] is False
 
@@ -292,6 +305,11 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
         )
     assert normal["preview_rgb_variant_support"]["preview_distinct_xyz_rgb_pairs"] == 2
     normal_rgb = normal["preview_rgb_variant_support"]
+    assert normal_rgb["source_distinct_rgb_triplets"] == 3
+    assert normal_rgb["preview_distinct_rgb_triplets"] == 2
+    assert normal_rgb["fraction_of_source_rgb_triplets_displayed"] == pytest.approx(2 / 3)
+    assert normal_rgb["preview_omitted_distinct_rgb_triplets"] == 1
+    assert "preview_omits_distinct_rgb_triplets" in normal["qc_warnings"]
     assert normal_rgb["source_repeated_xyz_rgb_observation_rows"] == 597
     assert normal_rgb["source_repeated_xyz_rgb_observation_fraction"] == pytest.approx(597 / 600)
     assert normal_rgb["preview_repeated_xyz_rgb_observation_rows"] == 510
@@ -314,6 +332,11 @@ def test_rgb_pair_preservation_standalone_and_two_saved_graph_replays(
     assert "preview_omits_rgb_channel_extrema" in normal["qc_warnings"]
     support = pinned["preview_rgb_variant_support"]
     assert support["source_distinct_xyz_rgb_pairs"] == 3
+    assert support["source_distinct_rgb_triplets"] == 3
+    assert support["preview_distinct_rgb_triplets"] == 3
+    assert support["fraction_of_source_rgb_triplets_displayed"] == 1.0
+    assert support["preview_omitted_distinct_rgb_triplets"] == 0
+    assert "preview_omits_distinct_rgb_triplets" not in pinned["qc_warnings"]
     assert support["preview_distinct_xyz_rgb_pairs"] == 3
     assert support["source_repeated_xyz_rgb_observation_rows"] == 597
     assert support["preview_repeated_xyz_rgb_observation_rows"] == 509
