@@ -6,7 +6,7 @@ or alter prediction records. It closes a missing-evidence approval path.
 
 A researcher may approve a saved review gate only when its one typed input is
 still bound to the same workflow run, exists, matches its original SHA-256
-payload digest, carries no foreign project identifier, and is present in the
+payload digest, carries no foreign project identifier (while accepting historical null hints), and is present in the
 successful producer's persisted output list. For live prediction artifacts,
 every referenced proposal/classification row must still exist in the same
 project; absence is **not** equivalent to a reviewed prediction. Pending rows

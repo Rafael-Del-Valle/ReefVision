@@ -98,7 +98,7 @@ def _input_artifacts(
     if (
         not isinstance(payload, dict)
         or artifact.payload_sha256 != canonical_json_sha256(payload)
-        or payload.get("project_id", project_id) != project_id
+        or payload.get("project_id") not in (None, project_id)
     ):
         raise ValidationError("Workflow review input failed project or checksum validation")
     return [artifact]

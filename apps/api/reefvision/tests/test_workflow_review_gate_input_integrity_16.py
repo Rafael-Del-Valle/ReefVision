@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from reefvision.db.models import WorkflowArtifact, WorkflowNodeRun
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.workflow_review import _input_artifacts
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_workflow_review_phase10 import _queue_seeded_review_run
 
@@ -91,3 +92,38 @@ def test_saved_review_rejects_invalid_or_lost_scientific_input(
             session.scalar(select(WorkflowNodeRun.status).where(WorkflowNodeRun.id == review_id))
             == "waiting_for_review"
         )
+
+
+def test_legacy_nullable_project_scope_stays_bound_to_saved_run(client: TestClient) -> None:
+    """Older pose-style artifacts may omit their project hint; run provenance is required."""
+    project, run_id, job_id = _queue_seeded_review_run(client)
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id) is True
+    with app.state.session_factory() as session:
+        review = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "review",
+            )
+        )
+        assert review is not None
+        artifact = session.get(WorkflowArtifact, review.input_artifact_ids_json[0])
+        assert artifact is not None
+        artifact.payload_json = {**artifact.payload_json, "project_id": None}
+        artifact.payload_sha256 = canonical_json_sha256(artifact.payload_json)
+        session.commit()
+
+    with app.state.session_factory() as session:
+        review = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == run_id,
+                WorkflowNodeRun.node_id == "review",
+            )
+        )
+        assert review is not None
+        artifacts = _input_artifacts(session, review, project_id=project["id"])
+        assert len(artifacts) == 1
+        assert artifacts[0].payload_json["project_id"] is None
+    assert client.get(f"/api/v1/workflow-runs/{run_id}").json()["run"][
+        "status"
+    ] == "waiting_for_review"
