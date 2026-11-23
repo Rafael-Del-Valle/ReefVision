@@ -522,3 +522,28 @@ adds no duplicate workflow node or database migration. Full exact-head CI,
 representative scientific workflow acceptance, 1.1/1.6 Alembic-0038 lineage,
 real MSI/CAB installed-GUI clean install/upgrade/rollback and investigator
 release approval remain HOLD.
+
+
+## 2026-11-23 — Saved Workflow Builder producer-output referential integrity (Track D)
+
+Audited existing 1.0–1.5 typed Workflow Builder and 1.6 researcher-review
+gate, class/QC implementation, draft PR #77 and the previous exact-head CI.
+Fixed the reported Ruff-format preflight on the prior output-ID guard.
+The persisted producer output manifest now rejects whitespace-only IDs
+and any additional ID that no longer exists or belongs to a different
+producer/run. A correctly checksummed reviewed artifact alone is not
+sufficient evidence when its parent manifest misrepresents other outputs.
+Validation occurs before review approval, materialization or unpausing.
+Existing frozen biological images, annotation/QC decisions, typed ports,
+saved graphs, units and retries are unchanged.
+
+The existing persisted executable detection-to-consensus-to-review
+regression adds three damaged-manifest cases, checking direct-service
+refusal, HTTP 400, and unchanged waiting workflow/reviewer/job status.
+No migration, new scientific node or pretrained-model download is needed.
+Independent SQLite query semantics can be validated separately, but
+repository regression pass and exact-head CI require GitHub Actions.
+Release HOLD remains for independent Alembic-0038 reconciliation,
+representative biological saved-workflow acceptance, complete CI,
+actual Windows MSI/CAB clean-install/upgrade/rollback and installed GUI,
+and explicit researcher approval.

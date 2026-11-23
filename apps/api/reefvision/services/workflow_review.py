@@ -188,12 +188,29 @@ def _input_artifacts(
     # Every declared producer output is part of the persisted scientific
     # lineage. Repeated, empty or non-string IDs cannot establish an
     # unambiguous link to the exact artifact submitted for human approval.
-    if (
-        any(type(output_id) is not str or not output_id for output_id in producer_outputs)
-        or len(producer_outputs) != len(set(producer_outputs))
-    ):
+    malformed_output_ids = any(
+        type(output_id) is not str or not output_id.strip() for output_id in producer_outputs
+    )
+    if malformed_output_ids or len(producer_outputs) != len(set(producer_outputs)):
         raise ValidationError(
             "Workflow review producer output identifiers are invalid or duplicated"
+        )
+    # A producer's output manifest is scientific lineage evidence, not a list
+    # of arbitrary IDs. Every referenced artifact must still belong to this
+    # successful producer within the original saved workflow run.
+    linked_output_count = int(
+        session.scalar(
+            select(func.count(WorkflowArtifact.id)).where(
+                WorkflowArtifact.id.in_(producer_outputs),
+                WorkflowArtifact.workflow_run_id == node_run.workflow_run_id,
+                WorkflowArtifact.producer_node_run_id == producer.id,
+            )
+        )
+        or 0
+    )
+    if linked_output_count != len(producer_outputs):
+        raise ValidationError(
+            "Workflow review producer output manifest references missing or foreign artifacts"
         )
     _verify_review_graph_binding(session, node_run, producer, artifact, project_id=project_id)
     payload = artifact.payload_json
