@@ -259,6 +259,19 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 and canonical_json_sha256(request) == snapshot["pose_child_job_request_sha256"],
                 "Queued training job request differs from its frozen fingerprint",
             )
+            # First completion freezes the complete epoch history separately
+            # from the final scores. Compare both persisted training records
+            # with the saved Workflow Builder result: altered learning curves
+            # must not pass just because checkpoint bytes remain unchanged.
+            _require(
+                snapshot.get("schema_version") == "pose-workflow-training-snapshot-0004"
+                and isinstance(training.metrics_history_json, dict)
+                and canonical_json_sha256(training.metrics_history_json)
+                == snapshot.get("metrics_history_sha256")
+                and result.get("metrics_history") == training.metrics_history_json
+                and result.get("metrics") == training.metrics_json,
+                "Saved pose-training metric history or summary disagrees with worker evidence",
+            )
             # A checksum-valid workflow artifact is not proof that the durable
             # experiment registry still belongs to this training run. Verify
             # the separately persisted scientific summary and environment.
