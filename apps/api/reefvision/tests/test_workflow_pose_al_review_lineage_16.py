@@ -156,9 +156,7 @@ def test_pose_al_standalone_accepts_same_candidates_in_different_order(
     )
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
-        result = pose_active_learning_review_status(
-            session, artifact, project_id="project-one"
-        )
+        result = pose_active_learning_review_status(session, artifact, project_id="project-one")
     assert result["ready"] is True
     assert result["selection_sha256"] == "a" * 64
     assert result["verified_candidate_count"] == 1
@@ -223,23 +221,15 @@ def _paused_saved_pose_al_workflow(
             for source_node, source_port, target_node, target_port in links
         ],
     }
-    plan = client.post(
-        f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph
-    )
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
     assert plan.status_code == 200, plan.text
     assert plan.json()["executable"] is True
     run_id, job_id = _save_and_queue(client, project_id, graph)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, job_id
-    )
+    assert process_workflow_run_job(app.state.settings, app.state.session_factory, job_id)
     detail = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "waiting_for_review"
-    review_id = next(
-        node["id"]
-        for node in detail.json()["nodes"]
-        if node["node_id"] == "review"
-    )
+    review_id = next(node["id"] for node in detail.json()["nodes"] if node["node_id"] == "review")
     round_artifact = next(
         item
         for item in detail.json()["artifacts"]
@@ -275,9 +265,7 @@ def test_saved_executable_pose_al_review_refuses_resigned_foreign_selection(
     corruption: str,
     message: str,
 ) -> None:
-    app, run_id, job_id, review_id, project_id = _paused_saved_pose_al_workflow(
-        client, monkeypatch
-    )
+    app, run_id, job_id, review_id, project_id = _paused_saved_pose_al_workflow(client, monkeypatch)
     with app.state.session_factory() as session:
         review = session.get(WorkflowNodeRun, review_id)
         assert review is not None
@@ -308,15 +296,14 @@ def test_saved_executable_pose_al_review_refuses_resigned_foreign_selection(
     detail = client.get(f"/api/v1/workflow-runs/{run_id}")
     assert detail.status_code == 200
     assert detail.json()["run"]["status"] == "waiting_for_review"
-    node = next(
-        item for item in detail.json()["nodes"] if item["id"] == review_id
-    )
+    node = next(item for item in detail.json()["nodes"] if item["id"] == review_id)
     assert node["status"] == "waiting_for_review"
     assert "review_approval" not in (node["result_json"] or {})
     with app.state.session_factory() as session:
         job = session.get(Job, job_id)
         assert job is not None
         assert job.status == "waiting_for_review"
-        assert session.scalar(
-            select(WorkflowNodeRun.status).where(WorkflowNodeRun.id == review_id)
-        ) == "waiting_for_review"
+        assert (
+            session.scalar(select(WorkflowNodeRun.status).where(WorkflowNodeRun.id == review_id))
+            == "waiting_for_review"
+        )
