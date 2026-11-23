@@ -212,6 +212,21 @@ def _input_artifacts(
         raise ValidationError(
             "Workflow review producer output manifest references missing or foreign artifacts"
         )
+    # A valid listed subset is insufficient: unlisted persisted outputs
+    # must not be mistaken for an approved biological observation cohort.
+    actual_output_count = int(
+        session.scalar(
+            select(func.count(WorkflowArtifact.id)).where(
+                WorkflowArtifact.workflow_run_id == node_run.workflow_run_id,
+                WorkflowArtifact.producer_node_run_id == producer.id,
+            )
+        )
+        or 0
+    )
+    if actual_output_count != len(producer_outputs):
+        raise ValidationError(
+            "Workflow review producer output manifest omits persisted artifacts"
+        )
     _verify_review_graph_binding(session, node_run, producer, artifact, project_id=project_id)
     payload = artifact.payload_json
     if (
@@ -301,18 +316,41 @@ def _pending_review_count(
 def _disagreement_artifact_for_consensus(
     session: Session,
     consensus_artifact: WorkflowArtifact,
+    *,
+    project_id: str,
 ) -> WorkflowArtifact | None:
-    return session.scalar(
-        select(WorkflowArtifact)
-        .where(
-            WorkflowArtifact.workflow_run_id == consensus_artifact.workflow_run_id,
-            WorkflowArtifact.producer_node_run_id == consensus_artifact.producer_node_run_id,
-            WorkflowArtifact.data_type == "detection_disagreements",
+    """Validate an optional original sibling before scientific AL handoff."""
+    siblings = list(
+        session.scalars(
+            select(WorkflowArtifact)
+            .where(
+                WorkflowArtifact.workflow_run_id == consensus_artifact.workflow_run_id,
+                WorkflowArtifact.producer_node_run_id == consensus_artifact.producer_node_run_id,
+                WorkflowArtifact.data_type == "detection_disagreements",
+            )
+            .order_by(WorkflowArtifact.created_at, WorkflowArtifact.id)
         )
-        .order_by(WorkflowArtifact.created_at.desc(), WorkflowArtifact.id.desc())
-        .limit(1)
     )
+    if not siblings:
+        # Historical consensus-only workflows remain approvable.
+        return None
+    if len(siblings) != 1:
+        raise ValidationError("Workflow consensus disagreement output is ambiguous")
 
+    sibling = siblings[0]
+    producer = session.get(WorkflowNodeRun, consensus_artifact.producer_node_run_id)
+    output_ids = producer.output_artifact_ids_json if producer is not None else None
+    payload = sibling.payload_json
+    if (
+        not isinstance(output_ids, list)
+        or sibling.id not in output_ids
+        or sibling.producer_port_id != "disagreements"
+        or not isinstance(payload, dict)
+        or payload.get("project_id") != project_id
+        or sibling.payload_sha256 != canonical_json_sha256(payload)
+    ):
+        raise ValidationError("Workflow consensus disagreement handoff failed source provenance")
+    return sibling
 
 def _auto_label_post_review(
     session: Session,
@@ -327,9 +365,17 @@ def _auto_label_post_review(
     if not consensus_artifacts:
         return {}
 
+    # Verify all optional siblings before making any approved annotation writes.
+    verified_handoffs = [
+        (
+            artifact,
+            _disagreement_artifact_for_consensus(session, artifact, project_id=project_id),
+        )
+        for artifact in consensus_artifacts
+    ]
     materialized: list[dict[str, Any]] = []
     active_learning: list[dict[str, Any]] = []
-    for consensus_artifact in consensus_artifacts:
+    for consensus_artifact, disagreement_artifact in verified_handoffs:
         materialized.append(
             materialize_consensus_annotations(
                 session,
@@ -337,10 +383,6 @@ def _auto_label_post_review(
                 artifact=consensus_artifact,
                 reviewed_by=reviewed_by,
             )
-        )
-        disagreement_artifact = _disagreement_artifact_for_consensus(
-            session,
-            consensus_artifact,
         )
         if disagreement_artifact is None:
             continue
