@@ -24,7 +24,7 @@ CALIBRATION = {
 }
 
 
-def _alternating_source() -> tuple[list[list[float]], list[list[int]], str]:
+def _alternating_source(repeated_rows: int) -> tuple[list[list[float]], list[list[int]], str]:
     # The first-occurrence rows for A, B, C are A/1, B/2, C/1.
     # A/2, B/3, C/1 is a three-row cover of all three loci and colors.
     # A local single-swap heuristic rejects this feasible cover because
@@ -36,10 +36,14 @@ def _alternating_source() -> tuple[list[list[float]], list[list[int]], str]:
         (1, [3, 0, 0]),
         (2, [1, 0, 0]),
     ]
+    # Repeat both an ultimately rejected edge and a selected edge. Matching
+    # must retain the earliest original row for the selected parallel edge.
+    observations[2:2] = [observations[1]] * repeated_rows
+    observations[1:1] = [observations[0]] * repeated_rows
     observations.extend((locus, [locus % 256, locus // 256, 1]) for locus in range(3, 512))
     points = [[float(locus), 0.0, 0.0] for locus, _ in observations]
     colors = [rgb for _, rgb in observations]
-    assert len(points) == 514
+    assert len(points) == 514 + 2 * repeated_rows
     assert len({tuple(point) for point in points}) == 512
     assert len({tuple(rgb) for rgb in colors}) == 512
     rows = [f"{locus} 0 0 {rgb[0]} {rgb[1]} {rgb[2]}" for locus, rgb in observations]
@@ -73,10 +77,11 @@ def _graph(params: dict, suffix: str) -> dict:
     }
 
 
+@pytest.mark.parametrize("repeated_rows", [0, 1000])
 def test_alternating_joint_cover_minimal_rows_and_saved_workflow(
-    client: TestClient,
+    client: TestClient, repeated_rows: int
 ) -> None:
-    points, colors, ply_text = _alternating_source()
+    points, colors, ply_text = _alternating_source(repeated_rows)
     project = create_project(client, "Alternating joint point-cloud cover")
     project_id = str(project["id"])
     base = f"/api/v1/projects/{project_id}"
@@ -86,7 +91,8 @@ def test_alternating_joint_cover_minimal_rows_and_saved_workflow(
         "preserve_distinct_xyz_loci_in_preview": True,
         "preserve_distinct_rgb_triplets_in_preview": True,
     }
-    expected = [1, 3, *range(4, 514)]
+    offset = 2 * repeated_rows
+    expected = [1 + repeated_rows, 3 + offset, *range(4 + offset, 514 + offset)]
     direct = measure_point_cloud_preview(
         points=points,
         point_colors=colors,
