@@ -561,3 +561,24 @@ Release HOLD remains for independent Alembic-0038 reconciliation,
 representative biological saved-workflow acceptance, complete CI,
 actual Windows MSI/CAB clean-install/upgrade/rollback and installed GUI,
 and explicit researcher approval.
+
+## 2026-11-23 — Consensus secondary-output type integrity (Track D)
+
+The existing detection consensus registry declares exactly two typed outputs:
+consensus and disagreements. Historical runs may have only the consensus
+artifact. The review handoff previously searched only for the disagreement
+data type, so a persisted secondary output with a changed type (or changed
+port and type) could be mistaken for a legitimately absent historical output.
+Review now inspects every other artifact from the original producer in the
+same saved run. A second output must have the original disagreement type and
+port, project, checksum and manifest membership; extra outputs fail closed.
+Historical consensus-only and valid empty-disagreement runs remain supported.
+
+Two parameterized persisted saved-workflow regressions exercise relabeled
+secondary artifacts using direct service and HTTP approval refusal, retaining
+the paused workflow, review node and job without recording approval. The
+existing successful review and prior sibling-integrity tests remain controls.
+No migration, additional workflow node, model download or scientific data
+rewrite is introduced. Full exact-head CI, representative biological runs,
+independent Alembic-0038 reconciliation, installed Windows MSI/CAB and GUI
+upgrade/rollback, and explicit researcher approval remain release holds.
