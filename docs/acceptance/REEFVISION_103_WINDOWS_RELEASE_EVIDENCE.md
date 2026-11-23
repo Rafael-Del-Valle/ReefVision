@@ -112,20 +112,25 @@ $after = Join-Path $evidenceRoot 'jpeg-after.json'
 python scripts/verify_camera_jpeg_fixtures.py $cameraRoot --verify-decode > $before
 if ($LASTEXITCODE -ne 0) { throw 'Camera pre-import inventory failed.' }
 $beforeSha256 = (Get-FileHash -LiteralPath $before -Algorithm SHA256).Hash
+# Record $beforeSha256 independently NOW. Do not recalculate it from the
+# baseline file when validating the post-import camera evidence.
 # Perform approved installed-app import/reopen; never modify camera originals.
-python scripts/verify_camera_jpeg_fixtures.py $cameraRoot --verify-decode --compare-manifest $before > $after
+python scripts/verify_camera_jpeg_fixtures.py $cameraRoot --verify-decode --compare-manifest $before --expected-manifest-sha256 $beforeSha256 > $after
 if ($LASTEXITCODE -ne 0) { throw 'Camera originals changed, disappeared, or were added after import.' }
 "PASS: verified pre/post JPEG names, byte counts and SHA-256; saved baseline hash $beforeSha256"
 ```
 
 The baseline must be a well-formed, error-free scanner JSON inventory. Comparison
 rejects a different source root, duplicate/unsafe manifest paths, changed source
-hashes even when file size is unchanged, missing files and new JPEG files. It
-**cannot authenticate an altered baseline**: keep the original baseline hash in
-an independent experiment record. This is still source-integrity evidence only,
-not proof of physical camera compatibility, GUI rendering or scientific validity.
+hashes even when file size is unchanged, missing files and new JPEG files. The optional `--expected-manifest-sha256` flag also rejects a baseline whose
+JSON bytes differ from the separately recorded pre-import digest, including
+when altered JPEGs and baseline hashes have been co-edited. Preserve that digest
+in an independent experiment record; hashing an already altered baseline at
+comparison time cannot establish authenticity. This is still source-integrity
+evidence only, not proof of physical camera compatibility, GUI rendering or
+scientific validity.
 
-**Limitations:** This comparison assumes a trusted, unchanged manifest and a dedicated staging directory. Reject filesystem reparse points/symlinks in the staging tree: lexical path checks do not prove physical containment. Preserve the manifest and its SHA-256 separately. This verifies original-file integrity, **not** decoding or GUI compatibility. Record application commit, Windows/WebView2 version, per-file results and decode errors; missing real-camera samples are **BLOCKED**, not PASS.
+**Limitations:** The pinned SHA-256 proves consistency with a separately retained digest, not who originally acquired or authorized the capture. Use a dedicated staging directory. Reject filesystem reparse points/symlinks in the staging tree: lexical path checks do not prove physical containment. Preserve the manifest and its SHA-256 separately. This verifies original-file integrity, **not** decoding or GUI compatibility. Record application commit, Windows/WebView2 version, per-file results and decode errors; missing real-camera samples are **BLOCKED**, not PASS.
 
 ## Read-only external training console: process-continuity acceptance
 
