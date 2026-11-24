@@ -321,6 +321,17 @@ def compare_mesh_observations(
                 face_count < 3 or (patch_count is not None and face_count - patch_count < 2)
             ):
                 raise ValueError("Mesh topology nonmanifold edge requires three faces in a patch")
+            # Each shared edge with k incident faces can join at most k - 1
+            # components. Even ignoring two-face edges, the nonmanifold
+            # edges consume at least one incidence each without joining a
+            # component. There must be enough links for F - P merges.
+            if (
+                nonmanifold
+                and boundary is not None
+                and patch_count is not None
+                and 3 * face_count - boundary - nonmanifold < face_count - patch_count
+            ):
+                raise ValueError("Mesh topology shared edge links insufficient for patch count")
             # With no nonmanifold edges, every remaining incidence belongs
             # to a two-face edge. Their count must be integral and sufficient
             # to connect F faces into P edge-connected patches.
