@@ -124,7 +124,15 @@ def test_saved_glb(
 
 @pytest.mark.parametrize(
     "variant",
-    ["nanoscale", "float32_subnormal", "float32_negative_subnormal", "float32_decimal_roundtrip"],
+    [
+        "nanoscale",
+        "float32_subnormal",
+        "float32_negative_subnormal",
+        "float32_decimal_roundtrip",
+        "bounds_midpoint_below",
+        "bounds_midpoint_tie",
+        "bounds_odd_above",
+    ],
 )
 def test_valid_glb_bounds_standalone_and_replayed_graph(client: TestClient, variant: str) -> None:
     """Accept representable bounds; two runs must save identical evidence."""
@@ -137,8 +145,10 @@ def test_valid_glb_bounds_standalone_and_replayed_graph(client: TestClient, vari
         sample = make_glb(position_bounds=True, subnormal_z=True)
     elif variant == "float32_negative_subnormal":
         sample = make_glb(position_bounds=True, negative_subnormal_z=True)
-    else:
+    elif variant == "float32_decimal_roundtrip":
         sample = make_glb(invalid_selector="bounds_float32_roundtrip")
+    else:
+        sample = make_glb(invalid_selector=variant)
     params = {
         "glb_base64": sample,
         "meters_per_unit": 0.01,
@@ -231,6 +241,8 @@ def test_valid_glb_bounds_standalone_and_replayed_graph(client: TestClient, vari
         "bounds_nan",
         "bounds_mismatch",
         "bounds_float32_near_mismatch",
+        "bounds_midpoint_above",
+        "bounds_odd_tie",
         *FLOAT32_UNDERFLOW_SELECTORS,
         "bounds_tiny_positive",
         "bounds_tiny_negative",
@@ -292,6 +304,8 @@ def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
         assert "reserved primitive restart" in standalone.text
     if invalid_selector == "mixed_geometry_view":
         assert "require separate buffer views" in standalone.text
+    if invalid_selector in {"bounds_midpoint_above", "bounds_odd_tie"}:
+        assert "position bounds conflict" in standalone.text
     graph = {
         "graph_id": f"glb-invalid-{invalid_selector}-v14",
         "name": "Reject malformed GLB metadata",
@@ -314,7 +328,13 @@ def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
     app = cast(FastAPI, client.app)
     # Replaying malformed geometry must never publish a measurement, even
     # when all decoded vertex indices and byte offsets are in bounds.
-    replay_count = 2 if invalid_selector in {"byte_restart_index", "mixed_geometry_view"} else 1
+    replay_selectors = {
+        "byte_restart_index",
+        "mixed_geometry_view",
+        "bounds_midpoint_above",
+        "bounds_odd_tie",
+    }
+    replay_count = 2 if invalid_selector in replay_selectors else 1
     for _ in range(replay_count):
         run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
@@ -329,6 +349,8 @@ def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
             assert "reserved primitive restart" in result["run"]["error_message"]
         if invalid_selector == "mixed_geometry_view":
             assert "require separate buffer views" in result["run"]["error_message"]
+        if invalid_selector in {"bounds_midpoint_above", "bounds_odd_tie"}:
+            assert "position bounds conflict" in result["run"]["error_message"]
         assert not any(
             artifact["data_type"] == "mesh_measurement_preview" for artifact in result["artifacts"]
         )
