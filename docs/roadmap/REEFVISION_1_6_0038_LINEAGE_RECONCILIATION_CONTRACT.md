@@ -257,3 +257,29 @@ or existing research data are changed. The inherited typed executable QC
 Workflow Builder is unchanged. Cross-version lineage reconciliation,
 representative biology and genuine installed Windows MSI/GUI validation
 remain release gates.
+
+
+## Missing environmental migration stages (2026-11-23)
+
+Source inspection of the independent 1.1 migrations confirms that revision
+0040 creates environmental event definitions and 0042 creates both
+environmental analysis definitions and results. A scientific-only database
+stamped 0040 or 0041 with neither event table nor later analysis tables
+previously passed strict inventory if its 0038/0039 families were intact.
+The same issue affected a 0042 stamp with no analysis pair.
+
+The read-only inventory now emits fixed missing-stage warnings for known
+scientific-only 0040–0042 stamps lacking the event table, and for 0042
+without the complete analysis pair. Earlier revisions and QC-only lineages
+are not subjected to these scientific-stage requirements. The existing
+dependency and premature-table warnings remain intact. Four added persisted
+SQLite CLI regression configurations verify refusal, repeatability, private
+record preservation and unchanged file bytes; prior complete-stage cases
+remain compatibility controls. Ten independent disposable SQLite probes
+of the new stage predicates passed; these are not repository pytest.
+
+This is a diagnostic safeguard only. It does not reconcile revision IDs,
+authorize upgrade, change any Workflow Builder capability, or establish
+installed Windows acceptance. The integrated lineage, full CI, representative
+saved biological workflows, real installer/GUI validation and researcher
+approval remain HOLD.
