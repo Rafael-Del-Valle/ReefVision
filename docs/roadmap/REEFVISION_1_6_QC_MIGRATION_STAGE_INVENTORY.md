@@ -302,3 +302,20 @@ the preceding exact-head CI #45493014255 two Ruff E501/format diagnostics.
 Full repository CI remains required. Existing standalone and saved typed
 QC workflows, scientific provenance and researcher approvals are unchanged;
 no migration reconciliation, stamp or data rewrite is performed.
+
+## 2026-11-24 — desktop QC conflict-policy preflight
+
+The existing offline copy comparison checks policy drift between original
+and candidate databases. Desktop startup instead receives only one
+database; its index metadata cannot distinguish ordinary ABORT behavior
+from explicit ON CONFLICT REPLACE or IGNORE. The latter can replace a
+committed review event or silently discard a legitimate bulk request.
+Reject explicit noncanonical conflict clauses on both QC tables, without
+evaluating the clauses or writing anything. Tokenization ignores comments
+and quoted text, including a comment between ON and CONFLICT.
+Eighteen persisted cases exercise event PK, event request UNIQUE and bulk
+PK policies, including untouched controls and harmless comments.
+Nineteen independent SQLite/SQLAlchemy and lexical checks passed;
+full repository CI remains required. Existing typed standalone and saved
+QC workflow, retries and researcher-review gates are unchanged. No
+migration or schema repair is authorized.

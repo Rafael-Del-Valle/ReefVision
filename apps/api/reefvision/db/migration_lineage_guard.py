@@ -79,6 +79,25 @@ def _sqlite_stamp_has_check(ddl: str) -> bool:
     return any(token.group().upper() == "CHECK" for token in tokens)
 
 
+def _sqlite_has_explicit_conflict_policy(ddl: str) -> bool:
+    """Find unquoted ON CONFLICT clauses, including intervening comments."""
+    matches = re.finditer(
+        r"--[^\n]*|/\*.*?\*/|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|"
+        r"\x60(?:\x60\x60|[^\x60])*\x60|\[[^\]]*\]|[A-Za-z0-9_$\u0080-\U0010ffff]+|[^\s]",
+        ddl,
+        re.DOTALL,
+    )
+    tokens = [
+        match.group().upper()
+        for match in matches
+        if not match.group().startswith(("--", "/*"))
+    ]
+    return any(
+        left == "ON" and right == "CONFLICT"
+        for left, right in zip(tokens, tokens[1:], strict=False)
+    )
+
+
 def assert_compatible_revision_0038(connection: Connection) -> None:
     """Reject incompatible 0038-0040 schemas before any desktop write.
 
@@ -350,6 +369,21 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             "resolve the two lineages with a reviewed data-preserving "
             "migration; do not stamp, downgrade, or delete tables."
         )
+
+    if connection.dialect.name == "sqlite":
+        # Index reflection cannot reveal a conflict policy that silently
+        # replaces committed reviewer history or discards a new request.
+        for table in sorted(tables & {_REVIEW_TABLE, _BULK_TABLE}):
+            ddl = connection.execute(
+                text("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = :name"),
+                {"name": table},
+            ).scalar()
+            if not isinstance(ddl, str) or _sqlite_has_explicit_conflict_policy(ddl):
+                raise RuntimeError(
+                    f"Unsafe ReefVision Alembic revision {revision} collision: "
+                    "noncanonical QC constraint conflict policy. "
+                    "Preserve reviewer history and reconcile without rewriting research data."
+                )
 
     if revision == "0041":
         bulk_details = inspector.get_columns(_BULK_TABLE) if _BULK_TABLE in tables else []

@@ -692,6 +692,80 @@ def test_revision_0041_requires_global_bulk_request_registry(
     engine.dispose()
 
 
+@pytest.mark.parametrize("target", ["event_pk", "event_request", "bulk_pk"])
+@pytest.mark.parametrize(
+    "policy",
+    [
+        "",
+        " /* ON CONFLICT REPLACE */",
+        " ON CONFLICT REPLACE",
+        " oN /* note */ CoNfLiCt IGNORE",
+        " ON CONFLICT FAIL",
+        " ON CONFLICT ABORT",
+    ],
+)
+def test_revision_0041_qc_conflict_policy_preserves_history(target: str, policy: str) -> None:
+    """A forged stamp must not permit silently replaced or discarded review requests."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.exec_driver_sql("INSERT INTO alembic_version VALUES ('0041')")
+        allowed = (
+            "'comment', 'assign', 'unassign', 'triage_start', "
+            "'triage_skip', 'triage_return', 'triage_complete'"
+        )
+        schema = _REVIEW_REQUEST_SCHEMA
+        if target == "event_pk":
+            schema = schema.replace("PRIMARY KEY", f"PRIMARY KEY{policy}")
+        request_policy = policy if target == "event_request" else ""
+        connection.exec_driver_sql(
+            f"CREATE TABLE review_queue_item_events ({schema}, "
+            "CONSTRAINT ck_review_queue_item_event_type "
+            f"CHECK (event_type IN ({allowed})), "
+            "CONSTRAINT uq_review_queue_item_event_request "
+            f"UNIQUE (review_queue_item_id, client_request_id){request_policy}"
+            f"{REVIEW_EVENT_FK_SQL})"
+        )
+        install_review_event_parent_rows(connection)
+        install_review_event_history_indexes(connection)
+        bulk_policy = policy if target == "bulk_pk" else ""
+        connection.exec_driver_sql(
+            "CREATE TABLE review_queue_bulk_requests ("
+            f"id TEXT NOT NULL PRIMARY KEY{bulk_policy}, review_queue_id TEXT NOT NULL, "
+            "project_id TEXT NOT NULL, action TEXT NOT NULL, actor TEXT NOT NULL, "
+            "reason TEXT, item_ids_json TEXT NOT NULL, "
+            f"created_at TEXT NOT NULL{_REVIEW_QUEUE_FK}{_PROJECT_FK})"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO review_queue_item_events VALUES "
+            "('event-1', 'queue-1', 'item-1', 'project-1', 'request-1', "
+            "'comment', 'researcher', NULL, NULL, '2026-11-24')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO review_queue_bulk_requests VALUES "
+            "('batch-1', 'queue-1', 'project-1', 'start', 'researcher', NULL, "
+            "'[]', '2026-11-24')"
+        )
+        schema_query = "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+        event_query = "SELECT * FROM review_queue_item_events"
+        bulk_query = "SELECT * FROM review_queue_bulk_requests"
+        before_schema = connection.exec_driver_sql(schema_query).all()
+        before_events = connection.exec_driver_sql(event_query).all()
+        before_bulk = connection.exec_driver_sql(bulk_query).all()
+        for _ in range(2):
+            if policy and not policy.startswith(" /*"):
+                with pytest.raises(RuntimeError, match="noncanonical QC constraint conflict policy"):
+                    assert_compatible_revision_0038(connection)
+            else:
+                assert_compatible_revision_0038(connection)
+            assert connection.exec_driver_sql(schema_query).all() == before_schema
+            assert connection.exec_driver_sql(event_query).all() == before_events
+            assert connection.exec_driver_sql(bulk_query).all() == before_bulk
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
+            assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+    engine.dispose()
+
+
 @pytest.mark.parametrize("nullable_field", ["review_queue_item_id", "client_request_id"])
 def test_revision_0041_rejects_nullable_event_request_identity_without_writes(
     nullable_field: str,
