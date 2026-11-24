@@ -11,6 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from reefvision.db.models import WorkflowArtifact
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.spatial_mesh_preview_v14 import (
@@ -2605,6 +2606,29 @@ def test_partial_patch_topology_requires_shared_incidences(timepoint: str) -> No
     target["edge_connected_patch_boundary_edge_counts"] = [7, 3]
     with pytest.raises(ValueError, match="patch shared incidences insufficient"):
         compare_mesh_observations(before, after)
+
+
+def test_typed_mesh_executor_rejects_invalid_partial_topology(
+    client: TestClient,
+) -> None:
+    """Replay of typed preview artifacts must apply the same scientific QC."""
+    before, after = _minimal_topology_pair()
+    after.update(face_count=3, edge_connected_patch_count=1, boundary_edge_count=6)
+    inputs = {
+        "before": [WorkflowArtifact(data_type="mesh_measurement_preview", payload_json=before)],
+        "after": [WorkflowArtifact(data_type="mesh_measurement_preview", payload_json=after)],
+    }
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        result = execute_mesh_longitudinal_comparison(
+            session, app.state.settings, "project-1", {}, inputs
+        )
+        assert result[0]["payload"] == compare_mesh_observations(before, after)
+        inputs["after"][0].payload_json = {**after, "boundary_edge_count": 7}
+        with pytest.raises(ValidationError, match="shared incidences insufficient"):
+            execute_mesh_longitudinal_comparison(
+                session, app.state.settings, "project-1", {}, inputs
+            )
 
 
 def test_longitudinal_partial_patch_arrays_do_not_invent_totals() -> None:
