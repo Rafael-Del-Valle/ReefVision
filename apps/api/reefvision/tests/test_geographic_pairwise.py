@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from reefvision.db.models import GeoReferencedObservation as GeoReferencedObservationRecord
 from reefvision.db.models.computed_metric import ComputedMetricResult
+from reefvision.domain.errors import ConflictError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.geographic_pairwise import GeographicPairwiseCalculateRequest
 from reefvision.schemas.georeferenced_observation import GeoReferencedObservation
@@ -245,3 +246,21 @@ def test_pairwise_geography_executes_and_replays_in_workflow(
             workflow_node_run_id=node["id"],
         )
         assert str(replay.result_id) == artifact["payload_json"]["result_id"]
+        assert str(replay.workflow_run_id) == queued["id"]
+        assert str(replay.workflow_node_run_id) == node["id"]
+        for wrong_run_id in (str(uuid4()), None):
+            with pytest.raises(ConflictError, match="Workflow node replay conflicts"):
+                GeographicPairwiseService(session).calculate(
+                    project["id"],
+                    GeographicPairwiseCalculateRequest.model_validate(parameters),
+                    workflow_run_id=wrong_run_id,
+                    workflow_node_run_id=node["id"],
+                )
+        repeated = GeographicPairwiseService(session).calculate(
+            project["id"],
+            GeographicPairwiseCalculateRequest.model_validate(parameters),
+            workflow_run_id=queued["id"],
+            workflow_node_run_id=node["id"],
+        )
+        assert repeated.result_id == replay.result_id
+        assert repeated.result_sha256 == replay.result_sha256

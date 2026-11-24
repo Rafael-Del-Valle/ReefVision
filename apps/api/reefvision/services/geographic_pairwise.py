@@ -201,6 +201,7 @@ class GeographicPairwiseService:
                 if (
                     existing.project_id != project_id
                     or existing.result_kind != RESULT_KIND
+                    or existing.workflow_run_id != workflow_run_id
                     or definition is None
                     or definition.configuration_json != configuration
                     or definition.name != request.name
