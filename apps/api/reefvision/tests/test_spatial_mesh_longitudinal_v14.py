@@ -2133,13 +2133,16 @@ def test_exact_zero_followup_is_preserved_in_saved_workflow(client: TestClient) 
     assert len(artifact["payload_sha256"]) == 64
 
 
-def test_near_equal_patch_divergence_standalone_and_saved_workflow(client: TestClient) -> None:
-    """Small nonzero profile changes must survive log-ratio cancellation."""
-    project_id = str(create_project(client, "Near-equal patch divergence")["id"])
+@pytest.mark.parametrize("case", ["near_equal", "zero_patch_added", "zero_patch_removed"])
+def test_ranked_patch_divergence_standalone_and_saved_workflow(
+    client: TestClient, case: str
+) -> None:
+    """Resolve small differences, but treat zero padding as identical area mass."""
+    project_id = str(create_project(client, "Ranked patch divergence")["id"])
     base = f"/api/v1/projects/{project_id}"
     before = _mesh("first", "2026-10-01T12:00:00Z", 1)
     after = _mesh("second", "2026-10-02T12:00:00Z", 1)
-    offset = 2.0**-30
+    offset = 2.0**-30 if case == "near_equal" else 0.0
     for params, change in ((before, 0.0), (after, offset)):
         params["vertices"] = [
             [0, 0, 0],
@@ -2150,6 +2153,12 @@ def test_near_equal_patch_divergence_standalone_and_saved_workflow(client: TestC
             [3, 1 - 2 * change, 0],
         ]
         params["faces"] = [[0, 1, 2], [3, 4, 5]]
+    if case != "near_equal":
+        # An isolated collinear triangle creates a real geometric patch,
+        # but contributes exactly zero mass to the area distribution.
+        zero_patch_mesh = after if case == "zero_patch_added" else before
+        zero_patch_mesh["vertices"].extend([[6, 0, 0], [7, 0, 0], [8, 0, 0]])
+        zero_patch_mesh["faces"].append([6, 7, 8])
     response = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
         json={"before": before, "after": after},
@@ -2160,13 +2169,21 @@ def test_near_equal_patch_divergence_standalone_and_saved_workflow(client: TestC
     oracle = offset**2 / (2 * log(2))
     divergence = expected["ranked_patch_area_jensen_shannon_divergence_bits"]
     assert divergence == pytest.approx(oracle, rel=1e-9, abs=0.0)
+    if case != "near_equal":
+        assert expected["ranked_patch_area_profile_distance"] == 0.0
+        assert expected["reconstruction_topology_changed_fields"]
+        side = "after" if case == "zero_patch_added" else "before"
+        assert expected[f"{side}_reconstruction_topology_counts"]["degenerate_face_count"] == 1
+    assert (
+        "ranked_patch_area_profile_distance_below_numeric_resolution" not in expected["qc_warnings"]
+    )
     assert "ranked_patch_area_divergence_below_numeric_resolution" not in expected["qc_warnings"]
     assert expected["provenance"]["specimen_identity_verified"] is False
     assert expected["provenance"]["calibration_verified"] is False
 
     graph = {
-        "graph_id": "near-equal-patch-js-v14",
-        "name": "Near-equal provisional patch distributions",
+        "graph_id": "ranked-patch-js-v14",
+        "name": "Ranked provisional patch distributions",
         "nodes": [
             {"node_id": "project", "node_type": "project_source"},
             {"node_id": "early", "node_type": "mesh_surface_preview", "parameters": before},
