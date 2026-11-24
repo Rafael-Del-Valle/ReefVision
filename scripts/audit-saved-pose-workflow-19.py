@@ -844,7 +844,20 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 registered.get("source_training_run_id") == training.id
                 and registered.get("source_pose_training_dataset_id") == dataset.id
                 and registered.get("source_pose_training_dataset_manifest_sha256")
-                == dataset.manifest_sha256,
+                == dataset.manifest_sha256
+                and registered.get("source_experiment_id") == experiment.id
+                and registered.get("source_dataset_version_id") == training.dataset_version_id
+                and registered.get("source_dataset_manifest_sha256")
+                == training.dataset_manifest_sha256
+                and registered.get("source_split_manifest_sha256") == training.split_manifest_sha256
+                and registered.get("source_pose_validation_dataset_id") == validation_id
+                and registered.get("source_pose_validation_dataset_manifest_sha256")
+                == (validation_dataset.manifest_sha256 if validation_id is not None else None)
+                and registered.get("pose_schema_id") == dataset.pose_schema_id
+                and type(registered.get("pose_schema_revision")) is int
+                and registered.get("pose_schema_revision") == dataset.pose_schema_revision
+                and registered.get("pose_schema_content_hash") == dataset.pose_schema_content_hash
+                and registered.get("pose_landmark_labels") == revision.expanded_labels_json,
                 "Registered model no longer identifies the frozen training lineage",
             )
             # A model with matching checkpoint bytes can still have its persisted
@@ -875,6 +888,8 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 isinstance(metadata, dict)
                 and metadata.get("registered_from") == "training_run"
                 and metadata.get("source_training_run_id") == training.id
+                and metadata.get("source_dataset_version_id") == training.dataset_version_id
+                and metadata.get("source_dataset_manifest_sha256") == training.dataset_manifest_sha256
                 and metadata.get("source_pose_training_dataset_id") == dataset.id
                 and metadata.get("source_pose_training_dataset_manifest_sha256")
                 == dataset.manifest_sha256
