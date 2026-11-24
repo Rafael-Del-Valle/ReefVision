@@ -1341,3 +1341,47 @@ def test_log_tail_checks_eof_against_opened_identity(
             "text": original.decode("utf-8"),
         }
     assert log.read_bytes() == original
+
+
+def test_training_log_observer_uses_unbuffered_file_handle(tmp_path: Path) -> None:
+    """A verification reread must consult the file rather than a cached buffer."""
+    import io
+
+    log = tmp_path / "training.log"
+    original = b"epoch=4\ntrain/box_loss=0.25\n"
+    log.write_bytes(original)
+    with training_routes._open_training_log(log) as handle:
+        assert isinstance(handle, io.FileIO)
+        assert handle.read(len(original)) == original
+        handle.seek(0)
+        assert handle.read(len(original)) == original
+    assert log.read_bytes() == original
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Concurrent write sharing varies on Windows")
+def test_training_log_observer_reread_detects_real_in_place_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A same-inode rewrite plus append must not evade snapshot verification."""
+    log = tmp_path / "training.log"
+    original = b"epoch=4\ntrain/box_loss=0.25\n"
+    replacement = original.replace(b"0.25", b"9.99")
+    appended = b"train/cls_loss=0.30\n"
+    log.write_bytes(original)
+    real_fstat = os.fstat
+    calls = 0
+
+    def rewrite_after_first_read(fd: int) -> os.stat_result:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            with log.open("r+b") as writer:
+                writer.write(replacement + appended)
+        return real_fstat(fd)
+
+    monkeypatch.setattr(training_routes.os, "fstat", rewrite_after_first_read)
+    with pytest.raises(HTTPException) as error:
+        training_routes._training_log_tail("training.log", tmp_path)
+    assert error.value.status_code == 403
+    assert calls == 2
+    assert log.read_bytes() == replacement + appended
