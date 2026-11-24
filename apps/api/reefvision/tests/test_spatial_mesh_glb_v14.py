@@ -188,6 +188,15 @@ def make_glb(
             "matrix": [int(index % 5 == 0) for index in range(16)],
         }
         doc["nodes"][0][identity_transform] = identities[identity_transform]
+    if invalid_selector in EXACT_TRANSFORM_SELECTORS:
+        # Inject raw JSON decimal tokens below, not Python-rounded floats.
+        _, transform, _ = invalid_selector.split("_")
+        identities = {
+            "scale": ["numeric_marker", 1, 1],
+            "rotation": [0, 0, 0, "numeric_marker"],
+            "matrix": ["numeric_marker", *[int(i % 5 == 0) for i in range(1, 16)]],
+        }
+        doc["nodes"][0][transform] = identities[transform]
     if translated:
         doc["nodes"] = [{"mesh": 0, "translation": [1, 0, 0]}]
     if invalid_selector == "nonidentity_scale":
@@ -364,6 +373,13 @@ def make_glb(
         "json_extras_oversized_integer": b"9" * 65,
         "json_extras_bounded_integer": b"9" * 64,
     }
+    if invalid_selector in EXACT_TRANSFORM_SELECTORS:
+        _, _, variant = invalid_selector.split("_")
+        numeric_tokens[invalid_selector] = {
+            "above": b"1.00000000000000001",
+            "below": b"0.99999999999999999",
+            "identity": b"1.000e0",
+        }[variant]
     if invalid_selector in numeric_tokens:
         json_bytes = json_bytes.replace(b'"numeric_marker"', numeric_tokens[invalid_selector])
     json_bytes += b" " * (-len(json_bytes) % 4)
@@ -379,6 +395,24 @@ def make_glb(
         + binary
     )
     return base64.b64encode(glb).decode()
+
+
+EXACT_TRANSFORM_SELECTORS = tuple(
+    f"exact_{transform}_{variant}"
+    for transform in ("scale", "rotation", "matrix")
+    for variant in ("above", "below", "identity")
+)
+
+
+@pytest.mark.parametrize("selector", EXACT_TRANSFORM_SELECTORS)
+def test_glb_transform_identity_uses_exact_source_decimals(selector: str) -> None:
+    """Binary64 rounding cannot turn a nonidentity source into an identity."""
+    sample = make_glb(invalid_selector=selector)
+    if selector.endswith("_identity"):
+        assert parse_glb_triangles(sample) == parse_glb_triangles(make_glb())
+    else:
+        with pytest.raises(ValueError, match="transforms"):
+            parse_glb_triangles(sample)
 
 
 FLOAT32_UNDERFLOW_SELECTORS = (
