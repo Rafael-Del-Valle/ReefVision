@@ -88,6 +88,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
     from sqlalchemy import create_engine, event, select
     from sqlalchemy.orm import Session
 
+    from reefvision.config import Settings
     from reefvision.db.models import (
         ExperimentRecord,
         Job,
@@ -104,6 +105,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
     )
     from reefvision.jobs.pose_training import _verify_prelaunch_pose_dataset
     from reefvision.services.pose_training_datasets import PoseTrainingDatasetService
+    from reefvision.services.pose_training_exports import PoseTrainingExportService
     from reefvision.services.workflow_provenance import build_workflow_run_provenance
     from reefvision.storage.datasets import canonical_json_sha256
 
@@ -515,6 +517,40 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 validation_dataset.manifest_json["items"] if validation_id is not None else [],
                 materialization.get("validation_image_count"),
             )
+            # Frame counts do not establish that the actual class IDs, boxes,
+            # landmark coordinates and visibility match the reviewed poses.
+            # Render labels in memory using the production exporter; do not
+            # rewrite the saved dataset or decode/export the original frames.
+            exporter = PoseTrainingExportService(session, Settings(data_dir=root))
+            verified_label_count = 0
+            for split, frozen_dataset in (
+                ("train", dataset),
+                ("val", validation_dataset if validation_id is not None else None),
+            ):
+                if frozen_dataset is None:
+                    continue
+                items = exporter._items(frozen_dataset)
+                schema = exporter._schema(frozen_dataset)
+                video, _, _, _ = exporter._source_video(items)
+                expected_labels = exporter._ultralytics(
+                    items=items,
+                    schema=schema,
+                    video=video,
+                    class_mapping=exporter._class_mapping(items),
+                )
+                for relative, expected in expected_labels.items():
+                    if not relative.startswith("labels/train/"):
+                        continue
+                    label_file = root / dataset_path / "labels" / split / Path(relative).name
+                    _require(
+                        label_file.read_bytes() == expected,
+                        f"Materialized {split} labels differ from frozen truth: {label_file.name}",
+                    )
+                    verified_label_count += 1
+            _require(
+                verified_label_count == train_frame_count + validation_frame_count,
+                "Reconstructed pose labels do not cover all reviewed frames",
+            )
             # A successful retraining run must still be traceable to its
             # original local registered pose model, not only to the output
             # checkpoint. Preserve and authenticate user-trained seed weights.
@@ -742,6 +778,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 ),
                 "validation_mode": expected_validation_mode,
                 "materialized_dataset_sha256": materialization["materialized_dataset_sha256"],
+                "verified_materialized_label_file_count": verified_label_count,
                 "verified_training_frame_count": train_frame_count,
                 "verified_validation_frame_count": validation_frame_count,
                 "materialized_dataset_fingerprint_algorithm": materialization.get(
