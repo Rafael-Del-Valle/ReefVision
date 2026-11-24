@@ -730,6 +730,16 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
         # numeric revision names for unrelated schema operations.
         if lineage == "scientific" and len(revisions) == 1:
             revision = revisions[0]
+            # A later scientific stamp also promises that its own DDL exists.
+            # Earlier stage checks only diagnose tables arriving too soon or
+            # missing dependencies of tables that survived a partial restore.
+            if (
+                revision in {"0040", "0041", "0042"}
+                and "environmental_event_definitions" not in present_extensions
+            ):
+                warnings.append("scientific_revision_missing_environmental_event_definitions")
+            if revision == "0042" and not analysis_pair <= present_extensions:
+                warnings.append("scientific_revision_missing_environmental_analysis_pair")
             if (
                 revision in {"0037", "0038", "0039"}
                 and "environmental_event_definitions" in present_extensions
