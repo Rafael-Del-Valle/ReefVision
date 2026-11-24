@@ -146,6 +146,7 @@ def test_longitudinal_scale_only_area_difference_sign(
         "nonmanifold",
         "nonmanifold_disconnected",
         "nonmanifold_four_face_fan",
+        "nonmanifold_fan_and_manifold_pair",
         "near_identical",
         "near_identical_decrease",
     ],
@@ -179,7 +180,12 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
         after["vertices"][2][1] = 1.0 + 2**-48
     elif topology == "near_identical_decrease":
         after["vertices"][2][1] = 1.0 - 2**-48
-    elif topology in ("nonmanifold", "nonmanifold_disconnected", "nonmanifold_four_face_fan"):
+    elif topology in (
+        "nonmanifold",
+        "nonmanifold_disconnected",
+        "nonmanifold_four_face_fan",
+        "nonmanifold_fan_and_manifold_pair",
+    ):
         # Three triangles share one edge: six boundary incidences and three
         # nonmanifold incidences exhaust the nine available face incidences.
         for record, height in ((before, 1.0), (after, 1.1)):
@@ -198,6 +204,11 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
                 # Four distinct faces share one edge, saturating the link budget.
                 record["vertices"].append([0, 0, -height])
                 record["faces"].append([1, 0, 5])
+            elif topology == "nonmanifold_fan_and_manifold_pair":
+                record["vertices"].extend(
+                    [[0, 0, -height], [2, 0, 0], [3, 0, 0], [2, height, 0], [2, -height, 0]]
+                )
+                record["faces"].extend([[1, 0, 5], [6, 7, 8], [7, 6, 9]])
     response = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
         json={"before": before, "after": after},
@@ -213,6 +224,7 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
         "nonmanifold": (0.15, 3, 6, 1, 1),
         "nonmanifold_disconnected": (0.2, 4, 9, 1, 2),
         "nonmanifold_four_face_fan": (0.2, 4, 8, 1, 1),
+        "nonmanifold_fan_and_manifold_pair": (0.3, 6, 12, 1, 2),
     }[topology]
     # Explicit relative tolerance accommodates binary64 representation of 1.1,
     # without an absolute tolerance that could hide a tiny change or its sign.
@@ -2504,6 +2516,28 @@ def test_longitudinal_manifold_patch_connectivity(
     target = before if timepoint == "before" else after
     target["edge_connected_patch_boundary_edge_counts"] = boundary_counts
     with pytest.raises(ValueError, match=error):
+        compare_mesh_observations(before, after)
+
+
+@pytest.mark.parametrize("timepoint", ["before", "after"])
+def test_longitudinal_nonmanifold_patch_connectivity(timepoint: str) -> None:
+    """A disconnected nonmanifold patch cannot borrow links from another patch."""
+    before, after = _minimal_topology_pair()
+    for record in (before, after):
+        record.update(
+            face_count=12,
+            edge_connected_patch_count=2,
+            boundary_edge_count=17,
+            nonmanifold_edge_count=1,
+            edge_connected_patch_face_counts=[5, 7],
+            edge_connected_patch_boundary_edge_counts=[8, 9],
+            edge_connected_patch_nonmanifold_edge_counts=[1, 0],
+        )
+    result = compare_mesh_observations(before, after)
+    assert result["provenance"]["specimen_identity_verified"] is False
+    target = before if timepoint == "before" else after
+    target["edge_connected_patch_boundary_edge_counts"] = [12, 5]
+    with pytest.raises(ValueError, match="patch shared edge links insufficient"):
         compare_mesh_observations(before, after)
 
 
