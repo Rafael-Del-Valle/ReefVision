@@ -52,6 +52,10 @@ def _create_0039_metric_pair(connection: sqlite3.Connection, variant: str = "val
             "UNIQUE (workflow_node_run_id)",
             "",
         )
+    if variant == "duplicate_workflow_fk":
+        result_sql = result_sql[:-1] + (
+            ", FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id) ON DELETE RESTRICT)"
+        )
     connection.execute(definition_sql)
     connection.execute(result_sql)
     connection.execute(
@@ -1159,6 +1163,9 @@ def test_11_scientific_tables_cannot_precede_their_revision(
         ("request_unique_nocase", True),
         ("request_unique_descending", True),
         ("request_unique_nocase_descending", True),
+        ("request_unique_renamed", True),
+        ("request_unique_unnamed", True),
+        ("duplicate_project_fk", True),
         ("additional_unique_actor", True),
         ("additional_partial_unique_actor", True),
         ("stage_0038_0038", False),
@@ -1200,6 +1207,19 @@ def test_0038_qc_structural_audit_rejects_unreviewed_unique_index_semantics(
         if has_request_constraint
         else ""
     )
+    if variant == "request_unique_renamed":
+        request_constraint = request_constraint.replace(
+            "uq_review_queue_item_event_request", "renamed_request_constraint"
+        )
+    elif variant == "request_unique_unnamed":
+        request_constraint = request_constraint.replace(
+            "CONSTRAINT uq_review_queue_item_event_request ", ""
+        )
+    duplicate_fk = (
+        ", FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
+        if variant == "duplicate_project_fk"
+        else ""
+    )
     with sqlite3.connect(database) as connection:
         connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
         connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
@@ -1235,7 +1255,7 @@ def test_0038_qc_structural_audit_rejects_unreviewed_unique_index_semantics(
             "event_type VARCHAR(20) NOT NULL, "
             "actor VARCHAR(100) NOT NULL, "
             "comment TEXT, assignee VARCHAR(100), created_at DATETIME NOT NULL"
-            f"{request_constraint}, "
+            f"{request_constraint}{duplicate_fk}, "
             "CONSTRAINT ck_review_queue_item_event_type "
             f"CHECK (event_type IN ({event_types})))"
         )
@@ -1979,6 +1999,7 @@ def test_revision_must_belong_to_detected_schema_lineage(
         ("missing_unique", "computed_metric_results"),
         ("missing_index", "computed_metric_results"),
         ("result_trigger", "computed_metric_results"),
+        ("duplicate_workflow_fk", "computed_metric_results"),
     ],
 )
 def test_computed_metric_structural_contracts(

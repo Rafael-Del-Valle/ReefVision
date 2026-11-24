@@ -612,6 +612,27 @@ def _original_0038_check_contract_matches(
     checks = [i for i, token in enumerate(tokens) if token == "CHECK"]
     if table != "review_queue_item_events":
         return not checks
+    # Batch recreation in 0039/0040 preserves the named request constraint.
+    # SQLite autoindex metadata alone cannot distinguish an unnamed or renamed
+    # constraint, even though its current uniqueness behavior is identical.
+    request_constraint = (
+        "CONSTRAINT",
+        "UQ_REVIEW_QUEUE_ITEM_EVENT_REQUEST",
+        "UNIQUE",
+        "(",
+        "REVIEW_QUEUE_ITEM_ID",
+        ",",
+        "CLIENT_REQUEST_ID",
+        ")",
+    )
+    if (
+        sum(
+            tokens[i : i + len(request_constraint)] == request_constraint
+            for i in range(len(tokens))
+        )
+        != 1
+    ):
+        return False
     if len(checks) != 1 or checks[0] < 2:
         return False
     # 0038 -> 0039 -> 0040/0041; never accept an arbitrary extra category,
@@ -731,7 +752,12 @@ def _post_0037_table_contract_matches(
     if any(row[1] != 0 for row in foreign_key_rows):
         return False
     foreign_keys = {(row[3], row[2], row[4], row[6].upper()) for row in foreign_key_rows}
-    if foreign_keys != contract["foreign_keys"]:
+    # Preserve multiplicity: a duplicated FK is hidden by set equality and
+    # can survive an interrupted batch recreation with the same parent links.
+    if (
+        len(foreign_key_rows) != len(contract["foreign_keys"])
+        or foreign_keys != contract["foreign_keys"]
+    ):
         return False
     # The source migrations do not declare ON UPDATE actions. CASCADE or
     # SET NULL could silently alter biological links or reviewer ownership

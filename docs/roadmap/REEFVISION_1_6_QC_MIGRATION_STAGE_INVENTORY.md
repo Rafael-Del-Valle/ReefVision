@@ -133,3 +133,21 @@ Independent SQLAlchemy/SQLite checks passed for the same 28 combinations;
 complete repository CI is still required. The report remains read-only
 and never authorizes upgrades. Existing typed saved QC workflows,
 provenance, retry and researcher review are unchanged.
+
+## 2026-11-24 — QC request constraint identity and FK multiplicity
+
+The independent QC 0038 migration names its request idempotency constraint;
+0039 and 0040 recreate the event table in batch mode and preserve named
+constraints. The structural inspector now requires that original named
+constraint, not merely an equivalent SQLite autoindex. It also compares the
+number of foreign-key rows to the original contracts for all audited tables:
+duplicate links can otherwise disappear when converted to a set. Both checks
+are diagnostic only and do not authenticate a stamp or authorize an upgrade.
+
+Seven additional persisted CLI configurations cover renamed/unnamed QC
+constraints, duplicated QC project links, and duplicated computed-metric
+workflow links at each scientific stage 0039–0042. The existing tests check
+redaction, repeatability and byte preservation. Independent disposable SQLite
+probes verified the specific metadata ambiguity for the QC contract; full
+repository CI remains required. Existing typed executable saved QC workflows
+and review gates are unchanged; no migrations or research data are rewritten.
