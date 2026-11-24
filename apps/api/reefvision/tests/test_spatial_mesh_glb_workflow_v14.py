@@ -233,6 +233,7 @@ def test_valid_glb_bounds_standalone_and_replayed_graph(client: TestClient, vari
         "byte_index_oob",
         "byte_restart_index",
         "mixed_geometry_view",
+        "aliased_geometry_bytes",
         "dword_index_oob",
         "misaligned_position_view",
         "index_stride",
@@ -304,6 +305,8 @@ def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
         assert "reserved primitive restart" in standalone.text
     if invalid_selector == "mixed_geometry_view":
         assert "require separate buffer views" in standalone.text
+    if invalid_selector == "aliased_geometry_bytes":
+        assert "index bytes overlap vertex positions" in standalone.text
     if invalid_selector in {"bounds_midpoint_above", "bounds_odd_tie"}:
         assert "position bounds conflict" in standalone.text
     graph = {
@@ -331,6 +334,7 @@ def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
     replay_selectors = {
         "byte_restart_index",
         "mixed_geometry_view",
+        "aliased_geometry_bytes",
         "bounds_midpoint_above",
         "bounds_odd_tie",
     }
@@ -349,6 +353,8 @@ def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
             assert "reserved primitive restart" in result["run"]["error_message"]
         if invalid_selector == "mixed_geometry_view":
             assert "require separate buffer views" in result["run"]["error_message"]
+        if invalid_selector == "aliased_geometry_bytes":
+            assert "index bytes overlap vertex positions" in result["run"]["error_message"]
         if invalid_selector in {"bounds_midpoint_above", "bounds_odd_tie"}:
             assert "position bounds conflict" in result["run"]["error_message"]
         assert not any(
