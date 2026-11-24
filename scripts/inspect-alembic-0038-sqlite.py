@@ -61,6 +61,10 @@ def inspect_database(path: Path) -> dict[str, object]:
     # guard. Avoid immutable=1 because it can ignore a live WAL journal.
     with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as connection:
         connection.execute("PRAGMA query_only=ON")
+        # sqlite3 legacy transaction mode does not begin a transaction for SELECT.
+        # Pin the revision, schema, constraints and historical rows to one read snapshot
+        # so a concurrent WAL writer cannot mix different migration states in the report.
+        connection.execute("BEGIN")
         version_rows = connection.execute("SELECT version_num FROM alembic_version").fetchall()
         # A revision marker can survive corrupted cross-table relationships.
         # Check declared FKs even if the original writer disabled enforcement.
