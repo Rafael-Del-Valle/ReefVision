@@ -8,7 +8,11 @@ from fastapi.testclient import TestClient
 
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.tests.test_annotations import create_project
-from reefvision.tests.test_spatial_mesh_glb_v14 import FLOAT32_UNDERFLOW_SELECTORS, make_glb
+from reefvision.tests.test_spatial_mesh_glb_v14 import (
+    EXACT_TRANSFORM_SELECTORS,
+    FLOAT32_UNDERFLOW_SELECTORS,
+    make_glb,
+)
 
 
 @pytest.mark.parametrize(
@@ -314,3 +318,74 @@ def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
         artifact["data_type"] == "mesh_measurement_preview"
         for artifact in detail.json()["artifacts"]
     )
+
+
+@pytest.mark.parametrize("selector", EXACT_TRANSFORM_SELECTORS)
+def test_exact_glb_transform_standalone_and_replayed_graph(
+    client: TestClient, selector: str
+) -> None:
+    """Do not publish base geometry for an unapplied nonidentity source transform."""
+    project_id = str(create_project(client, f"GLB {selector}")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    params = {
+        "glb_base64": make_glb(invalid_selector=selector),
+        "meters_per_unit": 0.01,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic control, pending independent review",
+    }
+    valid = selector.endswith("_identity")
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == (200 if valid else 400), standalone.text
+    expected = standalone.json()
+    if valid:
+        assert expected["surface_area_m2"] == pytest.approx(0.0003)
+        assert expected["provenance"]["calibration_verified"] is False
+        assert expected["provenance"]["coordinate_registration_verified"] is False
+    else:
+        assert "transforms" in expected["detail"]
+    graph = {
+        "graph_id": f"glb-{selector}-v14",
+        "name": "GLB exact source transform integrity",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        ) is valid
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        result = detail.json()
+        assert result["run"]["status"] == ("succeeded" if valid else "failed")
+        artifacts = [
+            artifact
+            for artifact in result["artifacts"]
+            if artifact["data_type"] == "mesh_measurement_preview"
+        ]
+        if valid:
+            assert len(artifacts) == 1
+            assert artifacts[0]["payload_json"] == expected
+            hashes.append(artifacts[0]["payload_sha256"])
+        else:
+            assert "transforms" in result["run"]["error_message"]
+            assert not artifacts
+    if valid:
+        assert len(hashes[0]) == 64
+        assert hashes[0] == hashes[1]
