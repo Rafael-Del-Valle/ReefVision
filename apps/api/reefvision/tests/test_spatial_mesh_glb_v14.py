@@ -53,7 +53,8 @@ def make_glb(
         z_value = 2**-149
     else:
         z_value = 1e-9 if tiny_z else 0.0
-    positions = struct.pack("<9f", 0, 0, 0, 2, 0, 0, 0, 3, z_value)
+    x_value = 2 + 2**-22 if invalid_selector in ODD_BOUND_SELECTORS else 2
+    positions = struct.pack("<9f", 0, 0, 0, x_value, 0, 0, 0, 3, z_value)
     if type(position_stride) is int and position_stride >= 12:
         positions = b"".join(
             b"\x00" * position_leading_bytes
@@ -169,6 +170,8 @@ def make_glb(
     elif invalid_selector == "bounds_float32_roundtrip":
         # Decimal exporter spelling still rounds to the stored 2.0 float32.
         doc["accessors"][0]["max"] = [2.00000001, 3.0, 0.0]
+    elif invalid_selector in MIDPOINT_BOUND_TOKENS:
+        doc["accessors"][0]["max"] = ["numeric_marker", 3.0, 0.0]
     elif invalid_selector in FLOAT32_UNDERFLOW_SELECTORS:
         # A nonzero JSON extremum near zero can round to BIN float32 zero.
         # The metadata must not claim a distinction absent from the vertices.
@@ -403,6 +406,7 @@ def make_glb(
             "below": b"0.99999999999999999",
             "identity": b"1.000e0",
         }[variant]
+    numeric_tokens.update(MIDPOINT_BOUND_TOKENS)
     if invalid_selector in numeric_tokens:
         json_bytes = json_bytes.replace(b'"numeric_marker"', numeric_tokens[invalid_selector])
     json_bytes += b" " * (-len(json_bytes) % 4)
@@ -418,6 +422,39 @@ def make_glb(
         + binary
     )
     return base64.b64encode(glb).decode()
+
+
+# The midpoint between float32 2 and its successor is exact in binary64.
+# These source decimals straddle it but all round to the same binary64 value.
+MIDPOINT_BOUND_TOKENS = {
+    "bounds_midpoint_below": b"2.000000119209289550781249999999",
+    "bounds_midpoint_tie": b"2.00000011920928955078125",
+    "bounds_midpoint_above": b"2.000000119209289550781250000001",
+    "bounds_odd_above": b"2.000000119209289550781250000001",
+    "bounds_odd_tie": b"2.00000011920928955078125",
+}
+ODD_BOUND_SELECTORS = {"bounds_odd_above", "bounds_odd_tie"}
+
+
+@pytest.mark.parametrize(
+    ("selector", "valid"),
+    [
+        ("bounds_midpoint_below", True),
+        ("bounds_midpoint_tie", True),
+        ("bounds_midpoint_above", False),
+        ("bounds_odd_above", True),
+        ("bounds_odd_tie", False),
+    ],
+)
+def test_glb_position_bounds_round_once_at_float32_midpoint(selector: str, valid: bool) -> None:
+    sample = make_glb(invalid_selector=selector)
+    if valid:
+        vertices, faces = parse_glb_triangles(sample)
+        assert vertices[1][0] == (2 + 2**-22 if selector in ODD_BOUND_SELECTORS else 2)
+        assert faces == [[0, 1, 2]]
+    else:
+        with pytest.raises(ValueError, match="position bounds conflict"):
+            parse_glb_triangles(sample)
 
 
 EXACT_TRANSFORM_SELECTORS = tuple(
