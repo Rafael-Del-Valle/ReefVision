@@ -111,6 +111,7 @@ def inspect_database(path: Path) -> dict[str, object]:
         qc_request_key_unique: bool | None = None
         qc_required_columns_not_null: bool | None = None
         qc_event_foreign_keys_valid: bool | None = None
+        qc_event_primary_key_valid: bool | None = None
         qc_event_type_counts: list[tuple[object, int]] = []
         if signatures[REVIEW_TABLE]:
             # The applied 1.6/0038 schema requires complete attributed events.
@@ -126,11 +127,13 @@ def inspect_database(path: Path) -> dict[str, object]:
                 "actor",
                 "created_at",
             }
-            not_null_columns = {
-                row[1]
-                for row in connection.execute(f'PRAGMA table_info("{REVIEW_TABLE}")')
-                if row[3]
-            }
+            event_columns = connection.execute(
+                f'PRAGMA table_info("{REVIEW_TABLE}")'
+            ).fetchall()
+            not_null_columns = {row[1] for row in event_columns if row[3]}
+            # An event ID must identify one immutable event independently of
+            # request deduplication; NOT NULL alone permits duplicate IDs.
+            qc_event_primary_key_valid = [row[1] for row in event_columns if row[5]] == ["id"]
             qc_required_columns_not_null = required_not_null <= not_null_columns
             # 1.6/0038 guarantees idempotent append-only review requests by a
             # non-partial UNIQUE constraint on the item and client request ID.
@@ -282,6 +285,8 @@ def inspect_database(path: Path) -> dict[str, object]:
         issues.append("QC event item/request uniqueness constraint is missing")
     if groups["review_0038"] and not qc_required_columns_not_null:
         issues.append("QC event required fields are missing or nullable")
+    if groups["review_0038"] and not qc_event_primary_key_valid:
+        issues.append("QC event primary key is not exactly the event ID")
     if groups["review_0038"] and not qc_event_foreign_keys_valid:
         issues.append("QC event required CASCADE foreign keys are missing or incorrect")
     if REVIEW_TABLE in tables and not groups["review_0038"]:
@@ -317,6 +322,7 @@ def inspect_database(path: Path) -> dict[str, object]:
         "qc_request_key_unique": qc_request_key_unique,
         "qc_required_columns_not_null": qc_required_columns_not_null,
         "qc_event_foreign_keys_valid": qc_event_foreign_keys_valid,
+        "qc_event_primary_key_valid": qc_event_primary_key_valid,
         "foreign_key_violations": foreign_key_violations,
         "foreign_key_violation_sources": foreign_key_violation_sources,
         "classification": classification,
