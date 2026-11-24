@@ -1765,3 +1765,54 @@ def test_reserved_lineage_schema_aliases_fail_closed(
         assert "private coral observation" not in result.stdout + result.stderr
         assert "private lineage record" not in result.stdout + result.stderr
         assert database.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    ("name", "kind"),
+    [
+        ("ALEMBIC_VERSION", "table"),
+        ("Alembic_Version", "table"),
+        ("alembic_version", "view"),
+        ("ALEMBIC_VERSION", "view"),
+        ("alembic_version", "table"),
+    ],
+)
+def test_revision_schema_object_identity(tmp_path: Path, name: str, kind: str) -> None:
+    database = tmp_path / "revision-object.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE biological_observations (version_num TEXT, note TEXT)")
+        connection.execute(
+            "INSERT INTO biological_observations VALUES ('0039', 'private coral observation')"
+        )
+        for table in (
+            "scientific_records",
+            "environmental_cache_entries",
+            "computed_metric_definitions",
+            "computed_metric_results",
+        ):
+            connection.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY)')
+        if kind == "table":
+            connection.execute(f'CREATE TABLE "{name}" (version_num TEXT NOT NULL PRIMARY KEY)')
+            connection.execute(f'INSERT INTO "{name}" VALUES (?)', ("0039",))
+        else:
+            connection.execute(
+                f'CREATE VIEW "{name}" AS SELECT version_num FROM biological_observations'
+            )
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0039",)
+    original = database.read_bytes()
+    canonical = name == "alembic_version" and kind == "table"
+    for _ in range(2):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == (0 if canonical else 2), result.stderr
+        report = json.loads(result.stdout)
+        assert ("noncanonical_alembic_version_object" in report["warnings"]) is not canonical
+        assert report["revision_rows"] == (["0039"] if canonical else [])
+        assert report["canonical_alembic_stamp_constraints"] is canonical
+        assert report["upgrade_authorized"] is False
+        assert "private coral observation" not in result.stdout + result.stderr
+        assert database.read_bytes() == original

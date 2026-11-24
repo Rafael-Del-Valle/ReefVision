@@ -158,9 +158,58 @@ def test_desktop_refuses_reserved_schema_alias(
     )
     settings = SimpleNamespace(resolved_database_url=str(engine.url))
     for _ in range(2):
-        with engine.connect() as connection:
-            with pytest.raises(RuntimeError, match="noncanonical reserved schema object"):
-                assert_compatible_revision_0038(connection)
+        with (
+            engine.connect() as connection,
+            pytest.raises(RuntimeError, match="noncanonical reserved schema object"),
+        ):
+            assert_compatible_revision_0038(connection)
+        with pytest.raises(RuntimeError, match="noncanonical reserved schema object"):
+            desktop.run_pending_migrations(settings)
+        assert database.read_bytes() == original
+    engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("name", "kind"),
+    [
+        ("ALEMBIC_VERSION", "table"),
+        ("Alembic_Version", "table"),
+        ("alembic_version", "view"),
+        ("ALEMBIC_VERSION", "view"),
+    ],
+)
+def test_desktop_refuses_noncanonical_revision_object(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, name: str, kind: str
+) -> None:
+    database = tmp_path / "revision-object.sqlite"
+    engine = create_engine(f"sqlite+pysqlite:///{database}")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE biological_observations (version_num TEXT)")
+        connection.exec_driver_sql("INSERT INTO biological_observations VALUES ('0037')")
+        if kind == "table":
+            connection.exec_driver_sql(
+                f'CREATE TABLE "{name}" (version_num TEXT NOT NULL PRIMARY KEY)'
+            )
+            connection.exec_driver_sql(f'INSERT INTO "{name}" VALUES (?)', ("0037",))
+        else:
+            connection.exec_driver_sql(
+                f'CREATE VIEW "{name}" AS SELECT version_num FROM biological_observations'
+            )
+        assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == "0037"
+    original = database.read_bytes()
+    monkeypatch.setattr(session, "create_database_engine", lambda _settings: engine)
+    monkeypatch.setattr(
+        desktop.ScriptDirectory,
+        "from_config",
+        lambda _config: SimpleNamespace(get_current_head=lambda: "0041"),
+    )
+    monkeypatch.setattr(
+        desktop.command,
+        "upgrade",
+        lambda *_args, **_kwargs: pytest.fail("Noncanonical revision object must block upgrade"),
+    )
+    settings = SimpleNamespace(resolved_database_url=str(engine.url))
+    for _ in range(2):
         with pytest.raises(RuntimeError, match="noncanonical reserved schema object"):
             desktop.run_pending_migrations(settings)
         assert database.read_bytes() == original

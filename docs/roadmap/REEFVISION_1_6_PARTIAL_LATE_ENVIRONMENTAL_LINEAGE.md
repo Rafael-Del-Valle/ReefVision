@@ -195,3 +195,18 @@ and two QC names, case-variant tables and reserved views, repeated refusal,
 original database bytes and private observation redaction. Existing executable
 QC saved graphs and review gates are unchanged. This is not an integrated
 migration DAG or installed Windows acceptance.
+
+## 2026-11-24 — Alembic revision object identity
+
+SQLite resolves case aliases and views through the name `alembic_version`;
+SQLAlchemy's has_table also accepts views. A plausible revision returned
+by a view of unrelated biological observations is not migration evidence.
+The desktop guard now rejects noncanonical spelling and views occupying
+the reserved revision name before reading any stamp or invoking Alembic.
+The read-only CLI explicitly diagnoses the noncanonical revision object
+without accepting its values as revision rows. Four desktop configurations
+and five strict CLI configurations (including a canonical table control)
+exercise repeated inspection, unchanged database bytes and private-data
+redaction. Corrected the preceding exact CI SIM117 and inspector formatting
+diagnostics. No schema mutation, integration of unmerged lineages, new
+scientific workflow operation, or release approval is implied.

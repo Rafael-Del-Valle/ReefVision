@@ -689,6 +689,12 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
             )
         }
         version_table_present = objects.get("alembic_version") == "table"
+        noncanonical_version_object = any(
+            name.isascii()
+            and name.lower() == "alembic_version"
+            and (name != "alembic_version" or kind != "table")
+            for name, kind in objects.items()
+        )
         # table_info hides SQLite generated and virtual-table hidden columns.
         # Use xinfo so a forged Alembic table cannot pass as single-column
         # canonical merely because its extra columns are hidden from table_info.
@@ -749,9 +755,7 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
             if name.isascii() and name.lower() in names
         }
         noncanonical_lineage_object = any(
-            name.isascii()
-            and name.lower() in names
-            and (name not in names or kind != "table")
+            name.isascii() and name.lower() in names and (name not in names or kind != "table")
             for name, kind in objects.items()
         )
         for name in sorted(names):
@@ -786,6 +790,8 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
         warnings = []
         if noncanonical_lineage_object:
             warnings.append("noncanonical_lineage_schema_object")
+        if noncanonical_version_object:
+            warnings.append("noncanonical_alembic_version_object")
         for table, outcome in structural_contracts.items():
             if outcome == "mismatch":
                 warnings.append(f"lineage_table_contract_mismatch_{table}")

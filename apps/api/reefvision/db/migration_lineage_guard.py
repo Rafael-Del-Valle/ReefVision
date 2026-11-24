@@ -85,7 +85,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     # otherwise bypass the scientific/QC set intersections below. A view
     # occupying a reserved migration table name is equally unsafe.
     if connection.dialect.name == "sqlite":
-        reserved_tables = _SCIENCE_TABLES | {_REVIEW_TABLE, _BULK_TABLE}
+        reserved_tables = _SCIENCE_TABLES | {_REVIEW_TABLE, _BULK_TABLE, "alembic_version"}
         if any(
             name.isascii()
             and name.lower() in reserved_tables
