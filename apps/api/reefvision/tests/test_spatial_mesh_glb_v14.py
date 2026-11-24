@@ -115,6 +115,13 @@ def make_glb(
         "scenes": [{"nodes": [0]}],
         "scene": 0,
     }
+    if invalid_selector == "mixed_geometry_view":
+        # Both accessors remain in bounds and decode the original triangle,
+        # but they now reference the same view for incompatible data roles.
+        doc["bufferViews"][0]["byteLength"] = position_size + len(index_bytes)
+        doc["accessors"][1]["bufferView"] = 0
+        doc["accessors"][1]["byteOffset"] = position_size
+        doc["bufferViews"].pop()
     if nonindexed_vertices is not None:
         if nonindexed_vertices not in (3, 4):
             raise ValueError("Test fixture supports three or four vertices")
@@ -859,3 +866,14 @@ def test_glb_reserved_byte_index_is_not_an_in_bounds_vertex() -> None:
     short_vertices, short_faces = parse_glb_triangles(make_glb(invalid_selector="short_255_index"))
     assert short_vertices == vertices
     assert short_faces == [[0, 1, 255]]
+
+
+@pytest.mark.parametrize("index_width", [1, 2, 4])
+def test_glb_rejects_mixed_position_and_index_view(index_width: int) -> None:
+    options = {
+        "unsigned_byte_indices": index_width == 1,
+        "unsigned_int_indices": index_width == 4,
+    }
+    assert parse_glb_triangles(make_glb(**options)) == parse_glb_triangles(make_glb())
+    with pytest.raises(ValueError, match="require separate buffer views"):
+        parse_glb_triangles(make_glb(invalid_selector="mixed_geometry_view", **options))
