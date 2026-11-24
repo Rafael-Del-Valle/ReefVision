@@ -114,9 +114,7 @@ it("rejects immutable ID conflicts even when the duplicate is filtered out", () 
       ["east-b", "north-b"],
     ]);
   }
-  expect(
-    currentVectors([east, north, otherEast, otherNorth]),
-  ).toHaveLength(2);
+  expect(currentVectors([east, north, otherEast, otherNorth])).toHaveLength(2);
 });
 it("preserves component uncertainty without deriving uncertainty", () => {
   const vectors = currentVectors([
