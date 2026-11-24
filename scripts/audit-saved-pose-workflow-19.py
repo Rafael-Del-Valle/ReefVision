@@ -523,6 +523,8 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             # rewrite the saved dataset or decode/export the original frames.
             exporter = PoseTrainingExportService(session, Settings(data_dir=root))
             verified_label_count = 0
+            training_yaml: str | None = None
+            materialized_yaml = root / dataset_path / "data.yaml"
             for split, frozen_dataset in (
                 ("train", dataset),
                 ("val", validation_dataset if validation_id is not None else None),
@@ -538,6 +540,26 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                     video=video,
                     class_mapping=exporter._class_mapping(items),
                 )
+                # The worker requires identical export headers before splitting
+                # held-out data and changes only the validation directory.
+                # Read text to allow the worker's native Windows line endings.
+                exported_yaml = expected_labels["data.yaml"].decode("utf-8")
+                if split == "train":
+                    training_yaml = exported_yaml
+                    expected_yaml = (
+                        exported_yaml.replace("val: images/train", "val: images/val", 1)
+                        if validation_id is not None
+                        else exported_yaml
+                    )
+                    _require(
+                        materialized_yaml.read_text(encoding="utf-8") == expected_yaml,
+                        "Materialized pose YAML differs from frozen class or landmark schema",
+                    )
+                else:
+                    _require(
+                        exported_yaml == training_yaml,
+                        "Frozen validation export header differs from training schema",
+                    )
                 for relative, expected in expected_labels.items():
                     if not relative.startswith("labels/train/"):
                         continue
@@ -779,6 +801,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 "validation_mode": expected_validation_mode,
                 "materialized_dataset_sha256": materialization["materialized_dataset_sha256"],
                 "verified_materialized_label_file_count": verified_label_count,
+                "verified_materialized_yaml_sha256": _digest(materialized_yaml),
                 "verified_training_frame_count": train_frame_count,
                 "verified_validation_frame_count": validation_frame_count,
                 "materialized_dataset_fingerprint_algorithm": materialization.get(
