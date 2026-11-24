@@ -724,8 +724,24 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                     seed.created_at <= job.created_at,
                     "Original pose seed was registered after the training job was queued",
                 )
+                # Apply the same registry ownership contract as production
+                # retraining, including independently copied exchange imports.
+                allowed_seed_paths = {
+                    f"{project.storage_root}/{directory}/{seed.id}{extension}"
+                    for directory in ("models", "exchange-import/models")
+                    for extension in (".pt", ".pth")
+                }
+                _require(
+                    seed.managed_path in allowed_seed_paths,
+                    "Original pose seed is outside its model registry",
+                )
                 seed_path = _managed_file(root, seed.managed_path)
-                seed_size = seed_path.stat().st_size
+                seed_metadata = seed_path.stat()
+                _require(
+                    seed_metadata.st_nlink == 1,
+                    "Original pose seed is hard-linked instead of independently retained",
+                )
+                seed_size = seed_metadata.st_size
                 _require(
                     seed_size > 0
                     and seed_size == seed.file_size_bytes
