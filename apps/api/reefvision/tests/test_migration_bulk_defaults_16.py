@@ -30,9 +30,24 @@ _EVENT_TYPES = (
 )
 
 
-@pytest.mark.parametrize("defaulted_field", [None, *_REQUIRED_FIELDS])
+@pytest.mark.parametrize(
+    ("defaulted_field", "fk_suffix", "expected_error"),
+    [
+        (None, "", None),
+        *((field, "", "defaulted required columns") for field in _REQUIRED_FIELDS),
+        (
+            None,
+            ", FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE RESTRICT",
+            "canonical update policy and multiplicity",
+        ),
+        (None, " ON UPDATE CASCADE", "canonical update policy and multiplicity"),
+        (None, " ON UPDATE SET NULL", "canonical update policy and multiplicity"),
+        (None, " ON UPDATE RESTRICT", "canonical update policy and multiplicity"),
+        (None, " ON UPDATE NO ACTION", None),
+    ],
+)
 def test_0041_bulk_registry_defaults_fail_closed_without_writes(
-    defaulted_field: str | None,
+    defaulted_field: str | None, fk_suffix: str, expected_error: str | None
 ) -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     try:
@@ -82,11 +97,20 @@ def test_0041_bulk_registry_defaults_fail_closed_without_writes(
                 [
                     "reason TEXT",
                     "FOREIGN KEY(review_queue_id) REFERENCES review_queues(id) ON DELETE RESTRICT",
-                    "FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE RESTRICT",
+                    "FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE RESTRICT"
+                    + fk_suffix,
                 ]
             )
             connection.execute(
                 text(f"CREATE TABLE review_queue_bulk_requests ({', '.join(fields)})")
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO review_queue_bulk_requests "
+                    "(id, review_queue_id, project_id, action, actor, item_ids_json, created_at) "
+                    "VALUES ('request-1', 'queue-1', 'project-1', 'skip', 'reviewer', "
+                    "'[1]', '2026-10-29T00:00:00')"
+                )
             )
             before_schema = tuple(
                 connection.execute(
@@ -94,10 +118,10 @@ def test_0041_bulk_registry_defaults_fail_closed_without_writes(
                 ).all()
             )
             for _ in range(2):
-                if defaulted_field is None:
+                if expected_error is None:
                     assert_compatible_revision_0038(connection)
                 else:
-                    with pytest.raises(RuntimeError, match="defaulted required columns"):
+                    with pytest.raises(RuntimeError, match=expected_error):
                         assert_compatible_revision_0038(connection)
                 after_schema = tuple(
                     connection.execute(
@@ -114,7 +138,10 @@ def test_0041_bulk_registry_defaults_fail_closed_without_writes(
                     == "reviewer"
                 )
                 assert (
-                    connection.scalar(text("SELECT COUNT(*) FROM review_queue_bulk_requests")) == 0
+                    connection.scalar(text("SELECT COUNT(*) FROM review_queue_bulk_requests")) == 1
                 )
+                assert connection.execute(
+                    text("SELECT id, project_id, actor FROM review_queue_bulk_requests")
+                ).one() == ("request-1", "project-1", "reviewer")
     finally:
         engine.dispose()

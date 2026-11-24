@@ -217,3 +217,22 @@ warning, not their names or expressions. Five configurations in each regression
 surface cover the primary-key-only control and four explicit-index variants,
 repeat inspection and assert unchanged database bytes. No automatic index
 removal, migration, restamp or alteration of saved QC workflows is performed.
+
+## 2026-11-24 — bulk-request registry startup foreign-key parity
+
+The original 0041 registry declares precisely two foreign keys, each with
+ON DELETE RESTRICT and the implicit ON UPDATE NO ACTION. Desktop preflight
+previously reduced the SQLite relationships to a set of delete-only tuples:
+a duplicate declaration or an update cascade could pass. A cascade can
+rewrite the project scope of a committed QC request after a parent identity
+change. The startup gate now checks relationship multiplicity, single-column
+shape and the original update policy in addition to the existing delete
+policy, without mutating data. The read-only structural inspector already
+checks these contracts. Regression configurations cover duplicate links,
+three altered update policies and the equivalent explicit NO ACTION control;
+all fixtures retain a populated request, reviewer history and biological
+sentinel. Six independent disposable SQLAlchemy/SQLite probes reproduced the
+old acceptance and verified the new classification, including the actual
+scope rewrite on a synthetic cascade. Full repository CI remains required;
+no migration reconciliation, approval, workflow-node duplication or release
+is performed.

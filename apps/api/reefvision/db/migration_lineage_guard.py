@@ -397,15 +397,25 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             ("review_queue_id", "review_queues", "id", "RESTRICT"),
             ("project_id", "projects", "id", "RESTRICT"),
         }
+        bulk_fk_shape_valid = True
         if _BULK_TABLE not in tables:
             actual_foreign_keys = set()
         elif connection.dialect.name == "sqlite":
-            actual_foreign_keys = {
-                (row["from"], row["table"], row["to"], row["on_delete"].upper())
-                for row in connection.execute(
+            bulk_fk_rows = list(
+                connection.execute(
                     text("PRAGMA foreign_key_list(review_queue_bulk_requests)")
                 ).mappings()
+            )
+            actual_foreign_keys = {
+                (row["from"], row["table"], row["to"], row["on_delete"].upper())
+                for row in bulk_fk_rows
             }
+            # Do not collapse duplicate declarations or ignore ON UPDATE.
+            # A cascade could rewrite the scope of a committed request.
+            bulk_fk_shape_valid = len(bulk_fk_rows) == len(expected_foreign_keys) and all(
+                row["seq"] == 0 and row["on_update"].upper() == "NO ACTION"
+                for row in bulk_fk_rows
+            )
         else:
             actual_foreign_keys = {
                 (
@@ -426,6 +436,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             or nullable_bulk
             or defaulted_bulk
             or actual_foreign_keys != expected_foreign_keys
+            or not bulk_fk_shape_valid
         ):
             raise RuntimeError(
                 "Unsafe ReefVision Alembic revision 0041 collision: "
@@ -435,7 +446,8 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 f"nullable required columns={nullable_bulk}; "
                 f"defaulted required columns={defaulted_bulk}; "
                 f"foreign keys={sorted(actual_foreign_keys)}; "
-                "or missing global primary key / required RESTRICT links. "
+                "or missing global primary key / required RESTRICT links "
+                "with canonical update policy and multiplicity. "
                 "Preserve the database "
                 "and reconcile without rewriting reviewer history."
             )
