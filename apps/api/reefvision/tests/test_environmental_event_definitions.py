@@ -115,3 +115,75 @@ def test_invalid_event_units_and_tampered_definition_are_rejected(
         session.commit()
     assert client.get(f"{base}/{definition['id']}").status_code == 409
     assert client.post(f"{base}/{definition['id']}/evaluate").status_code == 409
+
+
+def test_saved_event_definition_replay_preserves_historical_evidence(
+    client: TestClient,
+) -> None:
+    """Re-execution uses current QC evidence without rewriting the named rule or old run."""
+    project = create_project(client, "Event definition replay")
+    records_url = f"/api/v1/projects/{project['id']}/scientific-records"
+    initial = client.post(
+        records_url,
+        json={"records": [observation(value=19, unit="degC", qc="accepted")]},
+    )
+    assert initial.status_code == 201, initial.text
+    definition = _create(client, project["id"])
+    first = save_and_queue(
+        client, project["id"], threshold_graph({"definition_id": definition["id"]})
+    )
+    app = cast(FastAPI, client.app)
+
+    def read_artifact(run: dict) -> dict:
+        detail = client.get(f"/api/v1/workflow-runs/{run['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        return next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "environmental_threshold_samples"
+        )
+
+    def execute(run: dict) -> dict:
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run["job_id"])
+        )
+        return read_artifact(run)
+
+    historical = execute(first)
+    assert historical["payload_json"]["sample_count"] == 0
+    assert historical["payload_json"]["matches"] == []
+    assert historical["payload_json"]["definition_sha256"] == definition["definition_sha256"]
+
+    added = client.post(
+        records_url,
+        json={
+            "records": [
+                observation(value=22, unit="degC", qc="accepted"),
+                observation(value=25, unit="degC", qc="suspect"),
+            ]
+        },
+    )
+    assert added.status_code == 201, added.text
+    accepted_id = added.json()["items"][0]["id"]
+    queued = client.post(
+        f"/api/v1/projects/{project['id']}/workflow-runs",
+        json={"graph_record_id": first["workflow_graph_record_id"]},
+    )
+    assert queued.status_code == 202, queued.text
+    second = queued.json()
+    assert second["workflow_graph_record_id"] == first["workflow_graph_record_id"]
+    current = execute(second)
+    payload = current["payload_json"]
+    assert payload["definition_id"] == definition["id"]
+    assert payload["definition_sha256"] == definition["definition_sha256"]
+    assert payload["query"] == definition["query"]
+    assert payload["workflow_run_id"] == second["id"]
+    assert payload["sample_count"] == 1
+    assert [match["record_id"] for match in payload["matches"]] == [accepted_id]
+    assert current["payload_sha256"] != historical["payload_sha256"]
+    original = read_artifact(first)
+    assert original["payload_sha256"] == historical["payload_sha256"]
+    assert original["payload_json"] == historical["payload_json"]
+    base = f"/api/v1/projects/{project['id']}/environment/events/definitions"
+    assert client.get(f"{base}/{definition['id']}").json() == definition
