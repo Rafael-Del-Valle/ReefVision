@@ -137,7 +137,9 @@ def test_longitudinal_scale_only_area_difference_sign(
     assert comparison["provenance"]["specimen_identity_verified"] is False
 
 
-@pytest.mark.parametrize("topology", ["single", "manifold_pair", "nonmanifold"])
+@pytest.mark.parametrize(
+    "topology", ["single", "manifold_pair", "nonmanifold", "nonmanifold_disconnected"]
+)
 def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
     client: TestClient, topology: str
 ) -> None:
@@ -150,7 +152,7 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
         for record, height in ((before, 1.0), (after, 1.1)):
             record["vertices"] = [[0, 0, 0], [1, 0, 0], [0, height, 0], [0, -height, 0]]
             record["faces"] = [[0, 1, 2], [1, 0, 3]]
-    elif topology == "nonmanifold":
+    elif topology in ("nonmanifold", "nonmanifold_disconnected"):
         # Three triangles share one edge: six boundary incidences and three
         # nonmanifold incidences exhaust the nine available face incidences.
         for record, height in ((before, 1.0), (after, 1.1)):
@@ -162,16 +164,20 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
                 [0, 0, height],
             ]
             record["faces"] = [[0, 1, 2], [1, 0, 3], [0, 1, 4]]
+            if topology == "nonmanifold_disconnected":
+                record["vertices"].extend([[2, 0, 0], [3, 0, 0], [2, height, 0]])
+                record["faces"].append([5, 6, 7])
     response = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
         json={"before": before, "after": after},
     )
     assert response.status_code == 200, response.text
     expected = response.json()
-    expected_delta, faces, boundary, nonmanifold = {
-        "single": (0.05, 1, 3, 0),
-        "manifold_pair": (0.1, 2, 4, 0),
-        "nonmanifold": (0.15, 3, 6, 1),
+    expected_delta, faces, boundary, nonmanifold, patches = {
+        "single": (0.05, 1, 3, 0, 1),
+        "manifold_pair": (0.1, 2, 4, 0, 1),
+        "nonmanifold": (0.15, 3, 6, 1, 1),
+        "nonmanifold_disconnected": (0.2, 4, 9, 1, 2),
     }[topology]
     assert expected["delta_surface_area_m2"] == pytest.approx(expected_delta)
     for timepoint in ("before", "after"):
@@ -179,7 +185,7 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
         assert counts["face_count"] == faces
         assert counts["boundary_edge_count"] == boundary
         assert counts["nonmanifold_edge_count"] == nonmanifold
-        assert counts["edge_connected_patch_count"] == 1
+        assert counts["edge_connected_patch_count"] == patches
     assert expected["surface_area_difference_sign_under_scale_only_bounds"] == "includes_zero"
     assert "surface_area_difference_scale_bounds_include_zero" in expected["qc_warnings"]
     assert expected["axis_aligned_extent_difference_sign_under_scale_only_bounds"] == (
@@ -2341,6 +2347,11 @@ def test_matching_geometry_fingerprint_requires_consistent_topology_metadata(
             "edge incidence budget",
         ),
         ({"face_count": 3, "nonmanifold_edge_count": 4}, "edge incidence budget"),
+        ({"face_count": 2, "nonmanifold_edge_count": 1}, "requires three faces"),
+        (
+            {"face_count": 4, "nonmanifold_edge_count": 1, "edge_connected_patch_count": 3},
+            "requires three faces",
+        ),
         (
             {"face_count": 2, "boundary_edge_count": 5, "nonmanifold_edge_count": 0},
             "incidence parity",
