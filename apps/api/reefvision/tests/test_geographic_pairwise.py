@@ -23,7 +23,13 @@ from reefvision.tests.test_scientific_project_exchange import export_archive, im
 from reefvision.tests.test_workflow_computed_metrics import save_and_queue
 
 
-def _persist_pair(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+def _persist_pair(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    end_longitude: float = 0.001,
+    end_group: str = "fix-b",
+):
     project = create_project(client, "Pairwise geography")
     video = _import_video(client, project["id"], monkeypatch)
     track = client.post(
@@ -42,7 +48,7 @@ def _persist_pair(client: TestClient, monkeypatch: pytest.MonkeyPatch):
     observations: list[GeoReferencedObservation] = []
     for frame_index, longitude, sigma, group in (
         (1, 0.0, 3.0, "fix-a"),
-        (2, 0.001, 4.0, "fix-b"),
+        (2, end_longitude, 4.0, end_group),
     ):
         raw = _payload(
             project_id=project["id"],
@@ -316,3 +322,56 @@ def test_pairwise_saved_result_rejects_valid_but_unrelated_definition_and_measur
         restored = service.get_result(project["id"], str(first.result_id))
         assert restored == first
         assert service.get_result(project["id"], str(reverse.result_id)) == reverse
+
+@pytest.mark.parametrize(
+    ("end_longitude", "end_group", "expected_distance", "expected_sigma", "reason"),
+    [
+        (0.001, "fix-a", 111.319490793, None, "unknown_or_shared_endpoint_correlation"),
+        (0.0001, "fix-b", 11.1319490793, 5.0, "bearing_geometry_ill_conditioned"),
+        (0.0, "fix-b", 0.0, 5.0, "coincident_locations"),
+    ],
+)
+def test_pairwise_geography_preserves_uncertainty_limits(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    end_longitude: float,
+    end_group: str,
+    expected_distance: float,
+    expected_sigma: float | None,
+    reason: str,
+) -> None:
+    project, observations = _persist_pair(
+        client, monkeypatch, end_longitude=end_longitude, end_group=end_group
+    )
+    request = {
+        "name": "Uncertainty-limited displacement",
+        "start_observation_id": str(observations[0].id),
+        "end_observation_id": str(observations[1].id),
+    }
+    response = client.post(
+        f"/api/v1/projects/{project['id']}/geographic-pairwise/calculate", json=request
+    )
+    assert response.status_code == 201, response.text
+    saved = response.json()
+    measurement = saved["measurement"]
+    assert measurement["distance_m"] == pytest.approx(expected_distance, rel=1e-9)
+    assert measurement["distance_standard_uncertainty_m"] == expected_sigma
+    assert measurement["bearing_standard_uncertainty_deg"] is None
+    assert measurement["uncertainty_unavailable_reason"] == reason
+    if expected_distance == 0.0:
+        assert measurement["initial_bearing_deg"] is None
+        assert measurement["bearing_unavailable_reason"] == "coincident_locations"
+    else:
+        assert measurement["initial_bearing_deg"] == pytest.approx(90.0)
+        assert measurement["bearing_unavailable_reason"] is None
+
+    fetched = client.get(
+        f"/api/v1/projects/{project['id']}/geographic-pairwise/{saved['result_id']}"
+    )
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json() == saved
+    validation = client.get(
+        f"/api/v1/projects/{project['id']}/geographic-pairwise/{saved['result_id']}/validation"
+    )
+    assert validation.status_code == 200, validation.text
+    assert validation.json()["is_current"] is True
