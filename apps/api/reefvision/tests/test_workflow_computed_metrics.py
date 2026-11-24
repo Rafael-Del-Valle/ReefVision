@@ -133,6 +133,25 @@ def test_saved_workflow_executes_and_reloads_persisted_metric_result(client: Tes
             workflow_node_run_id=metric_node["id"],
         )
         assert replay.id == results["items"][0]["id"]
+        for wrong_run_id in (str(uuid4()), None):
+            with pytest.raises(ConflictError, match="conflicts"):
+                ComputedMetricService(session).calculate(
+                    project["id"],
+                    definition["id"],
+                    {"organisms": organisms["id"], "surveyed_area": area["id"]},
+                    workflow_run_id=wrong_run_id,
+                    workflow_node_run_id=metric_node["id"],
+                )
+        repeated = ComputedMetricService(session).calculate(
+            project["id"],
+            definition["id"],
+            {"organisms": organisms["id"], "surveyed_area": area["id"]},
+            workflow_run_id=run["id"],
+            workflow_node_run_id=metric_node["id"],
+        )
+        assert repeated.id == replay.id
+        assert repeated.content_sha256 == replay.content_sha256
+        assert repeated.workflow_run_id == run["id"]
         with pytest.raises(ConflictError, match="conflicts"):
             ComputedMetricService(session).calculate(
                 project["id"],

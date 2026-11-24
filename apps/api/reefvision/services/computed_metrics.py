@@ -232,7 +232,9 @@ class ComputedMetricService:
             if existing is not None:
                 replay_response = self.result_response(existing)
                 if (
-                    existing.definition_id != definition_id
+                    existing.project_id != project_id
+                    or existing.definition_id != definition_id
+                    or existing.workflow_run_id != workflow_run_id
                     or {key: str(value) for key, value in replay_response.input_record_ids.items()}
                     != bindings
                 ):
