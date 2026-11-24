@@ -114,6 +114,7 @@ def test_pairwise_geography_persists_complete_snapshots_currentness_and_csv(
     result_id = saved["result_id"]
     fetched = client.get(f"/api/v1/projects/{project['id']}/geographic-pairwise/{result_id}")
     assert fetched.status_code == 200, fetched.text
+    assert fetched.json() == saved
     current = client.get(
         f"/api/v1/projects/{project['id']}/geographic-pairwise/{result_id}/validation"
     )
@@ -170,6 +171,23 @@ def test_pairwise_geography_persists_complete_snapshots_currentness_and_csv(
     assert imported_current.json()["is_current"] is False
     assert imported_current.json()["reasons"] == ["endpoint_unavailable_or_stale"]
 
+    # An imported export must identify the remapped, independently hashed snapshots.
+    imported_export = client.get(
+        f"/api/v1/projects/{imported_project_id}/geographic-pairwise/"
+        f"{imported_result_id}/export.csv"
+    )
+    assert imported_export.status_code == 200, imported_export.text
+    imported_row = next(csv.DictReader(imported_export.text.splitlines()))
+    assert imported_row["result_id"] == imported_result_id
+    assert imported_row["start_observation_id"] == imported_measurement["start_observation_id"]
+    assert imported_row["end_observation_id"] == imported_measurement["end_observation_id"]
+    assert imported_row["measurement_sha256"] == imported_measurement["content_sha256"]
+    assert imported_row["start_snapshot_sha256"] == imported_measurement["start_snapshot_sha256"]
+    assert imported_row["end_snapshot_sha256"] == imported_measurement["end_snapshot_sha256"]
+    assert imported_row["definition_sha256"] == imported_saved.json()["definition_sha256"]
+    assert imported_row["result_sha256"] == imported_saved.json()["result_sha256"]
+    assert float(imported_row["distance_m"]) == pytest.approx(measurement["distance_m"])
+
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
         endpoint = session.get(GeoReferencedObservationRecord, str(observations[0].id))
@@ -183,6 +201,20 @@ def test_pairwise_geography_persists_complete_snapshots_currentness_and_csv(
     assert stale.status_code == 200, stale.text
     assert stale.json()["is_current"] is False
     assert stale.json()["reasons"] == ["endpoint_unavailable_or_stale"]
+    assert stale.json()["stored_measurement_sha256"] == measurement["content_sha256"]
+    assert stale.json()["current_measurement_sha256"] is None
+
+    # Currentness is separate from the immutable historical measurement and export.
+    historical = client.get(
+        f"/api/v1/projects/{project['id']}/geographic-pairwise/{result_id}"
+    )
+    assert historical.status_code == 200, historical.text
+    assert historical.json() == saved
+    historical_export = client.get(
+        f"/api/v1/projects/{project['id']}/geographic-pairwise/{result_id}/export.csv"
+    )
+    assert historical_export.status_code == 200, historical_export.text
+    assert historical_export.content == exported.content
 
 
 def test_pairwise_geography_is_project_scoped_and_rejects_self_pairs(
