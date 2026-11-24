@@ -880,6 +880,21 @@ def test_qc_16_migration_stages_preserve_records_and_diagnose_interrupted_ddl(
             ),
             (),
         ),
+        ("0040", (), ("scientific_revision_missing_environmental_event_definitions",)),
+        ("0041", (), ("scientific_revision_missing_environmental_event_definitions",)),
+        (
+            "0042",
+            (),
+            (
+                "scientific_revision_missing_environmental_event_definitions",
+                "scientific_revision_missing_environmental_analysis_pair",
+            ),
+        ),
+        (
+            "0042",
+            ("environmental_event_definitions",),
+            ("scientific_revision_missing_environmental_analysis_pair",),
+        ),
     ],
 )
 def test_scientific_extension_migration_stamp_is_stage_aware_and_read_only(
