@@ -10,6 +10,7 @@ it never resolves a migration or authorizes an automatic upgrade.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sqlite3
@@ -66,6 +67,14 @@ def inspect_database(path: Path) -> dict[str, object]:
         # so a concurrent WAL writer cannot mix different migration states in the report.
         connection.execute("BEGIN")
         version_rows = connection.execute("SELECT version_num FROM alembic_version").fetchall()
+        # Hash observed DDL in the same snapshot as the revision marker. Omit root
+        # page numbers and row data: neither describes the logical schema.
+        schema_rows = connection.execute(
+            "SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name, tbl_name"
+        ).fetchall()
+        schema_sha256 = hashlib.sha256(
+            json.dumps(schema_rows, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
         # A revision marker can survive corrupted cross-table relationships.
         # Check declared FKs even if the original writer disabled enforcement.
         # Aggregate offending child/parent table pairs without exposing row IDs
@@ -299,6 +308,8 @@ def inspect_database(path: Path) -> dict[str, object]:
     return {
         "schema_version": "reefvision-sqlite-lineage-forensics-0001",
         "alembic_versions": versions,
+        "observed_schema_sha256": schema_sha256,
+        "observed_schema_fingerprint_algorithm": "sqlite-master-ddl-json-sha256-v1",
         "table_signatures": signatures,
         "review_event_check": review_check if groups["review_0038"] else None,
         "qc_event_scope_violations": qc_scope_violations,
