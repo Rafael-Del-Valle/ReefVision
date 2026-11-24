@@ -923,7 +923,12 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 "Registered pose weights are outside their canonical model registry path",
             )
             model_file = _managed_file(root, model.managed_path)
-            model_size = model_file.stat().st_size
+            model_metadata = model_file.stat()
+            _require(
+                model_metadata.st_nlink == 1,
+                "Registered pose weights are hard-linked instead of independently retained",
+            )
+            model_size = model_metadata.st_size
             _require(
                 model_size == model.file_size_bytes == checkpoint_size,
                 "Registered local model file size differs from registry or checkpoint",
