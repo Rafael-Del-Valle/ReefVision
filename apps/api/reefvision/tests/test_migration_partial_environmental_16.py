@@ -279,3 +279,57 @@ def test_stamp_check_constraint_preflight(
                 desktop.run_pending_migrations(settings)
         assert database.read_bytes() == original
     engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "index_sql",
+    [
+        None,
+        "CREATE INDEX extra ON alembic_version(version_num)",
+        "CREATE UNIQUE INDEX extra ON alembic_version(version_num)",
+        "CREATE INDEX extra ON alembic_version("
+        "abs(CASE WHEN version_num = '0038' THEN -9223372036854775808 ELSE 1 END))",
+        "CREATE INDEX extra ON alembic_version(version_num) WHERE "
+        "abs(CASE WHEN version_num = '0038' THEN -9223372036854775808 ELSE 1 END) > 0",
+    ],
+)
+def test_stamp_explicit_index_preflight(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, index_sql: str | None
+) -> None:
+    database = tmp_path / "stamp-index.sqlite"
+    engine = create_engine(f"sqlite+pysqlite:///{database}")
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
+        )
+        connection.exec_driver_sql("INSERT INTO alembic_version VALUES ('0037')")
+        connection.exec_driver_sql("CREATE TABLE biological_observations (note TEXT)")
+        connection.exec_driver_sql("INSERT INTO biological_observations VALUES ('preserve tissue')")
+        if index_sql is not None:
+            connection.exec_driver_sql(index_sql)
+        assert connection.exec_driver_sql("PRAGMA integrity_check").scalar() == "ok"
+    original = database.read_bytes()
+    monkeypatch.setattr(session, "create_database_engine", lambda _settings: engine)
+    monkeypatch.setattr(
+        desktop.ScriptDirectory,
+        "from_config",
+        lambda _config: SimpleNamespace(get_current_head=lambda: "0041"),
+    )
+    monkeypatch.setattr(
+        desktop.command,
+        "upgrade",
+        lambda *_args, **_kwargs: pytest.fail("Explicit stamp indexes must block Alembic"),
+    )
+    settings = SimpleNamespace(resolved_database_url=str(engine.url))
+    for _ in range(2):
+        with engine.connect() as connection:
+            if index_sql is None:
+                assert_compatible_revision_0038(connection)
+            else:
+                with pytest.raises(RuntimeError, match="version-table explicit index"):
+                    assert_compatible_revision_0038(connection)
+        if index_sql is not None:
+            with pytest.raises(RuntimeError, match="version-table explicit index"):
+                desktop.run_pending_migrations(settings)
+        assert database.read_bytes() == original
+    engine.dispose()

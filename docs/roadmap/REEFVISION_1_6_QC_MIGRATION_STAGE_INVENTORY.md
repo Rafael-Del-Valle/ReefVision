@@ -203,3 +203,17 @@ quoted/comment controls; the independent disposable SQLite probe also
 verified the real Alembic-created table. No repair, restamp, change to
 saved QC workflow behavior, or upgrade authorization is performed. The
 previous inspector Ruff line-length/format issue was corrected.
+
+## 2026-11-24 — revision stamp explicit-index preflight
+
+SQLite expression and partial indexes may pass integrity checks at the current
+revision yet raise an error when Alembic writes a future stamp. An independent
+SQLite reproduction used conditional integer overflow on the next revision.
+The original Alembic version table requires no explicit indexes; its automatic
+primary-key index remains allowed. Both desktop startup and the read-only CLI
+now reject explicit indexes on that table, including ordinary or redundant
+indexes, pending researcher review. The CLI reports only their count and a
+warning, not their names or expressions. Five configurations in each regression
+surface cover the primary-key-only control and four explicit-index variants,
+repeat inspection and assert unchanged database bytes. No automatic index
+removal, migration, restamp or alteration of saved QC workflows is performed.

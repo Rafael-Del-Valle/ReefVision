@@ -172,6 +172,19 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "Preserve the database and reconcile provenance from a reviewed "
                 "backup without running migrations, stamping or deleting records."
             )
+        # An expression or partial index can accept the current stamp yet
+        # fail when Alembic updates it. No explicit index belongs to the
+        # original version table; the automatic primary-key index is allowed.
+        version_index_count = connection.exec_driver_sql(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' "
+            "AND tbl_name = 'alembic_version' COLLATE NOCASE AND sql IS NOT NULL"
+        ).scalar()
+        if version_index_count:
+            raise RuntimeError(
+                "Unsafe ReefVision Alembic version-table explicit index: "
+                "revision stamping may fail after migration writes. Preserve the "
+                "database and reconcile provenance without running migrations."
+            )
         # A CHECK can pin an apparently valid stamp to its current revision.
         # SQLAlchemy reflection misses some legal SQLite CHECK spellings,
         # including a comment between CHECK and its opening parenthesis.

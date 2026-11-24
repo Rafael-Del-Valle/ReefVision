@@ -955,6 +955,14 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
             if version_table_present
             else False
         )
+        version_index_count = (
+            db.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' "
+                "AND tbl_name = 'alembic_version' COLLATE NOCASE AND sql IS NOT NULL"
+            ).fetchone()[0]
+            if version_table_present
+            else 0
+        )
         version_table_info = (
             list(db.execute('PRAGMA table_xinfo("alembic_version")'))
             if version_table_present
@@ -983,6 +991,7 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
             and version_table_info[0][5] == 1
             and version_table_info[0][6] == 0
             and not version_has_check
+            and version_index_count == 0
         )
         # A malformed Alembic table is a diagnostic finding, not an inspector crash.
         revisions = (
@@ -1080,6 +1089,8 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
             warnings.append("alembic_version_foreign_keys_require_review")
         if version_has_check:
             warnings.append("alembic_version_checks_require_review")
+        if version_index_count:
+            warnings.append("alembic_version_indexes_require_review")
         if not version_table_present:
             warnings.append("missing_alembic_version_table")
         else:
@@ -1271,6 +1282,7 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
             "alembic_version_trigger_count": version_trigger_count,
             "alembic_version_has_foreign_keys": version_has_foreign_keys,
             "alembic_version_has_check": version_has_check,
+            "alembic_version_explicit_index_count": version_index_count,
             "canonical_alembic_stamp_constraints": canonical_stamp_constraints,
             "lineage_hint": lineage,
             "upgrade_authorized": False,

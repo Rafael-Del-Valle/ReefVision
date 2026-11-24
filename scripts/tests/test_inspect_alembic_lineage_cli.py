@@ -2159,3 +2159,55 @@ def test_stamp_check_constraint_is_reported_without_writes(
         assert report["upgrade_authorized"] is False
         assert "private coral record" not in result.stdout + result.stderr
         assert database.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "index_sql",
+    [
+        None,
+        "CREATE INDEX extra ON alembic_version(version_num)",
+        "CREATE UNIQUE INDEX extra ON alembic_version(version_num)",
+        "CREATE INDEX extra ON alembic_version("
+        "abs(CASE WHEN version_num = '0038' THEN -9223372036854775808 ELSE 1 END))",
+        "CREATE INDEX extra ON alembic_version(version_num) WHERE "
+        "abs(CASE WHEN version_num = '0038' THEN -9223372036854775808 ELSE 1 END) > 0",
+    ],
+)
+def test_stamp_explicit_indexes_are_reported_without_writes(
+    tmp_path: Path, index_sql: str | None
+) -> None:
+    database = tmp_path / "stamp-index.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
+        )
+        connection.execute("INSERT INTO alembic_version VALUES ('0039')")
+        for table in (
+            "scientific_records",
+            "environmental_cache_entries",
+            "computed_metric_definitions",
+            "computed_metric_results",
+        ):
+            connection.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY, note TEXT)')
+            connection.execute(f'INSERT INTO "{table}" VALUES (1, ?)', ("private coral record",))
+        if index_sql is not None:
+            connection.execute(index_sql.replace("'0038'", "'0040'"))
+        assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    original = database.read_bytes()
+    has_index = index_sql is not None
+    for _ in range(2):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == (2 if has_index else 0), result.stderr
+        report = json.loads(result.stdout)
+        assert report["alembic_version_explicit_index_count"] == int(has_index)
+        assert report["canonical_alembic_stamp_constraints"] is not has_index
+        assert ("alembic_version_indexes_require_review" in report["warnings"]) is has_index
+        assert report["upgrade_authorized"] is False
+        assert "private coral record" not in result.stdout + result.stderr
+        assert "9223372036854775808" not in result.stdout + result.stderr
+        assert database.read_bytes() == original
