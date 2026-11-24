@@ -117,6 +117,27 @@ def _as_int(value: Any, name: str, minimum: int = 0) -> int:
     return value
 
 
+def _matches_float32_bound(value: int | Decimal, expected: float) -> bool:
+    """Compare exact decimal metadata to a decoded float32 rounding interval."""
+    if expected == 0.0:
+        return value == 0
+    if (value < 0) != (expected < 0):
+        return False
+    magnitude = value.copy_abs() if isinstance(value, Decimal) else abs(value)
+    target = abs(expected)
+    bits = struct.unpack("<I", struct.pack("<f", target))[0]
+    lower = struct.unpack("<f", struct.pack("<I", bits - 1))[0]
+    upper = struct.unpack("<f", struct.pack("<I", bits + 1))[0]
+    # Adjacent binary32 midpoints are exactly representable in binary64,
+    # including subnormals and powers of two. Compare the original decimal
+    # without first rounding it to binary64 or applying a Decimal context.
+    low_midpoint = Decimal.from_float((lower + target) / 2)
+    high_midpoint = Decimal.from_float((target + upper) / 2)
+    if bits & 1:
+        return low_midpoint < magnitude < high_midpoint
+    return low_midpoint <= magnitude <= high_midpoint
+
+
 def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]]]:
     """Decode one embedded TRIANGLES primitive without applying scene transforms.
 
@@ -351,13 +372,12 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         # a relative tolerance that can hide several distinct float32 values
         # (and an entire small axis span). This is source QC, not calibration.
         for value, expected in zip(declared, actual, strict=True):
-            source_float32 = struct.unpack("<f", struct.pack("<f", value))[0]
-            # A nonzero JSON extremum must not disappear merely because it is
-            # smaller than binary32 can represent. A genuine stored subnormal
-            # remains valid; this rejects only collapse all the way to zero.
-            if value != 0.0 and source_float32 == 0.0:
+            # A nonzero extremum at or below the midpoint to the smallest
+            # subnormal rounds to zero (ties-to-even); do not hide its loss.
+            zero_midpoint = Decimal.from_float(2**-150)
+            if value != 0 and -zero_midpoint <= value <= zero_midpoint:
                 raise ValueError("GLB position bounds underflow float32 precision")
-            if source_float32 != expected:
+            if not _matches_float32_bound(value, expected):
                 raise ValueError("GLB position bounds conflict with decoded geometry")
     if "indices" in primitive:
         indices = [int(row[0]) for row in read_accessor(primitive["indices"], position=False)]
