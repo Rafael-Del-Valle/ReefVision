@@ -139,12 +139,19 @@ def test_longitudinal_scale_only_area_difference_sign(
 
 @pytest.mark.parametrize(
     "topology",
-    ["single", "manifold_pair", "nonmanifold", "nonmanifold_disconnected", "near_identical"],
+    [
+        "single",
+        "manifold_pair",
+        "nonmanifold",
+        "nonmanifold_disconnected",
+        "near_identical",
+        "near_identical_decrease",
+    ],
 )
 def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
     client: TestClient, topology: str
 ) -> None:
-    """A nominal area increase with scale-overlapping bounds is not verified growth."""
+    """A nominal area change with scale-overlapping bounds is not verified growth."""
     project_id = str(create_project(client, "Provisional scale overlap")["id"])
     base = f"/api/v1/projects/{project_id}"
     before = _mesh("early", "2026-10-01T12:00:00Z", 1.0)
@@ -155,6 +162,8 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
             record["faces"] = [[0, 1, 2], [1, 0, 3]]
     elif topology == "near_identical":
         after["vertices"][2][1] = 1.0 + 2**-48
+    elif topology == "near_identical_decrease":
+        after["vertices"][2][1] = 1.0 - 2**-48
     elif topology in ("nonmanifold", "nonmanifold_disconnected"):
         # Three triangles share one edge: six boundary incidences and three
         # nonmanifold incidences exhaust the nine available face incidences.
@@ -179,15 +188,21 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
     expected_delta, faces, boundary, nonmanifold, patches = {
         "single": (0.05, 1, 3, 0, 1),
         "near_identical": (2**-49, 1, 3, 0, 1),
+        "near_identical_decrease": (-2**-49, 1, 3, 0, 1),
         "manifold_pair": (0.1, 2, 4, 0, 1),
         "nonmanifold": (0.15, 3, 6, 1, 1),
         "nonmanifold_disconnected": (0.2, 4, 9, 1, 2),
     }[topology]
-    assert expected["delta_surface_area_m2"] == pytest.approx(expected_delta, abs=0)
-    if topology == "near_identical":
+    # Explicit relative tolerance accommodates binary64 representation of 1.1,
+    # without an absolute tolerance that could hide a tiny change or its sign.
+    assert expected["delta_surface_area_m2"] == pytest.approx(expected_delta, rel=1e-12, abs=0)
+    if topology in ("near_identical", "near_identical_decrease"):
+        assert expected["relative_surface_area_change_percent"] == pytest.approx(
+            100 * (expected_delta / 0.5), rel=1e-12, abs=0
+        )
         delta = expected["delta_axis_aligned_bounding_box_diagonal_m"]
         baseline = expected["before_axis_aligned_bounding_box_diagonal_m"]
-        assert delta > 0
+        assert delta * expected_delta > 0
         assert expected["relative_axis_aligned_bounding_box_diagonal_change_percent"] == (
             pytest.approx(100 * (delta / baseline), rel=1e-12, abs=0)
         )
