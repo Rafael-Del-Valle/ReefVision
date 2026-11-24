@@ -674,6 +674,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             # original local registered pose model, not only to the output
             # checkpoint. Preserve and authenticate user-trained seed weights.
             seed_id = training.initial_checkpoint_model_id
+            seed_size: int | None = None
             if seed_id is None:
                 _require(
                     training.initial_checkpoint_source == "scratch"
@@ -708,9 +709,12 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                     "Original registered pose seed or frozen initialization lineage changed",
                 )
                 seed_path = _managed_file(root, seed.managed_path)
+                seed_size = seed_path.stat().st_size
                 _require(
-                    seed_path.stat().st_size > 0 and _digest(seed_path) == seed.sha256,
-                    "Original registered pose seed checkpoint is missing or changed",
+                    seed_size > 0
+                    and seed_size == seed.file_size_bytes
+                    and _digest(seed_path) == seed.sha256,
+                    "Original registered pose seed checkpoint differs from registry evidence",
                 )
             expected_weights_prefix = (
                 f"{project.storage_root}/training/{training.id}/runs/pose/weights/"
@@ -983,6 +987,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 "random_seed": training.random_seed,
                 "seed_model_id": seed_id,
                 "seed_model_sha256": training.resolved_model_checksum,
+                "verified_seed_model_size_bytes": seed_size,
                 "checkpoint_sha256": checkpoint_sha,
                 "checkpoint_size_bytes": checkpoint_size,
                 "verified_checkpoints": verified_checkpoints,
