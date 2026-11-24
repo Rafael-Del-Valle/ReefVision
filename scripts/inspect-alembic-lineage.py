@@ -438,11 +438,13 @@ def _sqlite_schema_tokens(ddl: str) -> tuple[str, ...] | None:
     return tuple(tokens)
 
 
-def _original_0038_check_contract_matches(table: str, ddl: str) -> bool:
+def _original_0038_check_contract_matches(
+    table: str, ddl: str, revision: str | None = None
+) -> bool:
     """Reject changed QC event vocabularies and unexpected scientific CHECKs.
 
-    The QC constraint was intentionally expanded in revisions 0039 and 0040,
-    so each exact historically declared vocabulary remains recognizable.
+    The QC constraint was intentionally expanded in revisions 0039 and 0040.
+    Require the exact historical vocabulary for a known QC revision.
     This does NOT prove the correct revision was actually applied.
     """
     tokens = _sqlite_schema_tokens(ddl)
@@ -501,6 +503,9 @@ def _original_0038_check_contract_matches(table: str, ddl: str) -> bool:
         "IN",
         "(",
     )
+    stage = {"0038": 0, "0039": 1, "0040": 2, "0041": 2}.get(revision)
+    if stage is not None:
+        histories = (histories[stage],)
     for history in histories:
         values: list[str] = []
         for event in history:
@@ -513,7 +518,9 @@ def _original_0038_check_contract_matches(table: str, ddl: str) -> bool:
     return False
 
 
-def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> bool:
+def _post_0037_table_contract_matches(
+    db: sqlite3.Connection, table: str, revision: str | None = None
+) -> bool:
     """Check fixed migration DDL without exposing SQL, identities or row data.
 
     Structural equivalence is NOT proof of a migration's provenance, safety
@@ -542,7 +549,7 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
     ).fetchone()
     if ddl_row is None or not isinstance(ddl_row[0], str):
         return False
-    if not _original_0038_check_contract_matches(table, ddl_row[0]):
+    if not _original_0038_check_contract_matches(table, ddl_row[0], revision):
         return False
     quoted = '"' + table.replace('"', '""') + '"'
     columns = list(db.execute(f"PRAGMA table_xinfo({quoted})"))
@@ -779,11 +786,12 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
             else "unknown"
         )
         structural_contracts = {}
+        revision = revisions[0] if len(revisions) == 1 and isinstance(revisions[0], str) else None
         if verify_structural_contracts:
             for table in _POST_0037_TABLE_CONTRACTS:
                 if lineage_objects.get(table) != "table":
                     structural_contracts[table] = "absent"
-                elif _post_0037_table_contract_matches(db, table):
+                elif _post_0037_table_contract_matches(db, table, revision):
                     structural_contracts[table] = "matches"
                 else:
                     structural_contracts[table] = "mismatch"
