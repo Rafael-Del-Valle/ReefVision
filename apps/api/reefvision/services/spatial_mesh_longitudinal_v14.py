@@ -314,6 +314,13 @@ def compare_mesh_observations(
             nonmanifold = counts["nonmanifold_edge_count"]
             if (boundary or 0) + 3 * (nonmanifold or 0) > 3 * face_count:
                 raise ValueError("Mesh topology edge incidence budget exceeds face_count")
+            # A nonmanifold edge requires at least three distinct incident
+            # faces in the same edge-connected patch. All other patches
+            # require at least one face each.
+            if nonmanifold and (
+                face_count < 3 or (patch_count is not None and face_count - patch_count < 2)
+            ):
+                raise ValueError("Mesh topology nonmanifold edge requires three faces in a patch")
             # With no nonmanifold edges, every remaining incidence belongs
             # to a two-face edge. Their count must be integral and sufficient
             # to connect F faces into P edge-connected patches.
