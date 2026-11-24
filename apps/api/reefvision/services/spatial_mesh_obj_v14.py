@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 from math import isfinite
 from re import fullmatch
@@ -23,6 +23,15 @@ def _parse_obj_float(token: str) -> float:
         raise ValueError("Nonzero OBJ scalar underflows floating-point precision")
     if not isfinite(number):
         raise ValueError("OBJ scalar must be finite")
+    # Float accepts true zeros with exponents outside Decimal's range.
+    # Reject them here before exact homogeneous-coordinate collision QC.
+    if number == 0.0:
+        try:
+            source_zero = Decimal(token)
+        except InvalidOperation as exc:
+            raise ValueError("OBJ decimal scalar outside supported range") from exc
+        if not source_zero.is_finite():
+            raise ValueError("OBJ decimal scalar outside supported range")
     return number
 
 
