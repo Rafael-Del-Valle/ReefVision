@@ -89,3 +89,26 @@ Independent disposable SQLite checks exercise the same twelve
 combinations and verify the actual permitted event values. Full backend
 CI on the new commit remains required. Existing standalone/saved QC
 workflow execution and explicit researcher review remain unchanged.
+
+## 2026-11-24 — 0041 global bulk-request registry structural evidence
+
+Predecessor exact-head CI `45376525159` passed all three jobs; the full
+backend suite recorded 2512 passes and 32 skips. The optional structural
+audit previously recognized the 0041 registry by table presence only.
+The actual independent 0041 migration declares an eight-column registry
+with a global primary key, required reviewer attribution and JSON item
+identities, and RESTRICT parent foreign keys. The shared read-only audit
+now verifies that DDL contract, including nullability, types, defaults,
+primary-key identity, absence of extra unique or CHECK restrictions and
+triggers, and immediate foreign-key behavior. This does not authenticate
+stored request bodies or prove a migration was applied. A valid result
+still cannot authorize any upgrade.
+
+Ten persisted cases cover the valid schema and nine incompatible
+mutations, with repeated inspection, redaction and byte preservation.
+The existing 0041 event-vocabulary CLI fixture now uses the real bulk
+registry shape rather than a placeholder table. Independent disposable
+SQLAlchemy-compiled SQLite probes confirmed all ten structural cases;
+full exact-head repository CI remains required. No migration or
+scientific workflow node is changed; existing standalone/saved QC
+workflow execution, provenance, retry and human approval remain intact.

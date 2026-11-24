@@ -1144,7 +1144,15 @@ def test_0038_qc_structural_audit_rejects_unreviewed_unique_index_semantics(
         connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
         connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
         if revision == "0041":
-            connection.execute("CREATE TABLE review_queue_bulk_requests (id TEXT PRIMARY KEY)")
+            connection.execute(
+                "CREATE TABLE review_queue_bulk_requests ("
+                "id VARCHAR(36) NOT NULL PRIMARY KEY, "
+                "review_queue_id VARCHAR(36) NOT NULL "
+                "REFERENCES review_queues(id) ON DELETE RESTRICT, "
+                "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE RESTRICT, "
+                "action VARCHAR(20) NOT NULL, actor VARCHAR(100) NOT NULL, "
+                "reason TEXT, item_ids_json JSON NOT NULL, created_at DATETIME NOT NULL)"
+            )
         connection.execute("CREATE TABLE projects (id TEXT NOT NULL PRIMARY KEY)")
         connection.execute(
             "CREATE TABLE review_queues (id TEXT NOT NULL PRIMARY KEY, project_id TEXT NOT NULL)"

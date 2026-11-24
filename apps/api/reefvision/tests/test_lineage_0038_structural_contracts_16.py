@@ -325,6 +325,95 @@ def test_qc_structural_contract_matches_only_stamped_vocabulary(
         assert path.read_bytes() == before
 
 
+@pytest.mark.parametrize(
+    "variant",
+    [
+        "valid",
+        "nullable_actor",
+        "wrong_fk",
+        "wrong_type",
+        "unexpected_default",
+        "missing_pk",
+        "extra_unique",
+        "extra_check",
+        "unexpected_trigger",
+        "optional_notnull",
+    ],
+)
+def test_qc_0041_bulk_registry_structural_contract(tmp_path: Path, variant: str) -> None:
+    path = tmp_path / "bulk-registry.sqlite"
+    ddl = (
+        "CREATE TABLE review_queue_bulk_requests ("
+        "id VARCHAR(36) NOT NULL PRIMARY KEY, "
+        "review_queue_id VARCHAR(36) NOT NULL "
+        "REFERENCES review_queues(id) ON DELETE RESTRICT, "
+        "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE RESTRICT, "
+        "action VARCHAR(20) NOT NULL, actor VARCHAR(100) NOT NULL, "
+        "reason TEXT, item_ids_json JSON NOT NULL, created_at DATETIME NOT NULL)"
+    )
+    mutations = {
+        "nullable_actor": ("actor VARCHAR(100) NOT NULL", "actor VARCHAR(100)"),
+        "wrong_fk": ("ON DELETE RESTRICT", "ON DELETE CASCADE"),
+        "wrong_type": ("item_ids_json JSON", "item_ids_json TEXT"),
+        "unexpected_default": (
+            "actor VARCHAR(100) NOT NULL",
+            "actor VARCHAR(100) NOT NULL DEFAULT 'PRIVATE_FUTURE_ACTOR'",
+        ),
+        "missing_pk": ("id VARCHAR(36) NOT NULL PRIMARY KEY", "id VARCHAR(36) NOT NULL"),
+        "extra_unique": ("actor VARCHAR(100) NOT NULL", "actor VARCHAR(100) NOT NULL UNIQUE"),
+        "extra_check": (
+            "action VARCHAR(20) NOT NULL",
+            "action VARCHAR(20) NOT NULL CHECK (action = 'complete')",
+        ),
+        "optional_notnull": ("reason TEXT", "reason TEXT NOT NULL"),
+    }
+    if variant in mutations:
+        old, new = mutations[variant]
+        ddl = ddl.replace(old, new, 1)
+    with sqlite3.connect(path) as db:
+        db.executescript(
+            "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY);"
+            "INSERT INTO alembic_version VALUES ('0041');"
+            "CREATE TABLE projects (id VARCHAR(36) PRIMARY KEY);"
+            "CREATE TABLE review_queues (id VARCHAR(36) PRIMARY KEY);"
+            "CREATE TABLE review_queue_items (id VARCHAR(36) PRIMARY KEY);"
+            "INSERT INTO projects VALUES ('p1');"
+            "INSERT INTO review_queues VALUES ('queue1');"
+            "INSERT INTO review_queue_items VALUES ('item1');"
+        )
+        _create_qc(db, "triage_0040")
+        db.execute(ddl)
+        db.execute(
+            "INSERT INTO review_queue_bulk_requests VALUES "
+            "('bulk1', 'queue1', 'p1', 'complete', 'local scientist', "
+            "'PRIVATE_BULK_REASON', '[\"item1\"]', '2026-11-24')"
+        )
+        if variant == "unexpected_trigger":
+            db.execute(
+                "CREATE TRIGGER rewrite_bulk AFTER INSERT ON review_queue_bulk_requests "
+                "BEGIN UPDATE review_queue_bulk_requests SET actor = 'PRIVATE_TRIGGER_BODY' "
+                "WHERE id = NEW.id; END"
+            )
+        db.commit()
+
+    before = path.read_bytes()
+    matches = variant == "valid"
+    warning = "lineage_table_contract_mismatch_review_queue_bulk_requests"
+    for _ in range(2):
+        report = module.inspect(path, verify_structural_contracts=True)
+        assert report["structural_contracts"]["review_queue_bulk_requests"] == (
+            "matches" if matches else "mismatch"
+        )
+        assert report["structural_contracts"]["review_queue_item_events"] == "matches"
+        assert (warning in report["warnings"]) is (not matches)
+        assert report["upgrade_authorized"] is False
+        serialized = json.dumps(report)
+        assert "PRIVATE_BULK_REASON" not in serialized
+        assert "PRIVATE_FUTURE_ACTOR" not in serialized
+        assert "PRIVATE_TRIGGER_BODY" not in serialized
+        assert path.read_bytes() == before
+
+
 def test_strict_structural_audit_rejects_forged_scientific_0038(
     tmp_path: Path,
 ) -> None:

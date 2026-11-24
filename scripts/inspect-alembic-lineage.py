@@ -48,7 +48,8 @@ FAMILIES = {
 # optional read-only structural audit checks their declared SQLite column types and DDL shapes
 # to help a researcher assess provenance, not to authorize a migration.
 # The 1.1 environmental 0040/0042 contracts are also audited below. The
-# scientific metric tables and QC registry still require separate reconciliation.
+# QC bulk registry 0041 is audited as well; scientific metric tables still require
+# separate structural reconciliation.
 _POST_0037_TABLE_CONTRACTS = {
     "scientific_records": {
         "columns": frozenset(
@@ -347,6 +348,48 @@ _POST_0037_TABLE_CONTRACTS = {
             }
         ),
     },
+    "review_queue_bulk_requests": {
+        "columns": frozenset(
+            {
+                "id",
+                "review_queue_id",
+                "project_id",
+                "action",
+                "actor",
+                "reason",
+                "item_ids_json",
+                "created_at",
+            }
+        ),
+        "types": {
+            "id": "VARCHAR(36)",
+            "review_queue_id": "VARCHAR(36)",
+            "project_id": "VARCHAR(36)",
+            "action": "VARCHAR(20)",
+            "actor": "VARCHAR(100)",
+            "reason": "TEXT",
+            "item_ids_json": "JSON",
+            "created_at": "DATETIME",
+        },
+        "required": frozenset(
+            {
+                "id",
+                "review_queue_id",
+                "project_id",
+                "action",
+                "actor",
+                "item_ids_json",
+                "created_at",
+            }
+        ),
+        "foreign_keys": frozenset(
+            {
+                ("review_queue_id", "review_queues", "id", "RESTRICT"),
+                ("project_id", "projects", "id", "RESTRICT"),
+            }
+        ),
+        "indexes": frozenset(),
+    },
 }
 
 # Preserve named lookup indexes as well as their key columns. The original
@@ -359,6 +402,7 @@ _POST_0037_NAMED_LOOKUP_INDEXES = {
         "ix_scientific_project_variable_time": ("project_id", "variable", "observed_at"),
     },
     "environmental_cache_entries": {},
+    "review_queue_bulk_requests": {},
     "environmental_event_definitions": {
         "ix_environmental_event_definition_project": ("project_id", "created_at"),
     },
