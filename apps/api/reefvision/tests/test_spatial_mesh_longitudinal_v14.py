@@ -2770,6 +2770,50 @@ def test_typed_mesh_executor_rejects_impossible_partial_manifold_patches(
             )
 
 
+@pytest.mark.parametrize("timepoint", ["before", "after"])
+def test_zero_area_patch_cannot_carry_positive_fraction(
+    client: TestClient, timepoint: str
+) -> None:
+    """A degenerate patch cannot acquire area mass from a rounding tolerance."""
+    records = {}
+    for side, day in (("before", "01"), ("after", "02")):
+        params = _mesh(side, f"2026-10-{day}T12:00:00Z", 1)
+        params["vertices"].extend([[3, 0, 0], [4, 0, 0], [5, 0, 0]])
+        params["faces"].append([3, 4, 5])
+        record = preview_from_request(MeshPreviewRequest(**params))
+        record["project_id"] = "project-1"
+        assert record["edge_connected_patch_surface_areas_m2"] == [0.5, 0.0]
+        assert record["edge_connected_patch_surface_area_fractions"] == [1.0, 0.0]
+        records[side] = record
+    before, after = records["before"], records["after"]
+    inputs = {
+        side: [WorkflowArtifact(data_type="mesh_measurement_preview", payload_json=record)]
+        for side, record in records.items()
+    }
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        expected = compare_mesh_observations(before, after)
+        assert expected["ranked_patch_area_profile_distance"] == 0.0
+        assert expected["provenance"]["calibration_verified"] is False
+        assert expected["provenance"]["specimen_identity_verified"] is False
+        result = execute_mesh_longitudinal_comparison(
+            session, app.state.settings, "project-1", {}, inputs
+        )
+        assert result[0]["payload"] == expected
+
+        # This positive fraction is smaller than the general area tolerance
+        # and too small to affect the stored concentration in binary64.
+        target = records[timepoint]
+        target["edge_connected_patch_surface_area_fractions"] = [1.0, 2.0**-55]
+        with pytest.raises(ValueError, match="Patch surface areas contradict"):
+            compare_mesh_observations(before, after)
+        inputs[timepoint][0].payload_json = target
+        with pytest.raises(ValidationError, match="Patch surface areas contradict"):
+            execute_mesh_longitudinal_comparison(
+                session, app.state.settings, "project-1", {}, inputs
+            )
+
+
 def test_typed_mesh_executor_rejects_invalid_partial_topology(
     client: TestClient,
 ) -> None:
