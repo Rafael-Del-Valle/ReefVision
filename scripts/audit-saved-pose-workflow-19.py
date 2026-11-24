@@ -708,6 +708,16 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                     and seed_binding.schema_revision == dataset.pose_schema_revision,
                     "Original registered pose seed or frozen initialization lineage changed",
                 )
+                # Initialization must preexist this training run. Reject a
+                # direct cycle even if all persisted digests agree.
+                _require(
+                    seed_id != registered.get("model_id")
+                    and not (
+                        isinstance(seed.metadata_json, dict)
+                        and seed.metadata_json.get("source_training_run_id") == training.id
+                    ),
+                    "Original pose seed is an output of the audited training run",
+                )
                 seed_path = _managed_file(root, seed.managed_path)
                 seed_size = seed_path.stat().st_size
                 _require(
