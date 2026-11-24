@@ -197,6 +197,8 @@ class ScientificDataService:
         identity = payload.get("cache_identity")
         record_ids = payload.get("record_ids")
         missing = payload.get("skipped_missing")
+        if not isinstance(record_ids, list):
+            return set()
         try:
             verified = (
                 content_hash(payload) == cache.content_sha256
@@ -206,7 +208,6 @@ class ScientificDataService:
                 and type(missing) is int
                 and missing >= 0
                 and isinstance(payload.get("provider_response"), dict)
-                and isinstance(record_ids, list)
                 and all(isinstance(record_id, str) for record_id in record_ids)
                 and len(record_ids) == len(set(record_ids))
             )
