@@ -430,10 +430,11 @@ def compare_mesh_observations(
     difference_bounds = (
         [bounds[1][0] - bounds[0][1], bounds[1][1] - bounds[0][0]] if len(bounds) == 2 else None
     )
+    # Subtract the endpoints before division to avoid cancellation near unity.
     relative_bounds = (
         [
-            100 * (bounds[1][0] / bounds[0][1] - 1),
-            100 * (bounds[1][1] / bounds[0][0] - 1),
+            100 * ((bounds[1][0] - bounds[0][1]) / bounds[0][1]),
+            100 * ((bounds[1][1] - bounds[0][0]) / bounds[0][0]),
         ]
         if len(bounds) == 2 and bounds[0][0] > 0
         else None
@@ -561,14 +562,14 @@ def compare_mesh_observations(
     # Relative change is undefined for a zero baseline. These are descriptive
     # reconstruction extents, not biological growth or branch-length changes.
     extent_relative = (
-        100 * (late_extent / early_extent - 1)
-        if early_extent is not None and early_extent > 0 and late_extent is not None
+        100 * (extent_delta / early_extent)
+        if early_extent is not None and early_extent > 0 and extent_delta is not None
         else None
     )
     extent_relative_bounds = (
         [
-            100 * (extent_intervals[1][0] / extent_intervals[0][1] - 1),
-            100 * (extent_intervals[1][1] / extent_intervals[0][0] - 1),
+            100 * ((extent_intervals[1][0] - extent_intervals[0][1]) / extent_intervals[0][1]),
+            100 * ((extent_intervals[1][1] - extent_intervals[0][0]) / extent_intervals[0][0]),
         ]
         if len(extent_intervals) == 2 and extent_intervals[0][0] > 0
         else None
