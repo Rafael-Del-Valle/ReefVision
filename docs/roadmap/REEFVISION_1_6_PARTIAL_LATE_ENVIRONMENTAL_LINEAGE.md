@@ -115,3 +115,22 @@ is included. Full final-head CI and real installed Windows acceptance
 remain required; this diagnostic is not Alembic reconciliation or upgrade
 authorization. The existing executable saved QC Workflow Builder is not
 changed.
+
+## 2026-11-23 — required annotation aggregate column stage
+
+The source-audited 1.1 revision 0041 adds `definition_kind` and
+`configuration_json` to computed metric definitions, and `result_kind`
+to results. A complete table inventory alone did not detect a partial
+0041 column migration. The read-only inspector now checks these three
+columns at scientific-only 0041–0042 stamps and reports premature
+columns at earlier known scientific stamps. It never infers an upgrade
+authorization or changes any data. This is column-presence evidence,
+not a complete type/default/constraint equivalence check.
+
+Thirty-two CLI regression configurations exhaust all eight subsets of
+the three columns at revisions 0039–0042, including genuine earlier and
+later stage controls, repeated strict inspection, redaction and unchanged
+SQLite bytes. Existing synthetic positive-stage fixtures now include the
+source-audited 0041 additions. The existing typed saved QC Workflow Builder
+is unchanged; integrated lineage reconciliation and installed Windows
+acceptance remain on HOLD.

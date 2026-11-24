@@ -730,6 +730,25 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
         # numeric revision names for unrelated schema operations.
         if lineage == "scientific" and len(revisions) == 1:
             revision = revisions[0]
+            # 1.1 revision 0041 adds three reviewed-annotation aggregate
+            # columns to the earlier scalar metric tables. Table presence
+            # alone cannot distinguish an interrupted 0041 migration.
+            aggregate_columns = {
+                "computed_metric_definitions": {"definition_kind", "configuration_json"},
+                "computed_metric_results": {"result_kind"},
+            }
+            aggregate_columns_present = any(
+                columns.intersection(inventory[table].get("columns", ()))
+                for table, columns in aggregate_columns.items()
+            )
+            aggregate_columns_complete = all(
+                columns.issubset(inventory[table].get("columns", ()))
+                for table, columns in aggregate_columns.items()
+            )
+            if revision in {"0041", "0042"} and metric_complete and not aggregate_columns_complete:
+                warnings.append("scientific_revision_missing_annotation_aggregate_columns")
+            if revision in {"0037", "0038", "0039", "0040"} and aggregate_columns_present:
+                warnings.append("annotation_aggregate_columns_before_revision_0041")
             # A later scientific stamp also promises that its own DDL exists.
             if revision in {"0039", "0040", "0041", "0042"} and not metric_complete:
                 warnings.append("scientific_revision_missing_computed_metric_pair")

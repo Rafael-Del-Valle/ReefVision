@@ -11,6 +11,21 @@ import pytest
 SCRIPT = Path(__file__).resolve().parents[1] / "inspect-alembic-lineage.py"
 
 
+def _add_0041_aggregate_columns(connection: sqlite3.Connection) -> None:
+    """Apply only the source-audited 0041 additions to synthetic metric fixtures."""
+    connection.execute(
+        "ALTER TABLE computed_metric_definitions "
+        "ADD COLUMN definition_kind VARCHAR(40) NOT NULL DEFAULT 'scalar'"
+    )
+    connection.execute(
+        "ALTER TABLE computed_metric_definitions ADD COLUMN configuration_json JSON"
+    )
+    connection.execute(
+        "ALTER TABLE computed_metric_results "
+        "ADD COLUMN result_kind VARCHAR(40) NOT NULL DEFAULT 'scalar'"
+    )
+
+
 @pytest.mark.parametrize(
     ("revision", "strict", "expected_status"),
     [
@@ -560,6 +575,8 @@ def test_legitimate_11_extension_stages_do_not_require_later_tables(
             *extensions,
         ):
             connection.execute(f"CREATE TABLE {name} (id INTEGER PRIMARY KEY)")
+        if revision in {"0041", "0042"}:
+            _add_0041_aggregate_columns(connection)
     before = database.read_bytes()
     completed = subprocess.run(
         [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
@@ -628,6 +645,8 @@ def test_scientific_11_revision_stages_are_not_false_partial_schemas(
         connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
         for name in tables:
             connection.execute(f"CREATE TABLE {name} (id INTEGER PRIMARY KEY)")
+        if revision in {"0041", "0042"}:
+            _add_0041_aggregate_columns(connection)
         connection.execute("CREATE TABLE biological_sentinel (id INTEGER, note TEXT)")
         connection.execute("INSERT INTO biological_sentinel VALUES (1, 'coral-preserve')")
     before = database.read_bytes()
@@ -950,6 +969,8 @@ def test_scientific_extension_migration_stamp_is_stage_aware_and_read_only(
         ):
             connection.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY, note TEXT)')
             connection.execute(f'INSERT INTO "{table}" VALUES (1, ?)', ("scientific-preserve",))
+        if revision in {"0041", "0042"}:
+            _add_0041_aggregate_columns(connection)
         connection.execute("CREATE TABLE biological_sentinel (note TEXT)")
         connection.execute("INSERT INTO biological_sentinel VALUES ('coral-preserve')")
     original_bytes = database.read_bytes()
@@ -1369,3 +1390,59 @@ def test_0038_scientific_cache_and_declared_type_contracts(
         assert connection.execute(
             "SELECT payload_json FROM environmental_cache_entries"
         ).fetchone() == ('{"temperature_c":20.2}',)
+
+
+@pytest.mark.parametrize("revision", ["0039", "0040", "0041", "0042"])
+@pytest.mark.parametrize("column_mask", range(8))
+def test_0041_annotation_aggregate_columns_match_scientific_revision(
+    tmp_path: Path, revision: str, column_mask: int
+) -> None:
+    """Reject partial and premature 0041 column additions without changing research."""
+    database = tmp_path / "aggregate-stage.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
+        connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        for table in (
+            "scientific_records",
+            "environmental_cache_entries",
+            "computed_metric_definitions",
+            "computed_metric_results",
+        ):
+            connection.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY, note TEXT)')
+            connection.execute(f'INSERT INTO "{table}" VALUES (1, ?)', ("private coral count",))
+        if revision in {"0040", "0041", "0042"}:
+            connection.execute("CREATE TABLE environmental_event_definitions (id INTEGER)")
+        if revision == "0042":
+            connection.execute("CREATE TABLE environmental_analysis_definitions (id INTEGER)")
+            connection.execute("CREATE TABLE environmental_analysis_results (id INTEGER)")
+        additions = (
+            "ALTER TABLE computed_metric_definitions "
+            "ADD COLUMN definition_kind VARCHAR(40) NOT NULL DEFAULT 'scalar'",
+            "ALTER TABLE computed_metric_definitions ADD COLUMN configuration_json JSON",
+            "ALTER TABLE computed_metric_results "
+            "ADD COLUMN result_kind VARCHAR(40) NOT NULL DEFAULT 'scalar'",
+        )
+        for index, statement in enumerate(additions):
+            if column_mask & (1 << index):
+                connection.execute(statement)
+    expected = []
+    if revision in {"0041", "0042"} and column_mask != 7:
+        expected.append("scientific_revision_missing_annotation_aggregate_columns")
+    if revision in {"0039", "0040"} and column_mask:
+        expected.append("annotation_aggregate_columns_before_revision_0041")
+    original = database.read_bytes()
+    for _ in range(2):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == (2 if expected else 0), result.stderr
+        report = json.loads(result.stdout)
+        assert report["warnings"] == expected
+        assert report["lineage_hint"] == "scientific"
+        assert report["upgrade_authorized"] is False
+        assert "private coral count" not in result.stdout
+        assert report["inventory"]["computed_metric_results"]["rows"] == 1
+        assert database.read_bytes() == original
