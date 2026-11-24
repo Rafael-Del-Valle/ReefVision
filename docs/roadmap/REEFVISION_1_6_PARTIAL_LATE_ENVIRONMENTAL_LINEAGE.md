@@ -177,3 +177,21 @@ and byte-for-byte database preservation. The 0042 workflow-run foreign
 keys are references to historical evidence, not new executable nodes.
 Existing typed QC saved graphs remain untouched. This is not an
 integrated Alembic DAG or installed Windows acceptance.
+
+## 2026-11-23 — reserved SQLite schema identifier integrity
+
+SQLite resolves ASCII identifier case variants as the same table, while
+SQLAlchemy reflection and sqlite_master retain the original spelling. A
+partially restored uppercase 1.1 science or 1.6 QC table could escape the
+existing case-sensitive pre-review lineage checks. A view occupying one
+of these reserved table names is also not a valid migration artifact.
+Desktop preflight now refuses both before any Alembic writes. The independent
+inventory identifies case-variant tables as present, reports mixed lineage
+where applicable, and refuses noncanonical reserved objects in strict mode.
+The checks do not rename objects, infer provenance, or alter researcher data.
+
+Eighteen desktop and eighteen CLI configurations cover all seven scientific
+and two QC names, case-variant tables and reserved views, repeated refusal,
+original database bytes and private observation redaction. Existing executable
+QC saved graphs and review gates are unchanged. This is not an integrated
+migration DAG or installed Windows acceptance.

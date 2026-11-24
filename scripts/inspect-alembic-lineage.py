@@ -740,8 +740,22 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
         inventory = {}
         names = set(SCIENCE_EXTENSIONS)
         names.update(name for family in FAMILIES.values() for name in family)
+        # SQLite identifiers are ASCII case-insensitive even though sqlite_master
+        # preserves their spelling. Report case-variant tables as present, and
+        # reject aliases or views occupying reserved scientific/QC table names.
+        lineage_objects = {
+            name.lower(): kind
+            for name, kind in objects.items()
+            if name.isascii() and name.lower() in names
+        }
+        noncanonical_lineage_object = any(
+            name.isascii()
+            and name.lower() in names
+            and (name not in names or kind != "table")
+            for name, kind in objects.items()
+        )
         for name in sorted(names):
-            if objects.get(name) != "table":
+            if lineage_objects.get(name) != "table":
                 inventory[name] = {"present": False}
                 continue
             columns = [row[1] for row in db.execute(f'PRAGMA table_info("{name}")')]
@@ -763,13 +777,15 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
         structural_contracts = {}
         if verify_structural_contracts:
             for table in _POST_0037_TABLE_CONTRACTS:
-                if objects.get(table) != "table":
+                if lineage_objects.get(table) != "table":
                     structural_contracts[table] = "absent"
                 elif _post_0037_table_contract_matches(db, table):
                     structural_contracts[table] = "matches"
                 else:
                     structural_contracts[table] = "mismatch"
         warnings = []
+        if noncanonical_lineage_object:
+            warnings.append("noncanonical_lineage_schema_object")
         for table, outcome in structural_contracts.items():
             if outcome == "mismatch":
                 warnings.append(f"lineage_table_contract_mismatch_{table}")

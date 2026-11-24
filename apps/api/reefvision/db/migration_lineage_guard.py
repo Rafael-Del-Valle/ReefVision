@@ -80,6 +80,23 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     # A restored database may retain research views after losing its tables
     # and migration marker. Views are user schema too, not a fresh install.
     views = set(inspector.get_view_names())
+    # SQLite resolves ASCII identifiers case-insensitively, but SQLAlchemy's
+    # reflected table names retain their spelling. A case-variant table can
+    # otherwise bypass the scientific/QC set intersections below. A view
+    # occupying a reserved migration table name is equally unsafe.
+    if connection.dialect.name == "sqlite":
+        reserved_tables = _SCIENCE_TABLES | {_REVIEW_TABLE, _BULK_TABLE}
+        if any(
+            name.isascii()
+            and name.lower() in reserved_tables
+            and (name not in reserved_tables or name in views)
+            for name in tables | views
+        ):
+            raise RuntimeError(
+                "Unsafe ReefVision scientific/QC collision: noncanonical reserved "
+                "schema object. Preserve the original research database and reconcile "
+                "migration provenance without renaming, stamping, or deleting records."
+            )
     # Interrupted 1.1 migrations can leave scientific tables even when their
     # Alembic marker is still 0037 or missing. Refuse 1.6 writes in that case.
     if not inspector.has_table("alembic_version"):

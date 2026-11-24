@@ -1699,3 +1699,69 @@ def test_environmental_extension_structural_contracts(
         assert "private reef location" not in completed.stdout + completed.stderr
         assert "threshold_c" not in completed.stdout + completed.stderr
         assert database.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "table",
+    [
+        "scientific_records",
+        "environmental_cache_entries",
+        "computed_metric_definitions",
+        "computed_metric_results",
+        "environmental_event_definitions",
+        "environmental_analysis_definitions",
+        "environmental_analysis_results",
+        "review_queue_item_events",
+        "review_queue_bulk_requests",
+    ],
+)
+@pytest.mark.parametrize("kind", ["table", "view"])
+def test_reserved_lineage_schema_aliases_fail_closed(
+    tmp_path: Path, table: str, kind: str
+) -> None:
+    """SQLite resolves aliases even though the stored schema names differ."""
+    database = tmp_path / "reserved-schema.sqlite"
+    is_qc = table.startswith("review_queue_")
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
+        connection.execute("INSERT INTO alembic_version VALUES ('0039')")
+        baseline = (
+            (
+                "scientific_records",
+                "environmental_cache_entries",
+                "computed_metric_definitions",
+                "computed_metric_results",
+            )
+            if is_qc
+            else ("review_queue_item_events",)
+        )
+        for name in baseline:
+            connection.execute(f'CREATE TABLE "{name}" (id INTEGER PRIMARY KEY)')
+        connection.execute("CREATE TABLE biological_sentinel (note TEXT)")
+        connection.execute("INSERT INTO biological_sentinel VALUES ('private coral observation')")
+        if kind == "table":
+            connection.execute(f'CREATE TABLE "{table.upper()}" (id TEXT PRIMARY KEY)')
+            connection.execute(
+                f'INSERT INTO "{table.upper()}" VALUES (?)', ("private lineage record",)
+            )
+        else:
+            connection.execute(f'CREATE VIEW "{table}" AS SELECT note FROM biological_sentinel')
+        assert connection.execute(f'SELECT * FROM "{table}"').fetchone() is not None
+    original = database.read_bytes()
+    for _ in range(2):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 2, result.stderr
+        report = json.loads(result.stdout)
+        assert "noncanonical_lineage_schema_object" in report["warnings"]
+        assert report["inventory"][table]["present"] is (kind == "table")
+        expected_lineage = "ambiguous" if kind == "table" else "scientific" if is_qc else "qc"
+        assert report["lineage_hint"] == expected_lineage
+        assert report["upgrade_authorized"] is False
+        assert "private coral observation" not in result.stdout + result.stderr
+        assert "private lineage record" not in result.stdout + result.stderr
+        assert database.read_bytes() == original

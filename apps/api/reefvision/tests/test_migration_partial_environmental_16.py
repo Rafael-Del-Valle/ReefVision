@@ -104,3 +104,64 @@ def test_desktop_migration_never_starts_on_partial_late_science(
     with engine.connect() as connection:
         assert _evidence(connection, table) == before
     engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "table",
+    [
+        "scientific_records",
+        "environmental_cache_entries",
+        "computed_metric_definitions",
+        "computed_metric_results",
+        "environmental_event_definitions",
+        "environmental_analysis_definitions",
+        "environmental_analysis_results",
+        "review_queue_item_events",
+        "review_queue_bulk_requests",
+    ],
+)
+@pytest.mark.parametrize("kind", ["table", "view"])
+def test_desktop_refuses_reserved_schema_alias(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, table: str, kind: str
+) -> None:
+    """Case-variant tables and reserved views cannot bypass startup preflight."""
+    database = tmp_path / "reserved-schema.sqlite"
+    engine = create_engine(f"sqlite+pysqlite:///{database}")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num TEXT NOT NULL)"))
+        connection.execute(text("INSERT INTO alembic_version VALUES ('0037')"))
+        connection.execute(text("CREATE TABLE biological_observations (note TEXT)"))
+        connection.execute(text("INSERT INTO biological_observations VALUES ('preserve tissue')"))
+        if kind == "table":
+            connection.execute(text(f'CREATE TABLE "{table.upper()}" (id TEXT PRIMARY KEY)'))
+            connection.execute(
+                text(f'INSERT INTO "{table.upper()}" VALUES (:record)'),
+                {"record": "scientific-record"},
+            )
+        else:
+            connection.execute(
+                text(f'CREATE VIEW "{table}" AS SELECT note FROM biological_observations')
+            )
+        # SQLite resolves the uppercase table via its lowercase migration name.
+        assert connection.execute(text(f'SELECT * FROM "{table}"')).fetchone() is not None
+    original = database.read_bytes()
+    monkeypatch.setattr(session, "create_database_engine", lambda _settings: engine)
+    monkeypatch.setattr(
+        desktop.ScriptDirectory,
+        "from_config",
+        lambda _config: SimpleNamespace(get_current_head=lambda: "0041"),
+    )
+    monkeypatch.setattr(
+        desktop.command,
+        "upgrade",
+        lambda *_args, **_kwargs: pytest.fail("Reserved schema aliases must block Alembic"),
+    )
+    settings = SimpleNamespace(resolved_database_url=str(engine.url))
+    for _ in range(2):
+        with engine.connect() as connection:
+            with pytest.raises(RuntimeError, match="noncanonical reserved schema object"):
+                assert_compatible_revision_0038(connection)
+        with pytest.raises(RuntimeError, match="noncanonical reserved schema object"):
+            desktop.run_pending_migrations(settings)
+        assert database.read_bytes() == original
+    engine.dispose()
