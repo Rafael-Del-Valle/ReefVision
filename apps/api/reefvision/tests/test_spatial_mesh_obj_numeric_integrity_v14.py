@@ -528,9 +528,7 @@ def test_obj_non_bmp_unicode_comment_remains_supported_in_saved_graph(
     assert artifact["payload_json"] == expected
 
 @pytest.mark.parametrize("sign", ["+", "-"])
-def test_obj_decimal_exponent_rejects_without_measurement(
-    client: TestClient, sign: str
-) -> None:
+def test_obj_decimal_exponent_rejects_without_measurement(client: TestClient, sign: str) -> None:
     valid = OBJ.replace("v 0 0 0", "v 0e-9999 0 0", 1)
     assert parse_obj_triangles(valid) == parse_obj_triangles(OBJ)
     token = f"0e{sign}{'9' * 40}"
