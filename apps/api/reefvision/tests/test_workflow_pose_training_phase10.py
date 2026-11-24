@@ -3801,6 +3801,7 @@ def test_pose_seed_rejects_distinct_schema_identity_with_matching_content(
         ("metadata", "seed metadata must be a JSON object"),
         ("size", "seed checkpoint size differs from registry"),
         ("hardlink", "seed checkpoint is hard-linked"),
+        ("path", "seed checkpoint is outside its model registry"),
     ],
 )
 def test_pose_workflow_rejects_corrupt_seed_registry_from_verified_truth(
@@ -3825,6 +3826,13 @@ def test_pose_workflow_rejects_corrupt_seed_registry_from_verified_truth(
         elif corruption == "size":
             # Leave the actual checkpoint and checksum intact.
             model.file_size_bytes += 1
+        elif corruption == "path":
+            checkpoint = resolve_managed_project_path(test_settings, model.managed_path)
+            misplaced = f"{project['storage_root']}/training-output/{model.id}.pt"
+            destination = resolve_managed_project_path(test_settings, misplaced)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(checkpoint.read_bytes())
+            model.managed_path = misplaced
         else:
             checkpoint = resolve_managed_project_path(test_settings, model.managed_path)
             alias = checkpoint.with_name("external-seed-alias.pt")
