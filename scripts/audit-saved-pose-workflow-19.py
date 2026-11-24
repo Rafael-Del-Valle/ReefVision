@@ -15,6 +15,7 @@ import hashlib
 import json
 import sqlite3
 import sys
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -123,22 +124,41 @@ def _verify_source_frame_pixels(
     return verified
 
 
-def _verify_database_revision(connection: Any, api_dir: Path) -> str:
-    """Require the saved database to match this checkout's migration head."""
+def _verify_database_revision(connection: Any, api_dir: Path) -> tuple[str, int, str]:
+    """Require one linear migration chain and record its exact source identity."""
     from alembic.config import Config
     from alembic.migration import MigrationContext
     from alembic.script import ScriptDirectory
 
     scripts = ScriptDirectory.from_config(Config(str(api_dir / "alembic.ini")))
-    expected = scripts.get_heads()
-    if len(expected) != 1:
-        raise ValueError("Acceptance requires one source migration head")
+    # Alembic warns, rather than fails, for duplicate revision IDs.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", message=r"Revision .* is present more than once")
+        expected = scripts.get_heads()
+        if len(expected) != 1:
+            raise ValueError("Acceptance requires one source migration head")
+        revisions = list(scripts.walk_revisions())
+    lineage = []
+    for index, revision in enumerate(revisions):
+        parent = revisions[index + 1].revision if index + 1 < len(revisions) else None
+        if revision.down_revision != parent or revision.dependencies:
+            raise ValueError(f"Nonlinear source migration ancestry at {revision.revision}")
+        lineage.append(
+            {
+                "revision": revision.revision,
+                "down_revision": parent,
+                "file_sha256": hashlib.sha256(Path(revision.path).read_bytes()).hexdigest(),
+            }
+        )
     actual = MigrationContext.configure(connection).get_current_heads()
     if tuple(expected) != actual:
         raise ValueError(
             f"Database migration revision {actual} differs from source head {expected}"
         )
-    return actual[0]
+    digest = hashlib.sha256(
+        json.dumps(lineage, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return actual[0], len(lineage), digest
 
 
 def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
@@ -192,7 +212,9 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
         with Session(engine) as session:
             # Read the migration stamp within the same snapshot as the scientific records.
             # Never stamp or upgrade a database as part of this acceptance check.
-            database_revision = _verify_database_revision(session.connection(), api_dir)
+            database_revision, migration_count, migration_sha256 = _verify_database_revision(
+                session.connection(), api_dir
+            )
             run = session.get(WorkflowRun, run_id)
             _require(run is not None and run.status == "succeeded", "Saved run did not succeed")
             # The durable parent job proves that this saved graph was executed
@@ -857,6 +879,8 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 "status": "PASS",
                 "evidence_schema_version": "saved-pose-workflow-audit-0001",
                 "verified_database_alembic_revision": database_revision,
+                "source_migration_count": migration_count,
+                "source_migration_lineage_sha256": migration_sha256,
                 "project_id": run.project_id,
                 "workflow_run_id": run.id,
                 "workflow_job_id": parent_job.id,
