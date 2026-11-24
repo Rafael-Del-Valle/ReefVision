@@ -367,9 +367,10 @@ def test_exact_glb_transform_standalone_and_replayed_graph(
     for _ in range(2):
         run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
-        assert process_workflow_run_job(
+        processed = process_workflow_run_job(
             app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-        ) is valid
+        )
+        assert processed is valid
         detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
         assert detail.status_code == 200, detail.text
         result = detail.json()
