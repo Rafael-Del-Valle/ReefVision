@@ -780,6 +780,10 @@ def test_log_tail_quarantines_sgr_spliced_loss_tokens(
         b"train/cls_loss=0.\xe2\x81\xa030",
         b"train/dfl_loss=0.1\xe2\x80\xa80",
         b"train/bo\xe2\x80\x8bx_loss=0.25",
+        b"train/box_loss=0.2\xe2\x80\x8b\xe2\x81\xa05",
+        b"train/cls_loss=0.\x00\xe2\x80\x8b\x7f30",
+        b"train/df\xe2\x80\xa8\xe2\x80\xa9l_loss=0.10",
+        b"train/box_loss=0.2\x00\x07\x7f5",
     ],
 )
 def test_log_tail_quarantines_invisible_unicode_loss_splices(
