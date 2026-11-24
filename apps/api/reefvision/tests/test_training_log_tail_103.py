@@ -1289,3 +1289,55 @@ def test_log_tail_freezes_snapshot_and_verifies_record_boundary(
             training_routes._training_log_tail("training.log", tmp_path)
         assert error.value.status_code == 403
         assert log.read_bytes() == original
+
+
+@pytest.mark.parametrize("shortened", [True, False])
+def test_log_tail_checks_eof_against_opened_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, shortened: bool
+) -> None:
+    """Reject an EOF observed during transient truncation even if size recovers."""
+    log = tmp_path / "training.log"
+    complete_record = b"epoch=4\ntrain/box_loss=0.25\n"
+    original = complete_record + b"train/cls_loss=0.30\n"
+    log.write_bytes(original)
+    real_open = training_routes._open_training_log
+
+    class RacingHandle:
+        def __init__(self, handle):
+            self.handle = handle
+            self.eof_observed = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.handle.close()
+
+        def __getattr__(self, name):
+            return getattr(self.handle, name)
+
+        def seek(self, offset, whence=0):
+            position = self.handle.seek(offset, whence)
+            self.eof_observed = whence == 2
+            return position
+
+        def tell(self):
+            if self.eof_observed and shortened:
+                # Model truncation between fstat and EOF and restoration
+                # before the next read, without a concurrent Windows writer.
+                return len(complete_record)
+            return self.handle.tell()
+
+    monkeypatch.setattr(
+        training_routes, "_open_training_log", lambda path: RacingHandle(real_open(path))
+    )
+    if shortened:
+        with pytest.raises(HTTPException) as error:
+            training_routes._training_log_tail("training.log", tmp_path)
+        assert error.value.status_code == 403
+    else:
+        assert training_routes._training_log_tail("training.log", tmp_path) == {
+            "available": True,
+            "text": original.decode("utf-8"),
+        }
+    assert log.read_bytes() == original
