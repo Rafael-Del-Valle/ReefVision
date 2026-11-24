@@ -718,6 +718,12 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                     ),
                     "Original pose seed is an output of the audited training run",
                 )
+                # A later registration cannot be the initialization model of
+                # an already queued job, even when its bytes match.
+                _require(
+                    seed.created_at <= job.created_at,
+                    "Original pose seed was registered after the training job was queued",
+                )
                 seed_path = _managed_file(root, seed.managed_path)
                 seed_size = seed_path.stat().st_size
                 _require(
