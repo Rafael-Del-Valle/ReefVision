@@ -915,6 +915,13 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 and metadata.get("source_metrics") == training.metrics_json,
                 "Registered model database provenance no longer matches completed training",
             )
+            # Registration copies finalized weights into the project's model
+            # registry. A matching digest at a training-output path is not an
+            # independently retained registered model.
+            _require(
+                model.managed_path == f"{project.storage_root}/models/{model.id}.pt",
+                "Registered pose weights are outside their canonical model registry path",
+            )
             model_file = _managed_file(root, model.managed_path)
             model_size = model_file.stat().st_size
             _require(
