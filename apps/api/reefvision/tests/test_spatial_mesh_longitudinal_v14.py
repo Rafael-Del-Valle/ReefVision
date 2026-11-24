@@ -2562,6 +2562,51 @@ def test_longitudinal_nonmanifold_patch_connectivity(timepoint: str) -> None:
         compare_mesh_observations(before, after)
 
 
+@pytest.mark.parametrize("timepoint", ["before", "after"])
+@pytest.mark.parametrize(
+    ("faces", "patches", "valid_boundary", "invalid_boundary"),
+    [(3, 1, 6, 7), (4, 2, 9, 10)],
+)
+def test_partial_topology_requires_shared_incidences(
+    timepoint: str, faces: int, patches: int, valid_boundary: int, invalid_boundary: int
+) -> None:
+    """Unknown nonmanifold counts cannot make an impossible connection plausible."""
+    before, after = _minimal_topology_pair()
+    target = before if timepoint == "before" else after
+    target.update(
+        face_count=faces,
+        edge_connected_patch_count=patches,
+        boundary_edge_count=valid_boundary,
+    )
+    result = compare_mesh_observations(before, after)
+    counts = result[f"{timepoint}_reconstruction_topology_counts"]
+    assert counts["nonmanifold_edge_count"] is None
+    assert result["provenance"]["specimen_identity_verified"] is False
+    target["boundary_edge_count"] = invalid_boundary
+    with pytest.raises(ValueError, match="shared incidences insufficient for patch count"):
+        compare_mesh_observations(before, after)
+
+
+@pytest.mark.parametrize("timepoint", ["before", "after"])
+def test_partial_patch_topology_requires_shared_incidences(timepoint: str) -> None:
+    """A valid aggregate incidence budget cannot hide an impossible patch."""
+    before, after = _minimal_topology_pair()
+    for record in (before, after):
+        record.update(
+            face_count=6,
+            edge_connected_patch_count=2,
+            boundary_edge_count=10,
+            edge_connected_patch_face_counts=[3, 3],
+            edge_connected_patch_boundary_edge_counts=[5, 5],
+        )
+    result = compare_mesh_observations(before, after)
+    assert result["provenance"]["calibration_verified"] is False
+    target = before if timepoint == "before" else after
+    target["edge_connected_patch_boundary_edge_counts"] = [7, 3]
+    with pytest.raises(ValueError, match="patch shared incidences insufficient"):
+        compare_mesh_observations(before, after)
+
+
 def test_longitudinal_partial_patch_arrays_do_not_invent_totals() -> None:
     before, after = _minimal_topology_pair()
     before["edge_connected_patch_face_counts"] = [1]
