@@ -366,6 +366,10 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         # Optional exporter min/max metadata must describe the actual decoded
         # index buffer. It is not independent evidence of mesh correctness.
         index_accessor = _as_object(accessors[primitive["indices"]], "index accessor")
+        # glTF 2.0 buffer views must not mix vertex attributes and indices,
+        # even when their byte ranges are disjoint and target is omitted.
+        if index_accessor["bufferView"] == position_accessor["bufferView"]:
+            raise ValueError("GLB vertex positions and indices require separate buffer views")
         for field, reducer in (("min", min), ("max", max)):
             if field not in index_accessor:
                 continue
