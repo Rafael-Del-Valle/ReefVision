@@ -505,6 +505,11 @@ def _seed_pose_model(
     if not checkpoint.is_file():
         raise ValidationError("Pose retraining seed checkpoint is missing")
 
+    # Registered weights must be independent of mutable training outputs.
+    # A hard link can retain a valid digest while aliasing another file.
+    if checkpoint.stat().st_nlink > 1:
+        raise ValidationError("Pose retraining seed checkpoint is hard-linked")
+
     # An empty file has a stable SHA-256 but cannot initialize a pose model.
     if checkpoint.stat().st_size == 0:
         raise ValidationError("Pose retraining seed checkpoint is empty")

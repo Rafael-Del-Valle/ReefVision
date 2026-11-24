@@ -3800,6 +3800,7 @@ def test_pose_seed_rejects_distinct_schema_identity_with_matching_content(
     [
         ("metadata", "seed metadata must be a JSON object"),
         ("size", "seed checkpoint size differs from registry"),
+        ("hardlink", "seed checkpoint is hard-linked"),
     ],
 )
 def test_pose_workflow_rejects_corrupt_seed_registry_from_verified_truth(
@@ -3810,7 +3811,7 @@ def test_pose_workflow_rejects_corrupt_seed_registry_from_verified_truth(
     expected_error: str,
 ) -> None:
     # Freeze a scientist-verified round and register a local, schema-bound
-    # checkpoint before corrupting only its persisted registry metadata.
+    # checkpoint before corrupting registry metadata or file independence.
     project, dataset = _frozen_dataset(client, monkeypatch)
     app = cast(FastAPI, client.app)
     model_id = _seed_model(app, project, dataset)
@@ -3821,9 +3822,17 @@ def test_pose_workflow_rejects_corrupt_seed_registry_from_verified_truth(
         if corruption == "metadata":
             # A list of pairs is not a valid architecture metadata object.
             model.metadata_json = cast(Any, [["source_architecture", "yolo11n-pose.pt"]])
-        else:
+        elif corruption == "size":
             # Leave the actual checkpoint and checksum intact.
             model.file_size_bytes += 1
+        else:
+            checkpoint = resolve_managed_project_path(test_settings, model.managed_path)
+            alias = checkpoint.with_name("external-seed-alias.pt")
+            try:
+                os.link(checkpoint, alias)
+            except OSError as exc:
+                pytest.skip(f"Filesystem does not support hard links: {exc}")
+            assert checkpoint.stat().st_nlink > 1
         session.commit()
 
     with (
