@@ -75,6 +75,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
         WorkflowNodeRun,
         WorkflowRun,
     )
+    from reefvision.jobs.pose_training import _verify_prelaunch_pose_dataset
     from reefvision.services.pose_training_datasets import PoseTrainingDatasetService
     from reefvision.services.workflow_provenance import build_workflow_run_provenance
     from reefvision.storage.datasets import canonical_json_sha256
@@ -455,6 +456,23 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             # a different run's weights file does not prove local lineage.
             project = session.get(Project, run.project_id)
             _require(project is not None, "Training project was not found")
+            # Verify the exact extracted image/label/YAML tree consumed by the
+            # GPU worker, not just its original videos and database manifests.
+            dataset_relative = f"{project.storage_root}/training/{training.id}/pose-dataset"
+            dataset_path = Path(dataset_relative)
+            materialization = manifest.get("materialization")
+            _require(
+                not dataset_path.is_absolute()
+                and ".." not in dataset_path.parts
+                and manifest.get("dataset_output_path") == dataset_relative
+                and isinstance(materialization, dict)
+                and materialization.get("validation_mode") == expected_validation_mode
+                and manifest.get("validation_mode") == expected_validation_mode,
+                "Materialized pose inputs do not belong to the audited training run",
+            )
+            # Reuse the production worker's read-only fingerprint verification,
+            # including its path, symlink, junction, and hard-link protections.
+            _verify_prelaunch_pose_dataset(root / dataset_path, materialization)
             # A successful retraining run must still be traceable to its
             # original local registered pose model, not only to the output
             # checkpoint. Preserve and authenticate user-trained seed weights.
@@ -681,6 +699,10 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                     validation_dataset.item_count if validation_id is not None else 0
                 ),
                 "validation_mode": expected_validation_mode,
+                "materialized_dataset_sha256": materialization["materialized_dataset_sha256"],
+                "materialized_dataset_fingerprint_algorithm": materialization.get(
+                    "materialized_dataset_fingerprint_algorithm"
+                ),
                 "split_manifest_sha256": training.split_manifest_sha256,
                 "pose_schema_id": dataset.pose_schema_id,
                 "pose_schema_revision": dataset.pose_schema_revision,
