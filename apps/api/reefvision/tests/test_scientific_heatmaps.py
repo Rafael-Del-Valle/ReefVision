@@ -164,6 +164,44 @@ def test_saved_heatmap_workflow_matches_standalone_physical_density(
         assert corrupt.status_code == 400, corrupt.text
         assert database_counts(client) == before
 
+        # Recalibration changes physical density, not the centroid counts or
+        # the immutable scientific evidence produced by the earlier run.
+        scale = client.put(
+            f"/api/v1/images/{image_id}/measurement-calibration",
+            json={"distance_per_pixel": 1.0, "unit": "cm"},
+        )
+        assert scale.status_code == 200, scale.text
+        updated = client.get(_url(project_id, image_id), params=params)
+        assert updated.status_code == 200, updated.text
+        current = updated.json()
+        assert current["layers"] == expected["layers"]
+        assert current["physical_density"]["cell_areas"][0][0] == 400
+        assert current["physical_density"]["layers"]["reviewed_boxes"][0][0] == 0.0025
+        assert current["source_sha256"] != expected["source_sha256"]
+        assert current["content_sha256"] != expected["content_sha256"]
+
+        rerun = client.post(
+            f"/api/v1/projects/{project_id}/workflow-runs",
+            json={"graph_record_id": queued["workflow_graph_record_id"]},
+        )
+        assert rerun.status_code == 202, rerun.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, rerun.json()["job_id"]
+        )
+        new_detail = client.get(f"/api/v1/workflow-runs/{rerun.json()['id']}").json()
+        new_artifact = next(
+            item for item in new_detail["artifacts"] if item["data_type"] == "scientific_heatmap"
+        )
+        assert new_artifact["payload_json"] == current
+        assert new_artifact["payload_sha256"] != artifact["payload_sha256"]
+
+        historical = client.get(f"/api/v1/workflow-runs/{queued['id']}").json()
+        historical_artifact = next(
+            item for item in historical["artifacts"] if item["data_type"] == "scientific_heatmap"
+        )
+        assert historical_artifact["payload_json"] == expected
+        assert historical_artifact["payload_sha256"] == artifact["payload_sha256"]
+
 
 def test_reviewed_boxes_and_verified_masks_remain_separate(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
