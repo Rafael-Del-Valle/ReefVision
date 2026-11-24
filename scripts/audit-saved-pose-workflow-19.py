@@ -804,9 +804,18 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 model is not None and model.project_id == run.project_id,
                 "Model is not registered",
             )
+            # The workflow model reference is an independent persisted record.
+            # A valid digest must not conceal a changed model purpose or provider.
             _require(
-                model.task == "pose" and model.provider_name == training.provider_id,
-                "Registered pose model provider differs from completed training",
+                registered.get("schema_version") == "workflow-model-reference-0001"
+                and registered.get("registered_from_workflow") is True
+                and registered.get("project_id") == run.project_id
+                and registered.get("purpose") == model.purpose == "detector"
+                and registered.get("task") == model.task == "pose"
+                and registered.get("provider_name") == model.provider_name == training.provider_id
+                and registered.get("provider_version") == model.provider_version
+                and registered.get("framework") == model.framework,
+                "Saved model reference differs from registered pose model identity",
             )
             # The registration service independently binds the model to a
             # concrete landmark-schema revision. Metadata alone can remain
@@ -887,7 +896,13 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 and metadata.get("source_metrics") == training.metrics_json,
                 "Registered model database provenance no longer matches completed training",
             )
-            model_sha = _digest(_managed_file(root, model.managed_path))
+            model_file = _managed_file(root, model.managed_path)
+            model_size = model_file.stat().st_size
+            _require(
+                model_size == model.file_size_bytes == checkpoint_size,
+                "Registered local model file size differs from registry or checkpoint",
+            )
+            model_sha = _digest(model_file)
             _require(model_sha == model.sha256, "Registered local model file digest changed")
             # Registration copies the exact finalized training checkpoint. Two
             # independently self-consistent hashes are not enough to prove
