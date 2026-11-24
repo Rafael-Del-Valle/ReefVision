@@ -172,6 +172,26 @@ def _patch_area_concentration(record: dict[str, Any]) -> tuple[float, float] | N
     return concentration, effective_count
 
 
+def _ranked_patch_js_contribution(early: float, late: float) -> float:
+    """Compute one Jensen-Shannon contribution without near-equality cancellation."""
+    total = early + late
+    if total == 0:
+        return 0.0
+    imbalance = (early - late) / total
+    if abs(imbalance) <= 0.125:
+        # Even Taylor series of (1+t)ln(1+t) + (1-t)ln(1-t).
+        # Eight terms suffice at this threshold for binary64 precision.
+        series = fsum(
+            imbalance ** (2 * k) / (2 * k * (2 * k - 1)) for k in range(1, 9)
+        )
+        return total * (series / (2 * log(2)))
+    # Away from equality the original log-ratio form is well-conditioned.
+    # Avoid constructing a half-total that could underflow for tiny ranks.
+    early_term = early * log2(2 * early / total) if early > 0 else 0.0
+    late_term = late * log2(2 * late / total) if late > 0 else 0.0
+    return 0.5 * (early_term + late_term)
+
+
 def compare_mesh_observations(
     before: dict[str, Any],
     after: dict[str, Any],
@@ -984,15 +1004,10 @@ def compare_mesh_observations(
         if ranked_before != ranked_after and ranked_patch_area_profile_distance == 0.0:
             ranked_patch_area_profile_distance = None
             warnings.append("ranked_patch_area_profile_distance_below_numeric_resolution")
-        # Jensen-Shannon divergence (base-2, [0, 1]) detects changes in
-        # ranked patch areas without claiming correspondence. Computing
-        # 2 * p / (p + q) avoids a zero midpoint when p is subnormal and q=0.
-        # Zero-area ranks contribute zero, including padded absent patches.
+        # Compare ranked area profiles without claiming patch correspondence.
+        # Sum nonnegative, cancellation-resistant per-rank contributions.
         ranked_patch_area_jensen_shannon_divergence_bits = fsum(
-            0.5 * early * log2((2.0 * early) / (early + late)) if early > 0 else 0.0
-            for early, late in zip_longest(ranked_before, ranked_after, fillvalue=0.0)
-        ) + fsum(
-            0.5 * late * log2((2.0 * late) / (early + late)) if late > 0 else 0.0
+            _ranked_patch_js_contribution(early, late)
             for early, late in zip_longest(ranked_before, ranked_after, fillvalue=0.0)
         )
         ranked_patch_area_jensen_shannon_divergence_bits = min(
