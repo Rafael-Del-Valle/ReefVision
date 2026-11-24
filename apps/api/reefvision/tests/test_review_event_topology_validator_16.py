@@ -202,3 +202,102 @@ def test_non_sqlite_duplicate_inspection_entries_fail_closed(duplicate: str) -> 
     connection.execute.assert_not_called()
     if duplicate == "foreign_key":
         inspector.get_indexes.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "changed_column",
+    ["review_queue_id", "review_queue_item_id", "project_id"],
+)
+@pytest.mark.parametrize(
+    "update_action",
+    ["", "NO ACTION", "CASCADE", "SET NULL", "SET DEFAULT", "RESTRICT"],
+)
+def test_review_event_parent_update_policy_is_read_only(
+    changed_column: str, update_action: str
+) -> None:
+    """All original parent links prohibit reattributing a committed event."""
+    parents = {
+        "review_queue_id": "review_queues",
+        "review_queue_item_id": "review_queue_items",
+        "project_id": "projects",
+    }
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            for parent in parents.values():
+                connection.exec_driver_sql(f"CREATE TABLE {parent} (id TEXT PRIMARY KEY)")
+                connection.exec_driver_sql(f"INSERT INTO {parent} VALUES ('original')")
+            foreign_keys = ", ".join(
+                f"FOREIGN KEY ({column}) REFERENCES {parent}(id) ON DELETE CASCADE"
+                + (
+                    f" ON UPDATE {update_action}"
+                    if column == changed_column and update_action
+                    else ""
+                )
+                for column, parent in parents.items()
+            )
+            connection.exec_driver_sql(
+                "CREATE TABLE review_queue_item_events ("
+                "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
+                "project_id TEXT, created_at TEXT, "
+                f"{foreign_keys})"
+            )
+            connection.exec_driver_sql(
+                "CREATE INDEX ix_review_queue_item_events_item_created "
+                "ON review_queue_item_events (review_queue_item_id, created_at)"
+            )
+            connection.exec_driver_sql(
+                "CREATE INDEX ix_review_queue_item_events_queue_created "
+                "ON review_queue_item_events (review_queue_id, created_at)"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO review_queue_item_events "
+                "VALUES ('event', 'original', 'original', 'original', '2026-11-24')"
+            )
+            schema_query = "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+            row_query = "SELECT * FROM review_queue_item_events"
+            before_schema = connection.exec_driver_sql(schema_query).all()
+            before_row = connection.exec_driver_sql(row_query).one()
+            for _ in range(2):
+                if update_action in {"", "NO ACTION"}:
+                    assert_review_event_relationship_topology(connection)
+                else:
+                    with pytest.raises(RuntimeError, match="noncanonical update policy"):
+                        assert_review_event_relationship_topology(connection)
+                assert connection.exec_driver_sql(schema_query).all() == before_schema
+                assert connection.exec_driver_sql(row_query).one() == before_row
+                assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("update_action", ["CASCADE", "SET NULL", "SET DEFAULT", "RESTRICT"])
+def test_non_sqlite_review_event_update_policy_rejected(update_action: str) -> None:
+    connection = MagicMock()
+    connection.dialect.name = "postgresql"
+    inspector = MagicMock()
+    inspector.get_table_names.return_value = ["review_queue_item_events"]
+    inspector.get_foreign_keys.return_value = [
+        {
+            "constrained_columns": [column],
+            "referred_table": parent,
+            "referred_columns": ["id"],
+            "options": {
+                "ondelete": "CASCADE",
+                "onupdate": update_action if column == "project_id" else "NO ACTION",
+            },
+        }
+        for column, parent in (
+            ("review_queue_id", "review_queues"),
+            ("review_queue_item_id", "review_queue_items"),
+            ("project_id", "projects"),
+        )
+    ]
+    with (
+        patch("reefvision.db.review_event_topology_16.inspect", return_value=inspector),
+        pytest.raises(RuntimeError, match="noncanonical update policy"),
+    ):
+        assert_review_event_relationship_topology(connection)
+    connection.execute.assert_not_called()
+    inspector.get_indexes.assert_not_called()

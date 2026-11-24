@@ -37,6 +37,14 @@ def assert_review_event_relationship_topology(connection: Connection) -> None:
                 "Unsafe QC review-event foreign-key topology: duplicate relationship. "
                 "Preserve reviewer history."
             )
+        if any(
+            row["seq"] != 0 or str(row["on_update"]).upper() != "NO ACTION"
+            for row in foreign_key_rows
+        ):
+            raise RuntimeError(
+                "Unsafe QC review-event foreign-key topology: noncanonical update policy. "
+                "Preserve reviewer history."
+            )
     else:
         # A composite link must never disappear from the comparison merely
         # because the inspector reports more than one constrained column.
@@ -50,6 +58,14 @@ def assert_review_event_relationship_topology(connection: Connection) -> None:
             raise RuntimeError(
                 "Unsafe QC review-event foreign-key topology: composite or "
                 "incomplete relationship. Preserve reviewer history."
+            )
+        if any(
+            str((fk.get("options") or {}).get("onupdate") or "NO ACTION").upper() != "NO ACTION"
+            for fk in inspected_foreign_keys
+        ):
+            raise RuntimeError(
+                "Unsafe QC review-event foreign-key topology: noncanonical update policy. "
+                "Preserve reviewer history."
             )
         foreign_keys = {
             (

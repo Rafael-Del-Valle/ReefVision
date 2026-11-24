@@ -413,8 +413,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             # Do not collapse duplicate declarations or ignore ON UPDATE.
             # A cascade could rewrite the scope of a committed request.
             bulk_fk_shape_valid = len(bulk_fk_rows) == len(expected_foreign_keys) and all(
-                row["seq"] == 0 and row["on_update"].upper() == "NO ACTION"
-                for row in bulk_fk_rows
+                row["seq"] == 0 and row["on_update"].upper() == "NO ACTION" for row in bulk_fk_rows
             )
         else:
             actual_foreign_keys = {

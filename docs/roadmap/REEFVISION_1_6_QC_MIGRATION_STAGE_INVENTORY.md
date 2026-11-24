@@ -236,3 +236,20 @@ old acceptance and verified the new classification, including the actual
 scope rewrite on a synthetic cascade. Full repository CI remains required;
 no migration reconciliation, approval, workflow-node duplication or release
 is performed.
+
+## 2026-11-24 — event-parent update policy parity
+
+The original 0038 review-event foreign keys use ON DELETE CASCADE and implicit
+ON UPDATE NO ACTION. A restored table with ON UPDATE CASCADE previously
+passed desktop topology inspection and could reattribute a committed event
+when a queue, item or project identity changed. Startup now requires the
+original update policy for all three parent links; the same check is applied
+to reflected non-SQLite relationships. Existing deletion policy is unchanged.
+The independent structural inspector already checks these update policies.
+The regression matrix covers each SQLite parent with implicit and explicit
+NO ACTION and four altered policies, repeated read-only inspection of populated
+events, and four mocked non-SQLite variants. Eighteen independent SQLite and
+SQLAlchemy policy probes passed, including three reproduced cascade changes.
+The previous exact-head Ruff formatting diagnostic was corrected. Full CI and
+representative saved-workflow acceptance remain required; this preflight is
+not a new scientific node and does not modify a database or approve a review.
