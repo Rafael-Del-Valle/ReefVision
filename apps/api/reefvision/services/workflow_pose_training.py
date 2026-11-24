@@ -495,6 +495,19 @@ def _seed_pose_model(
     ):
         raise ValidationError("Pose retraining seed checkpoint path is invalid")
 
+    # A registered seed must belong to this project's model storage. Exchange
+    # imports retain independent weights under exchange-import/models.
+    project = session.get(Project, project_id)
+    if project is None:
+        raise ValidationError("Pose retraining seed project no longer exists")
+    allowed_paths = {
+        f"{project.storage_root}/{directory}/{model.id}{extension}"
+        for directory in ("models", "exchange-import/models")
+        for extension in (".pt", ".pth")
+    }
+    if model.managed_path not in allowed_paths:
+        raise ValidationError("Pose retraining seed checkpoint is outside its model registry")
+
     # Check the original registered path before resolution follows symlinks.
     _reject_symlinked_training_path(settings, model.managed_path)
     checkpoint = resolve_managed_project_path(
