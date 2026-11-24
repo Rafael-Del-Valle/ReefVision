@@ -222,6 +222,7 @@ def test_valid_glb_bounds_standalone_and_replayed_graph(client: TestClient, vari
         "target_boolean",
         "byte_index_oob",
         "byte_restart_index",
+        "mixed_geometry_view",
         "dword_index_oob",
         "misaligned_position_view",
         "index_stride",
@@ -289,6 +290,8 @@ def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
         assert "64-digit preview bound" in standalone.text
     if invalid_selector == "byte_restart_index":
         assert "reserved primitive restart" in standalone.text
+    if invalid_selector == "mixed_geometry_view":
+        assert "require separate buffer views" in standalone.text
     graph = {
         "graph_id": f"glb-invalid-{invalid_selector}-v14",
         "name": "Reject malformed GLB metadata",
@@ -309,9 +312,10 @@ def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     app = cast(FastAPI, client.app)
-    # Replaying the same stored source must never publish a restart sentinel
-    # as a measured triangle, even though its numeric vertex index exists.
-    for _ in range(2 if invalid_selector == "byte_restart_index" else 1):
+    # Replaying malformed geometry must never publish a measurement, even
+    # when all decoded vertex indices and byte offsets are in bounds.
+    replay_count = 2 if invalid_selector in {"byte_restart_index", "mixed_geometry_view"} else 1
+    for _ in range(replay_count):
         run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
         assert not process_workflow_run_job(
@@ -323,6 +327,8 @@ def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
         assert result["run"]["status"] == "failed"
         if invalid_selector == "byte_restart_index":
             assert "reserved primitive restart" in result["run"]["error_message"]
+        if invalid_selector == "mixed_geometry_view":
+            assert "require separate buffer views" in result["run"]["error_message"]
         assert not any(
             artifact["data_type"] == "mesh_measurement_preview" for artifact in result["artifacts"]
         )
