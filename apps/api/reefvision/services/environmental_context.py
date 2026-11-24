@@ -109,8 +109,8 @@ class EnvironmentalContextService:
         # Chunk the lookup for SQLite's parameter limit and large station downloads.
         for offset in range(0, len(record_ids), 500):
             chunk = record_ids[offset : offset + 500]
-            found = self.session.scalars(
-                select(ScientificRecord.id).where(
+            found = self.session.execute(
+                select(ScientificRecord.payload_json, ScientificRecord.content_sha256).where(
                     ScientificRecord.project_id == entry.project_id,
                     ScientificRecord.payload_json["environmental_cache_key"].as_string()
                     == entry.cache_key,
@@ -122,6 +122,15 @@ class EnvironmentalContextService:
                     "Environmental cache refers to missing or foreign scientific records "
                     "or records from another dataset"
                 )
+            # Validate every member before advertising dataset availability or
+            # using a spatial/temporal subset; a damaged sibling is not evidence.
+            for payload, checksum in found:
+                try:
+                    valid = content_hash(payload) == checksum
+                except (ValidationError, UnicodeError):
+                    valid = False
+                if not valid:
+                    raise ConflictError("Environmental cache member checksum mismatch")
         return record_ids
 
     def _cache_response(
