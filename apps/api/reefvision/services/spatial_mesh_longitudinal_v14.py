@@ -364,7 +364,7 @@ def compare_mesh_observations(
             ):
                 raise ValueError(f"Mesh topology patch array contradicts counts: {key}")
             patch_arrays[field] = values
-        for index, faces in enumerate(patch_arrays.get("face_count", [])):
+        for index, patch_faces in enumerate(patch_arrays.get("face_count", [])):
             boundary_values = patch_arrays.get("boundary_edge_count")
             nonmanifold_values = patch_arrays.get("nonmanifold_edge_count")
             patch_boundary = boundary_values[index] if boundary_values is not None else None
@@ -372,11 +372,19 @@ def compare_mesh_observations(
                 nonmanifold_values[index] if nonmanifold_values is not None else None
             )
             if (
-                (patch_boundary or 0) + 3 * (patch_nonmanifold or 0) > 3 * faces
-                or (faces < 3 and patch_nonmanifold)
-                or (faces == 1 and patch_boundary is not None and patch_boundary != 3)
+                (patch_boundary or 0) + 3 * (patch_nonmanifold or 0) > 3 * patch_faces
+                or (patch_faces < 3 and patch_nonmanifold)
+                or (patch_faces == 1 and patch_boundary is not None and patch_boundary != 3)
             ):
                 raise ValueError("Mesh topology patch edge incidences contradict face count")
+            # Each array entry describes one connected patch. Global parity
+            # and connectivity can conceal impossible individual patches.
+            if patch_boundary is not None and patch_nonmanifold == 0:
+                patch_shared_incidences = 3 * patch_faces - patch_boundary
+                if patch_shared_incidences % 2:
+                    raise ValueError("Mesh topology patch two-face edge incidence parity invalid")
+                if patch_shared_incidences // 2 < patch_faces - 1:
+                    raise ValueError("Mesh topology patch shared edges insufficient for connectivity")
         topology_counts.append(counts)
     a0 = before.get("surface_area_m2")
     a1 = after.get("surface_area_m2")
