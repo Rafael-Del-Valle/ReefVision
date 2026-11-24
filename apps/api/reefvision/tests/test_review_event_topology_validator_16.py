@@ -320,8 +320,14 @@ def test_sqlite_explicit_index_inventory_preserves_event_history(extra_ddl: str)
     engine = create_engine("sqlite+pysqlite:///:memory:")
     try:
         with engine.begin() as connection:
-            for parent in ("projects", "review_queues", "review_queue_items"):
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            for parent, identity in (
+                ("projects", "project"),
+                ("review_queues", "queue"),
+                ("review_queue_items", "item"),
+            ):
                 connection.exec_driver_sql(f"CREATE TABLE {parent} (id TEXT PRIMARY KEY)")
+                connection.exec_driver_sql(f"INSERT INTO {parent} VALUES (?)", (identity,))
             connection.exec_driver_sql(
                 "CREATE TABLE review_queue_item_events ("
                 "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
@@ -359,5 +365,6 @@ def test_sqlite_explicit_index_inventory_preserves_event_history(extra_ddl: str)
                     assert_review_event_relationship_topology(connection)
                 assert connection.exec_driver_sql(schema_query).all() == before_schema
                 assert connection.exec_driver_sql(row_query).all() == before_rows
+                assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
     finally:
         engine.dispose()
