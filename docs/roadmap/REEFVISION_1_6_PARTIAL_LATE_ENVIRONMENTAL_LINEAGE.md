@@ -210,3 +210,20 @@ exercise repeated inspection, unchanged database bytes and private-data
 redaction. Corrected the preceding exact CI SIM117 and inspector formatting
 diagnostics. No schema mutation, integration of unmerged lineages, new
 scientific workflow operation, or release approval is implied.
+
+## 2026-11-24 — lineage-specific revision bounds
+
+The independent 1.1 migration files end at 0042, while 1.6 QC ends at
+0041. Strict inventory previously accepted a complete-looking QC family
+with a 0042 stamp, or either family with arbitrary later or foreign
+revision strings. The inspector now flags unsupported revision markers
+for a recognized scientific/QC family, including the original shared
+pre-review mask revision when paired with post-0037 tables. Earlier
+numeric stamps retain the existing stage-specific diagnostics.
+Sixteen persisted CLI configurations cover both families, valid 0039 and
+scientific 0042 controls, unknown and out-of-range stamps, and retained
+private observations. The preceding exact-head CI #45341910641 failed
+before pytest on a test assertion exceeding Ruff's line limit; its exact
+formatting correction is included. This remains read-only evidence,
+not a unified migration DAG, workflow approval, or installed Windows
+acceptance.

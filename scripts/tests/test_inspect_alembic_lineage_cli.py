@@ -1816,3 +1816,58 @@ def test_revision_schema_object_identity(tmp_path: Path, name: str, kind: str) -
         assert report["upgrade_authorized"] is False
         assert "private coral observation" not in result.stdout + result.stderr
         assert database.read_bytes() == original
+
+
+@pytest.mark.parametrize("lineage", ["scientific", "qc"])
+@pytest.mark.parametrize(
+    "revision",
+    ["0039", "0042", "0043", "9999", "external-head", "53ba400993db", "0000", "0037"],
+)
+def test_revision_must_belong_to_detected_schema_lineage(
+    tmp_path: Path, lineage: str, revision: str
+) -> None:
+    database = tmp_path / "lineage-head.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
+        connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        tables = (
+            (
+                "scientific_records",
+                "environmental_cache_entries",
+                "computed_metric_definitions",
+                "computed_metric_results",
+            )
+            if lineage == "scientific"
+            else ("review_queue_item_events",)
+        )
+        for table in tables:
+            connection.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY, note TEXT)')
+            connection.execute(f'INSERT INTO "{table}" VALUES (1, ?)', ("private coral record",))
+        if lineage == "scientific" and revision == "0042":
+            _add_0041_aggregate_columns(connection)
+            for table in (
+                "environmental_event_definitions",
+                "environmental_analysis_definitions",
+                "environmental_analysis_results",
+            ):
+                connection.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY)')
+        assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    unsupported = revision not in {"0039", "0037"} and not (
+        lineage == "scientific" and revision == "0042"
+    )
+    original = database.read_bytes()
+    for _ in range(2):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == (2 if unsupported or revision == "0037" else 0), result.stderr
+        report = json.loads(result.stdout)
+        assert ("revision_not_supported_for_schema_lineage" in report["warnings"]) is unsupported
+        assert report["lineage_hint"] == lineage
+        assert report["revision_rows"] == [revision]
+        assert report["upgrade_authorized"] is False
+        assert "private coral record" not in result.stdout + result.stderr
+        assert database.read_bytes() == original

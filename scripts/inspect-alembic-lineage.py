@@ -886,6 +886,20 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
             and stamped_revision.isdecimal()
             else None
         )
+        # The independent scientific branch ends at 0042; QC ends at 0041.
+        # Unknown numeric or foreign textual heads cannot establish a later
+        # compatible schema. The shared historical mask revision is also too
+        # early to contain either of these post-0037 schema families.
+        supported_post_review = {"0038", "0039", "0040", "0041"}
+        if lineage == "scientific":
+            supported_post_review.add("0042")
+        if (
+            lineage in {"scientific", "qc"}
+            and isinstance(stamped_revision, str)
+            and stamped_revision not in supported_post_review
+            and not (numeric_revision is not None and 1 <= numeric_revision <= 37)
+        ):
+            warnings.append("revision_not_supported_for_schema_lineage")
         if qc_events_present and numeric_revision is not None and numeric_revision < 38:
             warnings.append("qc_events_before_revision_0038")
         if qc_bulk_present and numeric_revision is not None and numeric_revision < 41:

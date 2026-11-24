@@ -195,7 +195,9 @@ def test_desktop_refuses_noncanonical_revision_object(
             connection.exec_driver_sql(
                 f'CREATE VIEW "{name}" AS SELECT version_num FROM biological_observations'
             )
-        assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == "0037"
+        assert (
+            connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar() == "0037"
+        )
     original = database.read_bytes()
     monkeypatch.setattr(session, "create_database_engine", lambda _settings: engine)
     monkeypatch.setattr(
