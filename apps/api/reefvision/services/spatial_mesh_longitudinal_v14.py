@@ -1283,16 +1283,26 @@ def compare_mesh_observations(
             else:
                 source_centroid, target_centroid = centroids
                 assert source_centroid is not None and target_centroid is not None
-                offset = [
-                    target_centroid[axis]
-                    - (
-                        sum(
-                            transform[axis][column] * source_centroid[column] for column in range(3)
+                # Sum the signed residual directly: adding a small translation
+                # to a large survey coordinate first can round it away entirely.
+                # Products and input coordinates still have binary64 precision.
+                try:
+                    offset = [
+                        fsum(
+                            [
+                                target_centroid[axis],
+                                -transform[axis][0] * source_centroid[0],
+                                -transform[axis][1] * source_centroid[1],
+                                -transform[axis][2] * source_centroid[2],
+                                -transform[axis][3],
+                            ]
                         )
-                        + transform[axis][3]
-                    )
-                    for axis in range(3)
-                ]
+                        for axis in range(3)
+                    ]
+                except (OverflowError, ValueError):
+                    # Preserve the existing out-of-range QC for extreme replay
+                    # coordinates rather than leaking a numerical exception.
+                    offset = [float("inf")]
                 separation = hypot(*offset)
                 if all(isfinite(value) for value in offset) and isfinite(separation):
                     registered_surface_centroid_offset_target_frame_m = offset
