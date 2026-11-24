@@ -116,6 +116,15 @@ def make_glb(
         "scenes": [{"nodes": [0]}],
         "scene": 0,
     }
+    if invalid_selector == "aliased_geometry_bytes":
+        # Distinct views, but the index stream starts within the last Z
+        # coordinate. All decoded indices are legal and all positions finite.
+        start = position_offset + position_size - 4
+        binary = binary[:start] + index_bytes + binary[start + len(index_bytes) :]
+        doc["bufferViews"][1]["byteOffset"] = start
+    elif invalid_selector == "overlapping_unused_view_bytes":
+        # The views overlap only outside the consumed POSITION components.
+        doc["bufferViews"][0]["byteLength"] = position_size + len(index_bytes)
     if invalid_selector == "mixed_geometry_view":
         # Both accessors remain in bounds and decode the original triangle,
         # but they now reference the same view for incompatible data roles.
@@ -914,3 +923,18 @@ def test_glb_rejects_mixed_position_and_index_view(index_width: int) -> None:
     assert parse_glb_triangles(make_glb(**options)) == parse_glb_triangles(make_glb())
     with pytest.raises(ValueError, match="require separate buffer views"):
         parse_glb_triangles(make_glb(invalid_selector="mixed_geometry_view", **options))
+
+
+@pytest.mark.parametrize("index_width", [1, 2, 4])
+def test_glb_rejects_aliased_position_and_index_bytes(index_width: int) -> None:
+    options = {
+        "unsigned_byte_indices": index_width == 1,
+        "unsigned_int_indices": index_width == 4,
+    }
+    expected = parse_glb_triangles(make_glb(**options))
+    assert (
+        parse_glb_triangles(make_glb(invalid_selector="overlapping_unused_view_bytes", **options))
+        == expected
+    )
+    with pytest.raises(ValueError, match="index bytes overlap vertex positions"):
+        parse_glb_triangles(make_glb(invalid_selector="aliased_geometry_bytes", **options))
