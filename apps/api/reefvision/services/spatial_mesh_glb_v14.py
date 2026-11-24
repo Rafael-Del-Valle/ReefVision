@@ -276,6 +276,8 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
     ):
         raise ValueError("GLB preview requires indexed TRIANGLES geometry")
 
+    position_byte_ranges: list[tuple[int, int]] = []
+
     def read_accessor(index: Any, *, position: bool) -> list[tuple[Any, ...]]:
         accessor_index = _as_int(index, "accessor index")
         if accessor_index >= len(accessors):
@@ -341,6 +343,20 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         ):
             raise ValueError("GLB accessor exceeds or misaligns its buffer view")
         offset = start + accessor_offset
+        if position:
+            position_byte_ranges.extend(
+                (offset + i * stride, offset + i * stride + width) for i in range(count)
+            )
+        else:
+            index_end = offset + count * width
+            # Separate bufferView IDs alone do not guarantee independent
+            # geometry bytes. Reject aliasing of decoded POSITION components
+            # by the index stream; unused interleaved padding is not a vertex.
+            if any(
+                offset < vertex_end and vertex_start < index_end
+                for vertex_start, vertex_end in position_byte_ranges
+            ):
+                raise ValueError("GLB index bytes overlap vertex positions")
         rows = [struct.unpack_from(fmt, binary, offset + i * stride) for i in range(count)]
         # glTF 2.0 section 3.7.2.1 reserves the maximum unsigned index for
         # primitive restart. A byte index of 255 is invalid even if the
