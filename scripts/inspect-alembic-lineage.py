@@ -609,6 +609,12 @@ def _original_0038_check_contract_matches(
         tokens[i : i + 2] == ("ON", "CONFLICT") for i in range(len(tokens) - 1)
     ):
         return False
+    # SQLite folds duplicate UNIQUE constraints (including a redundant UNIQUE
+    # on the primary key) into an existing autoindex. Require the original
+    # declaration count as well as index metadata and the canonical name.
+    expected_unique_count = sum(unique for _, unique in _POST_0037_TABLE_CONTRACTS[table]["indexes"])
+    if tokens.count("UNIQUE") != expected_unique_count:
+        return False
     checks = [i for i, token in enumerate(tokens) if token == "CHECK"]
     if table != "review_queue_item_events":
         # The independent scientific migrations also name their UNIQUE

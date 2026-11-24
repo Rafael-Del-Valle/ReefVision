@@ -168,3 +168,23 @@ migration provenance. Independent disposable SQLite probes confirmed that
 the names are invisible in index metadata; full exact-head CI remains
 required. Existing executable saved QC workflows and human approval are
 unchanged, and no migration or research data is rewritten.
+
+## 2026-11-24 — redundant UNIQUE declarations and candidate evidence boundary
+
+SQLite can coalesce repeated UNIQUE declarations into the same autoindex,
+including an extra UNIQUE on an existing primary key. The structural audit
+now checks the number of declarations in the original table DDL as well as
+canonical names and reflected index metadata. Ten additional CLI configurations
+exercise repeated QC request/result uniqueness and redundant primary-key
+uniqueness in QC and metric tables, with the existing repeatability, redaction
+and byte-preservation checks. This does not authorize any migration.
+
+Separate integrated candidate evidence exists in draft PRs #98, #102 and #103.
+The corrective MSI was manufactured from `a580042e84c4d2fa0a646fbf8ec5a3dc90657fa8`,
+not this isolated branch. Actions run `44779080692` completed the installer
+build, fresh install, six predecessor roles and historical migration/rollback
+jobs successfully. Offline run `44779273302` also passed. These results are
+valuable to coordination, but cannot be attributed to this branch head or
+substitute for independent biological reference acceptance. No candidate
+branch is merged or restamped here. Existing executable saved QC workflows
+and explicit researcher review remain unchanged; release HOLD.

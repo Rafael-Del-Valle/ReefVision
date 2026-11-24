@@ -60,6 +60,12 @@ def _create_0039_metric_pair(connection: sqlite3.Connection, variant: str = "val
         result_sql = result_sql.replace(
             "CONSTRAINT uq_computed_metric_result_workflow_node_run ", ""
         )
+    if variant == "duplicate_result_unique":
+        result_sql = result_sql[:-1] + (
+            ", CONSTRAINT redundant_metric_result UNIQUE (workflow_node_run_id))"
+        )
+    if variant == "duplicate_definition_pk_unique":
+        definition_sql = definition_sql[:-1] + ", UNIQUE (id))"
     if variant == "duplicate_workflow_fk":
         result_sql = result_sql[:-1] + (
             ", FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id) ON DELETE RESTRICT)"
@@ -1173,6 +1179,8 @@ def test_11_scientific_tables_cannot_precede_their_revision(
         ("request_unique_nocase_descending", True),
         ("request_unique_renamed", True),
         ("request_unique_unnamed", True),
+        ("duplicate_request_unique", True),
+        ("duplicate_event_pk_unique", True),
         ("duplicate_project_fk", True),
         ("additional_unique_actor", True),
         ("additional_partial_unique_actor", True),
@@ -1223,6 +1231,12 @@ def test_0038_qc_structural_audit_rejects_unreviewed_unique_index_semantics(
         request_constraint = request_constraint.replace(
             "CONSTRAINT uq_review_queue_item_event_request ", ""
         )
+    if variant == "duplicate_request_unique":
+        request_constraint += (
+            ", CONSTRAINT redundant_request UNIQUE (review_queue_item_id, client_request_id)"
+        )
+    elif variant == "duplicate_event_pk_unique":
+        request_constraint += ", UNIQUE (id)"
     duplicate_fk = (
         ", FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
         if variant == "duplicate_project_fk"
@@ -2033,6 +2047,8 @@ def test_revision_must_belong_to_detected_schema_lineage(
         ("missing_index", "computed_metric_results"),
         ("result_trigger", "computed_metric_results"),
         ("duplicate_workflow_fk", "computed_metric_results"),
+        ("duplicate_result_unique", "computed_metric_results"),
+        ("duplicate_definition_pk_unique", "computed_metric_definitions"),
     ],
 )
 def test_computed_metric_structural_contracts(
