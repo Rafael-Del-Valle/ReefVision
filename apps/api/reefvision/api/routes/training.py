@@ -347,7 +347,10 @@ def _open_training_log(path: Path) -> BinaryIO:
         flags |= getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
         return os.open(name, flags)
 
-    return open(path, "rb", opener=opener)
+    # A second seek/read must consult the file, not reuse BufferedReader's
+    # cached bytes. Otherwise an in-place rewrite between reads can appear
+    # identical to the first snapshot, defeating the integrity comparison.
+    return open(path, "rb", buffering=0, opener=opener)
 
 
 def _training_log_tail(
