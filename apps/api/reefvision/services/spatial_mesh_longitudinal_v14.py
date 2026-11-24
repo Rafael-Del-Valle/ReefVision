@@ -181,9 +181,7 @@ def _ranked_patch_js_contribution(early: float, late: float) -> float:
     if abs(imbalance) <= 0.125:
         # Even Taylor series of (1+t)ln(1+t) + (1-t)ln(1-t).
         # Eight terms suffice at this threshold for binary64 precision.
-        series = fsum(
-            imbalance ** (2 * k) / (2 * k * (2 * k - 1)) for k in range(1, 9)
-        )
+        series = fsum(imbalance ** (2 * k) / (2 * k * (2 * k - 1)) for k in range(1, 9))
         return total * (series / (2 * log(2)))
     # Away from equality the original log-ratio form is well-conditioned.
     # Avoid constructing a half-total that could underflow for tiny ranks.
