@@ -221,6 +221,7 @@ def test_valid_glb_bounds_standalone_and_replayed_graph(client: TestClient, vari
         "target_float",
         "target_boolean",
         "byte_index_oob",
+        "byte_restart_index",
         "dword_index_oob",
         "misaligned_position_view",
         "index_stride",
@@ -272,7 +273,7 @@ def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
         "glb_base64": make_glb(
             invalid_selector=invalid_selector,
             nonindexed_vertices=4 if invalid_selector == "nonindexed_partial" else None,
-            unsigned_byte_indices=invalid_selector == "byte_index_oob",
+            unsigned_byte_indices=invalid_selector in {"byte_index_oob", "byte_restart_index"},
             unsigned_int_indices=invalid_selector == "dword_index_oob",
         ),
         "meters_per_unit": 0.01,
@@ -286,6 +287,8 @@ def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
     # API and saved graphs must both reject the source, not publish geometry.
     if invalid_selector in {"huge_identity_matrix", "index_bounds_huge"}:
         assert "64-digit preview bound" in standalone.text
+    if invalid_selector == "byte_restart_index":
+        assert "reserved primitive restart" in standalone.text
     graph = {
         "graph_id": f"glb-invalid-{invalid_selector}-v14",
         "name": "Reject malformed GLB metadata",
@@ -305,19 +308,24 @@ def test_invalid_glb_metadata_fails_standalone_and_saved_graph(
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
-    assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
-    assert not process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    )
-    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
-    assert detail.status_code == 200, detail.text
-    assert detail.json()["run"]["status"] == "failed"
-    assert not any(
-        artifact["data_type"] == "mesh_measurement_preview"
-        for artifact in detail.json()["artifacts"]
-    )
+    # Replaying the same stored source must never publish a restart sentinel
+    # as a measured triangle, even though its numeric vertex index exists.
+    for _ in range(2 if invalid_selector == "byte_restart_index" else 1):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert not process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        result = detail.json()
+        assert result["run"]["status"] == "failed"
+        if invalid_selector == "byte_restart_index":
+            assert "reserved primitive restart" in result["run"]["error_message"]
+        assert not any(
+            artifact["data_type"] == "mesh_measurement_preview" for artifact in result["artifacts"]
+        )
 
 
 @pytest.mark.parametrize("selector", EXACT_TRANSFORM_SELECTORS)
