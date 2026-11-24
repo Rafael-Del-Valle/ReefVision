@@ -355,6 +355,15 @@ class GeographicPairwiseService:
                 "bearing_standard_uncertainty_deg",
                 "uncertainty_method",
                 "measurement_sha256",
+                "coordinate_reference_system",
+                "bearing_unavailable_reason",
+                "absolute_time_delta_s",
+                "time_unavailable_reason",
+                "uncertainty_unavailable_reason",
+                "start_snapshot_sha256",
+                "end_snapshot_sha256",
+                "definition_sha256",
+                "result_sha256",
             ],
             lineterminator="\n",
         )
@@ -372,6 +381,15 @@ class GeographicPairwiseService:
                 "bearing_standard_uncertainty_deg": value.bearing_standard_uncertainty_deg,
                 "uncertainty_method": value.uncertainty_method,
                 "measurement_sha256": value.content_sha256,
+                "coordinate_reference_system": value.coordinate_reference_system,
+                "bearing_unavailable_reason": value.bearing_unavailable_reason,
+                "absolute_time_delta_s": value.absolute_time_delta_s,
+                "time_unavailable_reason": value.time_unavailable_reason,
+                "uncertainty_unavailable_reason": value.uncertainty_unavailable_reason,
+                "start_snapshot_sha256": value.start_snapshot_sha256,
+                "end_snapshot_sha256": value.end_snapshot_sha256,
+                "definition_sha256": saved.definition_sha256,
+                "result_sha256": saved.result_sha256,
             }
         )
         return output.getvalue()

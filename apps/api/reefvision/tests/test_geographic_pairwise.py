@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from typing import cast
 from uuid import uuid4
 
@@ -124,6 +125,16 @@ def test_pairwise_geography_persists_complete_snapshots_currentness_and_csv(
     assert exported.status_code == 200, exported.text
     assert "initial_bearing_deg_true_north" in exported.text
     assert measurement["content_sha256"] in exported.text
+    row = next(csv.DictReader(exported.text.splitlines()))
+    assert row["coordinate_reference_system"] == "EPSG:4326"
+    assert float(row["absolute_time_delta_s"]) == pytest.approx(0.1)
+    assert row["bearing_unavailable_reason"] == ""
+    assert row["time_unavailable_reason"] == ""
+    assert row["uncertainty_unavailable_reason"] == ""
+    assert row["start_snapshot_sha256"] == measurement["start_snapshot_sha256"]
+    assert row["end_snapshot_sha256"] == measurement["end_snapshot_sha256"]
+    assert row["definition_sha256"] == saved["definition_sha256"]
+    assert row["result_sha256"] == saved["result_sha256"]
 
     archive = export_archive(client, test_settings, project["id"])
     imported = import_archive(client, archive)
@@ -371,6 +382,19 @@ def test_pairwise_geography_preserves_uncertainty_limits(
     )
     assert fetched.status_code == 200, fetched.text
     assert fetched.json() == saved
+    exported = client.get(
+        f"/api/v1/projects/{project['id']}/geographic-pairwise/{saved['result_id']}/export.csv"
+    )
+    assert exported.status_code == 200, exported.text
+    row = next(csv.DictReader(exported.text.splitlines()))
+    assert row["uncertainty_unavailable_reason"] == reason
+    assert row["bearing_standard_uncertainty_deg"] == ""
+    assert row["bearing_unavailable_reason"] == (measurement["bearing_unavailable_reason"] or "")
+    assert row["measurement_sha256"] == measurement["content_sha256"]
+    if expected_sigma is None:
+        assert row["distance_standard_uncertainty_m"] == ""
+    else:
+        assert float(row["distance_standard_uncertainty_m"]) == expected_sigma
     validation = client.get(
         f"/api/v1/projects/{project['id']}/geographic-pairwise/{saved['result_id']}/validation"
     )
