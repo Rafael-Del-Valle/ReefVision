@@ -83,7 +83,13 @@ def parse_obj_triangles(text: str) -> tuple[list[list[float]], list[list[int]]]:
                     weight = _parse_obj_float(fields[4])
                     if not isfinite(weight) or weight == 0:
                         raise ValueError("homogeneous weight must be finite and nonzero")
-                    normalized = [value / weight for value in point]
+                    # Round the exact source ratio once. Dividing already-rounded
+                    # binary64 scalars can split equal source coordinates (e.g.
+                    # 0.3 / 3 versus 0.1) or hide a source precision collision.
+                    exact_weight = Fraction(Decimal(weight_token))
+                    normalized = [
+                        float(Fraction(Decimal(value)) / exact_weight) for value in fields[1:4]
+                    ]
                     # Division by a large homogeneous W can collapse a real
                     # source coordinate to zero even when each OBJ scalar
                     # was individually representable. Never measure that
