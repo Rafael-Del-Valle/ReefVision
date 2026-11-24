@@ -3574,6 +3574,10 @@ def test_reidentification_project_asset_bindings_in_standalone_and_saved_graph(
 
 
 @pytest.mark.parametrize(
+    ("origin", "translation"),
+    [(0.0, 0.1), (100_000_000.0, 1e-9), (-100_000_000.0, -1e-9)],
+)
+@pytest.mark.parametrize(
     ("source_bound", "target_bound", "alignment_bound"),
     [
         (0.0, 0.0, 0.0),
@@ -3591,6 +3595,8 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
     source_bound: float,
     target_bound: float,
     alignment_bound: float,
+    origin: float,
+    translation: float,
 ) -> None:
     """Typed persisted graphs must retain the standalone provisional interval and QC."""
     project_id = str(create_project(client, "Registered centroid interval parity")["id"])
@@ -3599,6 +3605,10 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
     after = _mesh("late", "2026-10-02T12:00:00Z", 1.0)
     before["coordinate_frame_id"] = "survey-frame"
     after["coordinate_frame_id"] = "survey-frame"
+    for observation in (before, after):
+        observation["vertices"] = [[origin, 0, 0], [origin + 1, 0, 0], [origin, 1, 0]]
+    transform = _rigid_transform()
+    transform[0][3] = translation
     evidence = {
         "source_frame_id": "survey-frame",
         "target_frame_id": "survey-frame",
@@ -3606,7 +3616,7 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
         "rms_residual_m": 0.02,
         "correspondence_count": 6,
         "evidence_note": "Caller-supplied bounds; independent verification pending",
-        "source_to_target_transform_m": _rigid_transform(),
+        "source_to_target_transform_m": transform,
         "source_centroid_position_error_bound_m": source_bound,
         "target_centroid_position_error_bound_m": target_bound,
         "registration_alignment_error_bound_m": alignment_bound,
@@ -3618,16 +3628,23 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     total_bound = source_bound + target_bound + alignment_bound
-    assert expected["registered_surface_centroid_separation_m"] == pytest.approx(0.1)
+    separation = abs(translation)
+    assert expected["registered_surface_centroid_offset_target_frame_m"] == pytest.approx(
+        [-translation, 0.0, 0.0], abs=0.0
+    )
+    assert expected["registered_surface_centroid_separation_m"] == pytest.approx(
+        separation, abs=0.0
+    )
     assert expected["registered_surface_centroid_separation_caller_bound_interval_m"] == (
-        pytest.approx([max(0.0, 0.1 - total_bound), 0.1 + total_bound])
+        pytest.approx([max(0.0, separation - total_bound), separation + total_bound], abs=0.0)
     )
     interval = expected["registered_surface_centroid_separation_caller_bound_interval_m"]
     assert interval[0] >= 0.0  # Euclidean separation cannot be negative.
     assert interval[0] <= expected["registered_surface_centroid_separation_m"]
     assert interval[1] >= expected["registered_surface_centroid_separation_m"]
-    assert interval[1] == pytest.approx(0.1 + total_bound)
+    assert interval[1] == pytest.approx(separation + total_bound, abs=0.0)
     assert expected["provenance"]["coordinate_registration_verified"] is False
+    assert expected["provenance"]["specimen_identity_verified"] is False
     assert (
         "registered_centroid_caller_interval_not_a_confidence_interval" in (expected["qc_warnings"])
     )
@@ -3671,19 +3688,20 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
     assert plan.json()["executable"] is True
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
-    assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    )
-    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
-    assert detail.status_code == 200, detail.text
-    assert detail.json()["run"]["status"] == "succeeded"
-    artifact = next(
-        item
-        for item in detail.json()["artifacts"]
-        if item["data_type"] == "mesh_longitudinal_comparison"
-    )
-    assert artifact["payload_json"] == expected
-    assert len(artifact["payload_sha256"]) == 64
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_longitudinal_comparison"
+        )
+        assert artifact["payload_json"] == expected
+        assert len(artifact["payload_sha256"]) == 64
