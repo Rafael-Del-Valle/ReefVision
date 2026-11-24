@@ -266,6 +266,7 @@ def test_pairwise_geography_executes_and_replays_in_workflow(
         assert repeated.result_id == replay.result_id
         assert repeated.result_sha256 == replay.result_sha256
 
+
 def test_pairwise_saved_result_rejects_valid_but_unrelated_definition_and_measurement(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -315,4 +316,3 @@ def test_pairwise_saved_result_rejects_valid_but_unrelated_definition_and_measur
         restored = service.get_result(project["id"], str(first.result_id))
         assert restored == first
         assert service.get_result(project["id"], str(reverse.result_id)) == reverse
-
