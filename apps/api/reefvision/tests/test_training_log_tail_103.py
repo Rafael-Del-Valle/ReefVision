@@ -1223,9 +1223,7 @@ def test_log_tail_rejects_same_inode_rewrite_hidden_by_append(
         handle = original_open(path, mode, *args, **kwargs)
         return RacingReadOnlyHandle(handle) if path == log and mode == "rb" else handle
 
-    monkeypatch.setattr(
-        training_routes, "_open_training_log", lambda path: racing_open(path, "rb")
-    )
+    monkeypatch.setattr(training_routes, "_open_training_log", lambda path: racing_open(path, "rb"))
     with pytest.raises(HTTPException) as error:
         training_routes._training_log_tail("training.log", tmp_path)
     assert error.value.status_code == 403
@@ -1242,9 +1240,7 @@ def test_log_tail_freezes_snapshot_and_verifies_record_boundary(
     log = tmp_path / "training.log"
     tail = b"epoch=1\n" * 2048
     original = (
-        b"older epoch\n" + tail
-        if race == "boundary_rewrite"
-        else b"epoch=4\ntrain/box_loss=0.25\n"
+        b"older epoch\n" + tail if race == "boundary_rewrite" else b"epoch=4\ntrain/box_loss=0.25\n"
     )
     appended = b"train/cls_loss=0.30\n"
     log.write_bytes(original)
@@ -1389,6 +1385,7 @@ def test_training_log_observer_reread_detects_real_in_place_change(
     assert error.value.status_code == 403
     assert calls == 2
     assert log.read_bytes() == replacement + appended
+
 
 @pytest.mark.parametrize("rotated", [True, False])
 def test_log_tail_rechecks_path_after_verification_reread(
