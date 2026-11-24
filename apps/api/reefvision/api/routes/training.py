@@ -413,6 +413,10 @@ def _training_log_tail(
                 raise HTTPException(status_code=403, detail="Training log changed during open")
             handle.seek(0, 2)
             size = handle.tell()
+            # A truncate after fstat but before seeking EOF must not redefine
+            # the validated snapshot as a shorter, apparently complete log.
+            if size < opened_identity.st_size:
+                raise HTTPException(status_code=403, detail="Training log changed during read")
             start = max(0, size - 16384)
             # Freeze the range at the observed EOF, even if the worker appends
             # before read(). Include the boundary byte in the integrity check:
