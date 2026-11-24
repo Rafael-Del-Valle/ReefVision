@@ -6,6 +6,7 @@ import base64
 import binascii
 import json
 import struct
+from decimal import Decimal, InvalidOperation
 from math import isfinite
 from typing import Any
 
@@ -28,8 +29,8 @@ def _reject_nonfinite_json_constant(value: str) -> None:
     raise ValueError(f"GLB JSON contains nonfinite constant: {value}")
 
 
-def _finite_json_float(value: str) -> float:
-    """Reject JSON exponent overflow, including in otherwise ignored metadata."""
+def _finite_json_float(value: str) -> Decimal:
+    """Retain exact JSON decimals for identity QC, rejecting invalid exponents."""
     parsed = float(value)
     # JSON numbers are exact decimal tokens before conversion. Reject a
     # nonzero transform or bound that silently collapses to floating zero.
@@ -39,7 +40,12 @@ def _finite_json_float(value: str) -> float:
         raise ValueError("GLB JSON number underflows floating-point precision")
     if not isfinite(parsed):
         raise ValueError("GLB JSON contains nonfinite number")
-    return parsed
+    # A decimal slightly above or below one can round to binary64 one.
+    # Retain its source value so an unapplied transform cannot pass identity QC.
+    try:
+        return Decimal(value)
+    except InvalidOperation as exc:
+        raise ValueError("GLB JSON decimal outside supported range") from exc
 
 
 def _bounded_json_int(value: str) -> int:
@@ -209,7 +215,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         matrix = _as_list(node["matrix"], "node matrix")
         identity_matrix = tuple(1.0 if index % 5 == 0 else 0.0 for index in range(16))
         if len(matrix) != 16 or any(
-            type(value) not in (int, float)
+            type(value) not in (int, Decimal)
             or not -1_000_000_000 <= value <= 1_000_000_000
             or not isfinite(value)
             or value != expected
@@ -228,7 +234,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
             continue
         values = _as_list(node[name], f"node {name}")
         if len(values) != len(identity) or any(
-            type(value) not in (int, float) or not isfinite(value) or value != expected
+            type(value) not in (int, Decimal) or not isfinite(value) or value != expected
             for value, expected in zip(values, identity, strict=True)
         ):
             raise ValueError("GLB nonidentity or invalid scene transforms are unsupported")
@@ -327,7 +333,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
             continue
         declared = _as_list(position_accessor[field], f"position {field}")
         if len(declared) != 3 or any(
-            type(value) not in (int, float)
+            type(value) not in (int, Decimal)
             or not -1_000_000_000 <= value <= 1_000_000_000
             or not isfinite(value)
             for value in declared
