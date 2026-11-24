@@ -269,12 +269,35 @@ class GeographicPairwiseService:
             or content_hash(_definition_payload(definition)) != definition.definition_sha256
         ):
             raise ConflictError("Geographic pairwise definition checksum mismatch")
-        measurement = GeographicPairwiseMeasurement.model_validate(
-            result.payload_json.get("measurement")
-        )
+        # Match the persisted definition as well as the independent checksums.
+        # Otherwise a valid result can be relinked to another valid definition.
+        payload = result.payload_json
+        if (
+            payload.get("definition_id") != definition.id
+            or payload.get("definition_name") != definition.name
+            or payload.get("definition_sha256") != definition.definition_sha256
+            or payload.get("expression") != definition.expression
+            or payload.get("formula_version") != definition.formula_version
+            or payload.get("output_unit") != definition.output_unit
+        ):
+            raise ConflictError("Geographic pairwise result definition mismatch")
+        measurement = GeographicPairwiseMeasurement.model_validate(payload.get("measurement"))
         measurement_content = measurement.model_dump(mode="json", exclude={"content_sha256"})
         if content_hash(measurement_content) != measurement.content_sha256:
             raise ConflictError("Geographic pairwise measurement checksum mismatch")
+        if (
+            str(measurement.project_id) != project_id
+            or measurement.algorithm != ALGORITHM
+            or content_hash(measurement.start_snapshot) != measurement.start_snapshot_sha256
+            or content_hash(measurement.end_snapshot) != measurement.end_snapshot_sha256
+        ):
+            raise ConflictError("Geographic pairwise measurement provenance mismatch")
+        if definition.configuration_json != {
+            "schema_version": "1.1.0",
+            "start_observation_id": str(measurement.start_observation_id),
+            "end_observation_id": str(measurement.end_observation_id),
+        }:
+            raise ConflictError("Geographic pairwise result endpoint mismatch")
         return GeographicPairwiseSavedResponse(
             definition_id=definition.id,
             result_id=result.id,

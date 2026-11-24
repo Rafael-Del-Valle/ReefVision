@@ -16,6 +16,7 @@ from reefvision.schemas.geographic_pairwise import GeographicPairwiseCalculateRe
 from reefvision.schemas.georeferenced_observation import GeoReferencedObservation
 from reefvision.services.geographic_pairwise import GeographicPairwiseService
 from reefvision.services.georeferenced_observations import GeoReferencedObservationService
+from reefvision.services.scientific_data import content_hash
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_georeferenced_observation_api import _import_video, _payload
 from reefvision.tests.test_scientific_project_exchange import export_archive, import_archive
@@ -264,3 +265,54 @@ def test_pairwise_geography_executes_and_replays_in_workflow(
         )
         assert repeated.result_id == replay.result_id
         assert repeated.result_sha256 == replay.result_sha256
+
+def test_pairwise_saved_result_rejects_valid_but_unrelated_definition_and_measurement(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project, observations = _persist_pair(client, monkeypatch)
+    start_id, end_id = (str(observation.id) for observation in observations)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        service = GeographicPairwiseService(session)
+        first = service.calculate(
+            project["id"],
+            GeographicPairwiseCalculateRequest(
+                name="Forward", start_observation_id=start_id, end_observation_id=end_id
+            ),
+        )
+        reverse = service.calculate(
+            project["id"],
+            GeographicPairwiseCalculateRequest(
+                name="Reverse", start_observation_id=end_id, end_observation_id=start_id
+            ),
+        )
+        row = session.get(ComputedMetricResult, str(first.result_id))
+        assert row is not None
+        original_payload = dict(row.payload_json)
+        original_hash = row.content_sha256
+
+        # Both definitions have valid checksums; their identities are not interchangeable.
+        row.definition_id = str(reverse.definition_id)
+        session.flush()
+        with pytest.raises(ConflictError, match="result definition mismatch"):
+            service.get_result(project["id"], str(first.result_id))
+        row.definition_id = str(first.definition_id)
+        session.flush()
+
+        # Even a separately valid measurement cannot be attached to reversed endpoints.
+        row.payload_json = {
+            **original_payload,
+            "measurement": reverse.measurement.model_dump(mode="json"),
+        }
+        row.content_sha256 = content_hash(row.payload_json)
+        session.flush()
+        with pytest.raises(ConflictError, match="result endpoint mismatch"):
+            service.get_result(project["id"], str(first.result_id))
+
+        row.payload_json = original_payload
+        row.content_sha256 = original_hash
+        session.flush()
+        restored = service.get_result(project["id"], str(first.result_id))
+        assert restored == first
+        assert service.get_result(project["id"], str(reverse.result_id)) == reverse
+
