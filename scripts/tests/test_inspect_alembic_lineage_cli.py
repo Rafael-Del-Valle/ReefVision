@@ -48,7 +48,8 @@ def _create_0039_metric_pair(connection: sqlite3.Connection, variant: str = "val
         )
     if variant == "missing_unique":
         result_sql = result_sql.replace(
-            ", CONSTRAINT uq_computed_metric_result_workflow_node_run UNIQUE (workflow_node_run_id)",
+            ", CONSTRAINT uq_computed_metric_result_workflow_node_run "
+            "UNIQUE (workflow_node_run_id)",
             "",
         )
     connection.execute(definition_sql)
@@ -2001,7 +2002,8 @@ def test_computed_metric_structural_contracts(
         )
         connection.execute(
             "INSERT INTO computed_metric_results "
-            "(id, project_id, definition_id, observed_at, payload_json, content_sha256, created_at) "
+            "(id, project_id, definition_id, observed_at, payload_json, "
+            "content_sha256, created_at) "
             "VALUES ('result-1', 'project-1', 'def-1', '2026-11-24', "
             "'PRIVATE_METRIC_VALUE', 'hash', '2026-11-24')"
         )
