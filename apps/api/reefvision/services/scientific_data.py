@@ -224,8 +224,25 @@ class ScientificDataService:
                     )
                 except ValidationError:
                     verified = False
-                if verified and isinstance(record_ids, list):
-                    snapshot_current = row.id in record_ids
+                if verified and isinstance(record_ids, list) and row.id in record_ids:
+                    # A plausible ID list is insufficient: a missing or foreign
+                    # member invalidates the acquisition for all its observations.
+                    snapshot_current = True
+                    for offset in range(0, len(record_ids), 500):
+                        chunk = record_ids[offset : offset + 500]
+                        found = self.session.scalar(
+                            select(func.count())
+                            .select_from(ScientificRecord)
+                            .where(
+                                ScientificRecord.project_id == row.project_id,
+                                ScientificRecord.payload_json["environmental_cache_key"].as_string()
+                                == cache_key,
+                                ScientificRecord.id.in_(chunk),
+                            )
+                        )
+                        if found != len(chunk):
+                            snapshot_current = False
+                            break
         if row.payload_json.get("calibration_sha256"):
             image = self.session.get(ImageAsset, row.image_id) if row.image_id else None
             calibration = (
