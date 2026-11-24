@@ -55,6 +55,33 @@ def _managed_file(root: Path, value: str) -> Path:
     return resolved
 
 
+def _verify_frozen_frame_inventory(
+    root: Path, split: str, items: list[dict[str, Any]], advertised_count: object
+) -> int:
+    """Reconcile materialized frame and instance counts with reviewed truth."""
+    counts: dict[str, int] = {}
+    for item in items:
+        stem = f"frame_{item['frame_index']:08d}"
+        counts[stem] = counts.get(stem, 0) + 1
+
+    images = root / "images" / split
+    labels = root / "labels" / split
+    _require(
+        {file.name for file in images.glob("*.png")} == {f"{stem}.png" for stem in counts}
+        and {file.name for file in labels.glob("*.txt")} == {f"{stem}.txt" for stem in counts}
+        and type(advertised_count) is int
+        and advertised_count == len(counts),
+        f"Materialized {split} frame inventory differs from frozen reviewed truth",
+    )
+    for stem, count in counts.items():
+        rows = (labels / f"{stem}.txt").read_text(encoding="utf-8").splitlines()
+        _require(
+            len(rows) == count and all(row.strip() for row in rows),
+            f"Materialized {split} instance count differs from frozen truth: {stem}",
+        )
+    return len(counts)
+
+
 def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
     # The app imports are delayed so the script works from a source checkout.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps" / "api"))
@@ -473,6 +500,21 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             # Reuse the production worker's read-only fingerprint verification,
             # including its path, symlink, junction, and hard-link protections.
             _verify_prelaunch_pose_dataset(root / dataset_path, materialization)
+            # The materialization hash only authenticates the recorded tree.
+            # Independently count reviewed instances per exported frame so a
+            # rehashed incomplete or duplicated split cannot pass acceptance.
+            train_frame_count = _verify_frozen_frame_inventory(
+                root / dataset_path,
+                "train",
+                dataset.manifest_json["items"],
+                materialization.get("training_image_count"),
+            )
+            validation_frame_count = _verify_frozen_frame_inventory(
+                root / dataset_path,
+                "val",
+                validation_dataset.manifest_json["items"] if validation_id is not None else [],
+                materialization.get("validation_image_count"),
+            )
             # A successful retraining run must still be traceable to its
             # original local registered pose model, not only to the output
             # checkpoint. Preserve and authenticate user-trained seed weights.
@@ -700,6 +742,8 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 ),
                 "validation_mode": expected_validation_mode,
                 "materialized_dataset_sha256": materialization["materialized_dataset_sha256"],
+                "verified_training_frame_count": train_frame_count,
+                "verified_validation_frame_count": validation_frame_count,
                 "materialized_dataset_fingerprint_algorithm": materialization.get(
                     "materialized_dataset_fingerprint_algorithm"
                 ),
