@@ -205,9 +205,7 @@ def test_pairwise_geography_persists_complete_snapshots_currentness_and_csv(
     assert stale.json()["current_measurement_sha256"] is None
 
     # Currentness is separate from the immutable historical measurement and export.
-    historical = client.get(
-        f"/api/v1/projects/{project['id']}/geographic-pairwise/{result_id}"
-    )
+    historical = client.get(f"/api/v1/projects/{project['id']}/geographic-pairwise/{result_id}")
     assert historical.status_code == 200, historical.text
     assert historical.json() == saved
     historical_export = client.get(
