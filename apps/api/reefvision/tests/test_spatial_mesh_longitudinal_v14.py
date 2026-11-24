@@ -2771,9 +2771,7 @@ def test_typed_mesh_executor_rejects_impossible_partial_manifold_patches(
 
 
 @pytest.mark.parametrize("timepoint", ["before", "after"])
-def test_zero_area_patch_cannot_carry_positive_fraction(
-    client: TestClient, timepoint: str
-) -> None:
+def test_zero_area_patch_cannot_carry_positive_fraction(client: TestClient, timepoint: str) -> None:
     """A degenerate patch cannot acquire area mass from a rounding tolerance."""
     records = {}
     for side, day in (("before", "01"), ("after", "02")):
