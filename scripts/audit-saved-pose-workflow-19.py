@@ -4,6 +4,7 @@
 This is a manual scientific acceptance gate, not a synthetic CI fixture.
 A PASS requires a saved run, reviewed frozen truth, finished training, a
 checkpoint, and a registered local model whose actual file digests match.
+The database must already be at the migration head of this checkout.
 It does not certify the Windows installer or GPU hardware independently.
 """
 
@@ -122,9 +123,28 @@ def _verify_source_frame_pixels(
     return verified
 
 
+def _verify_database_revision(connection: Any, api_dir: Path) -> str:
+    """Require the saved database to match this checkout's migration head."""
+    from alembic.config import Config
+    from alembic.migration import MigrationContext
+    from alembic.script import ScriptDirectory
+
+    scripts = ScriptDirectory.from_config(Config(str(api_dir / "alembic.ini")))
+    expected = scripts.get_heads()
+    if len(expected) != 1:
+        raise ValueError("Acceptance requires one source migration head")
+    actual = MigrationContext.configure(connection).get_current_heads()
+    if tuple(expected) != actual:
+        raise ValueError(
+            f"Database migration revision {actual} differs from source head {expected}"
+        )
+    return actual[0]
+
+
 def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
     # The app imports are delayed so the script works from a source checkout.
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps" / "api"))
+    api_dir = Path(__file__).resolve().parents[1] / "apps" / "api"
+    sys.path.insert(0, str(api_dir))
     from sqlalchemy import create_engine, event, select
     from sqlalchemy.orm import Session
 
@@ -170,6 +190,9 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
 
     try:
         with Session(engine) as session:
+            # Read the migration stamp within the same snapshot as the scientific records.
+            # Never stamp or upgrade a database as part of this acceptance check.
+            database_revision = _verify_database_revision(session.connection(), api_dir)
             run = session.get(WorkflowRun, run_id)
             _require(run is not None and run.status == "succeeded", "Saved run did not succeed")
             # The durable parent job proves that this saved graph was executed
@@ -833,6 +856,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             return {
                 "status": "PASS",
                 "evidence_schema_version": "saved-pose-workflow-audit-0001",
+                "verified_database_alembic_revision": database_revision,
                 "project_id": run.project_id,
                 "workflow_run_id": run.id,
                 "workflow_job_id": parent_job.id,
