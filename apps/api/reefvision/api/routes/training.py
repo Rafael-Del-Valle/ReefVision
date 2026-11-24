@@ -488,6 +488,23 @@ def _training_log_tail(
             handle.seek(snapshot_start)
             if handle.read(len(snapshot_payload)) != snapshot_payload:
                 raise HTTPException(status_code=403, detail="Training log changed during read")
+            # Rotation during the verification reread can leave the old
+            # handle readable even though the run's persisted path now names
+            # a different file. Revalidate the path after that final read.
+            verified_path = path.resolve(strict=True)
+            verified_identity = verified_path.stat()
+            if (
+                verified_path != path
+                or verified_identity.st_nlink != 1
+                or (verified_identity.st_dev, verified_identity.st_ino)
+                != (opened_identity.st_dev, opened_identity.st_ino)
+                or verified_identity.st_size < max(size, current_identity.st_size)
+                or (
+                    verified_identity.st_size == current_identity.st_size
+                    and verified_identity.st_mtime_ns != current_identity.st_mtime_ns
+                )
+            ):
+                raise HTTPException(status_code=403, detail="Training log changed during read")
     except (OSError, RuntimeError, ValueError):
         # Transient filesystem failures or a symlink loop after the initial
         # validation are unavailable snapshots, not training-job failures.
