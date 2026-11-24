@@ -24,6 +24,7 @@ from reefvision.tests.test_environmental_context import noaa_fixture
         "record_ids_not_list",
         "record_ids_non_string",
         "duplicate_record_ids",
+        "missing_member_record_id",
         "missing_cache_identity",
         "null_cache_identity",
         "list_cache_identity",
@@ -69,6 +70,10 @@ def test_scientific_record_listing_flags_malformed_rehashed_cache_as_not_current
             payload["record_ids"][0] = 42
         elif damage == "duplicate_record_ids":
             payload["record_ids"][1] = payload["record_ids"][0]
+        elif damage == "missing_member_record_id":
+            # Preserve both genuine IDs; an invented additional member must
+            # invalidate the entire acquisition, not only the missing row.
+            payload["record_ids"].append("00000000-0000-4000-8000-000000000000")
         elif damage == "missing_cache_identity":
             del payload["cache_identity"]
         elif damage == "null_cache_identity":
