@@ -1385,3 +1385,60 @@ def test_training_log_observer_reread_detects_real_in_place_change(
     assert error.value.status_code == 403
     assert calls == 2
     assert log.read_bytes() == replacement + appended
+
+@pytest.mark.parametrize("rotated", [True, False])
+def test_log_tail_rechecks_path_after_verification_reread(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rotated: bool
+) -> None:
+    """A late path rotation must not expose the previous file's loss snapshot."""
+    log = tmp_path / "training.log"
+    original = b"epoch=4\ntrain/box_loss=0.25\n"
+    log.write_bytes(original)
+    replacement = tmp_path / "other-run.log"
+    unrelated = b"epoch=9\ntrain/box_loss=9.99\n"
+    replacement.write_bytes(unrelated)
+    real_open = training_routes._open_training_log
+    real_stat = Path.stat
+    reads = 0
+
+    class LateRotationHandle:
+        def __init__(self, handle):
+            self.handle = handle
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.handle.close()
+
+        def __getattr__(self, name):
+            return getattr(self.handle, name)
+
+        def read(self, size=-1):
+            nonlocal reads
+            data = self.handle.read(size)
+            reads += 1
+            return data
+
+    def stat_after_reread(path: Path, *args: object, **kwargs: object) -> os.stat_result:
+        # Simulate the path changing during the reread without relying on
+        # Windows permitting rename of a file with an open reader.
+        target = replacement if path == log and rotated and reads >= 2 else path
+        return real_stat(target, *args, **kwargs)
+
+    monkeypatch.setattr(
+        training_routes, "_open_training_log", lambda path: LateRotationHandle(real_open(path))
+    )
+    monkeypatch.setattr(Path, "stat", stat_after_reread)
+    if rotated:
+        with pytest.raises(HTTPException) as error:
+            training_routes._training_log_tail("training.log", tmp_path)
+        assert error.value.status_code == 403
+    else:
+        assert training_routes._training_log_tail("training.log", tmp_path) == {
+            "available": True,
+            "text": original.decode("utf-8"),
+        }
+    assert reads == 2
+    assert log.read_bytes() == original
+    assert replacement.read_bytes() == unrelated
