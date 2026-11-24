@@ -48,8 +48,8 @@ FAMILIES = {
 # optional read-only structural audit checks their declared SQLite column types and DDL shapes
 # to help a researcher assess provenance, not to authorize a migration.
 # The 1.1 environmental 0040/0042 contracts are also audited below. The
-# QC bulk registry 0041 is audited as well; scientific metric tables still require
-# separate structural reconciliation.
+# QC bulk registry 0041 and the revision-specific computed metric contracts
+# are also audited; the separate lineage reconciliation remains mandatory.
 _POST_0037_TABLE_CONTRACTS = {
     "scientific_records": {
         "columns": frozenset(
@@ -146,6 +146,98 @@ _POST_0037_TABLE_CONTRACTS = {
         ),
         "foreign_keys": frozenset({("project_id", "projects", "id", "CASCADE")}),
         "indexes": frozenset({(("project_id", "cache_key"), True)}),
+    },
+    "computed_metric_definitions": {
+        "columns": frozenset(
+            {
+                "id",
+                "project_id",
+                "name",
+                "expression",
+                "formula_version",
+                "input_spec_json",
+                "output_unit",
+                "definition_sha256",
+                "created_at",
+            }
+        ),
+        "types": {
+            "id": "VARCHAR(36)",
+            "project_id": "VARCHAR(36)",
+            "name": "VARCHAR(200)",
+            "expression": "VARCHAR(1000)",
+            "formula_version": "VARCHAR(100)",
+            "input_spec_json": "JSON",
+            "output_unit": "VARCHAR(50)",
+            "definition_sha256": "VARCHAR(64)",
+            "created_at": "DATETIME",
+        },
+        "required": frozenset(
+            {
+                "id",
+                "project_id",
+                "name",
+                "expression",
+                "formula_version",
+                "input_spec_json",
+                "output_unit",
+                "definition_sha256",
+                "created_at",
+            }
+        ),
+        "foreign_keys": frozenset({("project_id", "projects", "id", "CASCADE")}),
+        "indexes": frozenset({(("project_id", "created_at"), False)}),
+    },
+    "computed_metric_results": {
+        "columns": frozenset(
+            {
+                "id",
+                "project_id",
+                "definition_id",
+                "observed_at",
+                "payload_json",
+                "content_sha256",
+                "workflow_run_id",
+                "workflow_node_run_id",
+                "created_at",
+            }
+        ),
+        "types": {
+            "id": "VARCHAR(36)",
+            "project_id": "VARCHAR(36)",
+            "definition_id": "VARCHAR(36)",
+            "observed_at": "DATETIME",
+            "payload_json": "JSON",
+            "content_sha256": "VARCHAR(64)",
+            "workflow_run_id": "VARCHAR(36)",
+            "workflow_node_run_id": "VARCHAR(36)",
+            "created_at": "DATETIME",
+        },
+        "required": frozenset(
+            {
+                "id",
+                "project_id",
+                "definition_id",
+                "observed_at",
+                "payload_json",
+                "content_sha256",
+                "created_at",
+            }
+        ),
+        "foreign_keys": frozenset(
+            {
+                ("project_id", "projects", "id", "CASCADE"),
+                ("definition_id", "computed_metric_definitions", "id", "RESTRICT"),
+                ("workflow_run_id", "workflow_runs", "id", "RESTRICT"),
+                ("workflow_node_run_id", "workflow_node_runs", "id", "RESTRICT"),
+            }
+        ),
+        "indexes": frozenset(
+            {
+                (("project_id", "created_at"), False),
+                (("workflow_node_run_id",), True),
+            }
+        ),
     },
     "environmental_event_definitions": {
         "columns": frozenset(
@@ -402,6 +494,12 @@ _POST_0037_NAMED_LOOKUP_INDEXES = {
         "ix_scientific_project_variable_time": ("project_id", "variable", "observed_at"),
     },
     "environmental_cache_entries": {},
+    "computed_metric_definitions": {
+        "ix_computed_metric_definition_project": ("project_id", "created_at"),
+    },
+    "computed_metric_results": {
+        "ix_computed_metric_result_project": ("project_id", "created_at"),
+    },
     "review_queue_bulk_requests": {},
     "environmental_event_definitions": {
         "ix_environmental_event_definition_project": ("project_id", "created_at"),
@@ -572,6 +670,20 @@ def _post_0037_table_contract_matches(
     and data-preserving migration acceptance can resolve the revision conflict.
     """
     contract = _POST_0037_TABLE_CONTRACTS[table]
+    expected_types = dict(contract["types"])
+    expected_required = set(contract["required"])
+    expected_defaults = {}
+    # The scientific 0041 migration extends the scalar definitions/results.
+    # Do not accept later columns at an earlier or unknown revision.
+    if revision in {"0041", "0042"}:
+        if table == "computed_metric_definitions":
+            expected_types.update(definition_kind="VARCHAR(40)", configuration_json="JSON")
+            expected_required.add("definition_kind")
+            expected_defaults["definition_kind"] = "'scalar'"
+        elif table == "computed_metric_results":
+            expected_types["result_kind"] = "VARCHAR(40)"
+            expected_required.add("result_kind")
+            expected_defaults["result_kind"] = "'scalar'"
     # Neither verified revision-0038 source migration declares table triggers.
     # Extra AFTER/BEFORE/INSTEAD OF triggers can change future scientific
     # records or reviewer events while every column, FK and index still
@@ -600,17 +712,16 @@ def _post_0037_table_contract_matches(
     by_name = {row[1]: row for row in columns}
     declared_types = {name: " ".join(str(row[2]).upper().split()) for name, row in by_name.items()}
     if (
-        set(by_name) != contract["columns"]
-        or declared_types != contract["types"]
+        set(by_name) != set(expected_types)
+        or declared_types != expected_types
         or any(row[6] != 0 for row in columns)
         # A new NOT NULL on an originally nullable observation or review field
         # can reject legitimate future data; making a required field nullable
         # can admit unattributed evidence. Check the complete original contract.
-        or any(bool(row[3]) != (name in contract["required"]) for name, row in by_name.items())
-        # Neither source 0038 table declares column defaults. Injected defaults
-        # can fabricate future measurements or reviewer attribution while all
-        # current rows and indices remain unchanged.
-        or any(row[4] is not None for row in columns)
+        or any(bool(row[3]) != (name in expected_required) for name, row in by_name.items())
+        # Only the scientific 0041 discriminator columns have declared defaults.
+        # Injected defaults could fabricate future measurements or attribution.
+        or any(row[4] != expected_defaults.get(name) for name, row in by_name.items())
         or [row[1] for row in columns if row[5] > 0] != ["id"]
     ):
         return False

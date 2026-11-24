@@ -11,6 +11,65 @@ import pytest
 SCRIPT = Path(__file__).resolve().parents[1] / "inspect-alembic-lineage.py"
 
 
+def _create_0039_metric_pair(connection: sqlite3.Connection, variant: str = "valid") -> None:
+    """Mirror the independent 1.1 scalar metric migration's SQLite contract."""
+    definition_sql = (
+        "CREATE TABLE computed_metric_definitions ("
+        "id VARCHAR(36) NOT NULL PRIMARY KEY, "
+        "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE CASCADE, "
+        "name VARCHAR(200) NOT NULL, expression VARCHAR(1000) NOT NULL, "
+        "formula_version VARCHAR(100) NOT NULL, input_spec_json JSON NOT NULL, "
+        "output_unit VARCHAR(50) NOT NULL, definition_sha256 VARCHAR(64) NOT NULL, "
+        "created_at DATETIME NOT NULL)"
+    )
+    result_sql = (
+        "CREATE TABLE computed_metric_results ("
+        "id VARCHAR(36) NOT NULL PRIMARY KEY, "
+        "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE CASCADE, "
+        "definition_id VARCHAR(36) NOT NULL "
+        "REFERENCES computed_metric_definitions(id) ON DELETE RESTRICT, "
+        "observed_at DATETIME NOT NULL, payload_json JSON NOT NULL, "
+        "content_sha256 VARCHAR(64) NOT NULL, "
+        "workflow_run_id VARCHAR(36) REFERENCES workflow_runs(id) ON DELETE RESTRICT, "
+        "workflow_node_run_id VARCHAR(36) REFERENCES workflow_node_runs(id) ON DELETE RESTRICT, "
+        "created_at DATETIME NOT NULL, "
+        "CONSTRAINT uq_computed_metric_result_workflow_node_run UNIQUE (workflow_node_run_id))"
+    )
+    if variant == "unit_type":
+        definition_sql = definition_sql.replace("output_unit VARCHAR(50)", "output_unit TEXT")
+    if variant == "formula_nullable":
+        definition_sql = definition_sql.replace(
+            "formula_version VARCHAR(100) NOT NULL", "formula_version VARCHAR(100)"
+        )
+    if variant == "workflow_cascade":
+        result_sql = result_sql.replace(
+            "REFERENCES workflow_runs(id) ON DELETE RESTRICT",
+            "REFERENCES workflow_runs(id) ON DELETE CASCADE",
+        )
+    if variant == "missing_unique":
+        result_sql = result_sql.replace(
+            ", CONSTRAINT uq_computed_metric_result_workflow_node_run UNIQUE (workflow_node_run_id)",
+            "",
+        )
+    connection.execute(definition_sql)
+    connection.execute(result_sql)
+    connection.execute(
+        "CREATE INDEX ix_computed_metric_definition_project "
+        "ON computed_metric_definitions (project_id, created_at)"
+    )
+    if variant != "missing_index":
+        connection.execute(
+            "CREATE INDEX ix_computed_metric_result_project "
+            "ON computed_metric_results (project_id, created_at)"
+        )
+    if variant == "result_trigger":
+        connection.execute(
+            "CREATE TRIGGER rewrite_metric AFTER INSERT ON computed_metric_results "
+            "BEGIN UPDATE computed_metric_results SET payload_json = 'PRIVATE_TRIGGER_BODY' "
+            "WHERE id = NEW.id; END"
+        )
+
+
 def _add_0041_aggregate_columns(connection: sqlite3.Connection) -> None:
     """Apply only the source-audited 0041 additions to synthetic metric fixtures."""
     connection.execute(
@@ -1341,14 +1400,21 @@ def test_0038_scientific_cache_and_declared_type_contracts(
             "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
         )
         connection.execute("INSERT INTO alembic_version VALUES ('0039')")
-        for parent in ("projects", "images", "videos", "video_tracks", "jobs"):
+        for parent in (
+            "projects",
+            "images",
+            "videos",
+            "video_tracks",
+            "jobs",
+            "workflow_runs",
+            "workflow_node_runs",
+        ):
             connection.execute(f'CREATE TABLE "{parent}" (id VARCHAR(36) PRIMARY KEY)')
         connection.execute(science_sql)
         connection.execute(cache_sql)
         # Revision 0039 also creates the metric pair. Keep the fixture complete
         # so this test isolates the 0038 structural-contract variants.
-        connection.execute("CREATE TABLE computed_metric_definitions (id INTEGER PRIMARY KEY)")
-        connection.execute("CREATE TABLE computed_metric_results (id INTEGER PRIMARY KEY)")
+        _create_0039_metric_pair(connection)
         connection.execute(
             "CREATE INDEX ix_scientific_project_variable_time "
             "ON scientific_records (project_id, variable, observed_at)"
@@ -1656,8 +1722,7 @@ def test_environmental_extension_structural_contracts(
             "CREATE INDEX ix_scientific_project_variable_time "
             "ON scientific_records (project_id, variable, observed_at)"
         )
-        connection.execute("CREATE TABLE computed_metric_definitions (id INTEGER PRIMARY KEY)")
-        connection.execute("CREATE TABLE computed_metric_results (id INTEGER PRIMARY KEY)")
+        _create_0039_metric_pair(connection)
         _add_0041_aggregate_columns(connection)
         connection.execute(event_sql)
         connection.execute(definition_sql)
@@ -1899,4 +1964,67 @@ def test_revision_must_belong_to_detected_schema_lineage(
         assert report["revision_rows"] == [revision]
         assert report["upgrade_authorized"] is False
         assert "private coral record" not in result.stdout + result.stderr
+        assert database.read_bytes() == original
+
+
+@pytest.mark.parametrize("revision", ["0039", "0040", "0041", "0042"])
+@pytest.mark.parametrize(
+    ("variant", "mismatch"),
+    [
+        ("valid", None),
+        ("unit_type", "computed_metric_definitions"),
+        ("formula_nullable", "computed_metric_definitions"),
+        ("workflow_cascade", "computed_metric_results"),
+        ("missing_unique", "computed_metric_results"),
+        ("missing_index", "computed_metric_results"),
+        ("result_trigger", "computed_metric_results"),
+    ],
+)
+def test_computed_metric_structural_contracts(
+    tmp_path: Path, revision: str, variant: str, mismatch: str | None
+) -> None:
+    database = tmp_path / "metric-contract.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
+        connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        for parent in ("projects", "workflow_runs", "workflow_node_runs"):
+            connection.execute(f'CREATE TABLE "{parent}" (id VARCHAR(36) PRIMARY KEY)')
+        _create_0039_metric_pair(connection, variant)
+        if revision in {"0041", "0042"}:
+            _add_0041_aggregate_columns(connection)
+        connection.execute("INSERT INTO projects VALUES ('project-1')")
+        connection.execute(
+            "INSERT INTO computed_metric_definitions "
+            "(id, project_id, name, expression, formula_version, input_spec_json, output_unit, "
+            "definition_sha256, created_at) VALUES "
+            "('def-1', 'project-1', 'PRIVATE_FORMULA', 'x', 'v1', '{}', 'mm', 'hash', '2026-11-24')"
+        )
+        connection.execute(
+            "INSERT INTO computed_metric_results "
+            "(id, project_id, definition_id, observed_at, payload_json, content_sha256, created_at) "
+            "VALUES ('result-1', 'project-1', 'def-1', '2026-11-24', "
+            "'PRIVATE_METRIC_VALUE', 'hash', '2026-11-24')"
+        )
+    original = database.read_bytes()
+    for _ in range(2):
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT), "--verify-structural-contracts", str(database)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert completed.returncode == 0, completed.stderr
+        report = json.loads(completed.stdout)
+        assert report["lineage_hint"] == "scientific"
+        assert report["upgrade_authorized"] is False
+        for table in ("computed_metric_definitions", "computed_metric_results"):
+            assert report["structural_contracts"][table] == (
+                "mismatch" if table == mismatch else "matches"
+            )
+            assert (f"lineage_table_contract_mismatch_{table}" in report["warnings"]) == (
+                table == mismatch
+            )
+            assert report["inventory"][table]["rows"] == 1
+        for private in ("PRIVATE_FORMULA", "PRIVATE_METRIC_VALUE", "PRIVATE_TRIGGER_BODY"):
+            assert private not in completed.stdout + completed.stderr
         assert database.read_bytes() == original

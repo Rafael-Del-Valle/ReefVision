@@ -112,3 +112,24 @@ SQLAlchemy-compiled SQLite probes confirmed all ten structural cases;
 full exact-head repository CI remains required. No migration or
 scientific workflow node is changed; existing standalone/saved QC
 workflow execution, provenance, retry and human approval remain intact.
+
+
+## 2026-11-24 — Complete scalar/aggregate metric DDL inventory
+
+The previous exact-head CI run `45385950760` passed backend, frontend
+and native-Windows preservation. The read-only structural audit now
+covers both scientific 0039 metric tables, using the actual independent
+1.1 migrations 0039 and 0041. It checks formula/version/unit columns,
+required provenance, foreign keys and delete actions, named lookup
+indexes, workflow-node result uniqueness and unexpected triggers.
+At revisions 0041–0042 it additionally requires the actual discriminator
+and configuration columns, including their original defaults. Earlier
+stages must retain the original scalar schema. This is structural
+evidence only; no stored formula or result is authenticated by it.
+
+Added 28 persisted stage/variant regression configurations, and replaced
+two placeholder metric-pair fixtures with the original scalar shape.
+Independent SQLAlchemy/SQLite checks passed for the same 28 combinations;
+complete repository CI is still required. The report remains read-only
+and never authorizes upgrades. Existing typed saved QC workflows,
+provenance, retry and researcher review are unchanged.
