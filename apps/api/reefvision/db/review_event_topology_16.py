@@ -87,6 +87,17 @@ def assert_review_event_relationship_topology(connection: Connection) -> None:
             f"actual={sorted(foreign_keys)}; expected={sorted(_EXPECTED_FOREIGN_KEYS)}. "
             "Preserve reviewer history and reconcile using a reviewed migration."
         )
+    if connection.dialect.name == "sqlite":
+        # SQLAlchemy skips SQLite expression indexes, including UNIQUE and
+        # partial ones. Automatic PK/UNIQUE indexes are not explicit indexes.
+        index_rows = connection.execute(text("PRAGMA index_list(review_queue_item_events)"))
+        explicit_names = [row["name"] for row in index_rows.mappings() if row["origin"] == "c"]
+        expected_names = set(_EXPECTED_INDEXES)
+        if len(explicit_names) != len(expected_names) or set(explicit_names) != expected_names:
+            raise RuntimeError(
+                "Unsafe QC review-event history index topology: "
+                "noncanonical explicit index inventory. Preserve reviewer history."
+            )
     inspected_indexes = inspector.get_indexes(table)
     # UNIQUE or partial history indexes alter the original 0038 audit contract.
     # An expression index cannot provide the required full-column ordering.

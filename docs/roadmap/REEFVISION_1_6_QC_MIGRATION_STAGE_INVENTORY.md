@@ -253,3 +253,20 @@ SQLAlchemy policy probes passed, including three reproduced cascade changes.
 The previous exact-head Ruff formatting diagnostic was corrected. Full CI and
 representative saved-workflow acceptance remain required; this preflight is
 not a new scientific node and does not modify a database or approve a review.
+
+## 2026-11-24 — reflection-hidden QC history indexes
+
+SQLite expression indexes are omitted by SQLAlchemy index reflection, including
+unique and partial expression indexes. The original QC event migration has
+exactly two explicit history indexes; its automatic primary-key and request
+UNIQUE indexes are distinct. Desktop topology validation now checks the raw
+SQLite explicit index inventory before reflection, rejecting extra or missing
+explicit indexes while retaining the original automatic indexes. The guard
+does not expose hidden index definitions, modify observations, or approve
+review events. Six disposable database probes verified three previously
+invisible expression-index variants, ordinary extra and missing indexes, and
+the original positive control, with repeated read-only checks. The six
+persisted regression configurations require exact schema and event-row
+preservation. Full repository CI and independent biological acceptance remain
+required. This is a startup safety guard, not a new scientific node or
+migration reconciliation; existing typed saved QC workflows are unchanged.

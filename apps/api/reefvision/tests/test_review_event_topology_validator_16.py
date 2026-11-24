@@ -301,3 +301,63 @@ def test_non_sqlite_review_event_update_policy_rejected(update_action: str) -> N
         assert_review_event_relationship_topology(connection)
     connection.execute.assert_not_called()
     inspector.get_indexes.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "extra_ddl",
+    [
+        "",
+        "CREATE INDEX hidden_expression ON review_queue_item_events(lower(project_id))",
+        "CREATE UNIQUE INDEX hidden_expression ON review_queue_item_events(lower(project_id))",
+        "CREATE INDEX hidden_expression ON review_queue_item_events(lower(project_id)) "
+        "WHERE created_at IS NOT NULL",
+        "CREATE INDEX hidden_expression ON review_queue_item_events(project_id)",
+        "DROP INDEX ix_review_queue_item_events_queue_created",
+    ],
+)
+def test_sqlite_explicit_index_inventory_preserves_event_history(extra_ddl: str) -> None:
+    """Reflection-hidden indexes cannot change the append-only event contract."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    try:
+        with engine.begin() as connection:
+            for parent in ("projects", "review_queues", "review_queue_items"):
+                connection.exec_driver_sql(f"CREATE TABLE {parent} (id TEXT PRIMARY KEY)")
+            connection.exec_driver_sql(
+                "CREATE TABLE review_queue_item_events ("
+                "id TEXT PRIMARY KEY, review_queue_id TEXT, review_queue_item_id TEXT, "
+                "project_id TEXT, client_request_id TEXT, created_at TEXT, "
+                "FOREIGN KEY (review_queue_id) REFERENCES review_queues(id) ON DELETE CASCADE, "
+                "FOREIGN KEY (review_queue_item_id) REFERENCES review_queue_items(id) "
+                "ON DELETE CASCADE, "
+                "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE, "
+                "CONSTRAINT uq_review_queue_item_event_request "
+                "UNIQUE (review_queue_item_id, client_request_id))"
+            )
+            connection.exec_driver_sql(
+                "CREATE INDEX ix_review_queue_item_events_item_created "
+                "ON review_queue_item_events (review_queue_item_id, created_at)"
+            )
+            connection.exec_driver_sql(
+                "CREATE INDEX ix_review_queue_item_events_queue_created "
+                "ON review_queue_item_events (review_queue_id, created_at)"
+            )
+            if extra_ddl:
+                connection.exec_driver_sql(extra_ddl)
+            connection.exec_driver_sql(
+                "INSERT INTO review_queue_item_events "
+                "VALUES ('event', 'queue', 'item', 'project', 'request', '2026-11-24')"
+            )
+            schema_query = "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+            row_query = "SELECT * FROM review_queue_item_events"
+            before_schema = connection.exec_driver_sql(schema_query).all()
+            before_rows = connection.exec_driver_sql(row_query).all()
+            for _ in range(2):
+                if extra_ddl:
+                    with pytest.raises(RuntimeError, match="noncanonical explicit index inventory"):
+                        assert_review_event_relationship_topology(connection)
+                else:
+                    assert_review_event_relationship_topology(connection)
+                assert connection.exec_driver_sql(schema_query).all() == before_schema
+                assert connection.exec_driver_sql(row_query).all() == before_rows
+    finally:
+        engine.dispose()
