@@ -142,6 +142,7 @@ def test_longitudinal_scale_only_area_difference_sign(
     [
         "single",
         "manifold_pair",
+        "manifold_disconnected",
         "nonmanifold",
         "nonmanifold_disconnected",
         "nonmanifold_four_face_fan",
@@ -161,6 +162,19 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
         for record, height in ((before, 1.0), (after, 1.1)):
             record["vertices"] = [[0, 0, 0], [1, 0, 0], [0, height, 0], [0, -height, 0]]
             record["faces"] = [[0, 1, 2], [1, 0, 3]]
+    elif topology == "manifold_disconnected":
+        for record, height in ((before, 1.0), (after, 1.1)):
+            record["vertices"] = [
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, height, 0],
+                [0, -height, 0],
+                [2, 0, 0],
+                [3, 0, 0],
+                [2, height, 0],
+                [2, -height, 0],
+            ]
+            record["faces"] = [[0, 1, 2], [1, 0, 3], [4, 5, 6], [5, 4, 7]]
     elif topology == "near_identical":
         after["vertices"][2][1] = 1.0 + 2**-48
     elif topology == "near_identical_decrease":
@@ -195,6 +209,7 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
         "near_identical": (2**-49, 1, 3, 0, 1),
         "near_identical_decrease": (-(2**-49), 1, 3, 0, 1),
         "manifold_pair": (0.1, 2, 4, 0, 1),
+        "manifold_disconnected": (0.2, 4, 8, 0, 2),
         "nonmanifold": (0.15, 3, 6, 1, 1),
         "nonmanifold_disconnected": (0.2, 4, 9, 1, 2),
         "nonmanifold_four_face_fan": (0.2, 4, 8, 1, 1),
@@ -2460,6 +2475,34 @@ def test_longitudinal_patch_arrays_bind_full_mesh_topology(
     assert result["provenance"]["specimen_identity_verified"] is False
     target = before if timepoint == "before" else after
     target[f"edge_connected_patch_{field}"] = values
+    with pytest.raises(ValueError, match=error):
+        compare_mesh_observations(before, after)
+
+
+@pytest.mark.parametrize(
+    ("boundary_counts", "error"),
+    [([4, 6], "patch two-face edge incidence parity"), ([3, 7], "patch shared edges insufficient")],
+)
+@pytest.mark.parametrize("timepoint", ["before", "after"])
+def test_longitudinal_manifold_patch_connectivity(
+    boundary_counts: list[int], error: str, timepoint: str
+) -> None:
+    """Valid global totals cannot substitute for per-patch connectivity."""
+    before, after = _minimal_topology_pair()
+    for record in (before, after):
+        record.update(
+            face_count=6,
+            edge_connected_patch_count=2,
+            boundary_edge_count=10,
+            nonmanifold_edge_count=0,
+            edge_connected_patch_face_counts=[3, 3],
+            edge_connected_patch_boundary_edge_counts=[5, 5],
+            edge_connected_patch_nonmanifold_edge_counts=[0, 0],
+        )
+    result = compare_mesh_observations(before, after)
+    assert result["provenance"]["specimen_identity_verified"] is False
+    target = before if timepoint == "before" else after
+    target["edge_connected_patch_boundary_edge_counts"] = boundary_counts
     with pytest.raises(ValueError, match=error):
         compare_mesh_observations(before, after)
 
