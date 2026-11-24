@@ -63,6 +63,11 @@ def _declaration(source: bytes, path: str) -> tuple[str, list[str], list[str]]:
             raise ValueError(f"Invalid Alembic {name}: {path}")
         return list(candidates)
 
+    # A missing declaration is not an explicit root migration. Alembic
+    # requires the module to declare down_revision, even for its root.
+    if "down_revision" not in values:
+        raise ValueError(f"Missing Alembic down_revision declaration: {path}")
+
     revision = values.get("revision")
     if not isinstance(revision, str) or not revision:
         raise ValueError(f"Invalid Alembic revision: {path}")
