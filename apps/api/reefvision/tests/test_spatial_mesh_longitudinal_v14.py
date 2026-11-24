@@ -2463,7 +2463,7 @@ def test_mesh_comparison_rejects_impossible_topology_relationships(
         ("face_counts", [4, 0], "patch array"),
         ("boundary_edge_counts", [9], "contradicts counts"),
         ("boundary_edge_counts", [3, 6], "patch edge incidences"),
-        ("nonmanifold_edge_counts", [0, 1], "patch edge incidences"),
+        ("nonmanifold_edge_counts", [0, 1], "patch two-face edge incidence parity"),
         ("nonmanifold_edge_counts", [True, 0], "patch array"),
     ],
 )
@@ -2488,6 +2488,27 @@ def test_longitudinal_patch_arrays_bind_full_mesh_topology(
     target = before if timepoint == "before" else after
     target[f"edge_connected_patch_{field}"] = values
     with pytest.raises(ValueError, match=error):
+        compare_mesh_observations(before, after)
+
+
+@pytest.mark.parametrize("timepoint", ["before", "after"])
+def test_partial_patch_arrays_reject_nonmanifold_single_face(timepoint: str) -> None:
+    """Missing per-patch boundary counts cannot hide impossible nonmanifold edges."""
+    before, after = _minimal_topology_pair()
+    for record in (before, after):
+        record.update(
+            face_count=4,
+            edge_connected_patch_count=2,
+            boundary_edge_count=9,
+            nonmanifold_edge_count=1,
+            edge_connected_patch_face_counts=[3, 1],
+            edge_connected_patch_nonmanifold_edge_counts=[1, 0],
+        )
+    result = compare_mesh_observations(before, after)
+    assert result["provenance"]["specimen_identity_verified"] is False
+    target = before if timepoint == "before" else after
+    target["edge_connected_patch_nonmanifold_edge_counts"] = [0, 1]
+    with pytest.raises(ValueError, match="patch edge incidences"):
         compare_mesh_observations(before, after)
 
 
