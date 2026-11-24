@@ -323,6 +323,7 @@ def test_pairwise_saved_result_rejects_valid_but_unrelated_definition_and_measur
         assert restored == first
         assert service.get_result(project["id"], str(reverse.result_id)) == reverse
 
+
 @pytest.mark.parametrize(
     ("end_longitude", "end_group", "expected_distance", "expected_sigma", "reason"),
     [
