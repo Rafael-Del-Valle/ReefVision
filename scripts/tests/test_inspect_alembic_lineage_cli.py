@@ -1228,7 +1228,8 @@ def test_0038_qc_structural_audit_rejects_unreviewed_unique_index_semantics(
             text=True,
             check=False,
         )
-        assert completed.returncode == (2 if mismatch or revision == "0038" else 0), completed.stderr
+        expected_returncode = 2 if mismatch or revision == "0038" else 0
+        assert completed.returncode == expected_returncode, completed.stderr
         report = json.loads(completed.stdout)
         assert report["upgrade_authorized"] is False
         assert report["structural_contracts"]["review_queue_item_events"] == (

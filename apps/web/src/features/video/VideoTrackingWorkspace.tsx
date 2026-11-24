@@ -19,7 +19,7 @@ import {
 } from "./poseInteroperabilityApi";
 import { useGeographicMovementAnalytics } from "./useGeographicMovementAnalytics";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { cancelJob, retryJob, type Project } from "../../api/client";
 import { PoseAnnotationEditor } from "../pose/PoseAnnotationEditor";
@@ -460,6 +460,9 @@ export function VideoTrackingWorkspace({
     setBenchmarkStartFrame(0);
     setBenchmarkEndFrame(0);
     setCopiedReport(null);
+  }, [selectedVideoId]);
+  // Clear the video-scoped import draft before the new form can accept input.
+  useLayoutEffect(() => {
     setPoseInteropImportFile(null);
     setConfirmPoseInteropFrameMapping(false);
   }, [selectedVideoId]);
@@ -1755,6 +1758,7 @@ export function VideoTrackingWorkspace({
             <label>
               Pose file
               <input
+                key={selectedVideo.id}
                 aria-label="Pose interoperability import file"
                 type="file"
                 accept=".slp,.nwb,.json,.csv,.zip,application/zip"

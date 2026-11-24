@@ -659,6 +659,12 @@ describe("VideoTrackingWorkspace", () => {
       await screen.findByRole("heading", { name: "Pose interoperability" }),
     ).toBeInTheDocument();
 
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: "Video" })).toHaveValue(
+        "video-1",
+      );
+    });
+
     const poseFile = new File(["pose"], "external.slp", {
       type: "application/octet-stream",
     });
@@ -673,12 +679,12 @@ describe("VideoTrackingWorkspace", () => {
         name: /I confirm external frame indices correspond to this video/,
       }),
     );
-    // Wait for the asynchronously loaded video and file selection before submitting.
-    // A heading alone does not guarantee the selected video is ready for import.
     await waitFor(() => {
-      expect(screen.getByRole("combobox", { name: "Video" })).toHaveValue(
-        "video-1",
-      );
+      expect(
+        screen.getByRole("checkbox", {
+          name: /I confirm external frame indices correspond to this video/,
+        }),
+      ).toBeChecked();
       expect(screen.getByRole("button", { name: "Import pose" })).toBeEnabled();
     });
     fireEvent.click(screen.getByRole("button", { name: "Import pose" }));
@@ -696,6 +702,51 @@ describe("VideoTrackingWorkspace", () => {
       await screen.findByText(/Imported 1 track with 2 pose keyframes/),
     ).toBeInTheDocument();
     expect(screen.getByText("Frame mapping confirmed.")).toBeInTheDocument();
+  });
+
+  it("clears the native pose file and frame confirmation when changing videos", async () => {
+    const [firstVideo] = await api.getVideos(project.id);
+    if (!firstVideo) throw new Error("Expected a video fixture");
+    vi.mocked(api.getVideos).mockResolvedValue([
+      firstVideo,
+      {
+        ...firstVideo,
+        id: "video-2",
+        original_filename: "second-fish.mp4",
+      },
+    ]);
+    renderWorkspace();
+    await screen.findByRole("heading", { name: "Pose interoperability" });
+    const videoSelector = screen.getByRole("combobox", { name: "Video" });
+    await waitFor(() => expect(videoSelector).toHaveValue("video-1"));
+
+    const fileInput = () =>
+      screen.getByLabelText(
+        "Pose interoperability import file",
+      ) as HTMLInputElement;
+    const confirmation = () =>
+      screen.getByRole("checkbox", {
+        name: /I confirm external frame indices correspond to this video/,
+      });
+    const importButton = () =>
+      screen.getByRole("button", { name: "Import pose" });
+    const originalInput = fileInput();
+    fireEvent.change(originalInput, {
+      target: { files: [new File(["pose"], "external.slp")] },
+    });
+    fireEvent.click(confirmation());
+    expect(confirmation()).toBeChecked();
+    expect(importButton()).toBeEnabled();
+
+    for (const videoId of ["video-2", "video-1"]) {
+      fireEvent.change(videoSelector, { target: { value: videoId } });
+      expect(videoSelector).toHaveValue(videoId);
+      expect(fileInput()).not.toBe(originalInput);
+      expect(fileInput().files).toHaveLength(0);
+      expect(confirmation()).not.toBeChecked();
+      expect(importButton()).toBeDisabled();
+    }
+    expect(poseInteropApi.importPoseInteroperability).not.toHaveBeenCalled();
   });
 
   it("connects geographic segment seeking to video and map without refetching analytics", async () => {
