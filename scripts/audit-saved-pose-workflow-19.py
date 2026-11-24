@@ -754,6 +754,11 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 advertised_path = checkpoint_manifest.get(path_key)
                 advertised_sha = checkpoint_manifest.get(sha_key)
                 if advertised_path is None and advertised_sha is None:
+                    candidate = checkpoint.parent / filename
+                    _require(
+                        not candidate.exists() and not candidate.is_symlink(),
+                        f"Unrecorded checkpoint in saved training output: {filename}",
+                    )
                     continue
                 _require(
                     isinstance(advertised_path, str)
@@ -777,6 +782,15 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                     "sha256": advertised_sha,
                     "size_bytes": advertised_size,
                 }
+
+            # The worker selects best.pt when present, otherwise last.pt.
+            # An omitted checkpoint cannot silently disappear from the inventory.
+            _require(
+                bool(verified_checkpoints)
+                and checkpoint.name
+                == ("best.pt" if "best.pt" in verified_checkpoints else "last.pt"),
+                "Selected checkpoint differs from the verified best/last inventory",
+            )
 
             model = session.get(ModelRegistration, registered.get("model_id"))
             _require(
