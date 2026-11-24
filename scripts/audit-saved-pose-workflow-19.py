@@ -773,7 +773,14 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                     f"{path_key} belongs to another training run",
                 )
                 advertised_file = _managed_file(root, advertised_path)
-                advertised_size = advertised_file.stat().st_size
+                advertised_metadata = advertised_file.stat()
+                # Match the training worker's trust boundary: a hard link can
+                # alias an earlier run's weights without changing their digest.
+                _require(
+                    advertised_metadata.st_nlink == 1,
+                    f"{path_key} is hard-linked and does not prove independent run lineage",
+                )
+                advertised_size = advertised_metadata.st_size
                 _require(
                     advertised_size > 0 and _digest(advertised_file) == advertised_sha,
                     f"{path_key} is empty or differs from saved training manifest",
