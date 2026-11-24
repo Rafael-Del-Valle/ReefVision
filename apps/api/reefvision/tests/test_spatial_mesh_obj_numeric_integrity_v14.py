@@ -526,3 +526,60 @@ def test_obj_non_bmp_unicode_comment_remains_supported_in_saved_graph(
         item for item in detail["artifacts"] if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["payload_json"] == expected
+
+@pytest.mark.parametrize("sign", ["+", "-"])
+def test_obj_decimal_exponent_rejects_without_measurement(
+    client: TestClient, sign: str
+) -> None:
+    valid = OBJ.replace("v 0 0 0", "v 0e-9999 0 0", 1)
+    assert parse_obj_triangles(valid) == parse_obj_triangles(OBJ)
+    token = f"0e{sign}{'9' * 40}"
+    assert float(token) == 0.0
+    invalid = valid.replace("0e-9999", token)
+    with pytest.raises(ValueError, match="invalid vertex"):
+        parse_obj_triangles(invalid)
+
+    project_id = str(create_project(client, "OBJ decimal exponent integrity")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    control = client.post(f"{base}/spatial/mesh-preview", json={**PARAMS, "obj_text": valid})
+    assert control.status_code == 200, control.text
+    assert control.json()["surface_area_m2"] == pytest.approx(0.0003)
+    assert control.json()["provenance"]["calibration_verified"] is False
+    params = {**PARAMS, "obj_text": invalid}
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 400, standalone.text
+    assert "invalid vertex" in standalone.text
+    graph = {
+        "graph_id": "obj-decimal-exponent-v14",
+        "name": "Reject unsupported OBJ source exponents",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "mesh", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-mesh",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "mesh",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    app = cast(FastAPI, client.app)
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert not process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "failed"
+        assert "invalid vertex" in detail.json()["run"]["error_message"]
+        assert not any(
+            artifact["data_type"] == "mesh_measurement_preview"
+            for artifact in detail.json()["artifacts"]
+        )
