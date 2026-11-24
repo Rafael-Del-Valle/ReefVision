@@ -383,6 +383,10 @@ def compare_mesh_observations(
             patch_nonmanifold = (
                 nonmanifold_values[index] if nonmanifold_values is not None else None
             )
+            # A known aggregate zero constrains every nonnegative patch count.
+            # Use that fact only for validation; never fill missing source arrays.
+            if patch_nonmanifold is None and counts["nonmanifold_edge_count"] == 0:
+                patch_nonmanifold = 0
             if (
                 (patch_boundary or 0) + 3 * (patch_nonmanifold or 0) > 3 * patch_faces
                 or (patch_faces < 3 and patch_nonmanifold)
