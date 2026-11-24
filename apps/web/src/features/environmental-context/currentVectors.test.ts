@@ -78,6 +78,46 @@ it("rejects reuse of one immutable component ID across separate times", () => {
   ]);
   expect(distinctRecords).toHaveLength(2);
 });
+it("rejects immutable ID conflicts even when the duplicate is filtered out", () => {
+  const east = component("current_eastward_velocity", 3, { id: "east-a" });
+  const north = component("current_northward_velocity", 4, { id: "north-a" });
+  const otherLocation = {
+    latitude: 32.6,
+    longitude: -79.5,
+    crs: "EPSG:4326" as const,
+  };
+  const otherEast = {
+    ...east,
+    id: "east-b",
+    location: otherLocation,
+  };
+  const otherNorth = {
+    ...north,
+    id: "north-b",
+    location: otherLocation,
+  };
+  for (const conflict of [
+    { ...east, qc: "rejected" as const },
+    { ...east, environmental_snapshot_current: false },
+    { ...east, normalized_value: Number.NaN },
+    { ...east, location: null },
+    { ...east, variable: "water_temperature" },
+  ]) {
+    const vectors = currentVectors([
+      east,
+      north,
+      conflict,
+      otherEast,
+      otherNorth,
+    ]);
+    expect(vectors.map((vector) => vector.recordIds)).toEqual([
+      ["east-b", "north-b"],
+    ]);
+  }
+  expect(
+    currentVectors([east, north, otherEast, otherNorth]),
+  ).toHaveLength(2);
+});
 it("preserves component uncertainty without deriving uncertainty", () => {
   const vectors = currentVectors([
     component("current_eastward_velocity", 3, {

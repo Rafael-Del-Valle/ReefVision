@@ -106,6 +106,13 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
     string,
     { east: ScientificRecord[]; north: ScientificRecord[] }
   >();
+  // Count identities before filtering. A rejected, superseded or otherwise
+  // invalid copy still conflicts with the immutable identity of a valid row.
+  // Do not let QC filtering conceal that ambiguity.
+  const recordIdCounts = new Map<string, number>();
+  for (const row of records) {
+    recordIdCounts.set(row.id, (recordIdCounts.get(row.id) ?? 0) + 1);
+  }
   for (const row of records) {
     if (
       !row.location ||
@@ -168,15 +175,6 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
     const group = groups.get(key) ?? { east: [], north: [] };
     group[direction].push(row);
     groups.set(key, group);
-  }
-  // One immutable record ID cannot represent components at multiple grid
-  // cells or times. Reject every vector depending on a duplicated ID rather
-  // than silently counting the same observation more than once.
-  const recordIdCounts = new Map<string, number>();
-  for (const group of groups.values()) {
-    for (const row of [...group.east, ...group.north]) {
-      recordIdCounts.set(row.id, (recordIdCounts.get(row.id) ?? 0) + 1);
-    }
   }
   const result: CurrentVector[] = [];
   for (const [key, group] of groups) {
