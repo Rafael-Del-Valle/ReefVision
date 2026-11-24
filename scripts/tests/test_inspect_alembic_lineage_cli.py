@@ -52,6 +52,14 @@ def _create_0039_metric_pair(connection: sqlite3.Connection, variant: str = "val
             "UNIQUE (workflow_node_run_id)",
             "",
         )
+    if variant == "unique_renamed":
+        result_sql = result_sql.replace(
+            "uq_computed_metric_result_workflow_node_run", "renamed_metric_result"
+        )
+    if variant == "unique_unnamed":
+        result_sql = result_sql.replace(
+            "CONSTRAINT uq_computed_metric_result_workflow_node_run ", ""
+        )
     if variant == "duplicate_workflow_fk":
         result_sql = result_sql[:-1] + (
             ", FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id) ON DELETE RESTRICT)"
@@ -1345,6 +1353,8 @@ def test_0038_qc_structural_audit_rejects_unreviewed_unique_index_semantics(
         ("cache_expiry_as_integer", "environmental_cache_entries"),
         ("cache_source_url_shortened", "environmental_cache_entries"),
         ("cache_missing_unique", "environmental_cache_entries"),
+        ("cache_unique_renamed", "environmental_cache_entries"),
+        ("cache_unique_unnamed", "environmental_cache_entries"),
         ("cache_unique_nocase", "environmental_cache_entries"),
         ("cache_fk_restrict", "environmental_cache_entries"),
         ("science_json_as_text", "scientific_records"),
@@ -1377,7 +1387,7 @@ def test_0038_scientific_cache_and_declared_type_contracts(
         "cache_key VARCHAR(64) NOT NULL, source_url VARCHAR(2000) NOT NULL, "
         "payload_json JSON NOT NULL, content_sha256 VARCHAR(64) NOT NULL, "
         "fetched_at DATETIME NOT NULL, expires_at DATETIME NOT NULL, "
-        "UNIQUE (project_id, cache_key))"
+        "CONSTRAINT uq_environmental_cache_project_key UNIQUE (project_id, cache_key))"
     )
     replacements = {
         "science_json_as_text": ("payload_json JSON NOT NULL", "payload_json TEXT NOT NULL"),
@@ -1398,7 +1408,12 @@ def test_0038_scientific_cache_and_declared_type_contracts(
             "source_url VARCHAR(2000) NOT NULL",
             "source_url VARCHAR(200) NOT NULL",
         ),
-        "cache_missing_unique": (", UNIQUE (project_id, cache_key)", ""),
+        "cache_missing_unique": (
+            ", CONSTRAINT uq_environmental_cache_project_key UNIQUE (project_id, cache_key)",
+            "",
+        ),
+        "cache_unique_renamed": ("uq_environmental_cache_project_key", "renamed_cache_key"),
+        "cache_unique_unnamed": ("CONSTRAINT uq_environmental_cache_project_key ", ""),
         "cache_unique_nocase": (
             "UNIQUE (project_id, cache_key)",
             "UNIQUE (project_id, cache_key COLLATE NOCASE)",
@@ -1646,6 +1661,8 @@ def test_0041_annotation_aggregate_column_contract(
         ("definition_hash_nullable", "environmental_analysis_definitions"),
         ("result_definition_cascade", "environmental_analysis_results"),
         ("result_missing_unique", "environmental_analysis_results"),
+        ("result_unique_renamed", "environmental_analysis_results"),
+        ("result_unique_unnamed", "environmental_analysis_results"),
         ("result_missing_provenance", "environmental_analysis_results"),
         ("result_trigger", "environmental_analysis_results"),
     ],
@@ -1675,7 +1692,7 @@ def test_environmental_extension_structural_contracts(
         "cache_key VARCHAR(64) NOT NULL, source_url VARCHAR(2000) NOT NULL, "
         "payload_json JSON NOT NULL, content_sha256 VARCHAR(64) NOT NULL, "
         "fetched_at DATETIME NOT NULL, expires_at DATETIME NOT NULL, "
-        "UNIQUE (project_id, cache_key))"
+        "CONSTRAINT uq_environmental_cache_project_key UNIQUE (project_id, cache_key))"
     )
     event_sql = (
         "CREATE TABLE environmental_event_definitions ("
@@ -1705,7 +1722,9 @@ def test_environmental_extension_structural_contracts(
         "content_sha256 VARCHAR(64) NOT NULL, "
         "workflow_run_id VARCHAR(36) REFERENCES workflow_runs(id) ON DELETE RESTRICT, "
         "workflow_node_run_id VARCHAR(36) REFERENCES workflow_node_runs(id) ON DELETE RESTRICT, "
-        "created_at DATETIME NOT NULL, UNIQUE (workflow_node_run_id))"
+        "created_at DATETIME NOT NULL, "
+        "CONSTRAINT uq_environmental_analysis_result_workflow_node_run "
+        "UNIQUE (workflow_node_run_id))"
     )
     if variant == "event_query_type":
         event_sql = event_sql.replace("query_json JSON", "query_json TEXT")
@@ -1719,7 +1738,19 @@ def test_environmental_extension_structural_contracts(
             "environmental_analysis_definitions(id) ON DELETE CASCADE",
         )
     if variant == "result_missing_unique":
-        result_sql = result_sql.replace(", UNIQUE (workflow_node_run_id)", "")
+        result_sql = result_sql.replace(
+            ", CONSTRAINT uq_environmental_analysis_result_workflow_node_run "
+            "UNIQUE (workflow_node_run_id)",
+            "",
+        )
+    if variant == "result_unique_renamed":
+        result_sql = result_sql.replace(
+            "uq_environmental_analysis_result_workflow_node_run", "renamed_analysis_result"
+        )
+    if variant == "result_unique_unnamed":
+        result_sql = result_sql.replace(
+            "CONSTRAINT uq_environmental_analysis_result_workflow_node_run ", ""
+        )
     if variant == "result_missing_provenance":
         result_sql = result_sql.replace("input_snapshot_json JSON NOT NULL, ", "")
     with sqlite3.connect(database) as connection:
@@ -1997,6 +2028,8 @@ def test_revision_must_belong_to_detected_schema_lineage(
         ("formula_nullable", "computed_metric_definitions"),
         ("workflow_cascade", "computed_metric_results"),
         ("missing_unique", "computed_metric_results"),
+        ("unique_renamed", "computed_metric_results"),
+        ("unique_unnamed", "computed_metric_results"),
         ("missing_index", "computed_metric_results"),
         ("result_trigger", "computed_metric_results"),
         ("duplicate_workflow_fk", "computed_metric_results"),

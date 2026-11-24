@@ -611,7 +611,33 @@ def _original_0038_check_contract_matches(
         return False
     checks = [i for i, token in enumerate(tokens) if token == "CHECK"]
     if table != "review_queue_item_events":
-        return not checks
+        # The independent scientific migrations also name their UNIQUE
+        # constraints. Equivalent SQLite autoindexes do not preserve those
+        # names, which later batch operations may need to address.
+        named_unique = {
+            "environmental_cache_entries": (
+                "UQ_ENVIRONMENTAL_CACHE_PROJECT_KEY",
+                "PROJECT_ID",
+                ",",
+                "CACHE_KEY",
+            ),
+            "computed_metric_results": (
+                "UQ_COMPUTED_METRIC_RESULT_WORKFLOW_NODE_RUN",
+                "WORKFLOW_NODE_RUN_ID",
+            ),
+            "environmental_analysis_results": (
+                "UQ_ENVIRONMENTAL_ANALYSIS_RESULT_WORKFLOW_NODE_RUN",
+                "WORKFLOW_NODE_RUN_ID",
+            ),
+        }.get(table)
+        if named_unique is None:
+            return not checks
+        name, *columns = named_unique
+        expected_unique = ("CONSTRAINT", name, "UNIQUE", "(", *columns, ")")
+        matches = sum(
+            tokens[i : i + len(expected_unique)] == expected_unique for i in range(len(tokens))
+        )
+        return not checks and matches == 1
     # Batch recreation in 0039/0040 preserves the named request constraint.
     # SQLite autoindex metadata alone cannot distinguish an unnamed or renamed
     # constraint, even though its current uniqueness behavior is identical.

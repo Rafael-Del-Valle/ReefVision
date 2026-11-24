@@ -151,3 +151,20 @@ redaction, repeatability and byte preservation. Independent disposable SQLite
 probes verified the specific metadata ambiguity for the QC contract; full
 repository CI remains required. Existing typed executable saved QC workflows
 and review gates are unchanged; no migrations or research data are rewritten.
+
+## 2026-11-24 — scientific named uniqueness and fixture parity
+
+The original independent 1.1 migrations 0038, 0039 and 0042 name the
+cache key, computed metric workflow-node result and environmental analysis
+workflow-node result UNIQUE constraints. SQLite reports identical autoindex
+metadata when these constraints are renamed or unnamed. The structural
+inspector now requires their original names and columns in addition to
+existing index semantics. Twelve new persisted CLI configurations exercise
+renamed and unnamed constraints, including all four metric stages. The
+canonical scientific fixtures now retain the real names. The older backend
+QC structural fixture also restores the original named request constraint
+required by the preceding guard. These are diagnostic checks, not proof of
+migration provenance. Independent disposable SQLite probes confirmed that
+the names are invisible in index metadata; full exact-head CI remains
+required. Existing executable saved QC workflows and human approval are
+unchanged, and no migration or research data is rewritten.

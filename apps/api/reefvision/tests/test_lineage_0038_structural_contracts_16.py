@@ -133,7 +133,10 @@ def _create_qc(db: sqlite3.Connection, variant: str) -> None:
         check += ", CHECK (comment IS NOT NULL)"
     if variant == "comment_decoy":
         check += " /* CHECK (event_type IN ('approve')) DEFERRABLE WITHOUT ROWID */"
-    unique = ", UNIQUE (review_queue_item_id, client_request_id)"
+    unique = (
+        ", CONSTRAINT uq_review_queue_item_event_request "
+        "UNIQUE (review_queue_item_id, client_request_id)"
+    )
     if variant in {"missing_unique", "unique_as_index"}:
         unique = ""
     table_options = " WITHOUT ROWID" if variant == "without_rowid" else ""
