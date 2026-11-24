@@ -216,3 +216,66 @@ def test_desktop_refuses_noncanonical_revision_object(
             desktop.run_pending_migrations(settings)
         assert database.read_bytes() == original
     engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("body", "has_check"),
+    [
+        ("version_num TEXT NOT NULL PRIMARY KEY", False),
+        (
+            '"version_num" VARCHAR(32) NOT NULL, CONSTRAINT "CHECK" PRIMARY KEY ("version_num")',
+            False,
+        ),
+        ("version_num TEXT NOT NULL PRIMARY KEY /* CHECK is only a comment */", False),
+        ("version_num TEXT NOT NULL PRIMARY KEY CHECK(version_num = '0037')", True),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY, CHECK/* hidden */(version_num = '0037')",
+            True,
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY, CONSTRAINT pinned cHeCk(\n"
+            "version_num = '0037'\n)",
+            True,
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY, CHECK(version_num IN ('0037', '0038'))",
+            True,
+        ),
+        ("version_num TEXT NOT NULL PRIMARY KEY, CHECK (length(version_num) = 4)", True),
+    ],
+)
+def test_stamp_check_constraint_preflight(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, body: str, has_check: bool
+) -> None:
+    database = tmp_path / "stamp-check.sqlite"
+    engine = create_engine(f"sqlite+pysqlite:///{database}")
+    with engine.begin() as connection:
+        connection.exec_driver_sql(f"CREATE TABLE alembic_version ({body})")
+        connection.exec_driver_sql("INSERT INTO alembic_version VALUES ('0037')")
+        connection.exec_driver_sql("CREATE TABLE biological_observations (note TEXT)")
+        connection.exec_driver_sql("INSERT INTO biological_observations VALUES ('preserve tissue')")
+    original = database.read_bytes()
+    monkeypatch.setattr(session, "create_database_engine", lambda _settings: engine)
+    monkeypatch.setattr(
+        desktop.ScriptDirectory,
+        "from_config",
+        lambda _config: SimpleNamespace(get_current_head=lambda: "0041"),
+    )
+    monkeypatch.setattr(
+        desktop.command,
+        "upgrade",
+        lambda *_args, **_kwargs: pytest.fail("A constrained stamp must block Alembic"),
+    )
+    settings = SimpleNamespace(resolved_database_url=str(engine.url))
+    for _ in range(2):
+        with engine.connect() as connection:
+            if has_check:
+                with pytest.raises(RuntimeError, match="version-table CHECK constraint"):
+                    assert_compatible_revision_0038(connection)
+            else:
+                assert_compatible_revision_0038(connection)
+        if has_check:
+            with pytest.raises(RuntimeError, match="version-table CHECK constraint"):
+                desktop.run_pending_migrations(settings)
+        assert database.read_bytes() == original
+    engine.dispose()

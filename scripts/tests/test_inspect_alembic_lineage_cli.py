@@ -2100,3 +2100,62 @@ def test_computed_metric_structural_contracts(
         for private in ("PRIVATE_FORMULA", "PRIVATE_METRIC_VALUE", "PRIVATE_TRIGGER_BODY"):
             assert private not in completed.stdout + completed.stderr
         assert database.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    ("body", "has_check"),
+    [
+        ("version_num TEXT NOT NULL PRIMARY KEY", False),
+        (
+            '"version_num" VARCHAR(32) NOT NULL, CONSTRAINT "CHECK" PRIMARY KEY ("version_num")',
+            False,
+        ),
+        ("version_num TEXT NOT NULL PRIMARY KEY /* CHECK is only a comment */", False),
+        ("version_num TEXT NOT NULL PRIMARY KEY CHECK(version_num = '0037')", True),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY, CHECK/* hidden */(version_num = '0037')",
+            True,
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY, CONSTRAINT pinned cHeCk(\n"
+            "version_num = '0037'\n)",
+            True,
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY, CHECK(version_num IN ('0037', '0038'))",
+            True,
+        ),
+        ("version_num TEXT NOT NULL PRIMARY KEY, CHECK (length(version_num) = 4)", True),
+    ],
+)
+def test_stamp_check_constraint_is_reported_without_writes(
+    tmp_path: Path, body: str, has_check: bool
+) -> None:
+    database = tmp_path / "stamp-check.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute(f"CREATE TABLE alembic_version ({body.replace('0037', '0039')})")
+        connection.execute("INSERT INTO alembic_version VALUES ('0039')")
+        for table in (
+            "scientific_records",
+            "environmental_cache_entries",
+            "computed_metric_definitions",
+            "computed_metric_results",
+        ):
+            connection.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY, note TEXT)')
+            connection.execute(f'INSERT INTO "{table}" VALUES (1, ?)', ("private coral record",))
+    original = database.read_bytes()
+    for _ in range(2):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == (2 if has_check else 0), result.stderr
+        report = json.loads(result.stdout)
+        assert report["alembic_version_has_check"] is has_check
+        assert report["canonical_alembic_stamp_constraints"] is not has_check
+        assert ("alembic_version_checks_require_review" in report["warnings"]) is has_check
+        assert report["upgrade_authorized"] is False
+        assert "private coral record" not in result.stdout + result.stderr
+        assert database.read_bytes() == original

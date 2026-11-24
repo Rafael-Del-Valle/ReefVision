@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import re
 import sqlite3
 from pathlib import Path
 
@@ -580,6 +581,17 @@ def _sqlite_schema_tokens(ddl: str) -> tuple[str, ...] | None:
     return tuple(tokens)
 
 
+def _sqlite_stamp_has_check(ddl: str) -> bool:
+    """Find CHECK keywords, including those missed by SQLite reflection."""
+    tokens = re.finditer(
+        r"--[^\n]*|/\*.*?\*/|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|"
+        r"\x60(?:\x60\x60|[^\x60])*\x60|\[[^\]]*\]|[A-Za-z0-9_$\u0080-\U0010ffff]+",
+        ddl,
+        re.DOTALL,
+    )
+    return any(token.group().upper() == "CHECK" for token in tokens)
+
+
 def _original_0038_check_contract_matches(
     table: str, ddl: str, revision: str | None = None
 ) -> bool:
@@ -612,7 +624,9 @@ def _original_0038_check_contract_matches(
     # SQLite folds duplicate UNIQUE constraints (including a redundant UNIQUE
     # on the primary key) into an existing autoindex. Require the original
     # declaration count as well as index metadata and the canonical name.
-    expected_unique_count = sum(unique for _, unique in _POST_0037_TABLE_CONTRACTS[table]["indexes"])
+    expected_unique_count = sum(
+        unique for _, unique in _POST_0037_TABLE_CONTRACTS[table]["indexes"]
+    )
     if tokens.count("UNIQUE") != expected_unique_count:
         return False
     checks = [i for i, token in enumerate(tokens) if token == "CHECK"]
@@ -947,6 +961,18 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
             else []
         )
         version_columns = {row[1] for row in version_table_info}
+        version_ddl_row = (
+            db.execute(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'alembic_version'"
+            ).fetchone()
+            if version_table_present
+            else None
+        )
+        version_has_check = (
+            version_ddl_row is not None
+            and isinstance(version_ddl_row[0], str)
+            and _sqlite_stamp_has_check(version_ddl_row[0])
+        )
         # A canonical Alembic stamp has precisely one ordinary, non-null
         # text primary-key column. A plausible revision string is not enough.
         canonical_stamp_constraints = (
@@ -956,6 +982,7 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
             and version_table_info[0][3] == 1
             and version_table_info[0][5] == 1
             and version_table_info[0][6] == 0
+            and not version_has_check
         )
         # A malformed Alembic table is a diagnostic finding, not an inspector crash.
         revisions = (
@@ -1051,6 +1078,8 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
             warnings.append("alembic_version_triggers_require_review")
         if version_has_foreign_keys:
             warnings.append("alembic_version_foreign_keys_require_review")
+        if version_has_check:
+            warnings.append("alembic_version_checks_require_review")
         if not version_table_present:
             warnings.append("missing_alembic_version_table")
         else:
@@ -1241,6 +1270,7 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
             "revision_rows": [value if isinstance(value, str) else None for value in revisions],
             "alembic_version_trigger_count": version_trigger_count,
             "alembic_version_has_foreign_keys": version_has_foreign_keys,
+            "alembic_version_has_check": version_has_check,
             "canonical_alembic_stamp_constraints": canonical_stamp_constraints,
             "lineage_hint": lineage,
             "upgrade_authorized": False,

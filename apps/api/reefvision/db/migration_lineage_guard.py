@@ -68,6 +68,17 @@ _BULK_COLUMNS = frozenset(
 )
 
 
+def _sqlite_stamp_has_check(ddl: str) -> bool:
+    """Find CHECK keywords, including those missed by SQLite reflection."""
+    tokens = re.finditer(
+        r"--[^\n]*|/\*.*?\*/|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|"
+        r"\x60(?:\x60\x60|[^\x60])*\x60|\[[^\]]*\]|[A-Za-z0-9_$\u0080-\U0010ffff]+",
+        ddl,
+        re.DOTALL,
+    )
+    return any(token.group().upper() == "CHECK" for token in tokens)
+
+
 def assert_compatible_revision_0038(connection: Connection) -> None:
     """Reject incompatible 0038-0040 schemas before any desktop write.
 
@@ -160,6 +171,18 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "stamping could change linked research data or depend on unrelated rows. "
                 "Preserve the database and reconcile provenance from a reviewed "
                 "backup without running migrations, stamping or deleting records."
+            )
+        # A CHECK can pin an apparently valid stamp to its current revision.
+        # SQLAlchemy reflection misses some legal SQLite CHECK spellings,
+        # including a comment between CHECK and its opening parenthesis.
+        stamp_ddl = connection.exec_driver_sql(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'alembic_version'"
+        ).scalar()
+        if not isinstance(stamp_ddl, str) or _sqlite_stamp_has_check(stamp_ddl):
+            raise RuntimeError(
+                "Unsafe ReefVision Alembic version-table CHECK constraint: "
+                "revision stamping may fail after migration writes. Preserve the "
+                "database and reconcile provenance without running migrations."
             )
     # Preserve row multiplicity: two identical stamps are still an invalid
     # Alembic state and must not be hidden by set deduplication.

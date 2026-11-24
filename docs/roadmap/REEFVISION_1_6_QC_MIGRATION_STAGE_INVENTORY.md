@@ -188,3 +188,18 @@ valuable to coordination, but cannot be attributed to this branch head or
 substitute for independent biological reference acceptance. No candidate
 branch is merged or restamped here. Existing executable saved QC workflows
 and explicit researcher review remain unchanged; release HOLD.
+
+## 2026-11-24 — revision stamp CHECK preflight
+
+A restored Alembic table can contain a CHECK that pins its apparently valid
+revision or prevents a later stamp. The check can be missed by SQLAlchemy
+reflection when a SQL comment separates CHECK from its opening parenthesis.
+On SQLite, both desktop preflight and the independent read-only CLI now
+recognize actual CHECK tokens while ignoring comments and quoted identifiers
+or literals. The CLI reports the noncanonical constraint without returning
+its expression. Desktop refuses to start Alembic before any migration writes.
+Eight configurations in each regression surface include normal stamps and
+quoted/comment controls; the independent disposable SQLite probe also
+verified the real Alembic-created table. No repair, restamp, change to
+saved QC workflow behavior, or upgrade authorization is performed. The
+previous inspector Ruff line-length/format issue was corrected.
