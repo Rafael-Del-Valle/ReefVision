@@ -24,6 +24,43 @@ Baseline: approved ReefVision 1.0.2 main line, with the candidate first-open vie
 5. If a feature cannot be validated in an automated runner, document its specific Windows acceptance procedure and label the gate **UNVERIFIED**, not PASS.
 
 
+## Exact-commit CI evidence when PR #73 is closed
+
+PR #73 is already merged/closed. Its recorded head is historical, not the
+current consolidated release branch tip. Do not reopen, merge, or publish
+anything as part of collecting evidence. The release branch remains under
+development and retains its existing commits.
+
+As observed on 2026-11-23, PR #73 reported
+`574b1a878e63e87b1e07d99d0938499aa411604c` while the live branch resolved to
+`75a2c9febfc362310c1f7276cf6e7f4aeb78ec82` (972 commits ahead, zero behind).
+The PR head had 19 successful PR-triggered workflows; the live branch head
+had no results from the PR-only workflow query or combined-status query.
+This is **UNVERIFIED**, not proof that push CI did not run or that it passed.
+
+For a fixed candidate, an authenticated maintainer can retrieve push-triggered
+evidence without rerunning jobs, installing software, or changing the branch.
+Use the actual candidate SHA, not the historical example above:
+
+```powershell
+$repo = 'Rafael-Del-Valle/ReefVision'
+$branch = 'develop/reefvision-1.0.3-consolidated'
+$sha = git rev-parse HEAD
+gh api --method GET "repos/$repo/actions/runs" -f "head_sha=$sha" -f "branch=$branch" -f "event=push" -F per_page=100 --paginate --jq '.workflow_runs[] | {id,name,head_sha,status,conclusion,html_url}'
+# For each matching run ID, inspect its latest-attempt jobs:
+# gh api --paginate "repos/$repo/actions/runs/RUN_ID/jobs?filter=latest&per_page=100" --jq '.jobs[] | {id,name,head_sha,status,conclusion,html_url,steps}'
+```
+
+Confirm the local checkout is clean and is the intended candidate before using
+its SHA. Every accepted run must match that SHA, and the required job steps
+must actually complete successfully; a skipped, cancelled, missing, or stale
+job is not evidence. Record workflow/job links, run attempt, source SHA and
+installer provenance. A successful general CI run alone does not establish
+the Rust tests, exact-candidate MSI/CAB build, clean install/upgrade, installed
+WebView2 interactions, actual training-loss observation, or representative
+GPU/scientific acceptance. Keep each independently unverified gate on HOLD.
+Do not trigger new paid runs or install anything solely to fill this record.
+
 ## Manual acceptance record — pending physical Windows evidence
 
 The automated CI suite is necessary but cannot establish the following installed-app behaviors. Record the exact candidate commit, Windows build, WebView2 runtime, camera model/sample hash, and installer artifact checksum for every run. Keep original scientific images immutable; use copies for testing.
