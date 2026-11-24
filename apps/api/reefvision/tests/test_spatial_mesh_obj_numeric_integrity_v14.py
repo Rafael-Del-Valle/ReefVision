@@ -527,14 +527,41 @@ def test_obj_non_bmp_unicode_comment_remains_supported_in_saved_graph(
     )
     assert artifact["payload_json"] == expected
 
+
 @pytest.mark.parametrize("sign", ["+", "-"])
-def test_obj_decimal_exponent_rejects_without_measurement(client: TestClient, sign: str) -> None:
-    valid = OBJ.replace("v 0 0 0", "v 0e-9999 0 0", 1)
+@pytest.mark.parametrize(
+    ("source", "error"),
+    [
+        pytest.param(OBJ.replace("v 0 0 0", "v ZERO 0 0"), "invalid vertex", id="xyz"),
+        pytest.param(
+            OBJ.replace("v 0 0 0", "v 0 0 0 2 ZERO 0.5 1"),
+            "invalid vertex",
+            id="homogeneous-rgb",
+        ),
+        pytest.param(
+            OBJ.replace("f 1 2 3", "vt ZERO 0\nf 1/1 2/1 3/1"),
+            "invalid vt declaration",
+            id="texture-coordinate",
+        ),
+        pytest.param(
+            OBJ.replace("f 1 2 3", "vn ZERO 0 1\nf 1//1 2//1 3//1"),
+            "invalid vn declaration",
+            id="normal",
+        ),
+    ],
+)
+def test_obj_decimal_exponent_rejects_without_measurement(
+    client: TestClient, sign: str, source: str, error: str
+) -> None:
+    # Both positive and negative representable exponents on true zeros are
+    # valid, including inert attributes. Unsupported exponents must not be
+    # silently accepted just because float() returns a finite zero.
+    valid = source.replace("ZERO", f"0e{sign}9999")
     assert parse_obj_triangles(valid) == parse_obj_triangles(OBJ)
     token = f"0e{sign}{'9' * 40}"
     assert float(token) == 0.0
-    invalid = valid.replace("0e-9999", token)
-    with pytest.raises(ValueError, match="invalid vertex"):
+    invalid = source.replace("ZERO", token)
+    with pytest.raises(ValueError, match=error):
         parse_obj_triangles(invalid)
 
     project_id = str(create_project(client, "OBJ decimal exponent integrity")["id"])
@@ -546,7 +573,7 @@ def test_obj_decimal_exponent_rejects_without_measurement(client: TestClient, si
     params = {**PARAMS, "obj_text": invalid}
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 400, standalone.text
-    assert "invalid vertex" in standalone.text
+    assert error in standalone.text
     graph = {
         "graph_id": "obj-decimal-exponent-v14",
         "name": "Reject unsupported OBJ source exponents",
@@ -576,7 +603,7 @@ def test_obj_decimal_exponent_rejects_without_measurement(client: TestClient, si
         detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
         assert detail.status_code == 200, detail.text
         assert detail.json()["run"]["status"] == "failed"
-        assert "invalid vertex" in detail.json()["run"]["error_message"]
+        assert error in detail.json()["run"]["error_message"]
         assert not any(
             artifact["data_type"] == "mesh_measurement_preview"
             for artifact in detail.json()["artifacts"]
