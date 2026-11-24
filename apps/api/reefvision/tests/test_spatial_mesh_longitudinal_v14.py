@@ -2608,6 +2608,66 @@ def test_partial_patch_topology_requires_shared_incidences(timepoint: str) -> No
         compare_mesh_observations(before, after)
 
 
+@pytest.mark.parametrize("timepoint", ["before", "after"])
+@pytest.mark.parametrize(
+    ("boundary_counts", "error"),
+    [([4, 6], "patch two-face edge incidence parity"), ([3, 7], "patch shared edges insufficient")],
+)
+def test_aggregate_zero_nonmanifold_constrains_partial_patches(
+    timepoint: str, boundary_counts: list[int], error: str
+) -> None:
+    """A known zero total rules out nonmanifold edges in every patch."""
+    before, after = _minimal_topology_pair()
+    target = before if timepoint == "before" else after
+    target.update(
+        face_count=6,
+        edge_connected_patch_count=2,
+        boundary_edge_count=10,
+        nonmanifold_edge_count=0,
+        edge_connected_patch_face_counts=[3, 3],
+        edge_connected_patch_boundary_edge_counts=[5, 5],
+    )
+    result = compare_mesh_observations(before, after)
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert result["provenance"]["calibration_verified"] is False
+    assert "edge_connected_patch_nonmanifold_edge_counts" not in target
+    target["edge_connected_patch_boundary_edge_counts"] = boundary_counts
+    with pytest.raises(ValueError, match=error):
+        compare_mesh_observations(before, after)
+
+
+def test_typed_mesh_executor_rejects_impossible_partial_manifold_patches(
+    client: TestClient,
+) -> None:
+    before, after = _minimal_topology_pair()
+    after.update(
+        face_count=6,
+        edge_connected_patch_count=2,
+        boundary_edge_count=10,
+        nonmanifold_edge_count=0,
+        edge_connected_patch_face_counts=[3, 3],
+        edge_connected_patch_boundary_edge_counts=[5, 5],
+    )
+    inputs = {
+        "before": [WorkflowArtifact(data_type="mesh_measurement_preview", payload_json=before)],
+        "after": [WorkflowArtifact(data_type="mesh_measurement_preview", payload_json=after)],
+    }
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        result = execute_mesh_longitudinal_comparison(
+            session, app.state.settings, "project-1", {}, inputs
+        )
+        assert result[0]["payload"] == compare_mesh_observations(before, after)
+        inputs["after"][0].payload_json = {
+            **after,
+            "edge_connected_patch_boundary_edge_counts": [4, 6],
+        }
+        with pytest.raises(ValidationError, match="patch two-face edge incidence parity"):
+            execute_mesh_longitudinal_comparison(
+                session, app.state.settings, "project-1", {}, inputs
+            )
+
+
 def test_typed_mesh_executor_rejects_invalid_partial_topology(
     client: TestClient,
 ) -> None:
