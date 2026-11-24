@@ -144,6 +144,7 @@ def test_longitudinal_scale_only_area_difference_sign(
         "manifold_pair",
         "nonmanifold",
         "nonmanifold_disconnected",
+        "nonmanifold_four_face_fan",
         "near_identical",
         "near_identical_decrease",
     ],
@@ -164,7 +165,7 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
         after["vertices"][2][1] = 1.0 + 2**-48
     elif topology == "near_identical_decrease":
         after["vertices"][2][1] = 1.0 - 2**-48
-    elif topology in ("nonmanifold", "nonmanifold_disconnected"):
+    elif topology in ("nonmanifold", "nonmanifold_disconnected", "nonmanifold_four_face_fan"):
         # Three triangles share one edge: six boundary incidences and three
         # nonmanifold incidences exhaust the nine available face incidences.
         for record, height in ((before, 1.0), (after, 1.1)):
@@ -179,6 +180,10 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
             if topology == "nonmanifold_disconnected":
                 record["vertices"].extend([[2, 0, 0], [3, 0, 0], [2, height, 0]])
                 record["faces"].append([5, 6, 7])
+            elif topology == "nonmanifold_four_face_fan":
+                # Four distinct faces share one edge, saturating the link budget.
+                record["vertices"].append([0, 0, -height])
+                record["faces"].append([1, 0, 5])
     response = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
         json={"before": before, "after": after},
@@ -188,10 +193,11 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
     expected_delta, faces, boundary, nonmanifold, patches = {
         "single": (0.05, 1, 3, 0, 1),
         "near_identical": (2**-49, 1, 3, 0, 1),
-        "near_identical_decrease": (-2**-49, 1, 3, 0, 1),
+        "near_identical_decrease": (-(2**-49), 1, 3, 0, 1),
         "manifold_pair": (0.1, 2, 4, 0, 1),
         "nonmanifold": (0.15, 3, 6, 1, 1),
         "nonmanifold_disconnected": (0.2, 4, 9, 1, 2),
+        "nonmanifold_four_face_fan": (0.2, 4, 8, 1, 1),
     }[topology]
     # Explicit relative tolerance accommodates binary64 representation of 1.1,
     # without an absolute tolerance that could hide a tiny change or its sign.
@@ -2390,6 +2396,24 @@ def test_matching_geometry_fingerprint_requires_consistent_topology_metadata(
                 "edge_connected_patch_count": 1,
             },
             "shared edges insufficient",
+        ),
+        (
+            {
+                "face_count": 5,
+                "boundary_edge_count": 12,
+                "nonmanifold_edge_count": 1,
+                "edge_connected_patch_count": 1,
+            },
+            "shared edge links insufficient",
+        ),
+        (
+            {
+                "face_count": 6,
+                "boundary_edge_count": 15,
+                "nonmanifold_edge_count": 1,
+                "edge_connected_patch_count": 2,
+            },
+            "shared edge links insufficient",
         ),
     ],
 )
