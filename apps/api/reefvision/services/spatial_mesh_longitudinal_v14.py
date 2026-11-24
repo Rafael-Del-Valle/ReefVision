@@ -341,6 +341,42 @@ def compare_mesh_observations(
                     raise ValueError("Mesh topology two-face edge incidence parity invalid")
                 if patch_count is not None and shared_incidences // 2 < face_count - patch_count:
                     raise ValueError("Mesh topology shared edges insufficient for patch count")
+        # Full-mesh per-patch counts are not sampled preview counts. When
+        # supplied, bind these arrays to the aggregate reconstruction QC.
+        # Legacy records may omit any array; do not infer missing totals.
+        patch_arrays: dict[str, list[int]] = {}
+        for field in ("face_count", "boundary_edge_count", "nonmanifold_edge_count"):
+            key = f"edge_connected_patch_{field}s"
+            values = record.get(key)
+            if values is None:
+                continue
+            if not isinstance(values, list) or any(
+                type(value) is not int or value < (1 if field == "face_count" else 0)
+                for value in values
+            ):
+                raise ValueError(f"Invalid mesh topology patch array: {key}")
+            total = counts[field]
+            patch_count = counts["edge_connected_patch_count"]
+            if (
+                (patch_count is not None and len(values) != patch_count)
+                or (total is not None and sum(values) != total)
+                or any(len(values) != len(other) for other in patch_arrays.values())
+            ):
+                raise ValueError(f"Mesh topology patch array contradicts counts: {key}")
+            patch_arrays[field] = values
+        for index, faces in enumerate(patch_arrays.get("face_count", [])):
+            boundary_values = patch_arrays.get("boundary_edge_count")
+            nonmanifold_values = patch_arrays.get("nonmanifold_edge_count")
+            patch_boundary = boundary_values[index] if boundary_values is not None else None
+            patch_nonmanifold = (
+                nonmanifold_values[index] if nonmanifold_values is not None else None
+            )
+            if (
+                (patch_boundary or 0) + 3 * (patch_nonmanifold or 0) > 3 * faces
+                or (faces < 3 and patch_nonmanifold)
+                or (faces == 1 and patch_boundary is not None and patch_boundary != 3)
+            ):
+                raise ValueError("Mesh topology patch edge incidences contradict face count")
         topology_counts.append(counts)
     a0 = before.get("surface_area_m2")
     a1 = after.get("surface_area_m2")
