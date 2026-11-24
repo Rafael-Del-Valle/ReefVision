@@ -384,7 +384,15 @@ def compare_mesh_observations(
                 if patch_shared_incidences % 2:
                     raise ValueError("Mesh topology patch two-face edge incidence parity invalid")
                 if patch_shared_incidences // 2 < patch_faces - 1:
-                    raise ValueError("Mesh topology patch shared edges insufficient for connectivity")
+                    raise ValueError(
+                        "Mesh topology patch shared edges insufficient for connectivity"
+                    )
+            if (
+                patch_boundary is not None
+                and patch_nonmanifold
+                and 3 * patch_faces - patch_boundary - patch_nonmanifold < patch_faces - 1
+            ):
+                raise ValueError("Mesh topology patch shared edge links insufficient")
         topology_counts.append(counts)
     a0 = before.get("surface_area_m2")
     a1 = after.get("surface_area_m2")
