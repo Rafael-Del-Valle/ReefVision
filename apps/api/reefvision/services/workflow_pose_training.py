@@ -509,10 +509,12 @@ def _seed_pose_model(
     if checkpoint.stat().st_size == 0:
         raise ValidationError("Pose retraining seed checkpoint is empty")
 
-    actual_sha, _ = hash_model_file(checkpoint)
+    actual_sha, actual_size = hash_model_file(checkpoint)
 
     if actual_sha != model.sha256:
         raise ValidationError("Pose retraining seed checkpoint checksum changed")
+    if actual_size != model.file_size_bytes:
+        raise ValidationError("Pose retraining seed checkpoint size differs from registry")
 
     return model
 

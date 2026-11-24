@@ -3795,13 +3795,22 @@ def test_pose_seed_rejects_distinct_schema_identity_with_matching_content(
         )
 
 
-def test_pose_workflow_rejects_malformed_seed_metadata_from_verified_truth(
+@pytest.mark.parametrize(
+    ("corruption", "expected_error"),
+    [
+        ("metadata", "seed metadata must be a JSON object"),
+        ("size", "seed checkpoint size differs from registry"),
+    ],
+)
+def test_pose_workflow_rejects_corrupt_seed_registry_from_verified_truth(
     client: TestClient,
     test_settings: Settings,
     monkeypatch: pytest.MonkeyPatch,
+    corruption: str,
+    expected_error: str,
 ) -> None:
     # Freeze a scientist-verified round and register a local, schema-bound
-    # checkpoint before corrupting only its persisted JSON metadata shape.
+    # checkpoint before corrupting only its persisted registry metadata.
     project, dataset = _frozen_dataset(client, monkeypatch)
     app = cast(FastAPI, client.app)
     model_id = _seed_model(app, project, dataset)
@@ -3809,14 +3818,17 @@ def test_pose_workflow_rejects_malformed_seed_metadata_from_verified_truth(
     with app.state.session_factory() as session:
         model = session.get(ModelRegistration, model_id)
         assert model is not None
-        # A list of pairs could previously be coerced by dict() to pass as
-        # the seed's original architecture during saved workflow execution.
-        model.metadata_json = cast(Any, [["source_architecture", "yolo11n-pose.pt"]])
+        if corruption == "metadata":
+            # A list of pairs is not a valid architecture metadata object.
+            model.metadata_json = cast(Any, [["source_architecture", "yolo11n-pose.pt"]])
+        else:
+            # Leave the actual checkpoint and checksum intact.
+            model.file_size_bytes += 1
         session.commit()
 
     with (
         app.state.session_factory() as session,
-        pytest.raises(ValidationError, match="seed metadata must be a JSON object"),
+        pytest.raises(ValidationError, match=expected_error),
     ):
         create_pose_workflow_training_result(
             session,
