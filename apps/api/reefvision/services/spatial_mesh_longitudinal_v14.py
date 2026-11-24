@@ -306,6 +306,14 @@ def compare_mesh_observations(
                 edge_count = counts[edge_field]
                 if edge_count is not None and edge_count > 3 * face_count:
                     raise ValueError(f"Mesh topology {edge_field} inconsistent with face_count")
+            # Each triangle contributes exactly three edge incidences. Boundary
+            # edges consume one each, nonmanifold edges at least three each.
+            # Missing legacy counts contribute only a zero lower bound here;
+            # they remain unknown in the returned scientific evidence.
+            boundary = counts["boundary_edge_count"]
+            nonmanifold = counts["nonmanifold_edge_count"]
+            if (boundary or 0) + 3 * (nonmanifold or 0) > 3 * face_count:
+                raise ValueError("Mesh topology edge incidence budget exceeds face_count")
         topology_counts.append(counts)
     a0 = before.get("surface_area_m2")
     a1 = after.get("surface_area_m2")
