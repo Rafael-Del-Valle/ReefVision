@@ -990,6 +990,12 @@ def compare_mesh_observations(
     if before_patch_distribution is not None and after_patch_distribution is not None:
         ranked_before = sorted(before["edge_connected_patch_surface_area_fractions"], reverse=True)
         ranked_after = sorted(after["edge_connected_patch_surface_area_fractions"], reverse=True)
+        # Zero-area ranks and the implicit zero padding represent identical
+        # area mass. Their topology differences remain in reconstruction QC.
+        ranked_profiles_differ = any(
+            early != late
+            for early, late in zip_longest(ranked_before, ranked_after, fillvalue=0.0)
+        )
         ranked_patch_area_profile_distance = 0.5 * fsum(
             abs(early - late)
             for early, late in zip_longest(ranked_before, ranked_after, fillvalue=0.0)
@@ -999,7 +1005,7 @@ def compare_mesh_observations(
         ranked_patch_area_profile_distance = min(1.0, max(0.0, ranked_patch_area_profile_distance))
         # An exactly zero float from distinct ranked fractions can reflect
         # subnormal underflow, not identical reconstructions.
-        if ranked_before != ranked_after and ranked_patch_area_profile_distance == 0.0:
+        if ranked_profiles_differ and ranked_patch_area_profile_distance == 0.0:
             ranked_patch_area_profile_distance = None
             warnings.append("ranked_patch_area_profile_distance_below_numeric_resolution")
         # Compare ranked area profiles without claiming patch correspondence.
@@ -1011,10 +1017,7 @@ def compare_mesh_observations(
         ranked_patch_area_jensen_shannon_divergence_bits = min(
             1.0, max(0.0, ranked_patch_area_jensen_shannon_divergence_bits)
         )
-        if (
-            ranked_before != ranked_after
-            and ranked_patch_area_jensen_shannon_divergence_bits == 0.0
-        ):
+        if ranked_profiles_differ and ranked_patch_area_jensen_shannon_divergence_bits == 0.0:
             ranked_patch_area_jensen_shannon_divergence_bits = None
             warnings.append("ranked_patch_area_divergence_below_numeric_resolution")
     if patch_concentration_delta is None:
