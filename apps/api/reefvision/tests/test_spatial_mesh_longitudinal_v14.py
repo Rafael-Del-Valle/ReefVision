@@ -137,16 +137,20 @@ def test_longitudinal_scale_only_area_difference_sign(
     assert comparison["provenance"]["specimen_identity_verified"] is False
 
 
-@pytest.mark.parametrize("nonmanifold", [False, True])
+@pytest.mark.parametrize("topology", ["single", "manifold_pair", "nonmanifold"])
 def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
-    client: TestClient, nonmanifold: bool
+    client: TestClient, topology: str
 ) -> None:
     """A nominal area increase with scale-overlapping bounds is not verified growth."""
     project_id = str(create_project(client, "Provisional scale overlap")["id"])
     base = f"/api/v1/projects/{project_id}"
     before = _mesh("early", "2026-10-01T12:00:00Z", 1.0)
     after = _mesh("late", "2026-10-02T12:00:00Z", 1.1)
-    if nonmanifold:
+    if topology == "manifold_pair":
+        for record, height in ((before, 1.0), (after, 1.1)):
+            record["vertices"] = [[0, 0, 0], [1, 0, 0], [0, height, 0], [0, -height, 0]]
+            record["faces"] = [[0, 1, 2], [1, 0, 3]]
+    elif topology == "nonmanifold":
         # Three triangles share one edge: six boundary incidences and three
         # nonmanifold incidences exhaust the nine available face incidences.
         for record, height in ((before, 1.0), (after, 1.1)):
@@ -164,13 +168,18 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
     )
     assert response.status_code == 200, response.text
     expected = response.json()
-    assert expected["delta_surface_area_m2"] == pytest.approx(0.15 if nonmanifold else 0.05)
-    if nonmanifold:
-        for timepoint in ("before", "after"):
-            counts = expected[f"{timepoint}_reconstruction_topology_counts"]
-            assert counts["face_count"] == 3
-            assert counts["boundary_edge_count"] == 6
-            assert counts["nonmanifold_edge_count"] == 1
+    expected_delta, faces, boundary, nonmanifold = {
+        "single": (0.05, 1, 3, 0),
+        "manifold_pair": (0.1, 2, 4, 0),
+        "nonmanifold": (0.15, 3, 6, 1),
+    }[topology]
+    assert expected["delta_surface_area_m2"] == pytest.approx(expected_delta)
+    for timepoint in ("before", "after"):
+        counts = expected[f"{timepoint}_reconstruction_topology_counts"]
+        assert counts["face_count"] == faces
+        assert counts["boundary_edge_count"] == boundary
+        assert counts["nonmanifold_edge_count"] == nonmanifold
+        assert counts["edge_connected_patch_count"] == 1
     assert expected["surface_area_difference_sign_under_scale_only_bounds"] == "includes_zero"
     assert "surface_area_difference_scale_bounds_include_zero" in expected["qc_warnings"]
     assert expected["axis_aligned_extent_difference_sign_under_scale_only_bounds"] == (
@@ -2332,6 +2341,19 @@ def test_matching_geometry_fingerprint_requires_consistent_topology_metadata(
             "edge incidence budget",
         ),
         ({"face_count": 3, "nonmanifold_edge_count": 4}, "edge incidence budget"),
+        (
+            {"face_count": 2, "boundary_edge_count": 5, "nonmanifold_edge_count": 0},
+            "incidence parity",
+        ),
+        (
+            {
+                "face_count": 3,
+                "boundary_edge_count": 7,
+                "nonmanifold_edge_count": 0,
+                "edge_connected_patch_count": 1,
+            },
+            "shared edges insufficient",
+        ),
     ],
 )
 @pytest.mark.parametrize("timepoint", ["before", "after"])
@@ -2344,6 +2366,17 @@ def test_mesh_comparison_rejects_impossible_topology_relationships(
     target.update(field_values)
     with pytest.raises(ValueError, match=error):
         compare_mesh_observations(before, after)
+
+
+def test_mesh_comparison_preserves_unknown_nonmanifold_edge_count() -> None:
+    """Odd shared incidence counts can be valid when nonmanifold counts are unknown."""
+    before, after = _minimal_topology_pair()
+    before.update(face_count=3, boundary_edge_count=6, edge_connected_patch_count=1)
+    result = compare_mesh_observations(before, after)
+    counts = result["before_reconstruction_topology_counts"]
+    assert counts["nonmanifold_edge_count"] is None
+    assert counts["boundary_edge_count"] == 6
+    assert result["provenance"]["specimen_identity_verified"] is False
 
 
 def test_mesh_comparison_preserves_partial_legacy_topology_without_face_count() -> None:
