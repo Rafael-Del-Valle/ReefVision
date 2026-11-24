@@ -95,3 +95,23 @@ retention and original coral observation payloads. This is an audit accuracy
 increment only, not a unified Alembic DAG, installed-GUI acceptance, or a
 release claim. Existing executable QC Workflow Builder graphs and human
 review requirements remain untouched.
+
+## 2026-11-23 — required computed-metric stage inventory
+
+The real 1.1 revision 0039 creates both immutable computed-metric tables.
+A database with just the 0038 base pair and a later 0039 stamp could
+previously pass strict inventory without either formula definitions or
+results. The read-only inspector now requires the metric pair at known
+scientific revisions 0039–0042, even if neither table survived. Legitimate
+0038 and unrelated QC lineages retain their existing semantics. Twelve
+new CLI regression combinations cover absent and partially retained metric
+pairs, repeated refusal, private observation redaction and unchanged
+SQLite bytes. The structural-contract fixture now retains the real 0039
+metric inventory while isolating its original 0038 DDL checks.
+
+The preceding push-triggered CI #45298701186 failed at the backend Ruff
+formatter on one migration-stamp test line; the exact reported correction
+is included. Full final-head CI and real installed Windows acceptance
+remain required; this diagnostic is not Alembic reconciliation or upgrade
+authorization. The existing executable saved QC Workflow Builder is not
+changed.

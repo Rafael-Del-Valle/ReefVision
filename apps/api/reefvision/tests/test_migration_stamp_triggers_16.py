@@ -147,8 +147,7 @@ def test_revision_foreign_key_preservation_across_preflight_and_inspector(
             "self": " REFERENCES alembic_version(version_num)",
         }.get(relationship, "")
         db.execute(
-            "CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY"
-            f"{reference})"
+            f"CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY{reference})"
         )
         db.execute("INSERT INTO alembic_version VALUES ('0037')")
         if relationship in {"update", "delete"}:

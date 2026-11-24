@@ -731,6 +731,8 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
         if lineage == "scientific" and len(revisions) == 1:
             revision = revisions[0]
             # A later scientific stamp also promises that its own DDL exists.
+            if revision in {"0039", "0040", "0041", "0042"} and not metric_complete:
+                warnings.append("scientific_revision_missing_computed_metric_pair")
             # Earlier stage checks only diagnose tables arriving too soon or
             # missing dependencies of tables that survived a partial restore.
             if (

@@ -822,6 +822,39 @@ def test_qc_16_migration_stages_preserve_records_and_diagnose_interrupted_ddl(
             )
 
 
+@pytest.mark.parametrize("revision", ["0039", "0040", "0041", "0042"])
+@pytest.mark.parametrize(
+    "retained_metrics", [(), ("computed_metric_definitions",), ("computed_metric_results",)]
+)
+def test_scientific_stamp_requires_computed_metric_pair(
+    tmp_path: Path, revision: str, retained_metrics: tuple[str, ...]
+) -> None:
+    """A later revision cannot prove missing immutable formula/result tables exist."""
+    database = tmp_path / "missing-metric-stage.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
+        connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        for table in ("scientific_records", "environmental_cache_entries", *retained_metrics):
+            connection.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY, note TEXT)')
+            connection.execute(f'INSERT INTO "{table}" VALUES (1, ?)', ("private coral count",))
+    original = database.read_bytes()
+    for _ in range(2):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 2, result.stderr
+        report = json.loads(result.stdout)
+        assert report["lineage_hint"] == "scientific"
+        assert "scientific_revision_missing_computed_metric_pair" in report["warnings"]
+        assert report["upgrade_authorized"] is False
+        assert "private coral count" not in result.stdout
+        assert database.read_bytes() == original
+        assert report["inventory"]["scientific_records"]["rows"] == 1
+
+
 @pytest.mark.parametrize(
     ("revision", "extensions", "expected_warnings"),
     [
@@ -1262,6 +1295,10 @@ def test_0038_scientific_cache_and_declared_type_contracts(
             connection.execute(f'CREATE TABLE "{parent}" (id VARCHAR(36) PRIMARY KEY)')
         connection.execute(science_sql)
         connection.execute(cache_sql)
+        # Revision 0039 also creates the metric pair. Keep the fixture complete
+        # so this test isolates the 0038 structural-contract variants.
+        connection.execute("CREATE TABLE computed_metric_definitions (id INTEGER PRIMARY KEY)")
+        connection.execute("CREATE TABLE computed_metric_results (id INTEGER PRIMARY KEY)")
         connection.execute(
             "CREATE INDEX ix_scientific_project_variable_time "
             "ON scientific_records (project_id, variable, observed_at)"
