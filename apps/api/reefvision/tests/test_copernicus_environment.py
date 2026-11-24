@@ -330,6 +330,57 @@ def test_invalid_copernicus_resolution_refresh_keeps_prior_offline_snapshot(
     assert [item.id for item in offline.items] == [item.id for item in cached.items]
 
 
+def test_shared_grid_hole_cannot_replace_validated_offline_snapshot(
+    client, test_settings, monkeypatch
+):
+    """A shared missing cell is not equivalent to explicit null model values."""
+    project = create_project(client)
+    original = raw_fixture(monkeypatch)
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    with client.app.state.session_factory() as session:
+        cached = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: deepcopy(original), now=now
+        ).acquire(project["id"], request())
+
+    damaged = deepcopy(original)
+    # Every variable has the same three cells of a two-by-two spatial grid.
+    for latitude, longitude in ((32.5, -79.4), (32.6, -79.5)):
+        for sample in original["samples"]:
+            damaged["samples"].append(
+                {**sample, "latitude": latitude, "longitude": longitude}
+            )
+    with (
+        client.app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="incomplete rectilinear grid coverage"),
+    ):
+        CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: damaged, now=now + timedelta(days=2)
+        ).acquire(project["id"], request(refresh=True))
+
+    with client.app.state.session_factory() as session:
+        offline = CopernicusEnvironmentService(
+            session,
+            test_settings,
+            fetch=lambda *_: pytest.fail("offline must not acquire remote data"),
+            now=now + timedelta(days=2),
+        ).acquire(project["id"], request(offline=True))
+    assert offline.cache_status == "stale_offline"
+    assert [item.id for item in offline.items] == [item.id for item in cached.items]
+
+    # Explicit nulls complete the grid but must not fabricate measurements.
+    for sample in original["samples"]:
+        damaged["samples"].append(
+            {**sample, "latitude": 32.6, "longitude": -79.4, "value": None}
+        )
+    with client.app.state.session_factory() as session:
+        refreshed = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: damaged, now=now + timedelta(days=2)
+        ).acquire(project["id"], request(refresh=True))
+    assert refreshed.skipped_missing == 4
+    assert len(refreshed.items) == 12
+    assert all(item.qc == "unassessed" for item in refreshed.items)
+
+
 def test_valid_provider_grid_spacing_is_retained_as_unassessed_provenance(
     client, test_settings, monkeypatch
 ):
