@@ -122,11 +122,15 @@ def test_review_lineage_is_accepted_without_writes(revision: str, extra_unique: 
             before_schema = connection.exec_driver_sql(schema_query).all()
             before_rows = connection.exec_driver_sql(row_query).all()
             for _ in range(2):
-                with pytest.raises(RuntimeError, match="noncanonical review-event automatic UNIQUE"):
+                with pytest.raises(
+                    RuntimeError, match="noncanonical review-event automatic UNIQUE"
+                ):
                     assert_compatible_revision_0038(connection)
                 assert connection.exec_driver_sql(schema_query).all() == before_schema
                 assert connection.exec_driver_sql(row_query).all() == before_rows
-                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+                assert (
+                    connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+                )
                 assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
             return
         assert_compatible_revision_0038(connection)
@@ -603,7 +607,35 @@ _REVIEW_REQUEST_SCHEMA = (
 )
 
 
-def test_revision_0041_requires_global_bulk_request_registry() -> None:
+@pytest.mark.parametrize(
+    ("id_ddl", "extra_unique", "index_sql"),
+    [
+        ("id TEXT NOT NULL PRIMARY KEY", "", ""),
+        ("id TEXT NOT NULL PRIMARY KEY", ", UNIQUE (actor)", ""),
+        ("id TEXT NOT NULL PRIMARY KEY", ", UNIQUE (project_id, action)", ""),
+        (
+            "id TEXT NOT NULL PRIMARY KEY",
+            "",
+            "CREATE UNIQUE INDEX unexpected ON review_queue_bulk_requests (lower(actor))",
+        ),
+        (
+            "id TEXT NOT NULL PRIMARY KEY",
+            "",
+            "CREATE INDEX unexpected ON review_queue_bulk_requests (project_id)",
+        ),
+        (
+            "id TEXT NOT NULL PRIMARY KEY",
+            "",
+            "CREATE UNIQUE INDEX unexpected ON review_queue_bulk_requests (actor) "
+            "WHERE action = 'start'",
+        ),
+        ("id TEXT COLLATE NOCASE NOT NULL PRIMARY KEY", "", ""),
+        ("id TEXT NOT NULL PRIMARY KEY DESC", "", ""),
+    ],
+)
+def test_revision_0041_requires_global_bulk_request_registry(
+    id_ddl: str, extra_unique: str, index_sql: str
+) -> None:
     """A forged 0041 stamp must never bypass the global request-ID constraint."""
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.begin() as connection:
@@ -630,14 +662,33 @@ def test_revision_0041_requires_global_bulk_request_registry() -> None:
         connection.execute(
             text(
                 "CREATE TABLE review_queue_bulk_requests ("
-                "id TEXT NOT NULL PRIMARY KEY, review_queue_id TEXT NOT NULL, "
+                f"{id_ddl}, review_queue_id TEXT NOT NULL, "
                 "project_id TEXT NOT NULL, action TEXT NOT NULL, "
                 "actor TEXT NOT NULL, reason TEXT, item_ids_json TEXT NOT NULL, "
-                f"created_at TEXT NOT NULL{_REVIEW_QUEUE_FK}{_PROJECT_FK})"
+                f"created_at TEXT NOT NULL{_REVIEW_QUEUE_FK}{_PROJECT_FK}{extra_unique})"
             )
         )
-        assert_compatible_revision_0038(connection)
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
+        if index_sql:
+            connection.exec_driver_sql(index_sql)
+        connection.exec_driver_sql(
+            "INSERT INTO review_queue_bulk_requests VALUES "
+            "('request-1', 'queue-1', 'project-1', 'start', 'researcher', NULL, "
+            "'[]', '2026-11-24')"
+        )
+        schema_query = "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+        row_query = "SELECT * FROM review_queue_bulk_requests"
+        before_schema = connection.exec_driver_sql(schema_query).all()
+        before_rows = connection.exec_driver_sql(row_query).all()
+        for _ in range(2):
+            if extra_unique or index_sql or id_ddl != "id TEXT NOT NULL PRIMARY KEY":
+                with pytest.raises(RuntimeError, match="noncanonical bulk request registry index"):
+                    assert_compatible_revision_0038(connection)
+            else:
+                assert_compatible_revision_0038(connection)
+            assert connection.exec_driver_sql(schema_query).all() == before_schema
+            assert connection.exec_driver_sql(row_query).all() == before_rows
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
+            assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
     engine.dispose()
 
 

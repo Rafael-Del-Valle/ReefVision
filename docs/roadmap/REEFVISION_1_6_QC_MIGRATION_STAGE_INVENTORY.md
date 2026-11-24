@@ -286,3 +286,19 @@ Seven independent SQLAlchemy/SQLite index probes verified the classification
 and reproduced a blocked second event by the same reviewer. Full repository
 CI remains required. The standalone and executable saved QC workflow review
 gates are unchanged; no migration, restamp or data rewrite is performed.
+
+## 2026-11-24 — bulk request registry index contract
+
+The original Alembic 0041 registry has exactly one automatic primary-key
+index on the binary ascending request ID, with no other indexes. An extra
+UNIQUE constraint or expression/partial index can reject independent
+review batches, and a nonbinary primary key can collapse distinct IDs.
+Desktop startup now refuses a changed index inventory or primary-key
+semantics before writes. Seven additional populated 0041 regression
+configurations check repeat refusal, schema and row preservation, the
+original stamp and clean foreign keys. Nine independent SQLite/SQLAlchemy
+probes passed, including a reconstructed Alembic 0041 table. Corrected
+the preceding exact-head CI #45493014255 two Ruff E501/format diagnostics.
+Full repository CI remains required. Existing standalone and saved typed
+QC workflows, scientific provenance and researcher approvals are unchanged;
+no migration reconciliation, stamp or data rewrite is performed.

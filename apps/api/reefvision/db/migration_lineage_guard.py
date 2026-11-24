@@ -451,6 +451,32 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "and reconcile without rewriting reviewer history."
             )
 
+        if connection.dialect.name == "sqlite":
+            # The original 0041 migration has only the global ID primary key.
+            # Extra indexes can block legitimate batches; a nonbinary primary
+            # key can collapse distinct request identities.
+            indexes = (
+                connection.execute(text("PRAGMA index_list(review_queue_bulk_requests)"))
+                .mappings()
+                .all()
+            )
+            if len(indexes) == 1 and indexes[0]["origin"] == "pk":
+                keys = connection.execute(
+                    text(
+                        'SELECT name, coll, "desc" FROM pragma_index_xinfo(:index_name) '
+                        'WHERE "key" = 1 ORDER BY seqno'
+                    ),
+                    {"index_name": indexes[0]["name"]},
+                ).all()
+            else:
+                keys = []
+            if [tuple(row) for row in keys] != [("id", "BINARY", 0)]:
+                raise RuntimeError(
+                    "Unsafe ReefVision Alembic revision 0041 collision: "
+                    "noncanonical bulk request registry index inventory or key semantics. "
+                    "Preserve reviewer history and reconcile without rewriting research data."
+                )
+
     # The 0041 review lineage relies on per-item request IDs being unique
     # for idempotent researcher comments and assignments. A forged or
     # incomplete migration stamp must not silently admit duplicate events,
