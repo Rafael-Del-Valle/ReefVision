@@ -191,12 +191,12 @@ def make_glb(
     if invalid_selector in EXACT_TRANSFORM_SELECTORS:
         # Inject raw JSON decimal tokens below, not Python-rounded floats.
         _, transform, _ = invalid_selector.split("_")
-        identities = {
+        exact_identities = {
             "scale": ["numeric_marker", 1, 1],
             "rotation": [0, 0, 0, "numeric_marker"],
             "matrix": ["numeric_marker", *[int(i % 5 == 0) for i in range(1, 16)]],
         }
-        doc["nodes"][0][transform] = identities[transform]
+        doc["nodes"][0][transform] = exact_identities[transform]
     if translated:
         doc["nodes"] = [{"mesh": 0, "translation": [1, 0, 0]}]
     if invalid_selector == "nonidentity_scale":
