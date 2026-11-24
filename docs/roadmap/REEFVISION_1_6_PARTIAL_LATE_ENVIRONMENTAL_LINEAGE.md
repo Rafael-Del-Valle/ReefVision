@@ -227,3 +227,19 @@ before pytest on a test assertion exceeding Ruff's line limit; its exact
 formatting correction is included. This remains read-only evidence,
 not a unified migration DAG, workflow approval, or installed Windows
 acceptance.
+
+## 2026-11-24 — QC event vocabulary bound to stamped revision
+
+The optional structural audit previously recognized each of the three
+historical review-event CHECK vocabularies independently of the stamp.
+An otherwise identical 0039 database retaining the 0038 constraint could
+pass the structural check while rejecting legitimate triage events;
+0040/0041 similarly require the completion event. The inspector now
+binds the accepted vocabulary to known QC revisions 0038, 0039, 0040
+and 0041, using the original migration declarations. It continues to
+report the separate 0038 lineage collision and never authorizes an upgrade.
+Twelve stage/vocabulary combinations extend the existing persisted CLI
+regression, preserving research bytes, comments and review gates. The
+previous exact-head CI #45349553769 failed solely at the inspector test
+format check; its reported formatting correction is included. This is
+read-only reconciliation evidence, not a unified migration or release.
