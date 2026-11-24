@@ -163,11 +163,12 @@ def test_tidal_context_keeps_observed_and_predicted_evidence_separate(
     assert "causal" not in result["payload"]["methodological_notes"][0].lower()
 
 
+@pytest.mark.parametrize("corrupt_prediction", [True, False])
 def test_environmental_analysis_currentness_detects_corrupt_source_evidence(
-    client: TestClient,
+    client: TestClient, corrupt_prediction: bool
 ) -> None:
     project = create_project(client, "Tidal currentness")
-    _import_tides(client, project["id"])
+    predicted, observed, _ = _import_tides(client, project["id"])
     response = client.post(
         f"/api/v1/projects/{project['id']}/environment/analyses/tidal-context",
         json={
@@ -194,17 +195,40 @@ def test_environmental_analysis_currentness_detects_corrupt_source_evidence(
         "reasons": [],
     }
 
-    source_id = result["source_record_ids"][0]
+    # A corrupt record invalidates its acquisition, not an independent NOAA product.
+    members = predicted.items if corrupt_prediction else observed.items
+    source_id = str(members[0].id)
+    sibling_ids = {str(item.id) for item in members[1:]}
+    assert {source_id, *sibling_ids} <= set(result["source_record_ids"])
     with client.app.state.session_factory() as session:
         source = session.get(ScientificRecord, source_id)
         assert source is not None
+        original_payload = dict(source.payload_json)
         source.payload_json = {**source.payload_json, "unit": "tampered"}
         session.commit()
 
     stale = client.get(validation_url)
     assert stale.status_code == 200, stale.text
-    assert stale.json()["current"] is False
-    assert stale.json()["reasons"] == [f"source_record_invalid:{source_id}"]
+    assert stale.json() == {
+        "result_id": result["id"],
+        "current": False,
+        "result_sha256": result["content_sha256"],
+        "reasons": sorted(
+            [f"source_record_invalid:{source_id}"]
+            + [f"source_record_snapshot_stale:{record_id}" for record_id in sibling_ids]
+        ),
+    }
+
+    # Restore only the synthetic fixture; currentness must be recomputed per request.
+    with client.app.state.session_factory() as session:
+        source = session.get(ScientificRecord, source_id)
+        assert source is not None
+        source.payload_json = original_payload
+        session.commit()
+
+    recovered = client.get(validation_url)
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json() == current.json()
 
 
 def test_tidal_context_enforces_station_datum_time_and_distance(client: TestClient) -> None:
