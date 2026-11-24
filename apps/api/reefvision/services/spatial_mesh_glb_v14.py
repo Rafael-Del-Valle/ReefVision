@@ -375,7 +375,7 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
             # A nonzero extremum at or below the midpoint to the smallest
             # subnormal rounds to zero (ties-to-even); do not hide its loss.
             zero_midpoint = Decimal.from_float(2**-150)
-            if value != 0 and -zero_midpoint <= value <= zero_midpoint:
+            if value != 0 and zero_midpoint.copy_negate() <= value <= zero_midpoint:
                 raise ValueError("GLB position bounds underflow float32 precision")
             if not _matches_float32_bound(value, expected):
                 raise ValueError("GLB position bounds conflict with decoded geometry")
