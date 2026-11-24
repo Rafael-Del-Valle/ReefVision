@@ -69,3 +69,23 @@ representative saved-workflow/scientific data acceptance, actual native
 Windows MSI/CAB install, upgrade/rollback, installed GUI and explicit
 researcher approval. Do not merge, tag, release, deploy, download unapproved
 models or delete research assets.
+
+
+## 2026-11-24 — full backend structural fixture stage parity
+
+Exact-head CI `45367114338` passed 2498 backend tests but exposed two
+obsolete structural fixture expectations: the fixtures stamped 0038
+incorrectly expected the expanded 0039 and 0040 event vocabularies to
+match. They now require a mismatch. The full persisted structural
+inspector additionally exercises all twelve combinations of the three
+historical event vocabularies and four QC revision stamps, including
+0041's unchanged 0040 event vocabulary. It checks the actual structural
+report, repeated inspection, redaction, byte preservation, and refusal
+to authorize any upgrade. The 0041 fixture tests the event table only,
+not the separate bulk registry; full schema acceptance remains HOLD.
+No production guard or applied migration is weakened or rewritten.
+
+Independent disposable SQLite checks exercise the same twelve
+combinations and verify the actual permitted event values. Full backend
+CI on the new commit remains required. Existing standalone/saved QC
+workflow execution and explicit researcher review remain unchanged.

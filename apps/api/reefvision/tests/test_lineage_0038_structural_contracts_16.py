@@ -272,7 +272,8 @@ def test_read_only_structural_contract_catches_colliding_0038_shape(
     target = "scientific_records" if family == "scientific" else "review_queue_item_events"
     other = "review_queue_item_events" if family == "scientific" else "scientific_records"
     mismatch_warning = f"lineage_table_contract_mismatch_{target}"
-    equivalent = variant in {"valid", "comment_decoy", "triage_0039", "triage_0040"}
+    # This fixture is stamped 0038: later triage vocabularies are premature.
+    equivalent = variant in {"valid", "comment_decoy"}
     assert report["structural_contracts"][target] == ("matches" if equivalent else "mismatch")
     assert report["structural_contracts"][other] == "absent"
     assert (mismatch_warning in report["warnings"]) is (not equivalent)
@@ -282,6 +283,46 @@ def test_read_only_structural_contract_catches_colliding_0038_shape(
     assert path.read_bytes() == before
     assert module.inspect(path)["structural_contracts"] == {}
     assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("revision", ["0038", "0039", "0040", "0041"])
+@pytest.mark.parametrize("variant", ["valid", "triage_0039", "triage_0040"])
+def test_qc_structural_contract_matches_only_stamped_vocabulary(
+    tmp_path: Path, revision: str, variant: str
+) -> None:
+    path = tmp_path / "qc-staged-structural-evidence.sqlite"
+    with sqlite3.connect(path) as db:
+        db.executescript(
+            "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY);"
+            "CREATE TABLE projects (id VARCHAR(36) PRIMARY KEY);"
+            "CREATE TABLE review_queues (id VARCHAR(36) PRIMARY KEY);"
+            "CREATE TABLE review_queue_items (id VARCHAR(36) PRIMARY KEY);"
+            "INSERT INTO projects VALUES ('p1');"
+            "INSERT INTO review_queues VALUES ('queue1');"
+            "INSERT INTO review_queue_items VALUES ('item1');"
+        )
+        db.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        _create_qc(db, variant)
+        db.commit()
+
+    expected = {
+        "0038": "valid",
+        "0039": "triage_0039",
+        "0040": "triage_0040",
+        "0041": "triage_0040",
+    }
+    matches = variant == expected[revision]
+    before = path.read_bytes()
+    for _ in range(2):
+        report = module.inspect(path, verify_structural_contracts=True)
+        assert report["structural_contracts"]["review_queue_item_events"] == (
+            "matches" if matches else "mismatch"
+        )
+        warning = "lineage_table_contract_mismatch_review_queue_item_events"
+        assert (warning in report["warnings"]) is (not matches)
+        assert report["upgrade_authorized"] is False
+        assert "PRIVATE_CORAL_NOTE" not in json.dumps(report)
+        assert path.read_bytes() == before
 
 
 def test_strict_structural_audit_rejects_forged_scientific_0038(
