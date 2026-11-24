@@ -61,6 +61,14 @@ def make_glb(
             + b"\x00" * max(0, position_stride - 12 - position_leading_bytes)
             for index in range(0, len(positions), 12)
         )
+    high_index = invalid_selector in {"byte_restart_index", "byte_high_index", "short_255_index"}
+    if high_index:
+        # Vertex 255 genuinely exists, so a bounds-only check cannot catch
+        # the reserved unsigned-byte restart value. All coordinates are distinct.
+        points = [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0)]
+        points.extend((float(i), 1.0, 0.0) for i in range(2, 254))
+        points.extend([(0.0, 3.0, 0.0), (0.0, 4.0, 0.0)])
+        positions = struct.pack("<768f", *(value for point in points for value in point))
     position_size = len(positions)
     if unsigned_byte_indices and unsigned_int_indices:
         raise ValueError("Test fixture index widths are mutually exclusive")
@@ -73,6 +81,9 @@ def make_glb(
     else:
         index_bytes = struct.pack("<3H", 0, 1, 2)
         index_component_type = 5123
+    if high_index:
+        last_index = 254 if invalid_selector == "byte_high_index" else 255
+        index_bytes = struct.pack("<3B" if unsigned_byte_indices else "<3H", 0, 1, last_index)
     binary = b"\x00" * position_offset + positions + index_bytes
     doc = {
         "asset": {"version": "2.0"},
@@ -86,7 +97,12 @@ def make_glb(
             },
         ],
         "accessors": [
-            {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+            {
+                "bufferView": 0,
+                "componentType": 5126,
+                "count": 256 if high_index else 3,
+                "type": "VEC3",
+            },
             {
                 "bufferView": 1,
                 "componentType": index_component_type,
@@ -826,3 +842,20 @@ def test_rejects_invalid_glb_index_bounds(invalid_selector: str) -> None:
     )
     with pytest.raises(ValueError, match=expected_error):
         parse_glb_triangles(make_glb(invalid_selector=invalid_selector))
+
+
+def test_glb_reserved_byte_index_is_not_an_in_bounds_vertex() -> None:
+    """The glTF restart sentinel is forbidden only at its own component width."""
+    with pytest.raises(ValueError, match="reserved primitive restart"):
+        parse_glb_triangles(
+            make_glb(unsigned_byte_indices=True, invalid_selector="byte_restart_index")
+        )
+    vertices, faces = parse_glb_triangles(
+        make_glb(unsigned_byte_indices=True, invalid_selector="byte_high_index")
+    )
+    assert len(vertices) == 256
+    assert vertices[254] == [0.0, 3.0, 0.0]
+    assert faces == [[0, 1, 254]]
+    short_vertices, short_faces = parse_glb_triangles(make_glb(invalid_selector="short_255_index"))
+    assert short_vertices == vertices
+    assert short_faces == [[0, 1, 255]]
