@@ -217,6 +217,44 @@ function Import-AcceptanceImage(
     } finally { $form.Dispose(); $client.Dispose() }
 }
 
+# The gallery uses a separate, asynchronously generated JPEG thumbnail. Check
+# its raw-frame aspect ratio independently from the full display rendition.
+function Get-AcceptanceCameraThumbnail(
+    [System.Net.Http.HttpClient]$Client,
+    [string]$Url,
+    [int]$SourceWidth,
+    [int]$SourceHeight
+) {
+    $response = $Client.GetAsync($Url).GetAwaiter().GetResult()
+    try {
+        if (-not $response.IsSuccessStatusCode) { throw 'Camera gallery thumbnail endpoint failed.' }
+        if ([string]$response.Content.Headers.ContentType.MediaType -cne 'image/jpeg') {
+            throw 'Camera gallery thumbnail must be served as image/jpeg.'
+        }
+        $bytes = $response.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult()
+        if ($bytes.Length -eq 0) { throw 'Camera gallery thumbnail returned no pixels.' }
+        Add-Type -AssemblyName System.Drawing
+        $stream = [System.IO.MemoryStream]::new([byte[]]$bytes, $false)
+        try {
+            $raster = [System.Drawing.Image]::FromStream($stream, $false, $true)
+            try {
+                $width = [int]$raster.Width
+                $height = [int]$raster.Height
+                if ($raster.RawFormat.Guid -ne [System.Drawing.Imaging.ImageFormat]::Jpeg.Guid -or
+                    $width -le 0 -or $height -le 0 -or $width -gt $SourceWidth -or $height -gt $SourceHeight) {
+                    throw 'Camera gallery thumbnail is not a valid, non-upscaled JPEG.'
+                }
+                # Allow one pixel of integer rounding when downscaling.
+                $aspectError = [Math]::Abs(([long]$width * $SourceHeight) - ([long]$height * $SourceWidth))
+                if ($aspectError -gt [Math]::Max($SourceWidth, $SourceHeight)) {
+                    throw 'Camera gallery thumbnail aspect ratio differs from the source pixel frame.'
+                }
+                return [pscustomobject]@{ bytes = $bytes; width = $width; height = $height }
+            } finally { $raster.Dispose() }
+        } finally { $stream.Dispose() }
+    } finally { $response.Dispose() }
+}
+
 function Import-AcceptanceAnnotations([string]$Url, [object[]]$Uploads) {
     Add-Type -AssemblyName System.Net.Http
     $http = [System.Net.Http.HttpClient]::new()
@@ -357,6 +395,16 @@ try {
         }
         # Validate the decoded source raster against the API's scientific pixel frame.
         $null = Assert-ReefVisionCameraRaster -Bytes $cameraBytes -ContentType 'image/jpeg' -ExpectedWidth ([int]$cameraMetadata.width_px) -ExpectedHeight ([int]$cameraMetadata.height_px)
+        # Wait for the actual thumbnail worker, not an arbitrary fixed delay.
+        $cameraThumbnailJobId = $cameraImport.successful[0].thumbnail_job_id
+        $cameraThumbnailDeadline = [DateTime]::UtcNow.AddSeconds(60)
+        do {
+            Start-Sleep -Milliseconds 500
+            $cameraThumbnailJob = Invoke-RestMethod "$api/jobs/$cameraThumbnailJobId" -TimeoutSec 10
+        } while ($cameraThumbnailJob.status -in @('queued', 'running') -and [DateTime]::UtcNow -lt $cameraThumbnailDeadline)
+        if ($cameraThumbnailJob.status -ne 'succeeded') {
+            throw "Camera thumbnail worker ended as $($cameraThumbnailJob.status)."
+        }
         $cameraHttp = [System.Net.Http.HttpClient]::new()
         try {
             $storedBytes = $cameraHttp.GetByteArrayAsync("$api/images/$cameraId/content").GetAwaiter().GetResult()
@@ -389,6 +437,7 @@ try {
                     throw 'EXIF-oriented camera JPEG must use an unrotated PNG display rendition.'
                 }
             } finally { $displayResponse.Dispose() }
+            $cameraThumbnail = Get-AcceptanceCameraThumbnail -Client $cameraHttp -Url "$api/images/$cameraId/thumbnail" -SourceWidth ([int]$cameraMetadata.width_px) -SourceHeight ([int]$cameraMetadata.height_px)
         } finally { $cameraHttp.Dispose() }
         if ((Get-FileHash -LiteralPath $CameraFixturePath -Algorithm SHA256).Hash -cne $cameraHashBefore) {
             throw 'Camera acceptance modified the original fixture on disk.'
@@ -605,11 +654,13 @@ try {
                 $null = Assert-ReefVisionCameraRaster -Bytes ([byte[]]$restartDisplayBytes) -ContentType $restartDisplayType -ExpectedWidth ([int]$cameraMetadata.width_px) -ExpectedHeight ([int]$cameraMetadata.height_px)
                 Assert-ReefVisionStableCameraDisplay -InitialBytes ([byte[]]$displayBytes) -RestartBytes ([byte[]]$restartDisplayBytes) -InitialContentType $displayType -RestartContentType $restartDisplayType
             } finally { $restartDisplayResponse.Dispose() }
+            $restartThumbnail = Get-AcceptanceCameraThumbnail -Client $cameraRestartHttp -Url "$api/images/$cameraId/thumbnail" -SourceWidth ([int]$cameraMetadata.width_px) -SourceHeight ([int]$cameraMetadata.height_px)
+            Assert-ReefVisionStableCameraDisplay -InitialBytes ([byte[]]$cameraThumbnail.bytes) -RestartBytes ([byte[]]$restartThumbnail.bytes) -InitialContentType 'image/jpeg' -RestartContentType 'image/jpeg'
         } finally { $cameraRestartHttp.Dispose() }
         if ((Get-FileHash -LiteralPath $CameraFixturePath -Algorithm SHA256).Hash -cne $cameraHashBefore) {
             throw 'Camera fixture changed on disk during restart acceptance.'
         }
-        $report.camera_jpeg = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed backend accepted and persisted $cameraName ($($cameraMetadata.width_px)x$($cameraMetadata.height_px)) across desktop restart; original SHA256 $cameraHashBefore unchanged; display decoded as $restartDisplayType and display SHA-256 unchanged across restart. GUI/WebView2 acceptance remains manual."
+        $report.camera_jpeg = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed backend accepted and persisted $cameraName ($($cameraMetadata.width_px)x$($cameraMetadata.height_px)) across desktop restart; original SHA256 $cameraHashBefore unchanged; display decoded as $restartDisplayType and display SHA-256 unchanged across restart; gallery JPEG thumbnail $($cameraThumbnail.width)x$($cameraThumbnail.height) decoded and remained byte-identical. GUI/WebView2 acceptance remains manual."
     }
     if ($LiveSam2Acceptance) {
         $persistedSamSession = Invoke-RestMethod "$api/images/$samImageId/annotations"
