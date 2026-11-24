@@ -1101,13 +1101,33 @@ def test_11_scientific_tables_cannot_precede_their_revision(
         ("request_unique_nocase_descending", True),
         ("additional_unique_actor", True),
         ("additional_partial_unique_actor", True),
+        ("stage_0038_0038", False),
+        ("stage_0038_0039", True),
+        ("stage_0038_0040", True),
+        ("stage_0039_0038", True),
+        ("stage_0039_0039", False),
+        ("stage_0039_0040", True),
+        ("stage_0040_0038", True),
+        ("stage_0040_0039", True),
+        ("stage_0040_0040", False),
+        ("stage_0041_0038", True),
+        ("stage_0041_0039", True),
+        ("stage_0041_0040", False),
     ],
 )
 def test_0038_qc_structural_audit_rejects_unreviewed_unique_index_semantics(
     tmp_path: Path, variant: str, mismatch: bool
 ) -> None:
-    """A column-matching QC table can still lose reviewer idempotency guarantees."""
+    """A column-matching QC table can lose idempotency or its stamped event vocabulary."""
     database = tmp_path / "review-events.sqlite"
+    revision, event_stage = ("0039", "0039")
+    if variant.startswith("stage_"):
+        _, revision, event_stage = variant.split("_")
+    event_types = "'comment', 'assign', 'unassign'"
+    if event_stage in {"0039", "0040"}:
+        event_types += ", 'triage_start', 'triage_skip', 'triage_return'"
+    if event_stage == "0040":
+        event_types += ", 'triage_complete'"
     has_request_constraint = variant != "partial_unique_replaces_request_constraint"
     request_indexed_column = "client_request_id"
     if variant in {"request_unique_nocase", "request_unique_nocase_descending"}:
@@ -1122,7 +1142,9 @@ def test_0038_qc_structural_audit_rejects_unreviewed_unique_index_semantics(
     )
     with sqlite3.connect(database) as connection:
         connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
-        connection.execute("INSERT INTO alembic_version VALUES ('0039')")
+        connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        if revision == "0041":
+            connection.execute("CREATE TABLE review_queue_bulk_requests (id TEXT PRIMARY KEY)")
         connection.execute("CREATE TABLE projects (id TEXT NOT NULL PRIMARY KEY)")
         connection.execute(
             "CREATE TABLE review_queues (id TEXT NOT NULL PRIMARY KEY, project_id TEXT NOT NULL)"
@@ -1147,7 +1169,7 @@ def test_0038_qc_structural_audit_rejects_unreviewed_unique_index_semantics(
             "comment TEXT, assignee VARCHAR(100), created_at DATETIME NOT NULL"
             f"{request_constraint}, "
             "CONSTRAINT ck_review_queue_item_event_type "
-            "CHECK (event_type IN ('comment', 'assign', 'unassign')))"
+            f"CHECK (event_type IN ({event_types})))"
         )
         connection.execute(
             "CREATE INDEX ix_review_queue_item_events_item_created "
@@ -1206,7 +1228,7 @@ def test_0038_qc_structural_audit_rejects_unreviewed_unique_index_semantics(
             text=True,
             check=False,
         )
-        assert completed.returncode == (2 if mismatch else 0), completed.stderr
+        assert completed.returncode == (2 if mismatch or revision == "0038" else 0), completed.stderr
         report = json.loads(completed.stdout)
         assert report["upgrade_authorized"] is False
         assert report["structural_contracts"]["review_queue_item_events"] == (
@@ -1716,9 +1738,7 @@ def test_environmental_extension_structural_contracts(
     ],
 )
 @pytest.mark.parametrize("kind", ["table", "view"])
-def test_reserved_lineage_schema_aliases_fail_closed(
-    tmp_path: Path, table: str, kind: str
-) -> None:
+def test_reserved_lineage_schema_aliases_fail_closed(tmp_path: Path, table: str, kind: str) -> None:
     """SQLite resolves aliases even though the stored schema names differ."""
     database = tmp_path / "reserved-schema.sqlite"
     is_qc = table.startswith("review_queue_")
