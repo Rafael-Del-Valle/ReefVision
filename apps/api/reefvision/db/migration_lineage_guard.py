@@ -473,6 +473,40 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "reviewed data-preserving migration, never by stamping."
             )
 
+    # An extra automatic UNIQUE index can prohibit legitimate successive
+    # events by the same reviewer or reuse of a request ID across items.
+    # Reflection of the expected named constraint alone cannot rule this out.
+    if connection.dialect.name == "sqlite":
+        request_indexes = (
+            connection.execute(
+                text(
+                    "SELECT name FROM pragma_index_list('review_queue_item_events') "
+                    "WHERE origin = 'u'"
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if len(request_indexes) == 1:
+            request_keys = connection.execute(
+                text(
+                    'SELECT name, coll, "desc" FROM pragma_index_xinfo(:index_name) '
+                    'WHERE "key" = 1 ORDER BY seqno'
+                ),
+                {"index_name": request_indexes[0]},
+            ).all()
+        else:
+            request_keys = []
+        if [tuple(row) for row in request_keys] != [
+            ("review_queue_item_id", "BINARY", 0),
+            ("client_request_id", "BINARY", 0),
+        ]:
+            raise RuntimeError(
+                f"Unsafe ReefVision Alembic revision {revision} collision: "
+                "noncanonical review-event automatic UNIQUE index inventory or key semantics. "
+                "Preserve reviewer history and reconcile without rewriting research data."
+            )
+
     # The 0038 migration gives every reviewer event a single global primary key.
     # A restored schema with only the request UNIQUE constraint could still
     # admit duplicate event IDs across items, corrupting audit references.

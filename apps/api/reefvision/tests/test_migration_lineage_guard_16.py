@@ -41,7 +41,11 @@ def test_fresh_and_noncolliding_revisions_are_not_modified(revision: str | None)
 
 
 @pytest.mark.parametrize("revision", ["0038", "0039"])
-def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
+@pytest.mark.parametrize(
+    "extra_unique",
+    ["", ", UNIQUE (actor)", ", UNIQUE (client_request_id)", ", UNIQUE (project_id, event_type)"],
+)
+def test_review_lineage_is_accepted_without_writes(revision: str, extra_unique: str) -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.connect() as connection:
         # Enforce the actual 0038 parent relationships during the positive
@@ -87,7 +91,9 @@ def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
                 text(f"INSERT INTO {parent} (id) VALUES (:parent_id)"),
                 {"parent_id": parent_id},
             )
-        connection.execute(text(f"CREATE TABLE review_queue_item_events ({schema}{check})"))
+        connection.execute(
+            text(f"CREATE TABLE review_queue_item_events ({schema}{check}{extra_unique})")
+        )
         connection.execute(
             text(
                 "CREATE INDEX ix_review_queue_item_events_item_created "
@@ -110,6 +116,19 @@ def test_review_lineage_is_accepted_without_writes(revision: str) -> None:
             )
         )
         assert connection.scalar(text("PRAGMA foreign_key_check")) is None
+        if extra_unique:
+            schema_query = "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+            row_query = "SELECT * FROM review_queue_item_events"
+            before_schema = connection.exec_driver_sql(schema_query).all()
+            before_rows = connection.exec_driver_sql(row_query).all()
+            for _ in range(2):
+                with pytest.raises(RuntimeError, match="noncanonical review-event automatic UNIQUE"):
+                    assert_compatible_revision_0038(connection)
+                assert connection.exec_driver_sql(schema_query).all() == before_schema
+                assert connection.exec_driver_sql(row_query).all() == before_rows
+                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+                assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+            return
         assert_compatible_revision_0038(connection)
         assert_review_event_relationship_topology(connection)
         assert (

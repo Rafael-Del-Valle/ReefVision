@@ -270,3 +270,19 @@ persisted regression configurations require exact schema and event-row
 preservation. Full repository CI and independent biological acceptance remain
 required. This is a startup safety guard, not a new scientific node or
 migration reconciliation; existing typed saved QC workflows are unchanged.
+
+## 2026-11-24 — automatic QC request uniqueness startup parity
+
+The original 0038 event table has one automatic UNIQUE request index in
+addition to its primary key. Desktop startup previously checked only for the
+presence of the named request constraint. An additional UNIQUE on actor,
+request ID alone, or project/event type can reject otherwise legitimate audit
+events even when existing records are valid. The SQLite startup guard now
+requires exactly the original automatic UNIQUE index and its ordered binary
+key columns; primary-key and explicit history indexes retain their separate
+checks. Six new populated 0038/0039 regression configurations verify repeated
+read-only refusal, unchanged event rows/schema/stamp and clean foreign keys.
+Seven independent SQLAlchemy/SQLite index probes verified the classification
+and reproduced a blocked second event by the same reviewer. Full repository
+CI remains required. The standalone and executable saved QC workflow review
+gates are unchanged; no migration, restamp or data rewrite is performed.
