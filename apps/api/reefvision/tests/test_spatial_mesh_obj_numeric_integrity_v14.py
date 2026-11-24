@@ -277,18 +277,30 @@ def test_distinct_obj_source_decimals_fail_standalone_and_saved_workflow(
 
 
 @pytest.mark.parametrize(
-    "valid",
+    ("valid", "x_coordinate"),
     [
-        "v 1 0 0\nv +1e0 2 0\nv 0 0 3\nf 1 2 3\n",
-        "v 1 0 0\nv 2 4 0 2\nv 0 0 3\nf 1 2 3\n",
+        pytest.param(
+            "v 1 0 0\nv +1e0 2 0\nv 0 0 3\nf 1 2 3\n",
+            1.0,
+            id="equivalent-decimal-spellings",
+        ),
+        pytest.param(
+            "v 1 0 0\nv 2 4 0 2\nv 0 0 3\nf 1 2 3\n",
+            1.0,
+            id="equivalent-homogeneous-coordinates",
+        ),
+        pytest.param(
+            "v 0.3 0 0 3\nv 0.1 2 0\nv 0 0 3\nf 1 2 3\n",
+            0.1,
+            id="single-rounded-homogeneous-coordinate",
+        ),
     ],
-    ids=["equivalent-decimal-spellings", "equivalent-homogeneous-coordinates"],
 )
 def test_equivalent_obj_sources_preserve_two_replays_and_provisional_provenance(
-    client: TestClient, valid: str
+    client: TestClient, valid: str, x_coordinate: float
 ) -> None:
     vertices, faces = parse_obj_triangles(valid)
-    assert vertices == [[1.0, 0.0, 0.0], [1.0, 2.0, 0.0], [0.0, 0.0, 3.0]]
+    assert vertices == [[x_coordinate, 0.0, 0.0], [x_coordinate, 2.0, 0.0], [0.0, 0.0, 3.0]]
     assert faces == [[0, 1, 2]]
     project_id = str(create_project(client, "OBJ equivalent exact source coordinates")["id"])
     base = f"/api/v1/projects/{project_id}"
@@ -608,3 +620,25 @@ def test_obj_decimal_exponent_rejects_without_measurement(
             artifact["data_type"] == "mesh_measurement_preview"
             for artifact in detail.json()["artifacts"]
         )
+
+
+def test_obj_single_rounding_exposes_hidden_source_collision(client: TestClient) -> None:
+    # Binary64 division used to separate these two coordinates by one ULP.
+    # Their distinct exact source ratios actually round to the same float.
+    assert 0.3 / 3 != 0.1
+    invalid = "v 0.3 0 0 3\nv 0.100000000000000001 2 0\nv 0 0 3\nf 1 2 3\n"
+    with pytest.raises(ValueError, match="distinct source coordinates collapse"):
+        parse_obj_triangles(invalid)
+
+    project_id = str(create_project(client, "OBJ hidden precision collision")["id"])
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/spatial/mesh-preview",
+        json={**PARAMS, "obj_text": invalid},
+    )
+    assert standalone.status_code == 400, standalone.text
+    assert "distinct source coordinates collapse" in standalone.json()["detail"]
+    detail = _run_saved(client, project_id, invalid)
+    assert detail["run"]["status"] == "failed"
+    assert not any(
+        artifact["data_type"] == "mesh_measurement_preview" for artifact in detail["artifacts"]
+    )
