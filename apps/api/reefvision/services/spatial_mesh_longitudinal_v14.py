@@ -314,6 +314,15 @@ def compare_mesh_observations(
             nonmanifold = counts["nonmanifold_edge_count"]
             if (boundary or 0) + 3 * (nonmanifold or 0) > 3 * face_count:
                 raise ValueError("Mesh topology edge incidence budget exceeds face_count")
+            # With no nonmanifold edges, every remaining incidence belongs
+            # to a two-face edge. Their count must be integral and sufficient
+            # to connect F faces into P edge-connected patches.
+            if boundary is not None and nonmanifold == 0:
+                shared_incidences = 3 * face_count - boundary
+                if shared_incidences % 2:
+                    raise ValueError("Mesh topology two-face edge incidence parity invalid")
+                if patch_count is not None and shared_incidences // 2 < face_count - patch_count:
+                    raise ValueError("Mesh topology shared edges insufficient for patch count")
         topology_counts.append(counts)
     a0 = before.get("surface_area_m2")
     a1 = after.get("surface_area_m2")
