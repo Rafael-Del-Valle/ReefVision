@@ -183,66 +183,75 @@ class ScientificDataService:
         self.session.flush()
         return rows
 
-    def response(self, row: ScientificRecord) -> ScientificRecordResponse:
+    def _current_environmental_members(self, project_id: str, cache_key: str) -> set[str]:
+        """Return current members only when the entire acquisition passes integrity checks."""
+        cache = self.session.scalar(
+            select(EnvironmentalCacheEntry).where(
+                EnvironmentalCacheEntry.project_id == project_id,
+                EnvironmentalCacheEntry.cache_key == cache_key,
+            )
+        )
+        if cache is None or not isinstance(cache.payload_json, dict):
+            return set()
+        payload = cache.payload_json
+        identity = payload.get("cache_identity")
+        record_ids = payload.get("record_ids")
+        missing = payload.get("skipped_missing")
+        try:
+            verified = (
+                content_hash(payload) == cache.content_sha256
+                and isinstance(identity, dict)
+                and content_hash(identity) == cache.cache_key
+                and ("source_url" not in identity or identity["source_url"] == cache.source_url)
+                and type(missing) is int
+                and missing >= 0
+                and isinstance(payload.get("provider_response"), dict)
+                and isinstance(record_ids, list)
+                and all(isinstance(record_id, str) for record_id in record_ids)
+                and len(record_ids) == len(set(record_ids))
+            )
+            if not verified:
+                return set()
+            for offset in range(0, len(record_ids), 500):
+                chunk = record_ids[offset : offset + 500]
+                found = self.session.execute(
+                    select(ScientificRecord.payload_json, ScientificRecord.content_sha256).where(
+                        ScientificRecord.project_id == project_id,
+                        ScientificRecord.payload_json["environmental_cache_key"].as_string()
+                        == cache_key,
+                        ScientificRecord.id.in_(chunk),
+                    )
+                ).all()
+                if len(found) != len(chunk) or any(
+                    content_hash(member) != checksum for member, checksum in found
+                ):
+                    return set()
+        except (ValidationError, UnicodeError):
+            return set()
+        return set(record_ids)
+
+    def response(
+        self,
+        row: ScientificRecord,
+        *,
+        snapshot_members: dict[tuple[str, str], set[str]] | None = None,
+    ) -> ScientificRecordResponse:
         if content_hash(row.payload_json) != row.content_sha256:
             raise ConflictError("Scientific record checksum mismatch; do not use this record")
         current = None
         snapshot_current = None
         cache_key = row.payload_json.get("environmental_cache_key")
         if cache_key is not None:
-            cache = self.session.scalar(
-                select(EnvironmentalCacheEntry).where(
-                    EnvironmentalCacheEntry.project_id == row.project_id,
-                    EnvironmentalCacheEntry.cache_key == cache_key,
-                )
-            )
-            # Record history is an immutable audit surface. A corrupt or
-            # missing provider cache invalidates scientific currentness, not
-            # the independently checksummed original observation. Dataset
-            # reuse and inference endpoints enforce strict cache validation.
+            # Historical observations remain readable, but damaged siblings invalidate
+            # currentness. Memoize only within a single read batch, never across requests.
             snapshot_current = False
-            if cache is not None and isinstance(cache.payload_json, dict):
-                payload = cache.payload_json
-                identity = payload.get("cache_identity")
-                record_ids = payload.get("record_ids")
-                missing = payload.get("skipped_missing")
-                try:
-                    verified = (
-                        content_hash(payload) == cache.content_sha256
-                        and isinstance(identity, dict)
-                        and content_hash(identity) == cache.cache_key
-                        and (
-                            "source_url" not in identity
-                            or identity["source_url"] == cache.source_url
-                        )
-                        and type(missing) is int
-                        and missing >= 0
-                        and isinstance(payload.get("provider_response"), dict)
-                        and isinstance(record_ids, list)
-                        and all(isinstance(record_id, str) for record_id in record_ids)
-                        and len(record_ids) == len(set(record_ids))
-                    )
-                except ValidationError:
-                    verified = False
-                if verified and isinstance(record_ids, list) and row.id in record_ids:
-                    # A plausible ID list is insufficient: a missing or foreign
-                    # member invalidates the acquisition for all its observations.
-                    snapshot_current = True
-                    for offset in range(0, len(record_ids), 500):
-                        chunk = record_ids[offset : offset + 500]
-                        found = self.session.scalar(
-                            select(func.count())
-                            .select_from(ScientificRecord)
-                            .where(
-                                ScientificRecord.project_id == row.project_id,
-                                ScientificRecord.payload_json["environmental_cache_key"].as_string()
-                                == cache_key,
-                                ScientificRecord.id.in_(chunk),
-                            )
-                        )
-                        if found != len(chunk):
-                            snapshot_current = False
-                            break
+            if isinstance(cache_key, str) and cache_key:
+                key = (row.project_id, cache_key)
+                if snapshot_members is None:
+                    snapshot_members = {}
+                if key not in snapshot_members:
+                    snapshot_members[key] = self._current_environmental_members(*key)
+                snapshot_current = row.id in snapshot_members[key]
         if row.payload_json.get("calibration_sha256"):
             image = self.session.get(ImageAsset, row.image_id) if row.image_id else None
             calibration = (
@@ -281,4 +290,8 @@ class ScientificDataService:
             .limit(limit)
             .offset(offset)
         ).all()
-        return ScientificRecordPage(items=[self.response(row) for row in rows], total=total)
+        snapshot_members: dict[tuple[str, str], set[str]] = {}
+        return ScientificRecordPage(
+            items=[self.response(row, snapshot_members=snapshot_members) for row in rows],
+            total=total,
+        )

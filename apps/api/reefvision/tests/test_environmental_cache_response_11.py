@@ -137,8 +137,11 @@ def test_dataset_inventory_rejects_corrupt_observation_checksum(client, damage):
         cache_checksum = entry.content_sha256
         assert service.datasets(project["id"]).items[0].record_count == 2
 
+        healthy = session.get(ScientificRecord, str(imported.items[0].id))
         row = session.get(ScientificRecord, str(imported.items[1].id))
-        assert row is not None
+        assert healthy is not None and row is not None
+        assert service.science.response(healthy).environmental_snapshot_current is True
+        healthy_checksum = healthy.content_sha256
         original_payload = deepcopy(row.payload_json)
         original_checksum = row.content_sha256
         if damage == "payload":
@@ -148,6 +151,11 @@ def test_dataset_inventory_rejects_corrupt_observation_checksum(client, damage):
         session.commit()
 
         assert entry.content_sha256 == cache_checksum == content_hash(entry.payload_json)
+        # The intact sibling remains auditable, but cannot be shown as current.
+        historical = service.science.response(healthy)
+        assert historical.id == imported.items[0].id
+        assert historical.environmental_snapshot_current is False
+        assert healthy.content_sha256 == healthy_checksum
         with pytest.raises(ConflictError, match="member checksum mismatch"):
             service.datasets(project["id"])
         with pytest.raises(ConflictError, match="member checksum mismatch"):
@@ -159,5 +167,7 @@ def test_dataset_inventory_rejects_corrupt_observation_checksum(client, damage):
         session.commit()
         assert service.datasets(project["id"]).items[0].record_count == 2
         recovered = service.cached_dataset(project["id"], cache_key)
+        assert service.science.response(healthy).environmental_snapshot_current is True
+        assert all(item.environmental_snapshot_current for item in recovered.items)
         assert {str(item.id) for item in recovered.items} == original_ids
         assert entry.content_sha256 == cache_checksum

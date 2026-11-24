@@ -137,6 +137,7 @@ class EnvironmentalContextService:
         self, entry: EnvironmentalCacheEntry, status: str
     ) -> EnvironmentalImportResponse:
         record_ids = self._verified_cache_record_ids(entry)
+        snapshot_members = {(entry.project_id, entry.cache_key): set(record_ids)}
         items = []
         for record_id in record_ids:
             row = self.session.get(ScientificRecord, record_id)
@@ -149,7 +150,7 @@ class EnvironmentalContextService:
                     "Environmental cache refers to missing or foreign scientific records "
                     "or records from another dataset"
                 )
-            items.append(self.science.response(row))
+            items.append(self.science.response(row, snapshot_members=snapshot_members))
         return EnvironmentalImportResponse(
             items=items,
             cache_status=status,
@@ -308,6 +309,7 @@ class EnvironmentalContextService:
         # allowing its observations into spatial/temporal or event analyses.
         # Archived record listing remains independent of cache availability.
         verified_caches: dict[str, EnvironmentalCacheEntry] = {}
+        snapshot_members: dict[tuple[str, str], set[str]] = {}
         matches = []
         for row in rows:
             cache_key = row.payload_json.get("environmental_cache_key")
@@ -323,9 +325,10 @@ class EnvironmentalContextService:
                     )
                     if cache_entry is None:
                         raise ConflictError("Environmental observation cache is missing")
-                    self._verified_cache_record_ids(cache_entry)
+                    record_ids = self._verified_cache_record_ids(cache_entry)
+                    snapshot_members[(project_id, cache_key)] = set(record_ids)
                     verified_caches[cache_key] = cache_entry
-            record = self.science.response(row)
+            record = self.science.response(row, snapshot_members=snapshot_members)
             if (
                 record.location is None
                 or record.qc in ("rejected", "suspect")
@@ -528,8 +531,9 @@ class EnvironmentalContextService:
         if len(rows) > 1000:
             raise ValidationError("Too many subject positions; use a narrower subject")
         positions = []
+        snapshot_members: dict[tuple[str, str], set[str]] = {}
         for row in rows:
-            record = self.science.response(row)
+            record = self.science.response(row, snapshot_members=snapshot_members)
             if (
                 record.subject == request.subject
                 and record.location is not None
