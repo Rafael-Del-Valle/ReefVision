@@ -332,6 +332,18 @@ def compare_mesh_observations(
                 and 3 * face_count - boundary - nonmanifold < face_count - patch_count
             ):
                 raise ValueError("Mesh topology shared edge links insufficient for patch count")
+            # Even without the legacy nonmanifold count, a nontrivial
+            # component needs shared incidences to connect its faces. At
+            # least one shared edge is needed for F - P component merges;
+            # each shared edge consumes one incidence without adding a link.
+            if (
+                nonmanifold is None
+                and boundary is not None
+                and patch_count is not None
+                and face_count > patch_count
+                and 3 * face_count - boundary < face_count - patch_count + 1
+            ):
+                raise ValueError("Mesh topology shared incidences insufficient for patch count")
             # With no nonmanifold edges, every remaining incidence belongs
             # to a two-face edge. Their count must be integral and sufficient
             # to connect F faces into P edge-connected patches.
@@ -377,6 +389,15 @@ def compare_mesh_observations(
                 or (patch_faces == 1 and patch_boundary is not None and patch_boundary != 3)
             ):
                 raise ValueError("Mesh topology patch edge incidences contradict face count")
+            # Missing nonmanifold counts do not establish a manifold, but
+            # even a single edge shared by every face needs F incidences.
+            if (
+                patch_nonmanifold is None
+                and patch_boundary is not None
+                and patch_faces > 1
+                and 3 * patch_faces - patch_boundary < patch_faces
+            ):
+                raise ValueError("Mesh topology patch shared incidences insufficient")
             # Each array entry describes one connected patch. Global parity
             # and connectivity can conceal impossible individual patches.
             if patch_boundary is not None and patch_nonmanifold == 0:
