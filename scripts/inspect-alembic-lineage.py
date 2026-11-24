@@ -462,6 +462,27 @@ def _post_0037_table_contract_matches(db: sqlite3.Connection, table: str) -> boo
     )
 
 
+def _annotation_aggregate_column_contract_matches(db: sqlite3.Connection) -> bool:
+    """Compare the original 1.1 revision 0041 added-column contracts."""
+    expected_contracts = {
+        "computed_metric_definitions": {
+            "definition_kind": ("VARCHAR(40)", 1, "'scalar'", 0, 0),
+            "configuration_json": ("JSON", 0, None, 0, 0),
+        },
+        "computed_metric_results": {
+            "result_kind": ("VARCHAR(40)", 1, "'scalar'", 0, 0),
+        },
+    }
+    for table, expected in expected_contracts.items():
+        actual = {
+            row[1]: (str(row[2]).upper(), *row[3:7])
+            for row in db.execute(f'PRAGMA table_xinfo("{table}")')
+        }
+        if any(actual.get(name) != contract for name, contract in expected.items()):
+            return False
+    return True
+
+
 def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
     if not path.is_file():
         raise ValueError(f"Database file does not exist: {path}")
@@ -747,6 +768,13 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
             )
             if revision in {"0041", "0042"} and metric_complete and not aggregate_columns_complete:
                 warnings.append("scientific_revision_missing_annotation_aggregate_columns")
+            if (
+                revision in {"0041", "0042"}
+                and metric_complete
+                and aggregate_columns_complete
+                and not _annotation_aggregate_column_contract_matches(db)
+            ):
+                warnings.append("scientific_annotation_aggregate_column_contract_mismatch")
             if revision in {"0037", "0038", "0039", "0040"} and aggregate_columns_present:
                 warnings.append("annotation_aggregate_columns_before_revision_0041")
             # A later scientific stamp also promises that its own DDL exists.

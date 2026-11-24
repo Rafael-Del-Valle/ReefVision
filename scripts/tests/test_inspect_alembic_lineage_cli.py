@@ -17,9 +17,7 @@ def _add_0041_aggregate_columns(connection: sqlite3.Connection) -> None:
         "ALTER TABLE computed_metric_definitions "
         "ADD COLUMN definition_kind VARCHAR(40) NOT NULL DEFAULT 'scalar'"
     )
-    connection.execute(
-        "ALTER TABLE computed_metric_definitions ADD COLUMN configuration_json JSON"
-    )
+    connection.execute("ALTER TABLE computed_metric_definitions ADD COLUMN configuration_json JSON")
     connection.execute(
         "ALTER TABLE computed_metric_results "
         "ADD COLUMN result_kind VARCHAR(40) NOT NULL DEFAULT 'scalar'"
@@ -1430,6 +1428,79 @@ def test_0041_annotation_aggregate_columns_match_scientific_revision(
         expected.append("scientific_revision_missing_annotation_aggregate_columns")
     if revision in {"0039", "0040"} and column_mask:
         expected.append("annotation_aggregate_columns_before_revision_0041")
+    original = database.read_bytes()
+    for _ in range(2):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--fail-on-warning", str(database)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == (2 if expected else 0), result.stderr
+        report = json.loads(result.stdout)
+        assert report["warnings"] == expected
+        assert report["lineage_hint"] == "scientific"
+        assert report["upgrade_authorized"] is False
+        assert "private coral count" not in result.stdout
+        assert report["inventory"]["computed_metric_results"]["rows"] == 1
+        assert database.read_bytes() == original
+
+
+@pytest.mark.parametrize("revision", ["0041", "0042"])
+@pytest.mark.parametrize(
+    ("column_index", "declaration"),
+    [
+        (None, None),
+        (0, "definition_kind TEXT NOT NULL DEFAULT 'scalar'"),
+        (0, "definition_kind VARCHAR(40) DEFAULT 'scalar'"),
+        (0, "definition_kind VARCHAR(40) NOT NULL"),
+        (1, "configuration_json TEXT"),
+        (1, "configuration_json JSON NOT NULL"),
+        (1, "configuration_json JSON DEFAULT '{}'"),
+        (2, "result_kind VARCHAR(40) NOT NULL DEFAULT 'aggregate'"),
+        (2, "result_kind VARCHAR(40) DEFAULT 'scalar'"),
+    ],
+)
+def test_0041_annotation_aggregate_column_contract(
+    tmp_path: Path, revision: str, column_index: int | None, declaration: str | None
+) -> None:
+    """Identical historical values cannot prove the original future-write contract."""
+    database = tmp_path / "aggregate-contract.sqlite"
+    declarations = [
+        "definition_kind VARCHAR(40) NOT NULL DEFAULT 'scalar'",
+        "configuration_json JSON",
+        "result_kind VARCHAR(40) NOT NULL DEFAULT 'scalar'",
+    ]
+    if column_index is not None:
+        assert declaration is not None
+        declarations[column_index] = declaration
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
+        connection.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+        for table in (
+            "scientific_records",
+            "environmental_cache_entries",
+            "environmental_event_definitions",
+        ):
+            connection.execute(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY)')
+        if revision == "0042":
+            connection.execute("CREATE TABLE environmental_analysis_definitions (id INTEGER)")
+            connection.execute("CREATE TABLE environmental_analysis_results (id INTEGER)")
+        connection.execute(
+            "CREATE TABLE computed_metric_definitions "
+            f"(id INTEGER PRIMARY KEY, {declarations[0]}, {declarations[1]})"
+        )
+        connection.execute(
+            f"CREATE TABLE computed_metric_results (id INTEGER PRIMARY KEY, {declarations[2]})"
+        )
+        connection.execute("INSERT INTO computed_metric_definitions VALUES (1, 'scalar', '{}')")
+        connection.execute("INSERT INTO computed_metric_results VALUES (1, 'scalar')")
+        connection.execute("CREATE TABLE biological_sentinel (note TEXT)")
+        connection.execute("INSERT INTO biological_sentinel VALUES ('private coral count')")
+        assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    expected = (
+        [] if column_index is None else ["scientific_annotation_aggregate_column_contract_mismatch"]
+    )
     original = database.read_bytes()
     for _ in range(2):
         result = subprocess.run(

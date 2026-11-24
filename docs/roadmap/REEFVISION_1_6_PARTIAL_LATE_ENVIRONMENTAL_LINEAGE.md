@@ -134,3 +134,28 @@ SQLite bytes. Existing synthetic positive-stage fixtures now include the
 source-audited 0041 additions. The existing typed saved QC Workflow Builder
 is unchanged; integrated lineage reconciliation and installed Windows
 acceptance remain on HOLD.
+
+
+## 2026-11-23 — reviewed-aggregate added-column contracts
+
+The actual 1.1 revision 0041 adds two required VARCHAR(40) kind
+discriminators with the server default `'scalar'`, and a nullable JSON
+configuration column without a default. Identical stored metric rows and
+complete column names do not establish those future-write semantics.
+For known scientific-only 0041–0042 stamps, the read-only inventory
+now compares these three source-audited column contracts using SQLite
+table_xinfo: declared type, nullability, default, primary-key and
+hidden-column flags. A noncanonical declaration fails closed; this is
+not a complete verification of the entire metric table DDL or its data.
+
+Eighteen CLI configurations cover both stages, correct declarations and
+eight type, nullability or default mutations with identical historical
+metric values. They require repeated strict refusal, private observation
+redaction, and unchanged database bytes. Nine independent disposable
+SQLite checks with canonical SQLAlchemy-compiled declarations confirmed
+the expected contract comparisons. The earlier exact-head CI
+#45313784341 passed frontend and native-Windows preservation but failed
+Ruff formatting in the previous aggregate fixture before pytest; the
+exact one-line correction is included. Integrated migration reconciliation,
+full CI, saved biological workflow acceptance and installed Windows
+verification remain on HOLD. Existing executable QC workflows are unchanged.
