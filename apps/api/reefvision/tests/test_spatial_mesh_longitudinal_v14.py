@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 from json import dumps
-from math import sqrt
+from math import nextafter, sqrt
 from typing import cast
 
 import pytest
@@ -138,7 +138,8 @@ def test_longitudinal_scale_only_area_difference_sign(
 
 
 @pytest.mark.parametrize(
-    "topology", ["single", "manifold_pair", "nonmanifold", "nonmanifold_disconnected"]
+    "topology",
+    ["single", "manifold_pair", "nonmanifold", "nonmanifold_disconnected", "near_identical"],
 )
 def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
     client: TestClient, topology: str
@@ -152,6 +153,8 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
         for record, height in ((before, 1.0), (after, 1.1)):
             record["vertices"] = [[0, 0, 0], [1, 0, 0], [0, height, 0], [0, -height, 0]]
             record["faces"] = [[0, 1, 2], [1, 0, 3]]
+    elif topology == "near_identical":
+        after["vertices"][2][1] = 1.0 + 2**-48
     elif topology in ("nonmanifold", "nonmanifold_disconnected"):
         # Three triangles share one edge: six boundary incidences and three
         # nonmanifold incidences exhaust the nine available face incidences.
@@ -175,11 +178,19 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
     expected = response.json()
     expected_delta, faces, boundary, nonmanifold, patches = {
         "single": (0.05, 1, 3, 0, 1),
+        "near_identical": (2**-49, 1, 3, 0, 1),
         "manifold_pair": (0.1, 2, 4, 0, 1),
         "nonmanifold": (0.15, 3, 6, 1, 1),
         "nonmanifold_disconnected": (0.2, 4, 9, 1, 2),
     }[topology]
-    assert expected["delta_surface_area_m2"] == pytest.approx(expected_delta)
+    assert expected["delta_surface_area_m2"] == pytest.approx(expected_delta, abs=0)
+    if topology == "near_identical":
+        delta = expected["delta_axis_aligned_bounding_box_diagonal_m"]
+        baseline = expected["before_axis_aligned_bounding_box_diagonal_m"]
+        assert delta > 0
+        assert expected["relative_axis_aligned_bounding_box_diagonal_change_percent"] == (
+            pytest.approx(100 * (delta / baseline), rel=1e-12, abs=0)
+        )
     for timepoint in ("before", "after"):
         counts = expected[f"{timepoint}_reconstruction_topology_counts"]
         assert counts["face_count"] == faces
@@ -2500,6 +2511,30 @@ def test_longitudinal_area_percent_remains_finite_for_large_finite_values(
     assert result["measurement_status"] == "provisional_unverified_longitudinal_comparison"
     assert result["provenance"]["specimen_identity_verified"] is False
     assert result["provenance"]["coordinate_registration_verified"] is False
+
+
+@pytest.mark.parametrize("direction", [0.0, float("inf")])
+def test_longitudinal_percent_preserves_adjacent_float_changes(direction: float) -> None:
+    """Relative values must agree with the absolute delta even near unity."""
+    before, after = _minimal_topology_pair()
+    early = 3.0
+    late = nextafter(early, direction)
+    for record, value in ((before, early), (after, late)):
+        record["surface_area_m2"] = value
+        record["surface_area_scale_interval_m2"] = [value, value]
+        record["axis_aligned_bounding_box_diagonal_m"] = value
+        record["axis_aligned_bounding_box_diagonal_scale_interval_m"] = [value, value]
+        record["provenance"]["relative_scale_uncertainty"] = 0.0
+    result = compare_mesh_observations(before, after)
+    expected = 100 * ((late - early) / early)
+    assert result["relative_surface_area_change_percent"] == expected
+    assert result["relative_axis_aligned_bounding_box_diagonal_change_percent"] == expected
+    assert result["relative_surface_area_scale_interval_percent"] == [expected, expected]
+    assert result["relative_axis_aligned_bounding_box_diagonal_scale_interval_percent"] == [
+        expected,
+        expected,
+    ]
+    assert result["provenance"]["specimen_identity_verified"] is False
 
 
 @pytest.mark.parametrize(
