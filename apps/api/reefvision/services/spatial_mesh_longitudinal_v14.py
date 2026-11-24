@@ -153,7 +153,11 @@ def _patch_area_concentration(record: dict[str, Any]) -> tuple[float, float] | N
             or source_total <= 0
             or not isclose(area_total, source_total, rel_tol=1e-9, abs_tol=0.0)
             or any(
-                not isclose(area / source_total, fraction, rel_tol=1e-9, abs_tol=1e-12)
+                # A zero-area patch cannot contribute any positive mass.
+                # The absolute tolerance below accommodates calibrated-area
+                # rounding, but must not admit fabricated mass at zero.
+                (area == 0 and fraction != 0)
+                or not isclose(area / source_total, fraction, rel_tol=1e-9, abs_tol=1e-12)
                 for area, fraction in zip(patch_areas, fractions, strict=True)
             )
         ):
@@ -993,8 +997,7 @@ def compare_mesh_observations(
         # Zero-area ranks and the implicit zero padding represent identical
         # area mass. Their topology differences remain in reconstruction QC.
         ranked_profiles_differ = any(
-            early != late
-            for early, late in zip_longest(ranked_before, ranked_after, fillvalue=0.0)
+            early != late for early, late in zip_longest(ranked_before, ranked_after, fillvalue=0.0)
         )
         ranked_patch_area_profile_distance = 0.5 * fsum(
             abs(early - late)
