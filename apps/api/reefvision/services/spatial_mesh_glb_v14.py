@@ -320,7 +320,13 @@ def parse_glb_triangles(encoded: str) -> tuple[list[list[float]], list[list[int]
         ):
             raise ValueError("GLB accessor exceeds or misaligns its buffer view")
         offset = start + accessor_offset
-        return [struct.unpack_from(fmt, binary, offset + i * stride) for i in range(count)]
+        rows = [struct.unpack_from(fmt, binary, offset + i * stride) for i in range(count)]
+        # glTF 2.0 section 3.7.2.1 reserves the maximum unsigned index for
+        # primitive restart. A byte index of 255 is invalid even if the
+        # POSITION accessor contains 256 or more vertices.
+        if not position and any(row[0] == (1 << (8 * width)) - 1 for row in rows):
+            raise ValueError("GLB index uses reserved primitive restart value")
+        return rows
 
     vertices = [list(row) for row in read_accessor(attributes["POSITION"], position=True)]
     if any(not isfinite(v) or abs(v) > 1_000_000_000 for row in vertices for v in row):
