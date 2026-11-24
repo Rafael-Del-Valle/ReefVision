@@ -159,3 +159,21 @@ Ruff formatting in the previous aggregate fixture before pytest; the
 exact one-line correction is included. Integrated migration reconciliation,
 full CI, saved biological workflow acceptance and installed Windows
 verification remain on HOLD. Existing executable QC workflows are unchanged.
+
+## 2026-11-23 — environmental definition and workflow result DDL
+
+The source-audited 1.1 revisions 0040 and 0042 now participate in the
+existing opt-in structural inspection. It checks the three extension
+tables' full declared columns, required values, defaults, key identities,
+foreign-key actions, named full lookup indexes, and workflow-node result
+uniqueness using the existing read-only schema validator. A missing
+input snapshot or changed definition foreign key can otherwise conceal
+broken scientific provenance even when current rows agree. No report
+authorizes migration, and the existing inventory-only mode is unchanged.
+
+Eight CLI regression configurations cover the canonical schema and
+seven mutations, repeated inspection, confidential threshold redaction,
+and byte-for-byte database preservation. The 0042 workflow-run foreign
+keys are references to historical evidence, not new executable nodes.
+Existing typed QC saved graphs remain untouched. This is not an
+integrated Alembic DAG or installed Windows acceptance.

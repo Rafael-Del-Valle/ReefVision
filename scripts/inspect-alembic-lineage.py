@@ -46,8 +46,9 @@ FAMILIES = {
 
 # The two independent revision-0038 migrations create distinct table families. This
 # optional read-only structural audit checks their declared SQLite column types and DDL shapes
-# to help a researcher assess provenance, not to authorize a migration. The
-# post-0038 scientific metrics and QC registry require separate reconciliation.
+# to help a researcher assess provenance, not to authorize a migration.
+# The 1.1 environmental 0040/0042 contracts are also audited below. The
+# scientific metric tables and QC registry still require separate reconciliation.
 _POST_0037_TABLE_CONTRACTS = {
     "scientific_records": {
         "columns": frozenset(
@@ -145,6 +146,153 @@ _POST_0037_TABLE_CONTRACTS = {
         "foreign_keys": frozenset({("project_id", "projects", "id", "CASCADE")}),
         "indexes": frozenset({(("project_id", "cache_key"), True)}),
     },
+    "environmental_event_definitions": {
+        "columns": frozenset(
+            {
+                "id",
+                "project_id",
+                "name",
+                "query_json",
+                "definition_sha256",
+                "created_at",
+            }
+        ),
+        "types": {
+            "id": "VARCHAR(36)",
+            "project_id": "VARCHAR(36)",
+            "name": "VARCHAR(200)",
+            "query_json": "JSON",
+            "definition_sha256": "VARCHAR(64)",
+            "created_at": "DATETIME",
+        },
+        "required": frozenset(
+            {
+                "id",
+                "project_id",
+                "name",
+                "query_json",
+                "definition_sha256",
+                "created_at",
+            }
+        ),
+        "foreign_keys": frozenset({("project_id", "projects", "id", "CASCADE")}),
+        "indexes": frozenset(
+            {
+                (("project_id", "created_at"), False),
+            }
+        ),
+    },
+    "environmental_analysis_definitions": {
+        "columns": frozenset(
+            {
+                "id",
+                "project_id",
+                "analysis_kind",
+                "name",
+                "configuration_json",
+                "calculation_version",
+                "definition_sha256",
+                "created_at",
+            }
+        ),
+        "types": {
+            "id": "VARCHAR(36)",
+            "project_id": "VARCHAR(36)",
+            "analysis_kind": "VARCHAR(50)",
+            "name": "VARCHAR(200)",
+            "configuration_json": "JSON",
+            "calculation_version": "VARCHAR(100)",
+            "definition_sha256": "VARCHAR(64)",
+            "created_at": "DATETIME",
+        },
+        "required": frozenset(
+            {
+                "id",
+                "project_id",
+                "analysis_kind",
+                "name",
+                "configuration_json",
+                "calculation_version",
+                "definition_sha256",
+                "created_at",
+            }
+        ),
+        "foreign_keys": frozenset({("project_id", "projects", "id", "CASCADE")}),
+        "indexes": frozenset(
+            {
+                (("project_id", "analysis_kind", "created_at"), False),
+            }
+        ),
+    },
+    "environmental_analysis_results": {
+        "columns": frozenset(
+            {
+                "id",
+                "project_id",
+                "definition_id",
+                "analysis_kind",
+                "observed_at",
+                "payload_json",
+                "input_snapshot_json",
+                "source_record_ids_json",
+                "source_analysis_result_ids_json",
+                "quality_control_json",
+                "uncertainty_json",
+                "content_sha256",
+                "workflow_run_id",
+                "workflow_node_run_id",
+                "created_at",
+            }
+        ),
+        "types": {
+            "id": "VARCHAR(36)",
+            "project_id": "VARCHAR(36)",
+            "definition_id": "VARCHAR(36)",
+            "analysis_kind": "VARCHAR(50)",
+            "observed_at": "DATETIME",
+            "payload_json": "JSON",
+            "input_snapshot_json": "JSON",
+            "source_record_ids_json": "JSON",
+            "source_analysis_result_ids_json": "JSON",
+            "quality_control_json": "JSON",
+            "uncertainty_json": "JSON",
+            "content_sha256": "VARCHAR(64)",
+            "workflow_run_id": "VARCHAR(36)",
+            "workflow_node_run_id": "VARCHAR(36)",
+            "created_at": "DATETIME",
+        },
+        "required": frozenset(
+            {
+                "id",
+                "project_id",
+                "definition_id",
+                "analysis_kind",
+                "observed_at",
+                "payload_json",
+                "input_snapshot_json",
+                "source_record_ids_json",
+                "source_analysis_result_ids_json",
+                "quality_control_json",
+                "content_sha256",
+                "created_at",
+            }
+        ),
+        "foreign_keys": frozenset(
+            {
+                ("project_id", "projects", "id", "CASCADE"),
+                ("definition_id", "environmental_analysis_definitions", "id", "RESTRICT"),
+                ("workflow_run_id", "workflow_runs", "id", "RESTRICT"),
+                ("workflow_node_run_id", "workflow_node_runs", "id", "RESTRICT"),
+            }
+        ),
+        "indexes": frozenset(
+            {
+                (("project_id", "analysis_kind", "created_at"), False),
+                (("definition_id", "created_at"), False),
+                (("workflow_node_run_id",), True),
+            }
+        ),
+    },
     "review_queue_item_events": {
         "columns": frozenset(
             {
@@ -211,6 +359,24 @@ _POST_0037_NAMED_LOOKUP_INDEXES = {
         "ix_scientific_project_variable_time": ("project_id", "variable", "observed_at"),
     },
     "environmental_cache_entries": {},
+    "environmental_event_definitions": {
+        "ix_environmental_event_definition_project": ("project_id", "created_at"),
+    },
+    "environmental_analysis_definitions": {
+        "ix_environmental_analysis_definition_project_kind": (
+            "project_id",
+            "analysis_kind",
+            "created_at",
+        ),
+    },
+    "environmental_analysis_results": {
+        "ix_environmental_analysis_result_project_kind": (
+            "project_id",
+            "analysis_kind",
+            "created_at",
+        ),
+        "ix_environmental_analysis_result_definition": ("definition_id", "created_at"),
+    },
     "review_queue_item_events": {
         "ix_review_queue_item_events_item_created": ("review_queue_item_id", "created_at"),
         "ix_review_queue_item_events_queue_created": ("review_queue_id", "created_at"),
@@ -842,7 +1008,7 @@ def main() -> None:
     parser.add_argument(
         "--verify-structural-contracts",
         action="store_true",
-        help="Read-only 1.1/1.6 revision-0038 DDL evidence checks (never authorizes migration)",
+        help="Read-only selected 1.1/1.6 DDL evidence checks (never authorizes migration)",
     )
     args = parser.parse_args()
     try:

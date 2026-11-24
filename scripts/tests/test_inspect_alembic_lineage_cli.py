@@ -1517,3 +1517,185 @@ def test_0041_annotation_aggregate_column_contract(
         assert "private coral count" not in result.stdout
         assert report["inventory"]["computed_metric_results"]["rows"] == 1
         assert database.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    ("variant", "mismatch"),
+    [
+        ("canonical", None),
+        ("event_query_type", "environmental_event_definitions"),
+        ("event_index_partial", "environmental_event_definitions"),
+        ("definition_hash_nullable", "environmental_analysis_definitions"),
+        ("result_definition_cascade", "environmental_analysis_results"),
+        ("result_missing_unique", "environmental_analysis_results"),
+        ("result_missing_provenance", "environmental_analysis_results"),
+        ("result_trigger", "environmental_analysis_results"),
+    ],
+)
+def test_environmental_extension_structural_contracts(
+    tmp_path: Path, variant: str, mismatch: str | None
+) -> None:
+    """Audit real 0040/0042 schema shapes without exposing private research."""
+    database = tmp_path / "environmental-contract.sqlite"
+    science_sql = (
+        "CREATE TABLE scientific_records ("
+        "id VARCHAR(36) NOT NULL PRIMARY KEY, "
+        "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE CASCADE, "
+        "variable VARCHAR(100) NOT NULL, source_kind VARCHAR(30) NOT NULL, "
+        "observed_at DATETIME NOT NULL, "
+        "image_id VARCHAR(36) REFERENCES images(id) ON DELETE RESTRICT, "
+        "video_id VARCHAR(36) REFERENCES videos(id) ON DELETE RESTRICT, "
+        "track_id VARCHAR(36) REFERENCES video_tracks(id) ON DELETE RESTRICT, "
+        "model_run_id VARCHAR(36) REFERENCES jobs(id) ON DELETE RESTRICT, "
+        "payload_json JSON NOT NULL, content_sha256 VARCHAR(64) NOT NULL, "
+        "created_at DATETIME NOT NULL)"
+    )
+    cache_sql = (
+        "CREATE TABLE environmental_cache_entries ("
+        "id VARCHAR(36) NOT NULL PRIMARY KEY, "
+        "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE CASCADE, "
+        "cache_key VARCHAR(64) NOT NULL, source_url VARCHAR(2000) NOT NULL, "
+        "payload_json JSON NOT NULL, content_sha256 VARCHAR(64) NOT NULL, "
+        "fetched_at DATETIME NOT NULL, expires_at DATETIME NOT NULL, "
+        "UNIQUE (project_id, cache_key))"
+    )
+    event_sql = (
+        "CREATE TABLE environmental_event_definitions ("
+        "id VARCHAR(36) NOT NULL PRIMARY KEY, "
+        "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE CASCADE, "
+        "name VARCHAR(200) NOT NULL, query_json JSON NOT NULL, "
+        "definition_sha256 VARCHAR(64) NOT NULL, created_at DATETIME NOT NULL)"
+    )
+    definition_sql = (
+        "CREATE TABLE environmental_analysis_definitions ("
+        "id VARCHAR(36) NOT NULL PRIMARY KEY, "
+        "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE CASCADE, "
+        "analysis_kind VARCHAR(50) NOT NULL, name VARCHAR(200) NOT NULL, "
+        "configuration_json JSON NOT NULL, calculation_version VARCHAR(100) NOT NULL, "
+        "definition_sha256 VARCHAR(64) NOT NULL, created_at DATETIME NOT NULL)"
+    )
+    result_sql = (
+        "CREATE TABLE environmental_analysis_results ("
+        "id VARCHAR(36) NOT NULL PRIMARY KEY, "
+        "project_id VARCHAR(36) NOT NULL REFERENCES projects(id) ON DELETE CASCADE, "
+        "definition_id VARCHAR(36) NOT NULL "
+        "REFERENCES environmental_analysis_definitions(id) ON DELETE RESTRICT, "
+        "analysis_kind VARCHAR(50) NOT NULL, observed_at DATETIME NOT NULL, "
+        "payload_json JSON NOT NULL, input_snapshot_json JSON NOT NULL, "
+        "source_record_ids_json JSON NOT NULL, source_analysis_result_ids_json JSON NOT NULL, "
+        "quality_control_json JSON NOT NULL, uncertainty_json JSON, "
+        "content_sha256 VARCHAR(64) NOT NULL, "
+        "workflow_run_id VARCHAR(36) REFERENCES workflow_runs(id) ON DELETE RESTRICT, "
+        "workflow_node_run_id VARCHAR(36) REFERENCES workflow_node_runs(id) ON DELETE RESTRICT, "
+        "created_at DATETIME NOT NULL, UNIQUE (workflow_node_run_id))"
+    )
+    if variant == "event_query_type":
+        event_sql = event_sql.replace("query_json JSON", "query_json TEXT")
+    if variant == "definition_hash_nullable":
+        definition_sql = definition_sql.replace(
+            "definition_sha256 VARCHAR(64) NOT NULL", "definition_sha256 VARCHAR(64)"
+        )
+    if variant == "result_definition_cascade":
+        result_sql = result_sql.replace(
+            "environmental_analysis_definitions(id) ON DELETE RESTRICT",
+            "environmental_analysis_definitions(id) ON DELETE CASCADE",
+        )
+    if variant == "result_missing_unique":
+        result_sql = result_sql.replace(", UNIQUE (workflow_node_run_id)", "")
+    if variant == "result_missing_provenance":
+        result_sql = result_sql.replace("input_snapshot_json JSON NOT NULL, ", "")
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
+        )
+        connection.execute("INSERT INTO alembic_version VALUES ('0042')")
+        for parent in (
+            "projects",
+            "images",
+            "videos",
+            "video_tracks",
+            "jobs",
+            "workflow_runs",
+            "workflow_node_runs",
+        ):
+            connection.execute(f'CREATE TABLE "{parent}" (id VARCHAR(36) PRIMARY KEY)')
+        connection.execute(science_sql)
+        connection.execute(cache_sql)
+        connection.execute(
+            "CREATE INDEX ix_scientific_project_variable_time "
+            "ON scientific_records (project_id, variable, observed_at)"
+        )
+        connection.execute("CREATE TABLE computed_metric_definitions (id INTEGER PRIMARY KEY)")
+        connection.execute("CREATE TABLE computed_metric_results (id INTEGER PRIMARY KEY)")
+        _add_0041_aggregate_columns(connection)
+        connection.execute(event_sql)
+        connection.execute(definition_sql)
+        connection.execute(result_sql)
+        event_index = (
+            "CREATE INDEX ix_environmental_event_definition_project "
+            "ON environmental_event_definitions (project_id, created_at)"
+        )
+        if variant == "event_index_partial":
+            event_index += " WHERE name <> ''"
+        connection.execute(event_index)
+        connection.execute(
+            "CREATE INDEX ix_environmental_analysis_definition_project_kind "
+            "ON environmental_analysis_definitions (project_id, analysis_kind, created_at)"
+        )
+        connection.execute(
+            "CREATE INDEX ix_environmental_analysis_result_project_kind "
+            "ON environmental_analysis_results (project_id, analysis_kind, created_at)"
+        )
+        connection.execute(
+            "CREATE INDEX ix_environmental_analysis_result_definition "
+            "ON environmental_analysis_results (definition_id, created_at)"
+        )
+        connection.execute("INSERT INTO projects VALUES ('project-1')")
+        connection.execute(
+            "INSERT INTO environmental_event_definitions VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                "event-1",
+                "project-1",
+                "private reef location",
+                '{"threshold_c":28}',
+                "a" * 64,
+                "2026-11-23 12:00:00",
+            ),
+        )
+        if variant == "result_trigger":
+            connection.execute(
+                "CREATE TRIGGER alter_event AFTER INSERT ON environmental_analysis_results "
+                "BEGIN UPDATE environmental_event_definitions SET name = 'changed'; END"
+            )
+    original = database.read_bytes()
+    for _ in range(2):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--verify-structural-contracts",
+                "--fail-on-warning",
+                str(database),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert completed.returncode == (2 if mismatch else 0), completed.stderr
+        report = json.loads(completed.stdout)
+        assert report["upgrade_authorized"] is False
+        assert report["lineage_hint"] == "scientific"
+        for table in (
+            "environmental_event_definitions",
+            "environmental_analysis_definitions",
+            "environmental_analysis_results",
+        ):
+            assert report["structural_contracts"][table] == (
+                "mismatch" if table == mismatch else "matches"
+            )
+            assert (f"lineage_table_contract_mismatch_{table}" in report["warnings"]) == (
+                table == mismatch
+            )
+        assert "private reef location" not in completed.stdout + completed.stderr
+        assert "threshold_c" not in completed.stdout + completed.stderr
+        assert database.read_bytes() == original
