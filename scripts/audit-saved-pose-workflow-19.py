@@ -82,6 +82,46 @@ def _verify_frozen_frame_inventory(
     return len(counts)
 
 
+def _verify_source_frame_pixels(
+    source: Path,
+    images: Path,
+    frame_indices: set[int],
+    width: int,
+    height: int,
+) -> int:
+    """Stream original frames and compare lossless materialized pixels."""
+    import cv2
+    import numpy as np
+
+    _require(bool(frame_indices) and min(frame_indices) >= 0, "Invalid frozen frame indices")
+    capture = cv2.VideoCapture(str(source))
+    verified = 0
+    try:
+        _require(capture.isOpened(), "Cannot decode original frozen source video")
+        # Match the exporter's sequential, zero-based decoding. Seeking to a
+        # compressed frame can select a different frame on some backends.
+        for index in range(max(frame_indices) + 1):
+            ok, frame = capture.read()
+            _require(ok and frame is not None, f"Source video ended before frame {index}")
+            if index not in frame_indices:
+                continue
+            image_path = images / f"frame_{index:08d}.png"
+            saved = cv2.imdecode(
+                np.frombuffer(image_path.read_bytes(), dtype=np.uint8), cv2.IMREAD_UNCHANGED
+            )
+            _require(
+                frame.shape[:2] == (height, width)
+                and saved is not None
+                and saved.dtype == frame.dtype
+                and np.array_equal(saved, frame),
+                f"Materialized image pixels differ from frozen source frame: {image_path.name}",
+            )
+            verified += 1
+    finally:
+        capture.release()
+    return verified
+
+
 def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
     # The app imports are delayed so the script works from a source checkout.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps" / "api"))
@@ -520,9 +560,10 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             # Frame counts do not establish that the actual class IDs, boxes,
             # landmark coordinates and visibility match the reviewed poses.
             # Render labels in memory using the production exporter; do not
-            # rewrite the saved dataset or decode/export the original frames.
+            # rewrite the saved dataset. Verify source image pixels separately.
             exporter = PoseTrainingExportService(session, Settings(data_dir=root))
             verified_label_count = 0
+            verified_image_count = 0
             training_yaml: str | None = None
             materialized_yaml = root / dataset_path / "data.yaml"
             for split, frozen_dataset in (
@@ -533,7 +574,14 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                     continue
                 items = exporter._items(frozen_dataset)
                 schema = exporter._schema(frozen_dataset)
-                video, _, _, _ = exporter._source_video(items)
+                video, source, _, _ = exporter._source_video(items)
+                verified_image_count += _verify_source_frame_pixels(
+                    source,
+                    root / dataset_path / "images" / split,
+                    {item.frame_index for item in items},
+                    video.width_px,
+                    video.height_px,
+                )
                 expected_labels = exporter._ultralytics(
                     items=items,
                     schema=schema,
@@ -572,6 +620,10 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             _require(
                 verified_label_count == train_frame_count + validation_frame_count,
                 "Reconstructed pose labels do not cover all reviewed frames",
+            )
+            _require(
+                verified_image_count == train_frame_count + validation_frame_count,
+                "Source pixel verification does not cover all reviewed frames",
             )
             # A successful retraining run must still be traceable to its
             # original local registered pose model, not only to the output
@@ -801,6 +853,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 "validation_mode": expected_validation_mode,
                 "materialized_dataset_sha256": materialization["materialized_dataset_sha256"],
                 "verified_materialized_label_file_count": verified_label_count,
+                "verified_materialized_image_pixel_count": verified_image_count,
                 "verified_materialized_yaml_sha256": _digest(materialized_yaml),
                 "verified_training_frame_count": train_frame_count,
                 "verified_validation_frame_count": validation_frame_count,
