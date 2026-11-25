@@ -804,6 +804,7 @@ def test_calibrated_centroid_preserves_cancellation_and_signed_scale(
         hashes.append(artifact["payload_sha256"])
     assert hashes[0] == hashes[1]
 
+
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
 def test_centroid_offsets_survive_large_common_origin(
     client: TestClient, source_format: str
@@ -855,7 +856,9 @@ def test_centroid_offsets_survive_large_common_origin(
         [0.0, 0.0],
     ]
     assert expected["preview_vs_source_row_centroid_separation_m"] == -expected_offset
-    assert expected["row_vs_unique_coordinate_centroid_separation_m"] == expected_unique_separation
+    assert expected["row_vs_unique_coordinate_centroid_separation_m"] == (
+        expected_unique_separation
+    )
     assert expected["branch_length_m"] is None
     assert expected["provenance"]["calibration_verified"] is False
 
