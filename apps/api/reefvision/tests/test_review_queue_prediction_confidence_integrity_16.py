@@ -26,7 +26,9 @@ from reefvision.tests.test_review_queue_annotation_evidence_16 import (
 )
 
 
-def _local_prediction(client: TestClient) -> tuple[str, str]:
+def _local_prediction(
+    client: TestClient, *, additional_pending: bool = False
+) -> tuple[str, str]:
     project = create_project(client, "Imported model confidence scientific QC")
     project_id = project["id"]
     imported = import_one(client, project_id, filename="confidence-coral.png")
@@ -61,27 +63,31 @@ def _local_prediction(client: TestClient) -> tuple[str, str]:
             )
         )
         session.flush()
-        session.add(
-            PredictionProposal(
-                id=prediction_id,
-                project_id=project_id,
-                image_id=image_id,
-                model_id=model_id,
-                inference_job_id=job_id,
-                model_checksum="d" * 64,
-                label_class_id=project["label_classes"][0]["id"],
-                predicted_label="Octocoral polyp",
-                predicted_index=0,
-                confidence=0.75,
-                x_min=5,
-                y_min=5,
-                x_max=20,
-                y_max=20,
-                review_status="pending",
-                was_edited=False,
-                provenance_json={"source": "local_fixture"},
+        prediction_ids = [prediction_id]
+        if additional_pending:
+            prediction_ids.append(str(uuid4()))
+        for current_prediction_id in prediction_ids:
+            session.add(
+                PredictionProposal(
+                    id=current_prediction_id,
+                    project_id=project_id,
+                    image_id=image_id,
+                    model_id=model_id,
+                    inference_job_id=job_id,
+                    model_checksum="d" * 64,
+                    label_class_id=project["label_classes"][0]["id"],
+                    predicted_label="Octocoral polyp",
+                    predicted_index=0,
+                    confidence=0.75,
+                    x_min=5,
+                    y_min=5,
+                    x_max=20,
+                    y_max=20,
+                    review_status="pending",
+                    was_edited=False,
+                    provenance_json={"source": "local_fixture"},
+                )
             )
-        )
         session.commit()
     return project_id, prediction_id
 

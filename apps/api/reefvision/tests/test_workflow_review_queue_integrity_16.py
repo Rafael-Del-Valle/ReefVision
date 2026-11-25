@@ -1221,3 +1221,33 @@ def test_v3_no_pending_predictions_cannot_invent_confidence(
     with pytest.raises(ValidationError, match="snapshot failed integrity"):
         validate_saved_queue_snapshot(queue, items)
     assert item.review_state == "in_progress"
+
+
+@pytest.mark.parametrize(
+    ("pending_count", "minimum", "valid"),
+    [
+        (2.0, 0.4, True),
+        (2.0, 0.9, False),
+        (3.0, 0.6, True),
+        (3.0, 0.9, False),
+        (5.0, 1.0, True),
+        (4.0, 1.0, False),
+    ],
+)
+def test_v3_pending_confidence_requires_feasible_sample_mean(
+    pending_count: float, minimum: float, valid: bool
+) -> None:
+    """A fixed sample size bounds the inverse mean even with zero-weight minimum."""
+    queue, items = _v3_snapshot()
+    item = items[1]
+    assert item.signal_values_json["low_mean_confidence"] == 0.2
+    item.review_state = "in_progress"
+    _set_v3_unweighted_signal(item, "pending_proposals", pending_count)
+    _set_v3_unweighted_signal(item, "low_min_confidence", minimum)
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    if valid:
+        validate_saved_queue_snapshot(queue, items)
+    else:
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            validate_saved_queue_snapshot(queue, items)
+    assert item.review_state == "in_progress"

@@ -184,12 +184,21 @@ def test_saved_qc_retry_preserves_original_weights_and_legacy_defaults(
 
 @pytest.mark.parametrize(
     ("prediction_status", "minimum"),
-    [("pending", 0.1), ("pending", 0.5), ("rejected", 0.1), ("rejected", 0.5)],
+    [
+        ("pending", 0.1),
+        ("pending", 0.5),
+        ("rejected", 0.1),
+        ("rejected", 0.5),
+        ("two_pending", 0.6),
+        ("two_pending", 0.9),
+    ],
 )
 def test_prediction_confidence_evidence_on_saved_qc_retry(
     client: TestClient, prediction_status: str, minimum: float
 ) -> None:
-    project_id, prediction_id = _local_prediction(client)
+    project_id, prediction_id = _local_prediction(
+        client, additional_pending=prediction_status == "two_pending"
+    )
     app = cast(FastAPI, client.app)
     if prediction_status == "rejected":
         with app.state.session_factory() as session:
@@ -216,8 +225,9 @@ def test_prediction_confidence_evidence_on_saved_qc_retry(
             ).all()
             assert len(items) == 1
             item = items[0]
-            expected_count = 1.0 if prediction_status == "pending" else 0.0
-            expected_signal = 0.25 if prediction_status == "pending" else 0.0
+            expected_counts = {"pending": 1.0, "rejected": 0.0, "two_pending": 2.0}
+            expected_count = expected_counts[prediction_status]
+            expected_signal = 0.25 if expected_count else 0.0
             assert item.signal_values_json["pending_proposals"] == expected_count
             assert item.signal_values_json["low_mean_confidence"] == expected_signal
             assert item.signal_values_json["low_min_confidence"] == expected_signal

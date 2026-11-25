@@ -219,9 +219,15 @@ def _valid_v3_signal_normalization(item: Any) -> bool:
         # For a single pending prediction the mean and minimum are the same
         # stored confidence. Both inverse confidence signals must agree exactly.
         return bool(raw["low_min_confidence"] == raw["low_mean_confidence"])
-    return not (
-        raw["pending_proposals"] > 0 and raw["low_min_confidence"] < raw["low_mean_confidence"]
-    )
+    # Every confidence deficit is nonnegative. At least one of the n
+    # pending predictions contributes the largest deficit (inverse minimum).
+    # The inverse mean therefore cannot be below that deficit divided by n.
+    # Allow one binary64 epsilon for the producer's rounded mean/subtraction;
+    # near confidence 1.0, a real tiny deficit can round to zero in the mean.
+    mean_deficit = raw["low_mean_confidence"]
+    max_deficit = raw["low_min_confidence"]
+    count = raw["pending_proposals"]
+    return bool(mean_deficit <= max_deficit and mean_deficit + 2**-52 >= max_deficit / count)
 
 
 def _valid_v3_scientific_references(item: Any) -> bool:

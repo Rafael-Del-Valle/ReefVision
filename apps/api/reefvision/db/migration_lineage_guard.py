@@ -578,7 +578,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                     "WHERE origin = 'u'"
                 )
             )
-            .scalars()
+            .mappings()
             .all()
         )
         if len(request_indexes) == 1:
@@ -587,7 +587,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                     'SELECT name, coll, "desc" FROM pragma_index_xinfo(:index_name) '
                     'WHERE "key" = 1 ORDER BY seqno'
                 ),
-                {"index_name": request_indexes[0]},
+                {"index_name": request_indexes[0]["name"]},
             ).all()
         else:
             request_keys = []
@@ -623,7 +623,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                     "WHERE origin = 'pk'"
                 )
             )
-            .scalars()
+            .mappings()
             .all()
         )
         if len(event_pk_indexes) == 1:
@@ -632,7 +632,7 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                     'SELECT name, coll, "desc" FROM pragma_index_xinfo(:index_name) '
                     'WHERE "key" = 1 ORDER BY seqno'
                 ),
-                {"index_name": event_pk_indexes[0]},
+                {"index_name": event_pk_indexes[0]["name"]},
             ).all()
         else:
             event_pk_keys = []
