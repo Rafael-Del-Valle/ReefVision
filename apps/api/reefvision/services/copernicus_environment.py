@@ -264,9 +264,7 @@ def parse_copernicus(
         )
     # Equal coverage across variables is not enough: a cell omitted from
     # every variable would otherwise masquerade as a complete rectilinear grid.
-    expected_cells = math.prod(
-        len({cell[axis] for cell in reference_cells}) for axis in range(4)
-    )
+    expected_cells = math.prod(len({cell[axis] for cell in reference_cells}) for axis in range(4))
     if len(reference_cells) != expected_cells:
         raise ValidationError(
             "Copernicus response has incomplete rectilinear grid coverage; "
