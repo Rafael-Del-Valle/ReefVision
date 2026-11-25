@@ -1067,3 +1067,70 @@ def test_revision_0041_qc_triggers_fail_closed(target: str, operation: str) -> N
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
             assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
     engine.dispose()
+
+
+@pytest.mark.parametrize("revision", ["0038", "0039", "0040", "0041"])
+@pytest.mark.parametrize(
+    "id_ddl",
+    [
+        "id TEXT NOT NULL PRIMARY KEY",
+        "id TEXT COLLATE NOCASE NOT NULL PRIMARY KEY",
+        "id TEXT COLLATE RTRIM NOT NULL PRIMARY KEY",
+        "id TEXT NOT NULL PRIMARY KEY DESC",
+    ],
+)
+def test_review_event_primary_key_index_semantics(revision: str, id_ddl: str) -> None:
+    """Global event identities retain binary equality across every QC revision."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": revision}
+        )
+        connection.exec_driver_sql("CREATE TABLE preserved (value TEXT NOT NULL)")
+        connection.exec_driver_sql("INSERT INTO preserved VALUES ('original observation')")
+        allowed = "'comment', 'assign', 'unassign'"
+        if revision != "0038":
+            allowed += ", 'triage_start', 'triage_skip', 'triage_return'"
+        if revision in {"0040", "0041"}:
+            allowed += ", 'triage_complete'"
+        schema = _REVIEW_REQUEST_SCHEMA.replace("id TEXT NOT NULL PRIMARY KEY", id_ddl)
+        connection.exec_driver_sql(
+            f"CREATE TABLE review_queue_item_events ({schema}, "
+            "CONSTRAINT ck_review_queue_item_event_type "
+            f"CHECK (event_type IN ({allowed})), "
+            "CONSTRAINT uq_review_queue_item_event_request "
+            "UNIQUE (review_queue_item_id, client_request_id)"
+            f"{REVIEW_EVENT_FK_SQL})"
+        )
+        install_review_event_parent_rows(connection)
+        install_review_event_history_indexes(connection)
+        if revision == "0041":
+            connection.exec_driver_sql(
+                "CREATE TABLE review_queue_bulk_requests ("
+                "id TEXT NOT NULL PRIMARY KEY, review_queue_id TEXT NOT NULL, "
+                "project_id TEXT NOT NULL, action TEXT NOT NULL, actor TEXT NOT NULL, "
+                "reason TEXT, item_ids_json TEXT NOT NULL, "
+                f"created_at TEXT NOT NULL{_REVIEW_QUEUE_FK}{_PROJECT_FK})"
+            )
+        connection.exec_driver_sql(
+            "INSERT INTO review_queue_item_events VALUES "
+            "('Event-1', 'queue-1', 'item-1', 'project-1', 'request-1', "
+            "'comment', 'researcher', NULL, NULL, '2026-11-24')"
+        )
+        schema_query = "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+        event_query = "SELECT * FROM review_queue_item_events"
+        before_schema = connection.exec_driver_sql(schema_query).all()
+        before_events = connection.exec_driver_sql(event_query).all()
+        for _ in range(2):
+            if id_ddl == "id TEXT NOT NULL PRIMARY KEY":
+                assert_compatible_revision_0038(connection)
+            else:
+                with pytest.raises(RuntimeError, match="noncanonical review-event primary-key"):
+                    assert_compatible_revision_0038(connection)
+            assert connection.exec_driver_sql(schema_query).all() == before_schema
+            assert connection.exec_driver_sql(event_query).all() == before_events
+            assert connection.scalar(text("SELECT value FROM preserved")) == "original observation"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
+            assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+    engine.dispose()

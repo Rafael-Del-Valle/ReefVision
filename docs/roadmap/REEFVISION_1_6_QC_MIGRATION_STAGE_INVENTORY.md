@@ -344,3 +344,24 @@ remain unverified until the new head completes.
 This is startup/migration safety, not a scientific workflow node. Existing
 typed saved QC workflow execution, provenance, retries and human review
 remain unchanged; release HOLD and all independent acceptance gates remain.
+
+
+## 2026-11-24 — review-event global primary-key index semantics
+
+The original 0038 migration specifies a string event ID as the global
+primary key, and the later QC stages retain it. SQLAlchemy reports the
+same primary-key column for BINARY, NOCASE, RTRIM and descending SQLite
+indexes. NOCASE and RTRIM can conflate distinct historical event IDs
+even when the per-item request-idempotency index is correct. Desktop
+startup now checks the actual automatic primary-key index and requires
+the original ascending binary key. It never rewrites or normalizes IDs.
+
+Sixteen persisted regression configurations span all four QC stages and
+the canonical, NOCASE, RTRIM and descending variants. They require
+unchanged schema, review rows, observation, revision and foreign-key
+integrity after repeated checks. Four independent SQLite/SQLAlchemy
+probes confirmed reflection's identical primary-key result and the
+actual index distinction, including blocked distinct IDs with NOCASE
+and RTRIM. Full repository CI remains required. The existing typed
+standalone and saved QC workflow, provenance, retries and researcher
+approval are unchanged; this is a preflight gate, not a workflow node.

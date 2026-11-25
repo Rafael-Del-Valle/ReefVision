@@ -589,6 +589,36 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             "history and reconcile through a reviewed data-preserving migration."
         )
 
+    if connection.dialect.name == "sqlite":
+        # Reflection reports only the PK column name, not its collation or
+        # sort order. A changed collation can conflate distinct event IDs.
+        event_pk_indexes = (
+            connection.execute(
+                text(
+                    "SELECT name FROM pragma_index_list('review_queue_item_events') "
+                    "WHERE origin = 'pk'"
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if len(event_pk_indexes) == 1:
+            event_pk_keys = connection.execute(
+                text(
+                    'SELECT name, coll, "desc" FROM pragma_index_xinfo(:index_name) '
+                    'WHERE "key" = 1 ORDER BY seqno'
+                ),
+                {"index_name": event_pk_indexes[0]},
+            ).all()
+        else:
+            event_pk_keys = []
+        if [tuple(row) for row in event_pk_keys] != [("id", "BINARY", 0)]:
+            raise RuntimeError(
+                f"Unsafe ReefVision Alembic revision {revision} collision: "
+                "noncanonical review-event primary-key index semantics. "
+                "Preserve reviewer history and reconcile without rewriting research data."
+            )
+
     # SQLite UNIQUE permits repeated NULL identities. A forged review-lineage stamp
     # with nullable request keys could bypass reviewer-event idempotency even
     # when the named two-column UNIQUE constraint exists. The actual 0038
