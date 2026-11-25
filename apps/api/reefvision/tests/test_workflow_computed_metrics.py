@@ -216,6 +216,9 @@ def test_saved_workflow_executes_and_reloads_persisted_metric_result(
         "bounded_uncertainty",
         "zero_area",
         "mismatched_observation_time",
+        "mismatched_location",
+        "mismatched_depth",
+        "mismatched_dataset",
     ],
 )
 def test_workflow_metric_failure_is_persisted_without_result(
@@ -223,6 +226,17 @@ def test_workflow_metric_failure_is_persisted_without_result(
 ) -> None:
     project = create_project(client, f"Metric workflow {failure}")
     qc_by_failure = {"qc_rejected": "rejected", "qc_suspect": "suspect"}
+    context_overrides: dict[str, object] = {}
+    if failure == "mismatched_location":
+        context_overrides["location"] = {"latitude": 25.1, "longitude": -80}
+    elif failure == "mismatched_depth":
+        context_overrides["depth_m"] = 11
+    elif failure == "mismatched_dataset":
+        context_overrides["provenance"] = {
+            "source": "Reef survey",
+            "dataset_id": "different-survey",
+            "acquired_at": "2026-04-03T13:05:00Z",
+        }
     organisms, area = add_records(
         client,
         project["id"],
@@ -253,6 +267,7 @@ def test_workflow_metric_failure_is_persisted_without_result(
                         "bounded_uncertainty": "bound",
                     }.get(failure, "standard_deviation"),
                 },
+                **context_overrides,
             ),
         ],
     )
@@ -306,3 +321,5 @@ def test_workflow_metric_failure_is_persisted_without_result(
             assert "Division by zero" in (failed_node.error_message or "")
         if failure == "mismatched_observation_time":
             assert "exact observation time" in (failed_node.error_message or "")
+        if failure in {"mismatched_location", "mismatched_depth", "mismatched_dataset"}:
+            assert "explicit shared contextual identity" in (failed_node.error_message or "")
