@@ -212,6 +212,8 @@ def test_saved_workflow_executes_and_reloads_persisted_metric_result(
         "qc_suspect",
         "area_qc_rejected",
         "area_qc_suspect",
+        "mixed_uncertainty_kind",
+        "bounded_uncertainty",
     ],
 )
 def test_workflow_metric_failure_is_persisted_without_result(
@@ -228,6 +230,7 @@ def test_workflow_metric_failure_is_persisted_without_result(
                 12,
                 "count",
                 qc=qc_by_failure.get(failure, "unassessed"),
+                uncertainty={"value": 2, "kind": "standard_deviation"},
             ),
             scientific_record(
                 "surveyed_area",
@@ -236,6 +239,13 @@ def test_workflow_metric_failure_is_persisted_without_result(
                 qc={"area_qc_rejected": "rejected", "area_qc_suspect": "suspect"}.get(
                     failure, "unassessed"
                 ),
+                uncertainty={
+                    "value": 0.1,
+                    "kind": {
+                        "mixed_uncertainty_kind": "standard_error",
+                        "bounded_uncertainty": "bound",
+                    }.get(failure, "standard_deviation"),
+                },
             ),
         ],
     )
@@ -283,3 +293,5 @@ def test_workflow_metric_failure_is_persisted_without_result(
             assert "distinct scientific record" in (failed_node.error_message or "")
         if failure in {"qc_rejected", "qc_suspect", "area_qc_rejected", "area_qc_suspect"}:
             assert "suspect or rejected" in (failed_node.error_message or "")
+        if failure in {"mixed_uncertainty_kind", "bounded_uncertainty"}:
+            assert "Unsupported uncertainty kind combination" in (failed_node.error_message or "")
