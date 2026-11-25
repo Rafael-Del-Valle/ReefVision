@@ -218,6 +218,22 @@ def test_worker_accepts_descending_and_irregular_monotonic_axes(monkeypatch, lat
     assert result["coordinate_resolution"].get("latitude") == resolution
 
 
+def test_worker_reports_true_spacing_for_descending_unsigned_depth(monkeypatch):
+    original = dataset().isel(depth=[0, 0, 0]).assign_coords(
+        depth=np.array([9, 5, 1], dtype=np.uint16)
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "copernicusmarine",
+        SimpleNamespace(open_dataset=lambda **_kwargs: original, __version__="synthetic-test"),
+    )
+    payload = request().model_dump(mode="json", exclude={"offline", "refresh"})
+    result = read_dataset(payload, "fixture-user", "fixture-password")
+    assert result["coordinate_resolution"]["depth"] == 4.0
+    assert {sample["depth_m"] for sample in result["samples"]} == {1.0, 5.0, 9.0}
+    assert len(result["samples"]) == 12
+
+
 def test_modeled_copernicus_samples_refresh_and_reopen_offline(client, test_settings, monkeypatch):
     project = create_project(client)
     raw = raw_fixture(monkeypatch)
