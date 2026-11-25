@@ -319,3 +319,28 @@ Nineteen independent SQLite/SQLAlchemy and lexical checks passed;
 full repository CI remains required. Existing typed standalone and saved
 QC workflow, retries and researcher-review gates are unchanged. No
 migration or schema repair is authorized.
+
+## 2026-11-24 — desktop QC trigger preflight
+
+The original 0038–0041 QC migrations install no triggers on the two QC
+audit tables. The independent structural inspector already checks unexpected
+triggers, but desktop startup checked only triggers on the Alembic stamp.
+A restored trigger on the QC event or bulk-request registry can alter unrelated
+scientific records when a reviewer writes, or be discarded by the 0039/0040
+batch-table recreation. Startup now rejects these triggers without executing,
+removing, or disclosing them. Unrelated research-table triggers are not
+classified as QC triggers by this check.
+
+Nine persisted regression configurations cover INSERT, UPDATE and DELETE
+triggers on each QC table and an unrelated-table control. Repeated validation
+preserves the schema, original reviewer rows, observation, and stamp. Nine
+independent disposable SQLite/SQLAlchemy probes additionally reproduced the
+trigger's destructive side effect and verified byte-identical preflight.
+The previous exact-head CI 45511584722 passed frontend and native Windows
+preservation, but failed backend Ruff (pairwise, formatting, and line length);
+the exact diagnostics are corrected here. Repository pytest and final CI
+remain unverified until the new head completes.
+
+This is startup/migration safety, not a scientific workflow node. Existing
+typed saved QC workflow execution, provenance, retries and human review
+remain unchanged; release HOLD and all independent acceptance gates remain.

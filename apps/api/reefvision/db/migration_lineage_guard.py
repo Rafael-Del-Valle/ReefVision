@@ -6,6 +6,7 @@ the revision identifier, so a cross-branch upgrade can silently skip the
 missing migration. Do not stamp, mutate, or delete any user schema here.
 """
 
+import itertools
 import re
 
 from sqlalchemy import Connection, inspect, text
@@ -88,14 +89,9 @@ def _sqlite_has_explicit_conflict_policy(ddl: str) -> bool:
         re.DOTALL,
     )
     tokens = [
-        match.group().upper()
-        for match in matches
-        if not match.group().startswith(("--", "/*"))
+        match.group().upper() for match in matches if not match.group().startswith(("--", "/*"))
     ]
-    return any(
-        left == "ON" and right == "CONFLICT"
-        for left, right in zip(tokens, tokens[1:], strict=False)
-    )
+    return any(left == "ON" and right == "CONFLICT" for left, right in itertools.pairwise(tokens))
 
 
 def assert_compatible_revision_0038(connection: Connection) -> None:
@@ -371,6 +367,20 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
         )
 
     if connection.dialect.name == "sqlite":
+        # No 0038-0041 migration installs triggers on the QC audit tables.
+        # A restored trigger could modify scientific data during a review
+        # write, or disappear during the 0039/0040 batch table recreation.
+        qc_trigger_count = connection.exec_driver_sql(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND "
+            "(tbl_name = 'review_queue_item_events' COLLATE NOCASE OR "
+            "tbl_name = 'review_queue_bulk_requests' COLLATE NOCASE)"
+        ).scalar()
+        if qc_trigger_count:
+            raise RuntimeError(
+                f"Unsafe ReefVision Alembic revision {revision} collision: "
+                "noncanonical QC table trigger. Preserve reviewer and research history "
+                "and reconcile without executing or removing the trigger."
+            )
         # Index reflection cannot reveal a conflict policy that silently
         # replaces committed reviewer history or discards a new request.
         for table in sorted(tables & {_REVIEW_TABLE, _BULK_TABLE}):

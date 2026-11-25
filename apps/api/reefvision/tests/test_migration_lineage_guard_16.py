@@ -754,7 +754,9 @@ def test_revision_0041_qc_conflict_policy_preserves_history(target: str, policy:
         before_bulk = connection.exec_driver_sql(bulk_query).all()
         for _ in range(2):
             if policy and not policy.startswith(" /*"):
-                with pytest.raises(RuntimeError, match="noncanonical QC constraint conflict policy"):
+                with pytest.raises(
+                    RuntimeError, match="noncanonical QC constraint conflict policy"
+                ):
                     assert_compatible_revision_0038(connection)
             else:
                 assert_compatible_revision_0038(connection)
@@ -995,4 +997,73 @@ def test_review_lineage_mixed_type_concurrent_head_fails_closed(
             assert_compatible_revision_0038(connection)
         assert connection.scalar(text("SELECT value FROM preserved")) == "biological evidence"
         assert connection.scalar(text("SELECT COUNT(*) FROM alembic_version")) == 2
+    engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "target", ["review_queue_item_events", "review_queue_bulk_requests", "preserved"]
+)
+@pytest.mark.parametrize("operation", ["INSERT", "UPDATE", "DELETE"])
+def test_revision_0041_qc_triggers_fail_closed(target: str, operation: str) -> None:
+    """Startup must not execute or discard unreviewed QC-table triggers."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.exec_driver_sql("INSERT INTO alembic_version VALUES ('0041')")
+        connection.exec_driver_sql("CREATE TABLE preserved (value TEXT NOT NULL)")
+        connection.exec_driver_sql("INSERT INTO preserved VALUES ('original observation')")
+        allowed = (
+            "'comment', 'assign', 'unassign', 'triage_start', "
+            "'triage_skip', 'triage_return', 'triage_complete'"
+        )
+        connection.exec_driver_sql(
+            f"CREATE TABLE review_queue_item_events ({_REVIEW_REQUEST_SCHEMA}, "
+            "CONSTRAINT ck_review_queue_item_event_type "
+            f"CHECK (event_type IN ({allowed})), "
+            "CONSTRAINT uq_review_queue_item_event_request "
+            "UNIQUE (review_queue_item_id, client_request_id)"
+            f"{REVIEW_EVENT_FK_SQL})"
+        )
+        install_review_event_parent_rows(connection)
+        install_review_event_history_indexes(connection)
+        connection.exec_driver_sql(
+            "CREATE TABLE review_queue_bulk_requests ("
+            "id TEXT NOT NULL PRIMARY KEY, review_queue_id TEXT NOT NULL, "
+            "project_id TEXT NOT NULL, action TEXT NOT NULL, actor TEXT NOT NULL, "
+            "reason TEXT, item_ids_json TEXT NOT NULL, "
+            f"created_at TEXT NOT NULL{_REVIEW_QUEUE_FK}{_PROJECT_FK})"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO review_queue_item_events VALUES "
+            "('event-1', 'queue-1', 'item-1', 'project-1', 'request-1', "
+            "'comment', 'researcher', NULL, NULL, '2026-11-24')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO review_queue_bulk_requests VALUES "
+            "('batch-1', 'queue-1', 'project-1', 'start', 'researcher', NULL, "
+            "'[]', '2026-11-24')"
+        )
+        connection.exec_driver_sql(
+            f"CREATE TRIGGER private_trigger AFTER {operation} ON {target.upper()} "
+            "BEGIN DELETE FROM preserved; END"
+        )
+        schema_query = "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+        event_query = "SELECT * FROM review_queue_item_events"
+        bulk_query = "SELECT * FROM review_queue_bulk_requests"
+        before_schema = connection.exec_driver_sql(schema_query).all()
+        before_events = connection.exec_driver_sql(event_query).all()
+        before_bulk = connection.exec_driver_sql(bulk_query).all()
+        for _ in range(2):
+            if target == "preserved":
+                assert_compatible_revision_0038(connection)
+            else:
+                with pytest.raises(RuntimeError, match="noncanonical QC table trigger") as exc:
+                    assert_compatible_revision_0038(connection)
+                assert "private_trigger" not in str(exc.value)
+            assert connection.exec_driver_sql(schema_query).all() == before_schema
+            assert connection.exec_driver_sql(event_query).all() == before_events
+            assert connection.exec_driver_sql(bulk_query).all() == before_bulk
+            assert connection.scalar(text("SELECT value FROM preserved")) == "original observation"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0041"
+            assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
     engine.dispose()
