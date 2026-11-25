@@ -1252,6 +1252,7 @@ def test_v3_pending_confidence_requires_feasible_sample_mean(
             validate_saved_queue_snapshot(queue, items)
     assert item.review_state == "in_progress"
 
+
 @pytest.mark.parametrize(
     ("pending_count", "threshold", "minimum", "valid"),
     [
