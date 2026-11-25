@@ -60,6 +60,20 @@ def _is_sqlite_queue_identity_collision(exc: IntegrityError) -> bool:
     )
 
 
+def _frozen_incomplete_provenance(annotations: list[dict[str, Any]]) -> float:
+    """Reproduce the v3 missing-provenance ratio from frozen detections only."""
+    assisted = [
+        annotation
+        for annotation in annotations
+        if str(annotation.get("source_type") or "human") in {"accepted_prediction", "assist_mask"}
+    ]
+    return (
+        sum(not annotation.get("provenance_json") for annotation in assisted) / len(assisted)
+        if assisted
+        else 0.0
+    )
+
+
 def create_review_queue_workflow_artifact(
     session: Session,
     settings: Settings,
@@ -392,6 +406,8 @@ def create_review_queue_workflow_artifact(
                     != float(frozen_item.image_annotation_status != "reviewed")
                     or item.signal_values_json["missing_group_metadata"]
                     != float(not (group_key and group_key.strip()))
+                    or item.signal_values_json["incomplete_provenance"]
+                    != _frozen_incomplete_provenance(frozen_item.annotation_snapshot_json)
                 ):
                     raise ValidationError(
                         "QC review-queue frozen annotation evidence does not match manifest"
