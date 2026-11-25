@@ -428,10 +428,11 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     # v3 freezes the complete set of formula inputs. A re-signed checksum
     # must not permit adding an invented signal or omitting a known one.
     # Historical v2 queues retain their original compatibility contract.
-    if integrity_version == "qc-review-queue-v3":
-        if set(weights) != V3_SUPPORTED_SIGNALS:
-            raise invalid
+    if integrity_version == "qc-review-queue-v3" and set(weights) != V3_SUPPORTED_SIGNALS:
+        raise invalid
+    if integrity_version in SUPPORTED_INTEGRITY_VERSIONS:
         # Empty queues still require a scientifically meaningful weight vector.
+        # V2 already enforces this when an item is present.
         total_weight = sum(float(weight) for weight in weights.values())
         if not isfinite(total_weight) or total_weight <= 0:
             raise invalid
@@ -487,18 +488,17 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             raise invalid
         # Versioned snapshots must preserve both finite scientific evidence
         # and its deterministic per-signal/aggregate score explanation.
-        if integrity_version in SUPPORTED_INTEGRITY_VERSIONS and not _valid_v2_score_explanation(
-            item, weights
+        if integrity_version in SUPPORTED_INTEGRITY_VERSIONS and (
+            # Mapping equality accepts True == 1 and False == 0.
+            not isinstance(item.weights_json, dict)
+            or any(not _finite_scientific_number(value) for value in item.weights_json.values())
+            or not _valid_v2_score_explanation(item, weights)
         ):
             raise invalid
         if integrity_version == "qc-review-queue-v3" and (
             not _valid_v3_signal_normalization(item)
             or not _valid_v3_scientific_explanation(item)
             or not _valid_v3_scientific_references(item)
-            # Python mapping equality accepts True == 1 and False == 0.
-            # Persisted per-item weights must be finite scientific numbers.
-            or not isinstance(item.weights_json, dict)
-            or any(not _finite_scientific_number(value) for value in item.weights_json.values())
         ):
             raise invalid
         # A frozen dataset version has no per-image import/edit timestamps.
