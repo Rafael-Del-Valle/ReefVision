@@ -467,6 +467,13 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                 and canonical_json_sha256(request) == snapshot["pose_child_job_request_sha256"],
                 "Queued training job request differs from its frozen fingerprint",
             )
+            # Reconcile the architecture independently of the persisted request hash.
+            # Earlier saved requests did not record an architecture pin.
+            _require(
+                "pose_training_architecture" not in request
+                or request["pose_training_architecture"] == training.architecture,
+                "Queued training architecture differs from the saved training run",
+            )
             # Independently reconcile the original queued snapshot with the
             # saved workflow and worker manifest. Checksum-valid job requests
             # cannot establish that the separately persisted training draft
