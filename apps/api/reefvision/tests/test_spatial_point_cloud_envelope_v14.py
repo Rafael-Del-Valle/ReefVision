@@ -655,9 +655,9 @@ def test_axis_chord_rounds_only_after_calibration_and_uncertainty(
             intervals = []
             for value in point:
                 coordinate = Decimal.from_float(value) * Decimal.from_float(0.1)
-                intervals.append(
-                    sorted([float(coordinate * (1 - u)), float(coordinate * (1 + u))])
-                )
+                lower = float(coordinate * (1 - u))
+                upper = float(coordinate * (1 + u))
+                intervals.append(sorted([lower, upper]))
             coordinate_intervals.append(intervals)
     project_id = str(create_project(client, f"Chord rounding {source_format}")["id"])
     base = f"/api/v1/projects/{project_id}"
@@ -670,12 +670,10 @@ def test_axis_chord_rounds_only_after_calibration_and_uncertainty(
         assert chord["scale_uncertainty_m"] == absolute
     assert expected["axis_aligned_dimensions_m"][0] == nominal
     assert expected["preview_point_scale_intervals_m"] == coordinate_intervals
-    assert expected["axis_aligned_min_in_source_frame_scale_interval_m"] == (
-        coordinate_intervals[0]
-    )
-    assert expected["axis_aligned_max_in_source_frame_scale_interval_m"] == (
-        coordinate_intervals[1]
-    )
+    minimum = expected["axis_aligned_min_in_source_frame_scale_interval_m"]
+    maximum = expected["axis_aligned_max_in_source_frame_scale_interval_m"]
+    assert minimum == coordinate_intervals[0]
+    assert maximum == coordinate_intervals[1]
     assert expected["branch_length_m"] is None
     assert expected["provenance"]["calibration_verified"] is False
 
