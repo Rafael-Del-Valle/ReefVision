@@ -50,6 +50,7 @@ jobs:
           export MIGRATION_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           verify_revision() {
             python - "$1" "$2" <<'PY'
+          import hashlib
           import json
           import os
           import sqlite3
@@ -70,9 +71,24 @@ jobs:
               revisions = conn.execute("SELECT version_num FROM alembic_version").fetchall()
               integrity = conn.execute("PRAGMA quick_check").fetchall()
               foreign_keys = conn.execute("PRAGMA foreign_key_check").fetchall()
+              schema_objects = conn.execute(
+                  "SELECT type, name, tbl_name, sql FROM sqlite_schema "
+                  "WHERE name NOT GLOB 'sqlite_*' ORDER BY type, name"
+              ).fetchall()
           assert revisions == [(expected,)], (expected, revisions)
           assert integrity == [("ok",)], integrity
           assert not foreign_keys, foreign_keys
+          schema_sha256 = hashlib.sha256(
+              json.dumps(schema_objects, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+          ).hexdigest()
+          report_path = Path(os.environ["MIGRATION_EVIDENCE"])
+          if stage == "final_upgrade":
+              first, second = [
+                  json.loads(line) for line in report_path.read_text(encoding="utf-8").splitlines()
+              ]
+              assert first["stage"] == "initial_upgrade", first
+              assert second["stage"] == "downgrade", second
+              assert schema_sha256 == first["schema_sha256"], "Roundtrip changed SQLite schema"
           evidence = {
               "stage": stage,
               "checkout_sha": os.environ["GITHUB_SHA"],
@@ -81,8 +97,10 @@ jobs:
               "actual_revision": revisions[0][0],
               "quick_check": integrity[0][0],
               "foreign_key_violations": len(foreign_keys),
+              "schema_sha256": schema_sha256,
+              "schema_object_count": len(schema_objects),
           }
-          with Path(os.environ["MIGRATION_EVIDENCE"]).open("a", encoding="utf-8") as report:
+          with report_path.open("a", encoding="utf-8") as report:
               report.write(json.dumps(evidence, sort_keys=True) + "\n")
           print(f"Verified revision {expected}; quick_check=ok; foreign_key_check=ok")
           PY
