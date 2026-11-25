@@ -324,3 +324,50 @@ def test_qc_table_stages_reject_all_pre_creation_stamps_without_data_changes(
     assert path.read_bytes() == original
     with sqlite3.connect(path) as db:
         assert db.execute("SELECT note FROM coral_sentinel").fetchone() == ("original observation",)
+
+
+@pytest.mark.parametrize(
+    ("stamp_definition", "canonical"),
+    [
+        ("version_num VARCHAR(32) NOT NULL PRIMARY KEY", True),
+        ("version_num TEXT NOT NULL PRIMARY KEY", True),
+        ("version_num TEXT COLLATE BINARY NOT NULL PRIMARY KEY", True),
+        ("version_num TEXT COLLATE NOCASE NOT NULL PRIMARY KEY", False),
+        ("version_num TEXT COLLATE RTRIM NOT NULL PRIMARY KEY", False),
+        ("version_num TEXT NOT NULL PRIMARY KEY DESC", False),
+        ("version_num TEXT NOT NULL, PRIMARY KEY (version_num COLLATE NOCASE)", False),
+        ("version_num TEXT NOT NULL, PRIMARY KEY (version_num DESC)", False),
+    ],
+)
+def test_alembic_stamp_primary_key_semantics_are_read_only(tmp_path, stamp_definition, canonical):
+    """An unchanged revision string can hide incompatible index semantics."""
+    import json
+    import subprocess
+    import sys
+
+    path = tmp_path / "qc-stamp-key.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute(f"CREATE TABLE alembic_version ({stamp_definition})")
+        db.execute("INSERT INTO alembic_version VALUES ('0039')")
+        db.execute("CREATE TABLE review_queue_item_events (id INTEGER PRIMARY KEY, note TEXT)")
+        db.execute("INSERT INTO review_queue_item_events VALUES (1, 'private coral observation')")
+        db.commit()
+        assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+
+    original = path.read_bytes()
+    result = module.inspect(path)
+    assert module.inspect(path) == result
+    assert result["canonical_alembic_stamp_constraints"] is canonical
+    assert ("noncanonical_alembic_stamp_constraints" in result["warnings"]) is not canonical
+    assert result["revision_rows"] == ["0039"]
+    assert result["upgrade_authorized"] is False
+    assert "private coral observation" not in json.dumps(result)
+    strict = subprocess.run(
+        [sys.executable, str(SCRIPT), str(path), "--fail-on-warning"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert strict.returncode == (0 if canonical else 2)
+    assert json.loads(strict.stdout)["warnings"] == result["warnings"]
+    assert path.read_bytes() == original
