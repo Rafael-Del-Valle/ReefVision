@@ -1121,6 +1121,13 @@ def process_pose_training_job(
                     raise ValidationError(
                         "Queued pose training frozen initialization lineage changed"
                     )
+            # New child requests pin the architecture as well as the seed.
+            # Older saved jobs did not record this field and remain readable.
+            if (
+                "pose_training_architecture" in request
+                and request["pose_training_architecture"] != run.architecture
+            ):
+                raise ValidationError("Queued pose training frozen architecture changed")
             checkpoint_source = _resolve_model_source(settings, session, run)
             if run.initial_checkpoint_model_id:
                 # Recheck schema and checksum at execution, after any queue delay.
