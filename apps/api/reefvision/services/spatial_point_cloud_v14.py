@@ -720,15 +720,19 @@ def measure_point_cloud_preview(
             # coverage or change the calibrated distance by a representable ULP.
             exact_span = Fraction(levels[-1]) - Fraction(levels[0])
             gap_details["fraction_of_source_axis_span"] = float(max_exact_gap / exact_span)
-            gap_m = float(max_exact_gap * Fraction(scale))
+            exact_gap_m = max_exact_gap * Fraction(scale)
+            gap_m = float(exact_gap_m)
             if gap_m == 0.0:
                 # Do not describe a positive gap as a measured zero.
                 sampling_gap_nominal_underflow = True
             else:
                 gap_details["calibrated_gap_m"] = gap_m
                 if relative_scale_uncertainty is not None:
-                    lower = gap_m * (1 - relative_scale_uncertainty)
-                    upper = gap_m * (1 + relative_scale_uncertainty)
+                    # Round the scale-only endpoints once, rather than
+                    # propagating rounding of the nominal gap or scale factors.
+                    uncertainty = Fraction(relative_scale_uncertainty)
+                    lower = float(exact_gap_m * (1 - uncertainty))
+                    upper = float(exact_gap_m * (1 + uncertainty))
                     if _scale_interval_unresolved(gap_m, relative_scale_uncertainty, lower, upper):
                         sampling_gap_interval_unresolved = True
                     else:
