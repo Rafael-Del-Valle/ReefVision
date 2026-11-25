@@ -556,14 +556,11 @@ def measure_point_cloud_preview(
             diagonal_scale_interval_underflow = True
         else:
             diagonal_scale_interval = [lower, upper]
-    # Multiply larger extents first: multiplying two tiny axes before a
-    # large third axis can underflow to zero even when the final positive
-    # envelope volume is representable. This remains a bounding envelope,
-    # not an estimate of biological tissue volume.
-    envelope_product = 1.0
-    for dimension in sorted(dimensions, reverse=True):
-        envelope_product *= dimension
-    envelope_volume: float | None = envelope_product
+    # Keep all three calibrated extents exact through their product. Neither
+    # rounded extents nor intermediate underflow should alter the envelope.
+    # This is a bounding envelope, not an estimate of biological tissue volume.
+    exact_envelope = exact_dimensions[0] * exact_dimensions[1] * exact_dimensions[2]
+    envelope_volume: float | None = float(exact_envelope)
     # Three representable dimensions may still have a product too small for
     # floating point. Report this as unknown rather than falsely claiming a
     # zero-volume (planar) cloud. Keep the independently valid dimensions.
@@ -579,8 +576,9 @@ def measure_point_cloud_preview(
     envelope_scale_interval_underflow = False
     envelope_scale_interval: list[float] | None = None
     if relative_scale_uncertainty is not None and envelope_volume is not None:
-        lower = envelope_volume * (1 - relative_scale_uncertainty) ** 3
-        upper = envelope_volume * (1 + relative_scale_uncertainty) ** 3
+        envelope_uncertainty = Fraction(relative_scale_uncertainty)
+        lower = float(exact_envelope * (1 - envelope_uncertainty) ** 3)
+        upper = float(exact_envelope * (1 + envelope_uncertainty) ** 3)
         # Quantized positive bounds may also become identical even when
         # the caller supplied nonzero scale uncertainty. Never claim a
         # precise zero-width scale-uncertainty interval at float resolution.
