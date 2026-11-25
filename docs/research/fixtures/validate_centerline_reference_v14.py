@@ -29,6 +29,24 @@ def validate_reference(path: Path = REFERENCE) -> list[str]:
     bound = data["calibration"]["absolute_scale_bound_meters_per_unit"]
     assert type(scale) in (int, float) and math.isfinite(scale) and scale > 0
     assert type(bound) in (int, float) and math.isfinite(bound) and 0 <= bound < scale
+    # Independent case-design invariants: a mutually edited graph and expected
+    # result must not silently erase the intended scientific challenge.
+    designs = {
+        "straight": ([1, 1], 1, False, False, 5.0),
+        "y_shared_trunk": ([1, 1, 1, 3], 1, False, False, 11.0),
+        "degree_two_node": ([1, 1, 2], 1, False, False, 5.0),
+        "loop_requires_review": ([2, 2, 2], 1, True, False, 12.0),
+        "occluded_unresolved": ([1, 1, 1, 1], 2, False, True, 4.0),
+    }
+    assert data["required_workflow_checks"] == [
+        "execute standalone engine",
+        "save typed graph revision",
+        "reload graph",
+        "execute graph",
+        "compare lengths and units",
+        "compare QC and provisional reviewer status",
+        "compare immutable artifact hashes",
+    ], "reference workflow validation contract changed"
     seen: set[str] = set()
     for case in data["cases"]:
         name = case["id"]
@@ -117,10 +135,17 @@ def validate_reference(path: Path = REFERENCE) -> list[str]:
             )
             branch_count = sum(len(adjacency[n]) for n in nodes if len(adjacency[n]) != 2) // 2
             assert branch_count == expected["branch_count"], name
-    assert seen == {
-        "straight", "y_shared_trunk", "degree_two_node",
-        "loop_requires_review", "occluded_unresolved",
-    }
+        degrees, count, cycle, gap, raw_length = designs[name]
+        assert (
+            sorted(len(adjacency[node]) for node in nodes),
+            components,
+            has_cycle,
+            has_gap,
+        ) == (degrees, count, cycle, gap), f"case topology changed in {name}"
+        assert math.isclose(total, raw_length, rel_tol=1e-10, abs_tol=1e-12), (
+            f"analytic raw reference length changed in {name}"
+        )
+    assert seen == set(designs)
     return sorted(seen)
 
 
