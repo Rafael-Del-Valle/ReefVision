@@ -138,7 +138,9 @@ def test_saved_workflow_executes_and_reloads_persisted_metric_result(
     assert results["items"][0]["workflow_node_run_id"] == metric_node["id"]
     result = results["items"][0]
     assert result["input_snapshot"]["surveyed_area"]["unit"] == "cm2"
-    expected = None if area_uncertainty is None else (1 + (3 * area_uncertainty / 10000) ** 2) ** 0.5
+    expected = None
+    if area_uncertainty is not None:
+        expected = (1 + (3 * area_uncertainty / 10000) ** 2) ** 0.5
     if expected is None:
         assert result["uncertainty"] is None
         assert result["normalized_uncertainty"] is None
@@ -148,7 +150,9 @@ def test_saved_workflow_executes_and_reloads_persisted_metric_result(
         assert result["uncertainty"] == pytest.approx(expected)
         assert result["normalized_uncertainty"] == pytest.approx(expected)
         assert result["provenance"]["uncertainty_kind"] == "standard_deviation"
-        assert result["provenance"]["uncertainty_method"] == "independent_first_order_root_sum_square"
+        assert (
+            result["provenance"]["uncertainty_method"] == "independent_first_order_root_sum_square"
+        )
     exported = client.get(f"/api/v1/projects/{project['id']}/computed-metric-results.csv")
     csv_row = next(csv.DictReader(io.StringIO(exported.text)))
     assert csv_row["workflow_run_id"] == run["id"]
