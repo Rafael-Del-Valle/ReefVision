@@ -31,6 +31,14 @@ class ReviewScoreWeights(BaseModel):
     recent_import: float = Field(default=4.0, ge=0)
     stale_review_state: float = Field(default=6.0, ge=0)
 
+    @field_validator("*", mode="before")
+    @classmethod
+    def reject_boolean_weight(cls, value: Any) -> Any:
+        # A JSON flag is not a dimensionless scientific scoring weight.
+        if isinstance(value, bool):
+            raise ValueError("Review score weights cannot be Boolean")
+        return value
+
     @model_validator(mode="after")
     def require_finite_positive_total_weight(self) -> Self:
         # Individual finite weights can still overflow when summed; an
