@@ -408,6 +408,16 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                     "noncanonical QC constraint conflict policy. "
                     "Preserve reviewer history and reconcile without rewriting research data."
                 )
+            # A second CHECK may restrict legitimate reviewer events even
+            # when the named event vocabulary and all indexes are intact.
+            # Reflection can miss CHECK followed by a SQL comment.
+            expected_checks = 1 if table == _REVIEW_TABLE else 0
+            if _sqlite_ddl_tokens(ddl).count("CHECK") > expected_checks:
+                raise RuntimeError(
+                    f"Unsafe ReefVision Alembic revision {revision} collision: "
+                    "unexpected QC audit CHECK constraint. Preserve reviewer history "
+                    "and reconcile without rewriting research data."
+                )
 
     if revision == "0041":
         bulk_details = inspector.get_columns(_BULK_TABLE) if _BULK_TABLE in tables else []
