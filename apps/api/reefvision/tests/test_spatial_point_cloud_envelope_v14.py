@@ -808,9 +808,10 @@ def test_calibrated_centroid_preserves_cancellation_and_signed_scale(
     assert hashes[0] == hashes[1]
 
 
+@pytest.mark.parametrize("uncertainty", [0.1, 0.2, 0.4])
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
 def test_centroid_offsets_survive_large_common_origin(
-    client: TestClient, source_format: str
+    client: TestClient, source_format: str, uncertainty: float
 ) -> None:
     """Distinct exact centroids may share the same rounded coordinates."""
     origin = float(2**29)
@@ -834,16 +835,21 @@ def test_centroid_offsets_survive_large_common_origin(
         "meters_per_unit": 1.0,
         "calibration_method": "ruler",
         "calibration_evidence": "Synthetic common origin; calibration unverified",
-        "relative_scale_uncertainty": 0.1,
+        "relative_scale_uncertainty": uncertainty,
     }
     with localcontext() as context:
         context.prec = 120
         delta = Decimal.from_float(step)
         offset = -delta / 513
-        u = Decimal.from_float(0.1)
+        u = Decimal.from_float(uncertainty)
         expected_offset = float(offset)
         offset_bounds = [float(offset * (1 + u)), float(offset * (1 - u))]
-        expected_unique_separation = float(delta / 2 - delta / 513)
+        unique_separation = delta / 2 - delta / 513
+        expected_unique_separation = float(unique_separation)
+        unique_bounds = [
+            float(unique_separation * (1 - u)),
+            float(unique_separation * (1 + u)),
+        ]
     project_id = str(create_project(client, f"Centroid offset {source_format}")["id"])
     base = f"/api/v1/projects/{project_id}"
     response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
@@ -860,6 +866,13 @@ def test_centroid_offsets_survive_large_common_origin(
     assert expected["preview_vs_source_row_centroid_separation_m"] == -expected_offset
     assert expected["row_vs_unique_coordinate_centroid_separation_m"] == (
         expected_unique_separation
+    )
+    assert expected["preview_vs_source_row_centroid_separation_scale_interval_m"] == [
+        -offset_bounds[1],
+        -offset_bounds[0],
+    ]
+    assert expected["row_vs_unique_coordinate_centroid_separation_scale_interval_m"] == (
+        unique_bounds
     )
     assert expected["branch_length_m"] is None
     assert expected["provenance"]["calibration_verified"] is False
