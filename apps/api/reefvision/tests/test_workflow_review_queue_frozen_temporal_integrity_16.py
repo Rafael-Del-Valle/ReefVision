@@ -48,15 +48,16 @@ def test_resigned_v3_frozen_snapshot_rejects_invented_temporal_signal(signal_id:
     assert item.review_state == "in_progress"
 
 
-@pytest.mark.parametrize("signal_id", ["recent_import", "stale_review_state", "model_reference"])
+@pytest.mark.parametrize(
+    "signal_id", ["recent_import", "stale_review_state", "model_reference", "count_disagreement"]
+)
 def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
     client: TestClient, signal_id: str
 ) -> None:
     """Standalone and saved QC agree; retry rejects forged chronology without a new queue."""
     project_id, _, version_id, _ = _study(client)
-    # Zero temporal weights isolate the scientific evidence check from the
-    # already-tested aggregate-score and priority-order integrity checks.
-    weights = {"recent_import": 0.0, "stale_review_state": 0.0}
+    # Zero weights isolate scientific evidence from aggregate-score checks.
+    weights = {"recent_import": 0.0, "stale_review_state": 0.0, "count_disagreement": 0.0}
     standalone = client.post(
         f"/api/v1/dataset-versions/{version_id}/review-queues",
         json={"signal_weights": weights},
@@ -77,6 +78,7 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
     for item in (standalone_item, workflow_item):
         assert item["signal_values_json"]["recent_import"] == 0.0
         assert item["signal_values_json"]["stale_review_state"] == 0.0
+        assert item["signal_values_json"]["count_disagreement"] == 1.0
         assert item["review_state"] == "pending"
     assert workflow_item["score"] == standalone_item["score"]
     assert workflow_item["input_checksum"] == standalone_item["input_checksum"]
@@ -197,3 +199,42 @@ def test_frozen_snapshot_rejects_resigned_prediction_model_reference() -> None:
     for item in items:
         item.dataset_version_id = None
     validate_saved_queue_snapshot(queue, items)
+
+
+@pytest.mark.parametrize("gap", [0.0, 0.25, 0.5, 0.75, 1.0])
+def test_prediction_free_count_gap_replay(gap: float) -> None:
+    """Re-sign every weighted field; prediction-free gaps are still binary."""
+    queue, items = _v3_human_only_snapshot()
+    validate_saved_queue_snapshot(queue, items)
+    score = round(gap * 100.0, 2)
+    for item in items:
+        item.signal_values_json["count_disagreement"] = gap
+        item.normalized_signals_json["count_disagreement"] = gap
+        part = next(
+            part for part in item.score_breakdown_json if part["signal_id"] == "count_disagreement"
+        )
+        part["raw_value"] = gap
+        part["normalized_value"] = gap
+        part["contribution"] = score
+        item.score_breakdown_json.sort(key=lambda part: (-part["contribution"], part["signal_id"]))
+        item.score = score
+        item.reason_summary = f"Model-versus-human count gap: +{score:.2f}" if score else None
+    queue.summary_json["average_score"] = score
+    queue.input_checksums_json["queue_scope_sha256"] = canonical_json_sha256(
+        {
+            "image_ids": sorted(item.image_id for item in items),
+            "scores": {item.image_id: item.score for item in items},
+            "source_quality_control_run_id": None,
+        }
+    )
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    if gap in (0.0, 1.0):
+        validate_saved_queue_snapshot(queue, items)
+    else:
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            validate_saved_queue_snapshot(queue, items)
+        # Actual prediction references permit fractional disagreement.
+        for item in items:
+            item.model_ids_json = ["prediction-model"]
+        queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+        validate_saved_queue_snapshot(queue, items)
