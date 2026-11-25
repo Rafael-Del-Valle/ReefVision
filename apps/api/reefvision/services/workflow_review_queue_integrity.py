@@ -420,8 +420,13 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     # v3 freezes the complete set of formula inputs. A re-signed checksum
     # must not permit adding an invented signal or omitting a known one.
     # Historical v2 queues retain their original compatibility contract.
-    if integrity_version == "qc-review-queue-v3" and set(weights) != V3_SUPPORTED_SIGNALS:
-        raise invalid
+    if integrity_version == "qc-review-queue-v3":
+        if set(weights) != V3_SUPPORTED_SIGNALS:
+            raise invalid
+        # Empty queues still require a scientifically meaningful weight vector.
+        total_weight = sum(float(weight) for weight in weights.values())
+        if not isfinite(total_weight) or total_weight <= 0:
+            raise invalid
     scoring_digest = checksums.get("scoring_provenance_sha256")
     if scoring_digest is not None:
         scoring_payload: dict[str, Any] = {
@@ -482,6 +487,10 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             not _valid_v3_signal_normalization(item)
             or not _valid_v3_scientific_explanation(item)
             or not _valid_v3_scientific_references(item)
+            # Python mapping equality accepts True == 1 and False == 0.
+            # Persisted per-item weights must be finite scientific numbers.
+            or not isinstance(item.weights_json, dict)
+            or any(not _finite_scientific_number(value) for value in item.weights_json.values())
         ):
             raise invalid
         # A frozen dataset version has no per-image import/edit timestamps.
