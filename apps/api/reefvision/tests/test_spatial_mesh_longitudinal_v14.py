@@ -3575,13 +3575,15 @@ def test_reidentification_project_asset_bindings_in_standalone_and_saved_graph(
 
 
 @pytest.mark.parametrize(
-    ("origin", "translation"),
+    ("origin", "translation", "rotate"),
     [
-        (0.0, (0.1, 0.0, 0.0)),
-        (100_000_000.0, (1e-9, 0.0, 0.0)),
-        (-100_000_000.0, (-1e-9, 0.0, 0.0)),
-        (100_000_000.0, (3.0, -4.0, 12.0)),
-        (0.0, (0.0, 0.0, 0.0)),
+        (0.0, (0.1, 0.0, 0.0), False),
+        (100_000_000.0, (1e-9, 0.0, 0.0), False),
+        (-100_000_000.0, (-1e-9, 0.0, 0.0), False),
+        (100_000_000.0, (3.0, -4.0, 12.0), False),
+        (0.0, (0.0, 0.0, 0.0), False),
+        (100_000_000.0, (0.0, 1e-9, 0.0), True),
+        (-100_000_000.0, (3.0, -4.0, 12.0), True),
     ],
 )
 @pytest.mark.parametrize(
@@ -3608,6 +3610,7 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
     alignment_bound: float,
     origin: float,
     translation: tuple[float, float, float],
+    rotate: bool,
 ) -> None:
     """Typed persisted graphs must retain the standalone provisional interval and QC."""
     project_id = str(create_project(client, "Registered centroid interval parity")["id"])
@@ -3615,15 +3618,21 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
     before = _mesh("early", "2026-10-01T12:00:00Z", 1.0)
     after = _mesh("late", "2026-10-02T12:00:00Z", 1.0)
     before["coordinate_frame_id"] = "survey-frame"
-    after["coordinate_frame_id"] = "survey-frame"
+    after["coordinate_frame_id"] = "rotated-frame" if rotate else "survey-frame"
     for observation in (before, after):
         observation["vertices"] = [[origin, 0, 0], [origin + 1, 0, 0], [origin, 1, 0]]
     transform = _rigid_transform()
+    if rotate:
+        # An exact right-handed quarter turn moves the large survey coordinate
+        # onto the target y-axis. The remaining offset is minus the translation.
+        after["vertices"] = [[0, origin, 0], [0, origin + 1, 0], [-1, origin, 0]]
+        transform[0][:3] = [0.0, -1.0, 0.0]
+        transform[1][:3] = [1.0, 0.0, 0.0]
     for axis, component in enumerate(translation):
         transform[axis][3] = component
     evidence = {
         "source_frame_id": "survey-frame",
-        "target_frame_id": "survey-frame",
+        "target_frame_id": after["coordinate_frame_id"],
         "method": "landmark",
         "rms_residual_m": 0.02,
         "correspondence_count": 6,
@@ -3640,7 +3649,7 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     # These fixtures have exactly known norms (including the 3-4-12 triple).
-    separation = 13.0 if translation == (3.0, -4.0, 12.0) else abs(translation[0])
+    separation = 13.0 if translation == (3.0, -4.0, 12.0) else max(map(abs, translation))
     # Use the exact binary64 inputs in an independent high-precision oracle.
     # A rounded sum of the radii can erase a small positive lower endpoint.
     with localcontext() as context:
@@ -3674,6 +3683,12 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
     ]
     for actual, reference in zip(axis_intervals, expected_axis_intervals, strict=True):
         assert actual == pytest.approx(reference, rel=1e-15, abs=0.0)
+    assert expected["registration_rotation_angle_degrees"] == pytest.approx(
+        90.0 if rotate else 0.0
+    )
+    assert expected["provenance"]["registration_evidence"]["source_to_target_transform_m"] == (
+        transform
+    )
     assert expected["provenance"]["coordinate_registration_verified"] is False
     assert expected["provenance"]["specimen_identity_verified"] is False
     assert (
