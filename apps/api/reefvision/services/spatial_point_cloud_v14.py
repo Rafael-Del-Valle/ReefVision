@@ -9,7 +9,7 @@ from datetime import UTC
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 from itertools import pairwise
-from math import dist, fsum, isfinite
+from math import dist, isfinite
 from re import fullmatch
 from typing import Any
 
@@ -530,13 +530,21 @@ def measure_point_cloud_preview(
                 dimension_scale_intervals.append(None)
             else:
                 dimension_scale_intervals.append([lower, upper])
-    # Divide only after calibration and compensated summation: dividing a
-    # positive subnormal source mean first can round it to zero even when its
-    # calibrated centroid is representable. A point centroid is not a tissue
-    # centroid or a verified organism position.
-    centroid = [
-        fsum(point[axis] * scale for point in vertices) / len(vertices) for axis in range(3)
-    ]
+    # Sum the imported coordinates exactly before calibration. Rounding each
+    # calibrated row can create a false nonzero centroid after cancellation.
+    # A point centroid is not a tissue centroid or a verified organism position.
+    def exact_calibrated_centroid(
+        rows: list[tuple[float, float, float]],
+    ) -> list[Fraction]:
+        return [
+            sum((Fraction(point[axis]) for point in rows), Fraction())
+            * Fraction(scale)
+            / len(rows)
+            for axis in range(3)
+        ]
+
+    exact_centroid = exact_calibrated_centroid(vertices)
+    centroid = [float(value) for value in exact_centroid]
     diagonal = dist((0.0, 0.0, 0.0), dimensions)
     # A calibrated diagonal may remain representable even when its scale-only
     # uncertainty interval is rounded to a false point interval. Do not report
@@ -590,7 +598,7 @@ def measure_point_cloud_preview(
     coordinate_scale_interval_underflow = False
 
     def coordinate_scale_intervals(
-        bounds: list[float] | tuple[float, float, float],
+        bounds: list[float] | list[Fraction] | tuple[float, float, float],
         *,
         source_coordinates: bool = False,
     ) -> list[list[float] | None] | None:
@@ -599,23 +607,17 @@ def measure_point_cloud_preview(
             return None
         intervals: list[list[float] | None] = []
         for value in bounds:
+            # Both source coordinates and derived exact centroids retain
+            # their unrounded values until the final interval conversion.
+            exact_value = Fraction(value)
             if source_coordinates:
-                # Source coordinates are available before calibration. Avoid
-                # rounding twice and preserve signed interval ordering.
-                exact_value = Fraction(value) * Fraction(scale)
-                uncertainty = Fraction(relative_scale_uncertainty)
-                nominal = float(exact_value)
-                candidates = (
-                    float(exact_value * (1 - uncertainty)),
-                    float(exact_value * (1 + uncertainty)),
-                )
-            else:
-                # Derived centroids already have a rounded nominal value.
-                nominal = value
-                candidates = (
-                    value * (1 - relative_scale_uncertainty),
-                    value * (1 + relative_scale_uncertainty),
-                )
+                exact_value *= Fraction(scale)
+            uncertainty = Fraction(relative_scale_uncertainty)
+            nominal = float(exact_value)
+            candidates = (
+                float(exact_value * (1 - uncertainty)),
+                float(exact_value * (1 + uncertainty)),
+            )
             if _scale_interval_unresolved(nominal, relative_scale_uncertainty, *candidates):
                 coordinate_scale_interval_underflow = True
                 intervals.append(None)
@@ -651,10 +653,8 @@ def measure_point_cloud_preview(
     # spatial observations. Keep the existing row-weighted centroid, but
     # contrast it with a centroid counting each distinct XYZ location once.
     # Neither is a validated tissue centroid or verified organism position.
-    unique_coordinate_centroid = [
-        fsum(point[axis] * scale for point in coordinate_multiplicities) / unique_count
-        for axis in range(3)
-    ]
+    exact_unique_centroid = exact_calibrated_centroid(list(coordinate_multiplicities))
+    unique_coordinate_centroid = [float(value) for value in exact_unique_centroid]
     centroid_separation = dist(centroid, unique_coordinate_centroid)
     if len(set(coordinate_multiplicities.values())) == 1:
         # Equal multiplicities cannot move the mathematical centroid. Avoid
@@ -1047,14 +1047,12 @@ def measure_point_cloud_preview(
     # displacement, NOT organism movement, tissue geometry or registration.
     # Reuse the full-source result when every acquisition row is displayed to
     # avoid numerical differences caused only by summation order.
-    preview_row_centroid = (
-        centroid
+    exact_preview_centroid = (
+        exact_centroid
         if len(preview_indices) == len(vertices)
-        else [
-            fsum(vertices[index][axis] * scale for index in preview_indices) / len(preview_indices)
-            for axis in range(3)
-        ]
+        else exact_calibrated_centroid([vertices[index] for index in preview_indices])
     )
+    preview_row_centroid = [float(value) for value in exact_preview_centroid]
     # Signed displacement of the displayed *sample* relative to all source
     # acquisition rows, in the source coordinate frame. Direction matters for
     # visualization bias, but is never evidence of organism motion or spatial
@@ -1257,11 +1255,11 @@ def measure_point_cloud_preview(
         ),
         "arithmetic_centroid_in_source_frame_m": centroid,
         "arithmetic_centroid_in_source_frame_scale_interval_m": coordinate_scale_intervals(
-            centroid
+            exact_centroid
         ),
         "preview_row_centroid_in_source_frame_m": preview_row_centroid,
         "preview_row_centroid_in_source_frame_scale_interval_m": coordinate_scale_intervals(
-            preview_row_centroid
+            exact_preview_centroid
         ),
         "preview_minus_source_row_centroid_offset_m": preview_minus_source_centroid_offset,
         "preview_minus_source_row_centroid_offset_scale_interval_m": (
@@ -1276,7 +1274,7 @@ def measure_point_cloud_preview(
         ),
         "unique_coordinate_centroid_in_source_frame_m": unique_coordinate_centroid,
         "unique_coordinate_centroid_in_source_frame_scale_interval_m": (
-            coordinate_scale_intervals(unique_coordinate_centroid)
+            coordinate_scale_intervals(exact_unique_centroid)
         ),
         "row_vs_unique_coordinate_centroid_separation_m": centroid_separation,
         "row_vs_unique_coordinate_centroid_separation_scale_interval_m": (
