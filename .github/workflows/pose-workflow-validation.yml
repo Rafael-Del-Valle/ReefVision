@@ -82,15 +82,44 @@ jobs:
           schema_sha256 = hashlib.sha256(
               json.dumps(schema_objects, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
           ).hexdigest()
+          def canonical_sql(kind, name, sql):
+              # Alembic batch reflection reorders this table's independent constraints.
+              # Preserve all definitions, column order, and every other schema object.
+              if kind != "table" or name != "behavior_bout_revisions" or sql is None:
+                  return sql
+              lines = sql.splitlines()
+              prefixes = ("\tCONSTRAINT ", "\tFOREIGN KEY(")
+              start = next((i for i, line in enumerate(lines) if line.startswith(prefixes)), None)
+              if start is None or lines[-1] != ")":
+                  return sql
+              tail = lines[start:-1]
+              if not tail or not all(line.startswith(prefixes) for line in tail):
+                  return sql
+              if any(not line.endswith(", ") for line in tail[:-1]) or tail[-1].endswith(", "):
+                  return sql
+              constraints = [line.removesuffix(", ") for line in tail]
+              return "\n".join(lines[:start] + [", \n".join(sorted(constraints)), ")"])
+
+          canonical_objects = [
+              (kind, name, table, canonical_sql(kind, name, sql))
+              for kind, name, table, sql in schema_objects
+          ]
+          canonical_schema_sha256 = hashlib.sha256(
+              json.dumps(canonical_objects, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+          ).hexdigest()
           report_path = Path(os.environ["MIGRATION_EVIDENCE"])
           schema_matches_initial = None
+          raw_schema_matches_initial = None
           if stage == "final_upgrade":
               first, second = [
                   json.loads(line) for line in report_path.read_text(encoding="utf-8").splitlines()
               ]
               assert first["stage"] == "initial_upgrade", first
               assert second["stage"] == "downgrade", second
-              schema_matches_initial = schema_sha256 == first["schema_sha256"]
+              raw_schema_matches_initial = schema_sha256 == first["schema_sha256"]
+              schema_matches_initial = canonical_schema_sha256 == first["canonical_schema_sha256"]
+              if schema_matches_initial and not raw_schema_matches_initial:
+                  print("Raw schema differs only in behavior_bout_revisions constraint order")
           evidence = {
               "stage": stage,
               "checkout_sha": os.environ["GITHUB_SHA"],
@@ -100,6 +129,8 @@ jobs:
               "quick_check": integrity[0][0],
               "foreign_key_violations": len(foreign_keys),
               "schema_sha256": schema_sha256,
+              "canonical_schema_sha256": canonical_schema_sha256,
+              "raw_schema_matches_initial": raw_schema_matches_initial,
               "schema_object_count": len(schema_objects),
               "schema_objects": schema_objects,
               "schema_matches_initial": schema_matches_initial,
