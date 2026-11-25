@@ -367,3 +367,35 @@ measure exact duplicate coordinate/color *records*, not sampling independence,
 repeat measurements, organism abundance, colony condition, color calibration,
 or independent biological replication. Do not turn duplicate-row counts into
 experimental units; human QC and field reference validation are required.
+
+### Shared trunk and anatomical length accounting
+
+For multiple selected mesh-edge traces, report
+`surface_traces_share_geometric_edges` in mesh-level QC when different
+traces traverse the same nonzero exact source-coordinate endpoint pair,
+regardless of direction or split mesh vertex indices. Do not merge the
+traces or change their individual lengths. Absence of this warning does not
+exclude partial collinear overlap, near-coincident routes, or biological
+ambiguity.
+
+Use a synthetic Y reference with a two-unit trunk and perpendicular three-
+and four-unit tip branches. Two complete root-to-tip traces have lengths
+five and six units, respectively, but their sum of eleven units double-counts
+the trunk. A centerline graph with three unique segments would have total
+length nine units. At 0.01 meters/unit these are 0.05 and 0.06 m versus
+0.09 m for the graph; none is a verified biological measurement. Reverse one
+trace and duplicate its junction and root indices to model an imported
+seam. Include a negative control sharing only the junction. Exercise direct
+measurement, standalone API and two saved typed mesh-preview graph runs,
+including QC, provisional status and stable artifact hashes.
+
+For a future anatomical centerline analysis, define each branch as an
+ordered chain between a tip, root or junction, with stable segment IDs and
+a source-geometry binding. Count each accepted segment once for total linear
+extension; keep root-to-tip distance as a separate metric. Require independent
+physical or expert-traced reference lengths and junction assignments, with
+blinded reviewers resolving disagreements and recording occluded or ambiguous
+branches. Evaluate branch-level detection and length error separately from
+specimen-level total-length bias. A shared-edge warning is a QC aid, not an
+implemented centerline extraction algorithm or a completed anatomical
+validation gate.
