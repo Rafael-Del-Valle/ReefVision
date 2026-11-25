@@ -1228,9 +1228,7 @@ def test_review_event_type_column_collation(revision: str, collation: str, valid
         ", CONSTRAINT extra CHECK (actor = 'researcher')",
     ],
 )
-def test_qc_audit_rejects_additional_checks(
-    revision: str, target: str, extra_check: str
-) -> None:
+def test_qc_audit_rejects_additional_checks(revision: str, target: str, extra_check: str) -> None:
     """A valid existing reviewer must not hide restrictions on later reviewers."""
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.begin() as connection:
