@@ -359,8 +359,11 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
         and (queue.formula_id, queue.formula_version) != V2_SUPPORTED_FORMULA
     ):
         raise invalid
+    # Explicit JSON null is not a digest. A key-presence check alone lets
+    # versioned evidence bypass the later optional historical digest checks.
     if integrity_version in SUPPORTED_INTEGRITY_VERSIONS and (
-        "scoring_provenance_sha256" not in checksums or "item_evidence_sha256" not in checksums
+        checksums.get("scoring_provenance_sha256") is None
+        or checksums.get("item_evidence_sha256") is None
     ):
         raise invalid
 

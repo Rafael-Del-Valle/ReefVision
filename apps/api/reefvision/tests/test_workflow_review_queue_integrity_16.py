@@ -333,6 +333,16 @@ def test_versioned_queue_fails_closed_when_provenance_digest_is_missing(missing_
         validate_saved_queue_snapshot(queue, items)
 
 
+@pytest.mark.parametrize("digest_key", ["scoring_provenance_sha256", "item_evidence_sha256"])
+@pytest.mark.parametrize("version", ["v2", "v3"])
+def test_versioned_queue_rejects_explicit_null_digest(digest_key: str, version: str) -> None:
+    queue, items = snapshot() if version == "v2" else _v3_snapshot()
+    validate_saved_queue_snapshot(queue, items)
+    queue.input_checksums_json[digest_key] = None
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+
+
 @pytest.mark.parametrize(
     ("formula_id", "formula_version"),
     [

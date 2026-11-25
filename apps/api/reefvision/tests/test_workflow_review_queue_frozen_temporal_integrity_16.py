@@ -66,6 +66,8 @@ def test_resigned_v3_frozen_snapshot_rejects_invented_temporal_signal(signal_id:
         "missing_group_metadata",
         "incomplete_provenance",
         "boolean_weight",
+        "null_scoring_digest",
+        "null_item_digest",
     ],
 )
 def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
@@ -141,6 +143,23 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
             item.model_ids_json = ["not-a-frozen-prediction-model"]
         elif signal_id == "class_reference":
             item.label_class_ids_json = ["not-a-frozen-annotation-class"]
+        elif signal_id in {"null_scoring_digest", "null_item_digest"}:
+            digest_key = (
+                "scoring_provenance_sha256"
+                if signal_id == "null_scoring_digest"
+                else "item_evidence_sha256"
+            )
+            standalone_queue = session.get(ReviewQueue, standalone.json()["id"])
+            assert standalone_queue is not None
+            standalone_queue.input_checksums_json = {
+                **standalone_queue.input_checksums_json,
+                digest_key: None,
+            }
+            session.flush()
+            session.refresh(standalone_queue)
+            assert standalone_queue.input_checksums_json[digest_key] is None
+            with pytest.raises(ValidationError, match="snapshot failed integrity"):
+                validate_saved_queue_snapshot(standalone_queue, standalone_queue.items)
         elif signal_id == "boolean_weight":
             assert item.weights_json["recent_import"] == 0.0
             item.weights_json = {**item.weights_json, "recent_import": False}
@@ -181,6 +200,16 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
             **queue.input_checksums_json,
             "item_evidence_sha256": queue_item_evidence_sha256(queue.items),
         }
+        if signal_id in {"null_scoring_digest", "null_item_digest"}:
+            digest_key = (
+                "scoring_provenance_sha256"
+                if signal_id == "null_scoring_digest"
+                else "item_evidence_sha256"
+            )
+            queue.input_checksums_json = {**queue.input_checksums_json, digest_key: None}
+            session.flush()
+            session.refresh(queue)
+            assert queue.input_checksums_json[digest_key] is None
         session.flush()
         qc_node = by_type["qc_review_queue"]
         parameters = {

@@ -197,3 +197,15 @@ checking rejection, then rolls back and retries the original pending-review
 artifact. No priority formula, typed port, migration or human approval
 semantics change. Full exact-head CI and installed Windows validation are
 still separate release gates.
+
+## Required versioned digests cannot be JSON null (2026-11-25)
+
+A v2/v3 QC snapshot must contain actual scoring-provenance and item-evidence
+SHA-256 digests. Previously an explicit JSON null satisfied the key-presence
+check and bypassed the optional historical digest validation. The shared
+validator now rejects null exactly as it rejects a missing required digest.
+Unversioned historical snapshots retain their original compatibility path.
+Four synthetic v2/v3 cases and two persisted standalone/saved workflow
+cases check refusal, rollback and recovery without changing review status,
+formula, units or typed ports. The independent JSON presence/null matrix
+passed; repository CI and installed Windows validation remain separate gates.
