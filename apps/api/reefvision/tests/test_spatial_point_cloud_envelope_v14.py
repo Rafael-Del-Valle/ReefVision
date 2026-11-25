@@ -803,3 +803,98 @@ def test_calibrated_centroid_preserves_cancellation_and_signed_scale(
         assert len(artifact["payload_sha256"]) == 64
         hashes.append(artifact["payload_sha256"])
     assert hashes[0] == hashes[1]
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+def test_centroid_offsets_survive_large_common_origin(
+    client: TestClient, source_format: str
+) -> None:
+    """Distinct exact centroids may share the same rounded coordinates."""
+    origin = float(2**29)
+    step = 2.0**-23
+    points = [[origin, 0.0, 0.0] for _ in range(513)]
+    # The default 512-row display skips source row 511.
+    points[511][0] += step
+    geometry = (
+        {"points": points}
+        if source_format == "xyz"
+        else {
+            "ply_text": (
+                "ply\nformat ascii 1.0\nelement vertex 513\n"
+                "property double x\nproperty double y\nproperty double z\n"
+                "end_header\n"
+                + "".join(f"{point[0]} 0 0\n" for point in points)
+            )
+        }
+    )
+    params = {
+        **geometry,
+        "meters_per_unit": 1.0,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic common origin; calibration unverified",
+        "relative_scale_uncertainty": 0.1,
+    }
+    with localcontext() as context:
+        context.prec = 120
+        delta = Decimal.from_float(step)
+        offset = -delta / 513
+        u = Decimal.from_float(0.1)
+        expected_offset = float(offset)
+        offset_bounds = [float(offset * (1 + u)), float(offset * (1 - u))]
+        expected_unique_separation = float(delta / 2 - delta / 513)
+    project_id = str(create_project(client, f"Centroid offset {source_format}")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    for prefix in ("arithmetic_centroid", "unique_coordinate_centroid", "preview_row_centroid"):
+        assert expected[f"{prefix}_in_source_frame_m"] == [origin, 0.0, 0.0]
+    assert expected["preview_minus_source_row_centroid_offset_m"] == [expected_offset, 0.0, 0.0]
+    assert expected["preview_minus_source_row_centroid_offset_scale_interval_m"] == [
+        offset_bounds,
+        [0.0, 0.0],
+        [0.0, 0.0],
+    ]
+    assert expected["preview_vs_source_row_centroid_separation_m"] == -expected_offset
+    assert expected["row_vs_unique_coordinate_centroid_separation_m"] == expected_unique_separation
+    assert expected["branch_length_m"] is None
+    assert expected["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": f"centroid-offset-resolution-{source_format}",
+        "name": "Centroid offset below coordinate resolution",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        )
+        assert artifact["payload_json"] == expected
+        assert len(artifact["payload_sha256"]) == 64
+        hashes.append(artifact["payload_sha256"])
+    assert hashes[0] == hashes[1]
