@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "apps/api/reefvision/**"
+      - "apps/api/migrations/**"
+      - "apps/api/alembic.ini"
       - "apps/web/src/features/pose/**"
       - "apps/web/src/features/video/**"
       - ".github/workflows/pose-workflow-validation.yml"
@@ -43,11 +45,37 @@ jobs:
           export REEFVISION_DATA_DIR="$(mktemp -d "$RUNNER_TEMP/reefvision-pose-migration.XXXXXX")"
           # Pin the scratch database explicitly; never use an inherited application DB URL.
           export REEFVISION_DATABASE_URL="sqlite:///$REEFVISION_DATA_DIR/reefvision.db"
+          verify_revision() {
+            python - "$1" <<'PY'
+          import os
+          import sqlite3
+          import sys
+          from pathlib import Path
+
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
+
+          expected = sys.argv[1]
+          if expected == "head":
+              expected = ScriptDirectory.from_config(
+                  Config("apps/api/alembic.ini")
+              ).get_current_head()
+              assert expected is not None, "Migration graph has no head"
+          database = Path(os.environ["REEFVISION_DATA_DIR"]) / "reefvision.db"
+          with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True) as conn:
+              revisions = conn.execute("SELECT version_num FROM alembic_version").fetchall()
+              integrity = conn.execute("PRAGMA quick_check").fetchall()
+          assert revisions == [(expected,)], (expected, revisions)
+          assert integrity == [("ok",)], integrity
+          print(f"Verified scratch database revision {expected}; quick_check=ok")
+          PY
+          }
           python -m alembic -c apps/api/alembic.ini upgrade head
-          test -f "$REEFVISION_DATA_DIR/reefvision.db"
+          verify_revision head
           python -m alembic -c apps/api/alembic.ini downgrade 0030
+          verify_revision 0030
           python -m alembic -c apps/api/alembic.ini upgrade head
-          test -f "$REEFVISION_DATA_DIR/reefvision.db"
+          verify_revision head
 
   frontend-pose:
     runs-on: ubuntu-latest
