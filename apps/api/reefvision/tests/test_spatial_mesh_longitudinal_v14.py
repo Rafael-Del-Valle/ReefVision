@@ -3576,7 +3576,13 @@ def test_reidentification_project_asset_bindings_in_standalone_and_saved_graph(
 
 @pytest.mark.parametrize(
     ("origin", "translation"),
-    [(0.0, 0.1), (100_000_000.0, 1e-9), (-100_000_000.0, -1e-9)],
+    [
+        (0.0, (0.1, 0.0, 0.0)),
+        (100_000_000.0, (1e-9, 0.0, 0.0)),
+        (-100_000_000.0, (-1e-9, 0.0, 0.0)),
+        (100_000_000.0, (3.0, -4.0, 12.0)),
+        (0.0, (0.0, 0.0, 0.0)),
+    ],
 )
 @pytest.mark.parametrize(
     ("source_bound", "target_bound", "alignment_bound"),
@@ -3591,6 +3597,8 @@ def test_reidentification_project_asset_bindings_in_standalone_and_saved_graph(
         (0.12, 0.0, 0.0),
         (0.02, 0.0, 0.01),
         (0.04, 0.04, 0.02),  # Bounds exactly equal measured separation.
+        (3.0, 4.0, 6.0),  # Exact equality for the three-axis 3-4-12 translation.
+        (1_000_000.0, 1_000_000.0, 1_000_000.0),
     ],
 )
 def test_registered_centroid_caller_bounds_survive_saved_workflow(
@@ -3599,7 +3607,7 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
     target_bound: float,
     alignment_bound: float,
     origin: float,
-    translation: float,
+    translation: tuple[float, float, float],
 ) -> None:
     """Typed persisted graphs must retain the standalone provisional interval and QC."""
     project_id = str(create_project(client, "Registered centroid interval parity")["id"])
@@ -3611,7 +3619,8 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
     for observation in (before, after):
         observation["vertices"] = [[origin, 0, 0], [origin + 1, 0, 0], [origin, 1, 0]]
     transform = _rigid_transform()
-    transform[0][3] = translation
+    for axis, component in enumerate(translation):
+        transform[axis][3] = component
     evidence = {
         "source_frame_id": "survey-frame",
         "target_frame_id": "survey-frame",
@@ -3630,7 +3639,8 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
     )
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
-    separation = abs(translation)
+    # These fixtures have exactly known norms (including the 3-4-12 triple).
+    separation = 13.0 if translation == (3.0, -4.0, 12.0) else abs(translation[0])
     # Use the exact binary64 inputs in an independent high-precision oracle.
     # A rounded sum of the radii can erase a small positive lower endpoint.
     with localcontext() as context:
@@ -3643,10 +3653,10 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
         expected_interval = [float(max(Decimal(0), distance - radius)), float(distance + radius)]
         expected_axis_intervals = [
             [float(component - radius), float(component + radius)]
-            for component in (Decimal.from_float(-translation), Decimal(0), Decimal(0))
+            for component in (Decimal.from_float(-value) for value in translation)
         ]
     assert expected["registered_surface_centroid_offset_target_frame_m"] == pytest.approx(
-        [-translation, 0.0, 0.0], abs=0.0
+        [-value for value in translation], abs=0.0
     )
     assert expected["registered_surface_centroid_separation_m"] == pytest.approx(
         separation, abs=0.0
