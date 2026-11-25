@@ -799,7 +799,11 @@ def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
         destination=destination,
     )
     _verify_prelaunch_pose_dataset(destination, materialization)
-    _verify_postlaunch_pose_dataset(destination, materialization, materialization)
+    manifest = {
+        "materialization": materialization,
+        "validation_mode": materialization["validation_mode"],
+    }
+    _verify_postlaunch_pose_dataset(destination, materialization, manifest)
 
     # A hard link outside the frozen run leaves the original hash and name
     # unchanged but permits external writes to scientist-reviewed frames.
@@ -822,7 +826,15 @@ def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
     # when the frozen training and validation bytes are untouched.
     altered_provenance = {**materialization, "validation_mode": "none"}
     with pytest.raises(ValidationError, match="materialization provenance changed"):
-        _verify_postlaunch_pose_dataset(destination, materialization, altered_provenance)
+        _verify_postlaunch_pose_dataset(
+            destination, materialization, {**manifest, "materialization": altered_provenance}
+        )
+
+    # A changed top-level validation mode must not authorize false holdout claims.
+    with pytest.raises(ValidationError, match="materialization provenance changed"):
+        _verify_postlaunch_pose_dataset(
+            destination, materialization, {**manifest, "validation_mode": "none"}
+        )
 
     holdout_label = destination / "labels" / "val" / "frame_00000001.txt"
     holdout_label.write_bytes(holdout_label.read_bytes() + b"changed")
@@ -831,7 +843,7 @@ def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
     # A modified validation label must also invalidate the completed GPU job,
     # even if it passed the earlier preflight verification.
     with pytest.raises(ValidationError, match="changed during GPU training"):
-        _verify_postlaunch_pose_dataset(destination, materialization, materialization)
+        _verify_postlaunch_pose_dataset(destination, materialization, manifest)
 
     with pytest.raises(ValidationError, match="missing materialized dataset provenance"):
         _verify_prelaunch_pose_dataset(destination, None)
