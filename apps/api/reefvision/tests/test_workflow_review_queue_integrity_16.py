@@ -1251,3 +1251,39 @@ def test_v3_pending_confidence_requires_feasible_sample_mean(
         with pytest.raises(ValidationError, match="snapshot failed integrity"):
             validate_saved_queue_snapshot(queue, items)
     assert item.review_state == "in_progress"
+
+@pytest.mark.parametrize(
+    ("pending_count", "threshold", "minimum", "valid"),
+    [
+        (2.0, 0.8, 0.2, True),
+        (2.0, 0.9, 0.3, True),
+        (2.0, 0.8, 0.3, False),
+        (2.0, 0.8, 0.4, False),
+        (3.0, 0.8, 0.4, False),
+    ],
+)
+def test_v3_selected_confidence_requires_joint_sample_bounds(
+    pending_count: float, threshold: float, minimum: float, valid: bool
+) -> None:
+    queue, items = _v3_snapshot()
+    item = items[1]
+    assert item.signal_values_json["low_mean_confidence"] == 0.2
+    queue.configuration_json["review_below_confidence"] = threshold
+    item.review_state = "in_progress"
+    _set_v3_unweighted_signal(item, "pending_proposals", pending_count)
+    _set_v3_unweighted_signal(item, "low_min_confidence", minimum)
+    queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
+        {
+            "formula_id": queue.formula_id,
+            "formula_version": queue.formula_version,
+            "configuration": queue.configuration_json,
+            "integrity_schema_version": "qc-review-queue-v3",
+        }
+    )
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    if valid:
+        validate_saved_queue_snapshot(queue, items)
+    else:
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            validate_saved_queue_snapshot(queue, items)
+    assert item.review_state == "in_progress"
