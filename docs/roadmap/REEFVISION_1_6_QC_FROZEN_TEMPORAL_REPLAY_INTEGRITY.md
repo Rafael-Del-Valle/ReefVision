@@ -81,3 +81,17 @@ frozen v3 snapshots without changing historical v2 or the scoring formula.
 A value of one in a prediction-free queue is not evidence of poor model accuracy.
 Regression checks cover re-signed weighted scores, both valid endpoints,
 prediction-present controls, and standalone/saved frozen QC retry parity.
+
+## Complete frozen image coverage (2026-11-25)
+
+Frozen v3 QC queues disallow prediction-confidence selection. The original
+dataset context enumerates every immutable version image, including images
+without annotations. On saved-node replay, the independently validated
+dataset manifest and typed dataset source now require complete image coverage
+in addition to correct membership and split labels. A re-signed queue cannot
+omit a coral observation (or claim an empty queue) while retaining a completed
+review reference. Live queues and historical pre-v3 subset semantics remain
+unchanged. The disposable regression verifies standalone coverage, saved
+workflow rejection after re-signing the empty queue and output, and rollback
+to the original pending researcher-review state. No research data or workflow
+artifact is rewritten by the guard.
