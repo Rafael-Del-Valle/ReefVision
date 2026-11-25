@@ -7,6 +7,7 @@ import hashlib
 import json
 from collections import Counter
 from datetime import UTC
+from fractions import Fraction
 from itertools import pairwise
 from math import dist, fsum, isfinite
 from typing import Any
@@ -915,6 +916,40 @@ def measure_mesh_preview(
                     }
                 )
         trace_edge_sets.append(trace_edges)
+    exact_edge_union = None
+    if trace_edge_sets:
+        # Count each nonzero exact endpoint-pair once, even within a trace.
+        # Unequal, partially overlapping segments are NOT geometrically merged.
+        unique_edges = set().union(*trace_edge_sets)
+        source_total = sum(
+            (Fraction(dist(min(edge), max(edge))) for edge in unique_edges), Fraction(0)
+        )
+        calibrated_total = source_total * Fraction(scale)
+        length_m = float(calibrated_total)
+        union_warnings: list[str] = []
+        interval = None
+        if calibrated_total > 0 and length_m == 0:
+            union_warnings.append("surface_trace_exact_edge_union_length_underflow")
+        elif relative_scale_uncertainty is not None:
+            uncertainty = Fraction(relative_scale_uncertainty)
+            lower = float(calibrated_total * (1 - uncertainty))
+            upper = float(calibrated_total * (1 + uncertainty))
+            if calibrated_total > 0 and (
+                (uncertainty < 1 and lower == 0) or (uncertainty > 0 and lower == upper)
+            ):
+                union_warnings.append("surface_trace_exact_edge_union_interval_unrepresentable")
+            else:
+                interval = [lower, upper]
+        exact_edge_union = {
+            "method": "exact_endpoint_pair_equality_only",
+            "distinct_nonzero_edge_count": len(unique_edges),
+            "source_length_mesh_units": float(source_total),
+            "length_m": None if calibrated_total > 0 and length_m == 0 else length_m,
+            "length_scale_only_interval_m": interval,
+            "biological_validation_status": "not_verified_anatomical_centerline",
+            "human_review_verified": False,
+            "qc_warnings": union_warnings,
+        }
     return {
         "schema_version": "mesh-preview-0001",
         "surface_area_m2": area_m2,
@@ -1052,6 +1087,7 @@ def measure_mesh_preview(
         ),
         "surface_edge_traces": surface_edge_traces,
         "surface_trace_shared_geometric_edge_pairs": shared_trace_edge_pairs,
+        "surface_trace_exact_edge_union": exact_edge_union,
         "boundary_edge_length_scale_uncertainty_m": (
             boundary_length_m * relative_scale_uncertainty
             if relative_scale_uncertainty is not None
