@@ -530,6 +530,7 @@ def measure_point_cloud_preview(
                 dimension_scale_intervals.append(None)
             else:
                 dimension_scale_intervals.append([lower, upper])
+
     # Sum the imported coordinates exactly before calibration. Rounding each
     # calibrated row can create a false nonzero centroid after cancellation.
     # A point centroid is not a tissue centroid or a verified organism position.
@@ -652,7 +653,12 @@ def measure_point_cloud_preview(
     # Neither is a validated tissue centroid or verified organism position.
     exact_unique_centroid = exact_calibrated_centroid(list(coordinate_multiplicities))
     unique_coordinate_centroid = [float(value) for value in exact_unique_centroid]
-    centroid_separation = dist(centroid, unique_coordinate_centroid)
+    # Difference the exact centroids before rounding: a large shared origin
+    # can hide real acquisition-weighting bias in the displayed coordinates.
+    centroid_separation = dist(
+        (0.0, 0.0, 0.0),
+        [float(a - b) for a, b in zip(exact_centroid, exact_unique_centroid, strict=True)],
+    )
     if len(set(coordinate_multiplicities.values())) == 1:
         # Equal multiplicities cannot move the mathematical centroid. Avoid
         # a false difference from independent floating-point summation paths.
@@ -1054,14 +1060,12 @@ def measure_point_cloud_preview(
     # acquisition rows, in the source coordinate frame. Direction matters for
     # visualization bias, but is never evidence of organism motion or spatial
     # registration. A complete or single-locus sample has no sampling offset.
-    preview_minus_source_centroid_offset = (
-        [0.0, 0.0, 0.0]
-        if len(preview_indices) == len(vertices) or unique_count == 1
-        else [preview_row_centroid[axis] - centroid[axis] for axis in range(3)]
-    )
-    preview_centroid_separation = dist(centroid, preview_row_centroid)
-    if unique_count == 1:
-        preview_centroid_separation = 0.0
+    exact_preview_offset = [
+        sample - source
+        for sample, source in zip(exact_preview_centroid, exact_centroid, strict=True)
+    ]
+    preview_minus_source_centroid_offset = [float(value) for value in exact_preview_offset]
+    preview_centroid_separation = dist((0.0, 0.0, 0.0), preview_minus_source_centroid_offset)
     # Signed per-axis sampling displacement has the same shared calibration
     # scale uncertainty as its magnitude, but negative components reverse
     # interval endpoints. A zero offset remains a genuine [0, 0] interval.
@@ -1070,10 +1074,12 @@ def measure_point_cloud_preview(
     preview_centroid_offset_interval_unresolved = False
     if relative_scale_uncertainty is not None:
         preview_centroid_offset_scale_intervals = []
-        for offset in preview_minus_source_centroid_offset:
+        uncertainty = Fraction(relative_scale_uncertainty)
+        for exact_offset in exact_preview_offset:
+            offset = float(exact_offset)
             offset_bound_candidates = (
-                offset * (1 - relative_scale_uncertainty),
-                offset * (1 + relative_scale_uncertainty),
+                float(exact_offset * (1 - uncertainty)),
+                float(exact_offset * (1 + uncertainty)),
             )
             offset_lower, offset_upper = (
                 min(offset_bound_candidates),
