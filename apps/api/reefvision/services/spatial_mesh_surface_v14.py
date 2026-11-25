@@ -897,17 +897,24 @@ def measure_mesh_preview(
     )
     # Root-to-tip selections can share a trunk. Summing their lengths would
     # double-count that geometry, even across split-index mesh seams.
-    seen_trace_edges: set[frozenset[tuple[float, float, float]]] = set()
-    traces_share_geometric_edge = False
+    trace_edge_sets: list[set[frozenset[tuple[float, float, float]]]] = []
+    shared_trace_edge_pairs: list[dict[str, Any]] = []
     for path in surface_trace_vertex_paths or []:
         trace_edges = {
             frozenset((points[first], points[second]))
             for first, second in pairwise(path)
             if points[first] != points[second]
         }
-        if seen_trace_edges.intersection(trace_edges):
-            traces_share_geometric_edge = True
-        seen_trace_edges.update(trace_edges)
+        for earlier_index, earlier_edges in enumerate(trace_edge_sets):
+            shared_count = len(earlier_edges.intersection(trace_edges))
+            if shared_count:
+                shared_trace_edge_pairs.append(
+                    {
+                        "trace_indices": [earlier_index, len(trace_edge_sets)],
+                        "shared_distinct_geometric_edge_count": shared_count,
+                    }
+                )
+        trace_edge_sets.append(trace_edges)
     return {
         "schema_version": "mesh-preview-0001",
         "surface_area_m2": area_m2,
@@ -1044,6 +1051,7 @@ def measure_mesh_preview(
             points, faces, surface_path_vertex_pairs, scale, relative_scale_uncertainty
         ),
         "surface_edge_traces": surface_edge_traces,
+        "surface_trace_shared_geometric_edge_pairs": shared_trace_edge_pairs,
         "boundary_edge_length_scale_uncertainty_m": (
             boundary_length_m * relative_scale_uncertainty
             if relative_scale_uncertainty is not None
@@ -1200,7 +1208,7 @@ def measure_mesh_preview(
             + (["coincident_mesh_patch_coordinates"] if coincident_patch_coordinates else [])
             + (["inconsistent_face_winding"] if inconsistent_winding_edge_count else [])
             + (["unreferenced_mesh_vertices"] if unreferenced_vertex_count else [])
-            + (["surface_traces_share_geometric_edges"] if traces_share_geometric_edge else [])
+            + (["surface_traces_share_geometric_edges"] if shared_trace_edge_pairs else [])
             + (
                 ["preview_omits_edge_connected_mesh_patches"]
                 if preview_omitted_patch_indices
