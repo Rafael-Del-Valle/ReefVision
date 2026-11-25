@@ -199,5 +199,50 @@ class CenterlineReferenceIntegrityTests(unittest.TestCase):
         self.check_mutation_rejected(mutate)
 
 
+    def test_equivalent_lengths_cannot_hide_swapped_case_designs(self) -> None:
+        def mutate(data) -> None:
+            straight, sampled = data["cases"][0], data["cases"][2]
+            straight["id"], sampled["id"] = sampled["id"], straight["id"]
+
+        self.check_mutation_rejected(mutate)
+
+    def test_consistent_geometry_and_expected_length_mutation_is_rejected(self) -> None:
+        def mutate(data) -> None:
+            case = data["cases"][0]
+            case["nodes"][1][1:4] = [6, 8, 0]
+            case["expected"].update(
+                unique_edge_total_raw=10,
+                observed_length_m=0.1,
+                scale_only_bound_m=0.002,
+            )
+
+        self.check_mutation_rejected(mutate)
+
+    def test_saved_workflow_replay_contract_cannot_be_omitted(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["required_workflow_checks"].remove("reload graph")
+        )
+
+    def test_artifact_hash_comparison_cannot_be_omitted(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["required_workflow_checks"].remove(
+                "compare immutable artifact hashes"
+            )
+        )
+
+    def test_case_and_edge_order_do_not_change_reference_designs(self) -> None:
+        data = copy.deepcopy(self.reference)
+        data["cases"].reverse()
+        for case in data["cases"]:
+            case["nodes"].reverse()
+            case["edges"].reverse()
+            for edge in case["edges"]:
+                edge.reverse()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "reordered_reference.json"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            self.assertEqual(validate_reference(path), validate_reference())
+
+
 if __name__ == "__main__":
     unittest.main()
