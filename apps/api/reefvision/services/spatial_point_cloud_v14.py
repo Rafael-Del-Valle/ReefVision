@@ -715,8 +715,12 @@ def measure_point_cloud_preview(
                 },
             }
             gap_details["largest_adjacent_source_gap_units"] = gap
-            gap_details["fraction_of_source_axis_span"] = gap / (levels[-1] - levels[0])
-            gap_m = gap * scale
+            # Preserve the exact selected interval through normalization and
+            # calibration. Rounding either operand first can invent full-axis
+            # coverage or change the calibrated distance by a representable ULP.
+            exact_span = Fraction(levels[-1]) - Fraction(levels[0])
+            gap_details["fraction_of_source_axis_span"] = float(max_exact_gap / exact_span)
+            gap_m = float(max_exact_gap * Fraction(scale))
             if gap_m == 0.0:
                 # Do not describe a positive gap as a measured zero.
                 sampling_gap_nominal_underflow = True
