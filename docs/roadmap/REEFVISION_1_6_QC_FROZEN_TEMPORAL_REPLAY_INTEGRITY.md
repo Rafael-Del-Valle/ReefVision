@@ -158,3 +158,23 @@ reload the corruption, require rejection, roll back and retry the original
 pending-review evidence. Independent canonical JSON probes verify numeric
 type separation; full repository and installed Windows qualification remain
 release gates, not inferred from these probes.
+
+## Fully rejected prediction evidence (2026-11-25)
+
+The v3 producer computes rejection rate over reviewed proposals and edited
+acceptance rate over accepted proposals. If every reviewed proposal was
+rejected, no edited acceptance is possible. If no pending proposals also
+remain, the model count is zero and the normalized human/model count gap
+must be zero (no annotations) or one (any annotations). The shared persisted
+queue validator now rejects contradictory combinations before returning a
+saved workflow artifact, even with re-signed item evidence at zero signal
+weight. Partial rejection and pending proposals remain supported; legacy
+snapshots and reviewer decisions remain unchanged.
+
+Four database-backed standalone and executable saved workflow regression
+configurations cover false edited acceptances and fractional count gaps.
+The tests re-sign the modified item evidence, reject replay, roll back and
+verify the original pending researcher review. Independent producer-formula
+checks covered 134,784 valid small-count combinations and four contradictory
+controls. Full repository CI and genuine installed Windows validation
+remain separate release gates.
