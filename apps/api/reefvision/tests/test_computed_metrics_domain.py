@@ -235,3 +235,41 @@ def test_invalid_uncertainty_raises_domain_error(uncertainty) -> None:
         evaluate_expression(
             compile_expression("a", {"a"}), {"a": MetricQuantity(1, "m", uncertainty)}, "m"
         )
+
+
+def test_repeated_symbol_preserves_shared_measurement_uncertainty() -> None:
+    result = evaluate_expression(
+        compile_expression("length + length", {"length"}),
+        {"length": MetricQuantity(2, "m", 0.1)},
+        "cm",
+    )
+    assert result.value == pytest.approx(400)
+    assert result.derivatives == {"length": 2.0}
+    assert result.normalized_uncertainty == pytest.approx(0.2)
+    assert result.uncertainty == pytest.approx(20)
+
+
+@pytest.mark.parametrize("uncertainty", [0.0, 0.1, None])
+def test_cancelling_symbol_does_not_invent_missing_uncertainty(uncertainty) -> None:
+    result = evaluate_expression(
+        compile_expression("length - length", {"length"}),
+        {"length": MetricQuantity(2, "m", uncertainty)},
+        "cm",
+    )
+    assert result.value == 0
+    assert result.derivatives == {"length": 0.0}
+    expected = None if uncertainty is None else 0.0
+    assert result.uncertainty == expected
+    assert result.normalized_uncertainty == expected
+
+
+def test_independent_symbols_do_not_cancel_uncertainty_when_values_match() -> None:
+    result = evaluate_expression(
+        compile_expression("a - b", {"a", "b"}),
+        {"a": MetricQuantity(2, "m", 0.1), "b": MetricQuantity(200, "cm", 10)},
+        "cm",
+    )
+    assert result.value == 0
+    assert result.derivatives == {"a": 1.0, "b": -1.0}
+    assert result.normalized_uncertainty == pytest.approx(math.hypot(0.1, 0.1))
+    assert result.uncertainty == pytest.approx(math.hypot(10, 10))
