@@ -8,6 +8,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.orm.attributes import flag_modified
 
 from reefvision.db.models import ReviewQueue, WorkflowArtifact, WorkflowNodeRun
 from reefvision.domain.errors import ValidationError
@@ -143,15 +144,21 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
         elif signal_id == "boolean_weight":
             assert item.weights_json["recent_import"] == 0.0
             item.weights_json = {**item.weights_json, "recent_import": False}
+            flag_modified(item, "weights_json")
             standalone_queue = session.get(ReviewQueue, standalone.json()["id"])
             assert standalone_queue is not None and len(standalone_queue.items) == 1
             standalone_row = standalone_queue.items[0]
             standalone_row.weights_json = {**standalone_row.weights_json, "recent_import": False}
+            flag_modified(standalone_row, "weights_json")
             standalone_queue.input_checksums_json = {
                 **standalone_queue.input_checksums_json,
                 "item_evidence_sha256": queue_item_evidence_sha256(standalone_queue.items),
             }
             session.flush()
+            session.refresh(standalone_row)
+            session.refresh(item)
+            assert standalone_row.weights_json["recent_import"] is False
+            assert item.weights_json["recent_import"] is False
             with pytest.raises(ValidationError, match="snapshot failed integrity"):
                 validate_saved_queue_snapshot(standalone_queue, standalone_queue.items)
         else:
