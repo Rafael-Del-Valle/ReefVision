@@ -785,6 +785,59 @@ def test_copernicus_cache_survives_project_exchange(client, test_settings, monke
     assert len(response.json()["items"]) == 4
 
 
+def test_copernicus_exchange_preserves_missing_refresh_and_historical_evidence(
+    client, test_settings, monkeypatch
+):
+    """Moving a project offline must not resurrect superseded modeled measurements."""
+    from reefvision.tests.test_scientific_project_exchange import export_archive, import_archive
+
+    project = create_project(client)
+    raw = raw_fixture(monkeypatch)
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    later = now + timedelta(days=2)
+    with client.app.state.session_factory() as session:
+        CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: deepcopy(raw), now=now
+        ).acquire(project["id"], request())
+
+    missing = deepcopy(raw)
+    missing["samples"][0]["value"] = None
+    with client.app.state.session_factory() as session:
+        CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: missing, now=later
+        ).acquire(project["id"], request(refresh=True))
+
+    source_url = f"/api/v1/projects/{project['id']}/scientific-records"
+    before = client.get(source_url).json()["items"]
+    assert len(before) == 7
+    imported = import_archive(client, export_archive(client, test_settings, project["id"]))
+    assert imported.status_code == 201, imported.text
+    imported_id = imported.json()["project_id"]
+
+    response = client.get(f"/api/v1/projects/{imported_id}/scientific-records")
+    assert response.status_code == 200, response.text
+    after = response.json()["items"]
+    assert len(after) == 7
+    assert {row["id"] for row in before}.isdisjoint(row["id"] for row in after)
+    assert sum(row["environmental_snapshot_current"] is False for row in after) == 4
+    historical = [row for row in after if row["variable"] == "current_eastward_velocity"]
+    assert len(historical) == 1
+    assert historical[0]["environmental_snapshot_current"] is False
+    assert historical[0]["normalized_value"] == 3.0
+    assert historical[0]["qc"] == "unassessed"
+
+    offline = client.post(
+        f"/api/v1/projects/{imported_id}/environment/copernicus",
+        json=request(offline=True).model_dump(mode="json"),
+    )
+    assert offline.status_code == 200, offline.text
+    assert offline.json()["skipped_missing"] == 1
+    assert {row["id"] for row in offline.json()["items"]} == {
+        row["id"] for row in after if row["environmental_snapshot_current"] is True
+    }
+    assert client.get(source_url).json()["items"] == before
+
+
 def test_cached_datasets_are_listed_and_opened_only_within_project(
     client, test_settings, monkeypatch
 ):
