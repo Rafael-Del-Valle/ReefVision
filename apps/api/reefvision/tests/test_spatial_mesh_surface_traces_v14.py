@@ -2234,7 +2234,9 @@ def test_shared_trace_pairs_count_distinct_edges_not_repeated_traversals() -> No
     params = {
         **PARAMS,
         "surface_path_vertex_pairs": None,
-        "surface_trace_vertex_paths": [[0, 1, 2, 1, 0], [2, 1, 0], [1, 0]],
+        "vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 0], [1, 0, 0]],
+        "faces": [[0, 1, 2], [2, 4, 3]],
+        "surface_trace_vertex_paths": [[0, 1, 2, 4, 3], [2, 1, 0], [1, 0]],
     }
     result = measure_mesh_preview(**params)
     assert result["surface_trace_shared_geometric_edge_pairs"] == [
