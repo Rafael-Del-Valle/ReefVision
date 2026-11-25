@@ -1207,3 +1207,90 @@ def test_review_event_type_column_collation(revision: str, collation: str, valid
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
             assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
     engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("revision", "target"),
+    [
+        ("0038", "event"),
+        ("0039", "event"),
+        ("0040", "event"),
+        ("0041", "event"),
+        ("0041", "bulk"),
+    ],
+)
+@pytest.mark.parametrize(
+    "extra_check",
+    [
+        "",
+        ", CHECK (actor = 'researcher')",
+        ", CHECK /* hidden from reflection */ (actor = 'researcher')",
+        ", CONSTRAINT extra CHECK (actor = 'researcher')",
+    ],
+)
+def test_qc_audit_rejects_additional_checks(
+    revision: str, target: str, extra_check: str
+) -> None:
+    """A valid existing reviewer must not hide restrictions on later reviewers."""
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE alembic_version (version_num TEXT NOT NULL)")
+        connection.execute(
+            text("INSERT INTO alembic_version VALUES (:revision)"), {"revision": revision}
+        )
+        connection.exec_driver_sql("CREATE TABLE preserved (value TEXT NOT NULL)")
+        connection.exec_driver_sql("INSERT INTO preserved VALUES ('original observation')")
+        allowed = "'comment', 'assign', 'unassign'"
+        if revision != "0038":
+            allowed += ", 'triage_start', 'triage_skip', 'triage_return'"
+        if revision in {"0040", "0041"}:
+            allowed += ", 'triage_complete'"
+        event_check = extra_check if target == "event" else ""
+        connection.exec_driver_sql(
+            f"CREATE TABLE review_queue_item_events ({_REVIEW_REQUEST_SCHEMA}, "
+            "CONSTRAINT ck_review_queue_item_event_type "
+            f"CHECK (event_type IN ({allowed})), "
+            "CONSTRAINT uq_review_queue_item_event_request "
+            "UNIQUE (review_queue_item_id, client_request_id)"
+            f"{REVIEW_EVENT_FK_SQL}{event_check})"
+        )
+        install_review_event_parent_rows(connection)
+        install_review_event_history_indexes(connection)
+        connection.exec_driver_sql(
+            "INSERT INTO review_queue_item_events VALUES "
+            "('Event-1', 'queue-1', 'item-1', 'project-1', 'request-1', "
+            "'comment', 'researcher', NULL, NULL, '2026-11-24')"
+        )
+        if revision == "0041":
+            bulk_check = extra_check if target == "bulk" else ""
+            connection.exec_driver_sql(
+                "CREATE TABLE review_queue_bulk_requests ("
+                "id TEXT NOT NULL PRIMARY KEY, review_queue_id TEXT NOT NULL, "
+                "project_id TEXT NOT NULL, action TEXT NOT NULL, actor TEXT NOT NULL, "
+                "reason TEXT, item_ids_json TEXT NOT NULL, "
+                f"created_at TEXT NOT NULL{_REVIEW_QUEUE_FK}{_PROJECT_FK}{bulk_check})"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO review_queue_bulk_requests VALUES "
+                "('request-1', 'queue-1', 'project-1', 'start', 'researcher', NULL, "
+                "'[]', '2026-11-24')"
+            )
+        queries = [
+            "SELECT type, name, sql FROM sqlite_master ORDER BY type, name",
+            "SELECT * FROM review_queue_item_events",
+            "SELECT * FROM preserved",
+            "SELECT * FROM alembic_version",
+        ]
+        if revision == "0041":
+            queries.append("SELECT * FROM review_queue_bulk_requests")
+        before = [connection.exec_driver_sql(query).all() for query in queries]
+        for _ in range(2):
+            if extra_check:
+                with pytest.raises(RuntimeError, match="unexpected QC audit CHECK constraint"):
+                    assert_compatible_revision_0038(connection)
+            else:
+                assert_compatible_revision_0038(connection)
+            assert [connection.exec_driver_sql(query).all() for query in queries] == before
+            assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+            assert connection.exec_driver_sql("PRAGMA integrity_check").scalar_one() == "ok"
+    engine.dispose()
