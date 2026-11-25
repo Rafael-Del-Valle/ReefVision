@@ -274,6 +274,38 @@ def test_projected_gap_scale_and_span_avoid_intermediate_rounding(
     _assert_projected_gap_workflow_replay(client, params, result)
 
 
+@pytest.mark.parametrize(
+    ("levels", "uncertainty", "expected_interval"),
+    [
+        ([-1.0, 1e-16, 1.0], 0.1, [0.09000000000000001, 0.11000000000000001]),
+        ([-1e-16, 0.0, 1.0], 0.2, [0.08, 0.12000000000000001]),
+        ([0.0, 3.0], 0.1, [0.27, 0.33]),
+        ([-1.0, 1e-16, 1.0], 0.0, [0.10000000000000002, 0.10000000000000002]),
+        ([-1.0, 1e-16, 1.0], 1.0, [0.0, 0.20000000000000004]),
+    ],
+)
+def test_projected_gap_scale_interval_rounds_only_final_bounds(
+    client: TestClient,
+    levels: list[float],
+    uncertainty: float,
+    expected_interval: list[float],
+) -> None:
+    # Expected endpoints independently evaluated with 120-digit Decimal
+    # arithmetic on the exact imported binary floats, then rounded once.
+    params: dict[str, Any] = {
+        "points": [[value, 0.0, 0.0] for value in levels],
+        "meters_per_unit": 0.1,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic scale interval precision control; unverified",
+        "relative_scale_uncertainty": uncertainty,
+    }
+    result = measure_point_cloud_preview(**params)
+    gap = result["axis_largest_adjacent_coordinate_gaps"]["x"]
+    assert gap["calibrated_gap_scale_interval_m"] == expected_interval
+    assert result["provenance"]["calibration_verified"] is False
+    _assert_projected_gap_workflow_replay(client, params, result)
+
+
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
 def test_all_tied_maximum_gap_boundaries_are_audited_in_saved_workflow(
     client: TestClient, source_format: str
