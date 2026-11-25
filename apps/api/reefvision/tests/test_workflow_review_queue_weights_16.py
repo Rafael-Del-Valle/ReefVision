@@ -290,3 +290,102 @@ def test_prediction_confidence_evidence_on_saved_qc_retry(
                 )
                 assert replay[0]["payload"] == payload
             session.rollback()
+
+
+@pytest.mark.parametrize(
+    ("signal_id", "value"),
+    [
+        ("edited_acceptance_rate", 0.5),
+        ("edited_acceptance_rate", 1.0),
+        ("count_disagreement", 0.25),
+        ("count_disagreement", 0.5),
+    ],
+)
+def test_fully_rejected_prediction_evidence_on_saved_qc_retry(
+    client: TestClient, signal_id: str, value: float
+) -> None:
+    project_id, prediction_id = _local_prediction(client)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        proposal = session.get(PredictionProposal, prediction_id)
+        assert proposal is not None
+        proposal.review_status = "rejected"
+        session.commit()
+    weights = {name: 0.0 for name in ReviewScoreWeights.model_fields}
+    weights["unreviewed_state"] = 1.0
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/review-queues",
+        json={"signal_weights": weights},
+    )
+    assert standalone.status_code == 201, standalone.text
+    graph = _weighted_graph(weights)
+    payload = _payload(_execute(client, project_id, graph))
+    assert payload["priority_score_unit"] == "dimensionless"
+    assert payload["review_status"] == "requires_researcher_review"
+
+    with app.state.session_factory() as session:
+        for queue_id in (standalone.json()["id"], payload["queue_id"]):
+            queue = session.get(ReviewQueue, queue_id)
+            assert queue is not None
+            items = session.scalars(
+                select(ReviewQueueItem).where(ReviewQueueItem.review_queue_id == queue_id)
+            ).all()
+            assert len(items) == 1
+            item = items[0]
+            assert item.signal_values_json["rejection_rate"] == 1.0
+            assert item.signal_values_json["pending_proposals"] == 0.0
+            assert item.signal_values_json["edited_acceptance_rate"] == 0.0
+            assert item.signal_values_json["count_disagreement"] == 0.0
+            assert item.model_ids_json
+            validate_saved_queue_snapshot(queue, items)
+
+            # Re-sign impossible evidence without changing the score.
+            assert item.weights_json[signal_id] == 0.0
+            item.signal_values_json = {**item.signal_values_json, signal_id: value}
+            item.normalized_signals_json = {
+                **item.normalized_signals_json,
+                signal_id: value,
+            }
+            item.score_breakdown_json = [
+                {**part, "raw_value": value, "normalized_value": value}
+                if part["signal_id"] == signal_id
+                else part
+                for part in item.score_breakdown_json
+            ]
+            queue.input_checksums_json = {
+                **queue.input_checksums_json,
+                "item_evidence_sha256": queue_item_evidence_sha256(items),
+            }
+            session.flush()
+            with pytest.raises(ValidationError, match="snapshot failed integrity"):
+                validate_saved_queue_snapshot(queue, items)
+            assert item.review_state == "pending"
+            if queue_id == payload["queue_id"]:
+                nodes = session.scalars(
+                    select(WorkflowNodeRun).where(
+                        WorkflowNodeRun.workflow_run_id == payload["workflow_run_id"]
+                    )
+                ).all()
+                node = next(row for row in nodes if row.node_type == "qc_review_queue")
+                source = session.scalar(
+                    select(WorkflowArtifact).where(
+                        WorkflowArtifact.workflow_run_id == payload["workflow_run_id"],
+                        WorkflowArtifact.producer_port_id == "project",
+                    )
+                )
+                assert source is not None
+                parameters = {
+                    **node.parameters_json,
+                    "__workflow_run_id": payload["workflow_run_id"],
+                    "__workflow_node_run_id": node.id,
+                }
+                with pytest.raises(ValidationError, match="snapshot failed integrity"):
+                    create_review_queue_workflow_artifact(
+                        session, app.state.settings, project_id, parameters, {"project": [source]}
+                    )
+                session.rollback()
+                replay = create_review_queue_workflow_artifact(
+                    session, app.state.settings, project_id, parameters, {"project": [source]}
+                )
+                assert replay[0]["payload"] == payload
+            session.rollback()
