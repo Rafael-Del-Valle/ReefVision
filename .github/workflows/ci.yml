@@ -33,9 +33,43 @@ jobs:
       - name: Verify migrations
         shell: bash
         run: |
-          export REEFVISION_DATA_DIR="$RUNNER_TEMP/reefvision-migration-test"
+          export REEFVISION_DATA_DIR="$(mktemp -d "$RUNNER_TEMP/reefvision-migration.XXXXXX")"
+          # The migration environment honors DATABASE_URL over DATA_DIR.
+          # Explicitly pin both so downgrade base can only target the scratch DB.
+          export REEFVISION_DATABASE_URL="sqlite:///$REEFVISION_DATA_DIR/reefvision.db"
+          verify_revision() {
+            python - "$1" <<'PY'
+          import os
+          import sqlite3
+          import sys
+          from pathlib import Path
+
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
+
+          expected = sys.argv[1]
+          database = Path(os.environ["REEFVISION_DATA_DIR"]) / "reefvision.db"
+          with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True) as conn:
+              revisions = conn.execute("SELECT version_num FROM alembic_version").fetchall()
+              integrity = conn.execute("PRAGMA quick_check").fetchall()
+              violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+          if expected == "head":
+              head = ScriptDirectory.from_config(
+                  Config("apps/api/alembic.ini")
+              ).get_current_head()
+              assert head is not None, "Migration graph has no head"
+              assert revisions == [(head,)], revisions
+          else:
+              assert expected == "base" and not revisions, revisions
+          assert integrity == [("ok",)], integrity
+          assert not violations, violations
+          print(f"Verified scratch database at {expected}: {revisions}")
+          PY
+          }
           alembic -c apps/api/alembic.ini upgrade head
+          verify_revision head
           alembic -c apps/api/alembic.ini downgrade base
+          verify_revision base
 
   frontend:
     runs-on: ubuntu-latest
