@@ -1128,18 +1128,22 @@ def process_pose_training_job(
                 and request["pose_training_architecture"] != run.architecture
             ):
                 raise ValidationError("Queued pose training frozen architecture changed")
-            checkpoint_source = _resolve_model_source(settings, session, run)
-            if run.initial_checkpoint_model_id:
-                # Recheck schema and checksum at execution, after any queue delay.
+            seed_model_id = run.initial_checkpoint_model_id
+            seed_model_sha256: str | None = None
+            seed_project_id = run.project_id
+            if seed_model_id:
+                # Recheck schema and checksum before resolving the registered path.
                 from reefvision.services.workflow_pose_training import _seed_pose_model
 
-                _seed_pose_model(
+                seed_model = _seed_pose_model(
                     session,
                     settings,
-                    project_id=run.project_id,
-                    payload={"model_id": run.initial_checkpoint_model_id},
+                    project_id=seed_project_id,
+                    payload={"model_id": seed_model_id},
                     dataset=training_dataset,
                 )
+                seed_model_sha256 = seed_model.sha256
+            checkpoint_source = _resolve_model_source(settings, session, run)
 
             require_provider_ready(
                 "ultralytics",
@@ -1262,6 +1266,26 @@ def process_pose_training_job(
         from ultralytics import YOLO
 
         cancellation_requested = {"value": False}
+
+        # Exporting reviewed video frames can take minutes. Revalidate the
+        # registered weights in a fresh session immediately before loading them,
+        # against the digest observed before export, not mutable registry metadata.
+        if seed_model_id:
+            with factory() as session:
+                frozen_dataset = session.get(PoseTrainingDataset, training_dataset_id)
+                if frozen_dataset is None:
+                    raise ValidationError("Frozen pose dataset disappeared before model loading")
+                seed_model = _seed_pose_model(
+                    session,
+                    settings,
+                    project_id=seed_project_id,
+                    payload={"model_id": seed_model_id, "sha256": seed_model_sha256},
+                    dataset=frozen_dataset,
+                )
+                if str(resolve_managed_project_path(settings, seed_model.managed_path)) != (
+                    checkpoint_source
+                ):
+                    raise ValidationError("Registered pose seed path changed before model loading")
 
         model = YOLO(checkpoint_source)
 
