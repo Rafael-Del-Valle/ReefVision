@@ -47,6 +47,7 @@ jobs:
           export REEFVISION_DATABASE_URL="sqlite:///$REEFVISION_DATA_DIR/reefvision.db"
           export MIGRATION_EVIDENCE="$REEFVISION_DATA_DIR/migration-evidence.jsonl"
           echo "MIGRATION_EVIDENCE=$MIGRATION_EVIDENCE" >> "$GITHUB_ENV"
+          export MIGRATION_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           verify_revision() {
             python - "$1" "$2" <<'PY'
           import json
@@ -68,18 +69,22 @@ jobs:
           with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True) as conn:
               revisions = conn.execute("SELECT version_num FROM alembic_version").fetchall()
               integrity = conn.execute("PRAGMA quick_check").fetchall()
+              foreign_keys = conn.execute("PRAGMA foreign_key_check").fetchall()
           assert revisions == [(expected,)], (expected, revisions)
           assert integrity == [("ok",)], integrity
+          assert not foreign_keys, foreign_keys
           evidence = {
               "stage": stage,
               "checkout_sha": os.environ["GITHUB_SHA"],
+              "source_sha": os.environ["MIGRATION_SOURCE_SHA"],
               "expected_revision": expected,
               "actual_revision": revisions[0][0],
               "quick_check": integrity[0][0],
+              "foreign_key_violations": len(foreign_keys),
           }
           with Path(os.environ["MIGRATION_EVIDENCE"]).open("a", encoding="utf-8") as report:
               report.write(json.dumps(evidence, sort_keys=True) + "\n")
-          print(f"Verified scratch database revision {expected}; quick_check=ok")
+          print(f"Verified revision {expected}; quick_check=ok; foreign_key_check=ok")
           PY
           }
           python -m alembic -c apps/api/alembic.ini upgrade head
