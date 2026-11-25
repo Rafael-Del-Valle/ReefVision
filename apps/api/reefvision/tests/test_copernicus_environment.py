@@ -129,6 +129,23 @@ def test_worker_closes_original_provider_dataset_after_subset_load(
     assert closed == ["provider"]
 
 
+@pytest.mark.parametrize("value", [True, 3 + 2j, "3.0"])
+def test_worker_rejects_nonphysical_measurement_types(monkeypatch, value):
+    original = dataset()
+    original["uo"] = original["uo"].copy(data=np.full(original["uo"].shape, value))
+    closed = []
+    original.set_close(lambda: closed.append("provider"))
+    monkeypatch.setitem(
+        sys.modules,
+        "copernicusmarine",
+        SimpleNamespace(open_dataset=lambda **_kwargs: original, __version__="synthetic-test"),
+    )
+    payload = request().model_dump(mode="json", exclude={"offline", "refresh"})
+    with pytest.raises(ValueError, match="measurements must be real numbers"):
+        read_dataset(payload, "fixture-user", "fixture-password")
+    assert closed == ["provider"]
+
+
 @pytest.mark.parametrize("axis", ["time", "depth", "latitude", "longitude"])
 def test_worker_rejects_implicit_dimension_coordinates(monkeypatch, axis):
     """Dimension names alone do not establish physical grid coordinates."""

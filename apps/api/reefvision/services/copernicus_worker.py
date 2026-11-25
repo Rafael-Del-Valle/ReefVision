@@ -35,6 +35,9 @@ def read_dataset(request: dict[str, Any], username: str, password: str) -> dict[
         variables = request["variables"]
         if any(set(dataset[name].dims) != required for name in variables):
             raise ValueError("Only rectilinear WGS84 time/depth grids are supported")
+        # A numeric-looking string, boolean or complex value is not a measured scalar.
+        if any(dataset[name].dtype.kind not in "iuf" for name in variables):
+            raise ValueError("Copernicus measurements must be real numbers")
         # xarray synthesizes positional indices for dimensions without coordinates.
         # Never interpret these indices as physical depth, latitude or longitude.
         for name in required:
