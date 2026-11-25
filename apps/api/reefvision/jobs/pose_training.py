@@ -1118,7 +1118,9 @@ def process_pose_training_job(
                     or snapshot.get("seed_model_id") != seed_id
                     or snapshot.get("seed_model_sha256") != run.resolved_model_checksum
                 ):
-                    raise ValidationError("Queued pose training frozen initialization lineage changed")
+                    raise ValidationError(
+                        "Queued pose training frozen initialization lineage changed"
+                    )
             checkpoint_source = _resolve_model_source(settings, session, run)
             if run.initial_checkpoint_model_id:
                 # Recheck schema and checksum at execution, after any queue delay.
