@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal, localcontext
 from hashlib import sha256
 from json import dumps
 from math import log, nextafter, sqrt
@@ -3583,6 +3584,8 @@ def test_reidentification_project_asset_bindings_in_standalone_and_saved_graph(
         (0.0, 0.0, 0.0),
         (0.05, 0.05, 0.05),
         (0.01, 0.03, 0.06),
+        (0.06, 0.03, 0.01),
+        (1e-9, 1e-20, 0.0),
         (0.0, 0.0, 0.2),
         (0.0, 0.1, 0.0),
         (0.12, 0.0, 0.0),
@@ -3627,8 +3630,21 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
     )
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
-    total_bound = source_bound + target_bound + alignment_bound
     separation = abs(translation)
+    # Use the exact binary64 inputs in an independent high-precision oracle.
+    # A rounded sum of the radii can erase a small positive lower endpoint.
+    with localcontext() as context:
+        context.prec = 80
+        radius = sum(
+            (Decimal.from_float(bound) for bound in (source_bound, target_bound, alignment_bound)),
+            Decimal(0),
+        )
+        distance = Decimal.from_float(separation)
+        expected_interval = [float(max(Decimal(0), distance - radius)), float(distance + radius)]
+        expected_axis_intervals = [
+            [float(component - radius), float(component + radius)]
+            for component in (Decimal.from_float(-translation), Decimal(0), Decimal(0))
+        ]
     assert expected["registered_surface_centroid_offset_target_frame_m"] == pytest.approx(
         [-translation, 0.0, 0.0], abs=0.0
     )
@@ -3636,13 +3652,18 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
         separation, abs=0.0
     )
     assert expected["registered_surface_centroid_separation_caller_bound_interval_m"] == (
-        pytest.approx([max(0.0, separation - total_bound), separation + total_bound], abs=0.0)
+        pytest.approx(expected_interval, rel=1e-15, abs=0.0)
     )
     interval = expected["registered_surface_centroid_separation_caller_bound_interval_m"]
     assert interval[0] >= 0.0  # Euclidean separation cannot be negative.
     assert interval[0] <= expected["registered_surface_centroid_separation_m"]
     assert interval[1] >= expected["registered_surface_centroid_separation_m"]
-    assert interval[1] == pytest.approx(separation + total_bound, abs=0.0)
+    assert interval[1] == pytest.approx(expected_interval[1], rel=1e-15, abs=0.0)
+    axis_intervals = expected[
+        "registered_surface_centroid_offset_target_frame_caller_bound_intervals_m"
+    ]
+    for actual, reference in zip(axis_intervals, expected_axis_intervals, strict=True):
+        assert actual == pytest.approx(reference, rel=1e-15, abs=0.0)
     assert expected["provenance"]["coordinate_registration_verified"] is False
     assert expected["provenance"]["specimen_identity_verified"] is False
     assert (
