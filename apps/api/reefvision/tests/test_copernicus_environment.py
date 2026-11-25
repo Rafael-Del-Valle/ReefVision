@@ -700,6 +700,62 @@ def test_changed_copernicus_refresh_preserves_history_and_excludes_superseded_va
     )
 
 
+def test_null_refresh_retires_old_measurement_without_fabricating_zero(
+    client, test_settings, monkeypatch
+):
+    """A newly missing modeled value must not leak into current scientific analyses."""
+    project = create_project(client)
+    original = raw_fixture(monkeypatch)
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    later = now + timedelta(days=2)
+    with client.app.state.session_factory() as session:
+        cached = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: deepcopy(original), now=now
+        ).acquire(project["id"], request())
+
+    missing = deepcopy(original)
+    missing["samples"][0]["value"] = None
+    with client.app.state.session_factory() as session:
+        refreshed = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: missing, now=later
+        ).acquire(project["id"], request(refresh=True))
+    assert refreshed.skipped_missing == 1
+    assert len(refreshed.items) == 3
+
+    with client.app.state.session_factory() as session:
+        service = CopernicusEnvironmentService(
+            session,
+            test_settings,
+            fetch=lambda *_: pytest.fail("offline must not acquire remote data"),
+            now=later,
+        )
+        reopened = service.acquire(project["id"], request(offline=True))
+        lookup = service.environment.lookup(
+            project["id"],
+            EnvironmentalLookup(
+                variable="current_eastward_velocity",
+                location={"latitude": 32.5, "longitude": -79.5},
+                observed_at=datetime(2026, 4, 3, tzinfo=UTC),
+                max_distance_m=0,
+                max_time_delta_s=0,
+                source_kinds=["modeled"],
+            ),
+        )
+    assert reopened.skipped_missing == 1
+    assert [item.id for item in reopened.items] == [item.id for item in refreshed.items]
+    assert not lookup.matches
+
+    response = client.get(f"/api/v1/projects/{project['id']}/scientific-records")
+    assert response.status_code == 200, response.text
+    assert response.json()["total"] == 7
+    records = {item["id"]: item for item in response.json()["items"]}
+    for item in cached.items:
+        historical = records[str(item.id)]
+        assert historical["environmental_snapshot_current"] is False
+        assert historical["content_sha256"] == item.content_sha256
+        assert historical["normalized_value"] == item.normalized_value
+
+
 def test_missing_copernicus_configuration_fails_without_leaking_secrets(client):
     project = create_project(client)
     response = client.post(
