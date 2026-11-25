@@ -473,7 +473,9 @@ def create_review_queue_workflow_artifact(
             or saved_output.data_type != "review_queue_reference"
             or not isinstance(saved_output.payload_json, dict)
             or saved_output.payload_sha256 != canonical_json_sha256(saved_output.payload_json)
-            or saved_output.payload_json != payload
+            # Python equality conflates True, 1 and 1.0. Compare canonical
+            # JSON identities to preserve the typed scientific output contract.
+            or saved_output.payload_sha256 != canonical_json_sha256(payload)
         ):
             raise ValidationError("QC review-queue saved output no longer matches its queue")
 
