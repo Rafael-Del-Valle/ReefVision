@@ -68,9 +68,14 @@ def _verify_frozen_frame_inventory(
 
     images = root / "images" / split
     labels = root / "labels" / split
+    # The trainer can discover other image formats and nested image directories.
+    # Compare the complete split inventory, not just the expected extensions.
+    image_entries = list(images.glob("*"))
+    label_entries = list(labels.glob("*"))
     _require(
-        {file.name for file in images.glob("*.png")} == {f"{stem}.png" for stem in counts}
-        and {file.name for file in labels.glob("*.txt")} == {f"{stem}.txt" for stem in counts}
+        all(file.is_file() for file in (*image_entries, *label_entries))
+        and {file.name for file in image_entries} == {f"{stem}.png" for stem in counts}
+        and {file.name for file in label_entries} == {f"{stem}.txt" for stem in counts}
         and type(advertised_count) is int
         and advertised_count == len(counts),
         f"Materialized {split} frame inventory differs from frozen reviewed truth",
