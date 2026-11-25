@@ -68,3 +68,16 @@ frozen QC parity and rollback/retry test expanded to reject invented model
 references. Researcher review, dimensional units, original observations and
 saved graph identity remain unchanged. This is not migration reconciliation
 or installed Windows acceptance.
+
+
+## Prediction-free count disagreement (2026-11-25)
+
+The existing count-gap formula is absolute annotation/proposal count difference
+divided by the maximum of the two counts and one. When there are no prediction
+references, the proposal count is zero, so the only possible saved values are
+zero (no annotations) or one (some annotations). Fractional gaps are still
+possible with actual prediction references. This check applies to live and
+frozen v3 snapshots without changing historical v2 or the scoring formula.
+A value of one in a prediction-free queue is not evidence of poor model accuracy.
+Regression checks cover re-signed weighted scores, both valid endpoints,
+prediction-present controls, and standalone/saved frozen QC retry parity.
