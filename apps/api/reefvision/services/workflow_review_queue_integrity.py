@@ -267,7 +267,10 @@ def _valid_v3_scientific_references(item: Any) -> bool:
     # Confidence, pending proposals and review outcomes are model-derived.
     # A re-signed queue with no source model IDs cannot invent prediction
     # evidence. Count disagreement may still be nonzero for human-only images,
-    # so it is intentionally excluded from this consistency check.
+    # but with no prediction proposals its formula can return only zero
+    # (no annotations) or one (at least one annotation).
+    if not item.model_ids_json and raw_signals.get("count_disagreement") not in (0.0, 1.0):
+        return False
     if not item.model_ids_json and any(
         raw_signals.get(signal_id) != 0.0
         for signal_id in (
