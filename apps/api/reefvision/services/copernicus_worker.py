@@ -44,6 +44,17 @@ def read_dataset(request: dict[str, Any], username: str, password: str) -> dict[
                 )
         if sum(dataset[name].size for name in variables) > MAX_SAMPLES:
             raise ValueError("Subset exceeds 5000 samples; narrow the request")
+        # Rectilinear axes must be finite and strictly ordered. Repeated or
+        # zigzag coordinates can masquerade as regular spacing after abs().
+        for name in required:
+            coordinates = dataset.coords[name].values
+            if not numpy.isfinite(coordinates).all():
+                raise ValueError("Non-finite Copernicus grid coordinate")
+            if not (
+                (coordinates[1:] > coordinates[:-1]).all()
+                or (coordinates[1:] < coordinates[:-1]).all()
+            ):
+                raise ValueError("Copernicus grid coordinates must be strictly monotonic")
         # Check shape before materializing remote arrays. Never fetch an unbounded cube.
         # Keep the provider-owned dataset handle: selecting variables returns a
         # new xarray Dataset whose close callback need not close the original

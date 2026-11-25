@@ -152,6 +152,52 @@ def test_worker_rejects_implicit_dimension_coordinates(monkeypatch, axis):
     assert closed == ["provider"]
 
 
+@pytest.mark.parametrize(
+    ("axis", "coordinates", "message"),
+    [
+        ("latitude", [32.25, 32.25, 32.75], "strictly monotonic"),
+        ("latitude", [32.25, 32.75, 32.25], "strictly monotonic"),
+        ("latitude", [32.25, np.nan, 32.75], "Non-finite"),
+        ("depth", [1.0, 5.0, np.inf], "Non-finite"),
+        (
+            "time",
+            np.array(["2026-04-03T00:00:00", "NaT", "2026-04-03T01:00:00"], dtype="datetime64[ns]"),
+            "Non-finite",
+        ),
+    ],
+)
+def test_worker_rejects_nonphysical_grid_axes(monkeypatch, axis, coordinates, message):
+    original = dataset().isel({axis: [0, 0, 0]}).assign_coords({axis: coordinates})
+    closed = []
+    original.set_close(lambda: closed.append("provider"))
+    monkeypatch.setitem(
+        sys.modules,
+        "copernicusmarine",
+        SimpleNamespace(open_dataset=lambda **_kwargs: original, __version__="synthetic-test"),
+    )
+    payload = request().model_dump(mode="json", exclude={"offline", "refresh"})
+    with pytest.raises(ValueError, match=message):
+        read_dataset(payload, "fixture-user", "fixture-password")
+    assert closed == ["provider"]
+
+
+@pytest.mark.parametrize(
+    ("latitudes", "resolution"),
+    [([32.75, 32.5, 32.25], 0.25), ([32.25, 32.5, 33.0], None)],
+)
+def test_worker_accepts_descending_and_irregular_monotonic_axes(monkeypatch, latitudes, resolution):
+    original = dataset().isel(latitude=[0, 0, 0]).assign_coords(latitude=latitudes)
+    monkeypatch.setitem(
+        sys.modules,
+        "copernicusmarine",
+        SimpleNamespace(open_dataset=lambda **_kwargs: original, __version__="synthetic-test"),
+    )
+    payload = request().model_dump(mode="json", exclude={"offline", "refresh"})
+    result = read_dataset(payload, "fixture-user", "fixture-password")
+    assert len(result["samples"]) == 12
+    assert result["coordinate_resolution"].get("latitude") == resolution
+
+
 def test_modeled_copernicus_samples_refresh_and_reopen_offline(client, test_settings, monkeypatch):
     project = create_project(client)
     raw = raw_fixture(monkeypatch)
