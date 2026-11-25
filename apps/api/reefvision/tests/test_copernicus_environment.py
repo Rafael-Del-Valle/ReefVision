@@ -129,6 +129,29 @@ def test_worker_closes_original_provider_dataset_after_subset_load(
     assert closed == ["provider"]
 
 
+@pytest.mark.parametrize("axis", ["time", "depth", "latitude", "longitude"])
+def test_worker_rejects_implicit_dimension_coordinates(monkeypatch, axis):
+    """Dimension names alone do not establish physical grid coordinates."""
+    original = dataset().drop_vars(axis)
+    assert axis in original.dims
+    assert axis not in original.coords
+    closed = []
+    original.set_close(lambda: closed.append("provider"))
+
+    def open_dataset(**_kwargs):
+        return original
+
+    monkeypatch.setitem(
+        sys.modules,
+        "copernicusmarine",
+        SimpleNamespace(open_dataset=open_dataset, __version__="synthetic-test"),
+    )
+    payload = request().model_dump(mode="json", exclude={"offline", "refresh"})
+    with pytest.raises(ValueError, match="Explicit one-dimensional"):
+        read_dataset(payload, "fixture-user", "fixture-password")
+    assert closed == ["provider"]
+
+
 def test_modeled_copernicus_samples_refresh_and_reopen_offline(client, test_settings, monkeypatch):
     project = create_project(client)
     raw = raw_fixture(monkeypatch)
