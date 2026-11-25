@@ -238,6 +238,10 @@ def test_saved_frozen_qc_rejects_resigned_dataset_manifest(
         ("wrong_item_version", "snapshot failed integrity"),
         ("resigned_wrong_item_split", "frozen dataset item membership or split"),
         ("resigned_missing_item", "frozen dataset image coverage is incomplete"),
+        ("resigned_boolean_count", "saved output no longer matches its queue"),
+        ("resigned_float_count", "saved output no longer matches its queue"),
+        ("resigned_nested_boolean_count", "saved output no longer matches its queue"),
+        ("resigned_nested_float_count", "saved output no longer matches its queue"),
     ],
 )
 def test_saved_frozen_qc_replay_enforces_dataset_scope(
@@ -297,6 +301,29 @@ def test_saved_frozen_qc_replay_enforces_dataset_scope(
             queue.scope_type = "project"
         elif tamper == "wrong_item_version":
             queue.items[0].dataset_version_id = None
+        elif tamper in {
+            "resigned_boolean_count",
+            "resigned_float_count",
+            "resigned_nested_boolean_count",
+            "resigned_nested_float_count",
+        }:
+            saved_output = session.get(WorkflowArtifact, qc_node.output_artifact_ids_json[0])
+            assert saved_output is not None
+            changed = dict(saved_output.payload_json)
+            replacement = True if "boolean" in tamper else 1.0
+            if "nested" in tamper:
+                changed["input_checksums"] = {
+                    **changed["input_checksums"],
+                    "item_count": replacement,
+                }
+            else:
+                changed["item_count"] = replacement
+            # Python equality conceals the invalid typed count, even though
+            # the canonical JSON representation is no longer the original.
+            assert changed == saved_output.payload_json
+            assert canonical_json_sha256(changed) != saved_output.payload_sha256
+            saved_output.payload_json = changed
+            saved_output.payload_sha256 = canonical_json_sha256(changed)
         elif tamper == "resigned_missing_item":
             # Disposable transaction: omit the only frozen image and re-sign
             # every affected count, checksum and saved output. Internal queue
