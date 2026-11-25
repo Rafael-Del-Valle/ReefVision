@@ -799,11 +799,13 @@ def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
         destination=destination,
     )
     _verify_prelaunch_pose_dataset(destination, materialization)
+    dataset_relative = "project/training/run/pose-dataset"
     manifest = {
         "materialization": materialization,
         "validation_mode": materialization["validation_mode"],
+        "dataset_output_path": dataset_relative,
     }
-    _verify_postlaunch_pose_dataset(destination, materialization, manifest)
+    _verify_postlaunch_pose_dataset(destination, materialization, manifest, dataset_relative)
 
     # A hard link outside the frozen run leaves the original hash and name
     # unchanged but permits external writes to scientist-reviewed frames.
@@ -827,13 +829,25 @@ def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
     altered_provenance = {**materialization, "validation_mode": "none"}
     with pytest.raises(ValidationError, match="materialization provenance changed"):
         _verify_postlaunch_pose_dataset(
-            destination, materialization, {**manifest, "materialization": altered_provenance}
+            destination,
+            materialization,
+            {**manifest, "materialization": altered_provenance},
+            dataset_relative,
         )
 
     # A changed top-level validation mode must not authorize false holdout claims.
     with pytest.raises(ValidationError, match="materialization provenance changed"):
         _verify_postlaunch_pose_dataset(
-            destination, materialization, {**manifest, "validation_mode": "none"}
+            destination, materialization, {**manifest, "validation_mode": "none"}, dataset_relative
+        )
+
+    # An unchanged digest must not authorize a different recorded dataset location.
+    with pytest.raises(ValidationError, match="materialization provenance changed"):
+        _verify_postlaunch_pose_dataset(
+            destination,
+            materialization,
+            {**manifest, "dataset_output_path": "another-run/pose-dataset"},
+            dataset_relative,
         )
 
     holdout_label = destination / "labels" / "val" / "frame_00000001.txt"
@@ -843,7 +857,7 @@ def test_pose_training_rechecks_frozen_holdout_bytes_before_gpu_launch(
     # A modified validation label must also invalidate the completed GPU job,
     # even if it passed the earlier preflight verification.
     with pytest.raises(ValidationError, match="changed during GPU training"):
-        _verify_postlaunch_pose_dataset(destination, materialization, manifest)
+        _verify_postlaunch_pose_dataset(destination, materialization, manifest, dataset_relative)
 
     with pytest.raises(ValidationError, match="missing materialized dataset provenance"):
         _verify_prelaunch_pose_dataset(destination, None)
