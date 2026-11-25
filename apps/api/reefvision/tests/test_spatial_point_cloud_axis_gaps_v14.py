@@ -167,6 +167,8 @@ def _assert_projected_gap_workflow_replay(
     for key in (
         "axis_largest_adjacent_coordinate_gaps",
         "axis_aligned_dimensions_m",
+        "axis_aligned_dimension_scale_interval_m",
+        "axis_aligned_dimension_scale_uncertainty_m",
         "qc_warnings",
     ):
         assert expected[key] == direct[key]
@@ -303,6 +305,73 @@ def test_projected_gap_scale_interval_rounds_only_final_bounds(
     gap = result["axis_largest_adjacent_coordinate_gaps"]["x"]
     assert gap["calibrated_gap_scale_interval_m"] == expected_interval
     assert result["provenance"]["calibration_verified"] is False
+    _assert_projected_gap_workflow_replay(client, params, result)
+
+
+@pytest.mark.parametrize(
+    ("lo", "hi", "uncertainty", "extent", "interval", "absolute"),
+    [
+        (
+            -1.0,
+            1e-16,
+            0.1,
+            0.10000000000000002,
+            [0.09000000000000001, 0.11000000000000001],
+            0.010000000000000002,
+        ),
+        (
+            -1.0,
+            1e-16,
+            0.0,
+            0.10000000000000002,
+            [0.10000000000000002, 0.10000000000000002],
+            0.0,
+        ),
+        (
+            -1.0,
+            1e-16,
+            1.0,
+            0.10000000000000002,
+            [0.0, 0.20000000000000004],
+            0.10000000000000002,
+        ),
+        (0.0, 3.0, 0.1, 0.30000000000000004, [0.27, 0.33], 0.030000000000000002),
+        (
+            -1e-16,
+            1.0,
+            0.2,
+            0.10000000000000002,
+            [0.08000000000000002, 0.12000000000000002],
+            0.020000000000000004,
+        ),
+    ],
+)
+def test_extent_and_scale_uncertainty_use_unrounded_source_span(
+    client: TestClient,
+    lo: float,
+    hi: float,
+    uncertainty: float,
+    extent: float,
+    interval: list[float],
+    absolute: float,
+) -> None:
+    # Independently evaluated using 120-digit Decimal arithmetic on exact
+    # imported binary floats; the mirrored z axis has the same extent.
+    params: dict[str, Any] = {
+        "points": [[lo, 0.0, -hi], [hi, 0.0, -lo]],
+        "meters_per_unit": 0.1,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic extent precision control; unverified",
+        "relative_scale_uncertainty": uncertainty,
+    }
+    result = measure_point_cloud_preview(**params)
+    assert result["axis_aligned_dimensions_m"] == [extent, 0.0, extent]
+    assert result["axis_aligned_dimension_scale_interval_m"] == [interval, [0.0, 0.0], interval]
+    assert result["axis_aligned_dimension_scale_uncertainty_m"] == [absolute, 0.0, absolute]
+    for axis in ("x", "z"):
+        gap = result["axis_largest_adjacent_coordinate_gaps"][axis]
+        assert gap["calibrated_gap_m"] == extent
+        assert gap["calibrated_gap_scale_interval_m"] == interval
     _assert_projected_gap_workflow_replay(client, params, result)
 
 
