@@ -1780,6 +1780,21 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         if item["data_type"] == "mesh_measurement_preview"
     )
     assert artifact["surface_edge_traces"] == standalone.json()["surface_edge_traces"]
+    union = artifact["surface_trace_exact_edge_union"]
+    assert union == standalone.json()["surface_trace_exact_edge_union"]
+    assert union["human_review_verified"] is False
+    if case == "segment_underflow":
+        assert union["source_length_mesh_units"] == pytest.approx(1e-250, abs=0)
+        assert union["length_m"] is None
+        assert union["length_scale_only_interval_m"] is None
+        assert union["qc_warnings"] == ["surface_trace_exact_edge_union_length_underflow"]
+    if case == "uncertainty_missing":
+        assert union["length_scale_only_interval_m"] is None
+        assert union["qc_warnings"] == []
+    if case == "uncertainty_max":
+        assert union["length_scale_only_interval_m"] == pytest.approx(
+            [0.0, 2 * union["length_m"]]
+        )
     assert artifact["provenance"] == standalone.json()["provenance"]
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     trace = artifact["surface_edge_traces"][0]
@@ -2162,11 +2177,21 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
     warning = "surface_traces_share_geometric_edges"
     assert (warning in direct["qc_warnings"]) is shared
     expected_pairs = (
-        [{"trace_indices": [0, 2], "shared_distinct_geometric_edge_count": 1}]
-        if shared
-        else []
+        [{"trace_indices": [0, 2], "shared_distinct_geometric_edge_count": 1}] if shared else []
     )
     assert direct["surface_trace_shared_geometric_edge_pairs"] == expected_pairs
+    union = direct["surface_trace_exact_edge_union"]
+    source_length = 9 + sqrt(13)
+    assert union["distinct_nonzero_edge_count"] == 4
+    assert union["source_length_mesh_units"] == pytest.approx(source_length)
+    assert union["length_m"] == pytest.approx(source_length * 0.01)
+    assert union["length_scale_only_interval_m"] == pytest.approx(
+        [source_length * 0.009, source_length * 0.011]
+    )
+    assert union["method"] == "exact_endpoint_pair_equality_only"
+    assert union["biological_validation_status"] == "not_verified_anatomical_centerline"
+    assert union["human_review_verified"] is False
+    assert union["qc_warnings"] == []
     traces = direct["surface_edge_traces"]
     assert [trace["length_m"] for trace in traces] == pytest.approx(expected_lengths)
     assert [trace["vertex_indices"] for trace in traces] == paths
@@ -2184,6 +2209,7 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
     assert expected["surface_edge_traces"] == traces
     assert expected["qc_warnings"] == direct["qc_warnings"]
     assert expected["surface_trace_shared_geometric_edge_pairs"] == expected_pairs
+    assert expected["surface_trace_exact_edge_union"] == union
     assert expected["provenance"]["calibration_verified"] is False
     graph = {
         "graph_id": "shared-trace-trunk",
@@ -2224,6 +2250,7 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
         assert artifact["payload_json"]["qc_warnings"] == expected["qc_warnings"]
         payload = artifact["payload_json"]
         assert payload["surface_trace_shared_geometric_edge_pairs"] == expected_pairs
+        assert payload["surface_trace_exact_edge_union"] == union
         assert artifact["payload_json"]["provenance"] == expected["provenance"]
         assert len(artifact["payload_sha256"]) == 64
         hashes.append(artifact["payload_sha256"])
@@ -2245,3 +2272,6 @@ def test_shared_trace_pairs_count_distinct_edges_not_repeated_traversals() -> No
         {"trace_indices": [1, 2], "shared_distinct_geometric_edge_count": 1},
     ]
     assert "surface_traces_share_geometric_edges" in result["qc_warnings"]
+    union = result["surface_trace_exact_edge_union"]
+    assert union["distinct_nonzero_edge_count"] == 3
+    assert union["source_length_mesh_units"] == pytest.approx(2 + sqrt(2))
