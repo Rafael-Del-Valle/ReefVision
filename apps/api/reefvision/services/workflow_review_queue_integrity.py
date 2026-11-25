@@ -208,6 +208,14 @@ def _valid_v3_signal_normalization(item: Any) -> bool:
     # simultaneously claiming that the image had already been reviewed.
     if raw["unreviewed_state"] == 0 and raw["stale_review_state"] != 0:
         return False
+    # A fully rejected review sample has no accepted predictions. It
+    # cannot contain edited acceptances; without pending proposals its
+    # model-versus-human count gap is zero or one.
+    if raw["rejection_rate"] == 1.0 and (
+        raw["edited_acceptance_rate"] != 0.0
+        or (raw["pending_proposals"] == 0 and raw["count_disagreement"] not in (0.0, 1.0))
+    ):
+        return False
     # Minimum pending-prediction confidence cannot exceed its mean.
     # The two stored priority signals are 1 - mean and 1 - minimum,
     # respectively. Check the relation only when pending predictions exist.
