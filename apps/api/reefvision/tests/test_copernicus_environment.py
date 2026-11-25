@@ -605,6 +605,49 @@ def test_offline_cache_isolated_by_pinned_version_and_variable_selection(
     assert all(item.qc == "unassessed" for item in reopened.items)
 
 
+@pytest.mark.parametrize(
+    ("elapsed", "force_refresh", "expected_status", "expected_calls"),
+    [
+        (timedelta(days=1) - timedelta(seconds=1), False, "fresh", 1),
+        (timedelta(days=1), False, "downloaded", 2),
+        (timedelta(hours=1), True, "downloaded", 2),
+    ],
+)
+def test_copernicus_cache_freshness_does_not_mutate_scientific_records(
+    client, test_settings, monkeypatch, elapsed, force_refresh, expected_status, expected_calls
+):
+    """An identical provider response renews cache freshness, not scientific evidence."""
+    project = create_project(client)
+    raw = raw_fixture(monkeypatch)
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    calls = []
+
+    def fetch(req, _settings):
+        calls.append(req)
+        return deepcopy(raw)
+
+    with client.app.state.session_factory() as session:
+        cached = CopernicusEnvironmentService(
+            session, test_settings, fetch=fetch, now=now
+        ).acquire(project["id"], request())
+    with client.app.state.session_factory() as session:
+        reused = CopernicusEnvironmentService(
+            session, test_settings, fetch=fetch, now=now + elapsed
+        ).acquire(project["id"], request(refresh=force_refresh))
+
+    assert len(calls) == expected_calls
+    assert reused.cache_status == expected_status
+    expected_fetch_time = now + elapsed if expected_calls == 2 else now
+    assert reused.fetched_at == expected_fetch_time
+    assert reused.expires_at == expected_fetch_time + timedelta(days=1)
+    assert [item.id for item in reused.items] == [item.id for item in cached.items]
+    assert [item.content_sha256 for item in reused.items] == [
+        item.content_sha256 for item in cached.items
+    ]
+    assert all(item.provenance.acquired_at == now for item in reused.items)
+    assert all(item.qc == "unassessed" for item in reused.items)
+
+
 def test_missing_copernicus_configuration_fails_without_leaking_secrets(client):
     project = create_project(client)
     response = client.post(
