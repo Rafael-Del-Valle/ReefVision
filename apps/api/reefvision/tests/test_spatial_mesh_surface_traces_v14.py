@@ -2127,3 +2127,88 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             "nonadjacent_coincident_surface_trace_vertices"
             in artifact["surface_edge_traces"][0]["qc_warnings"]
         )
+
+@pytest.mark.parametrize("shared", [True, False])
+@pytest.mark.parametrize("split_indices", [False, True])
+def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
+    client: TestClient, shared: bool, split_indices: bool
+) -> None:
+    # Two tip routes on a Y-shaped reference share a two-unit trunk.
+    # Reverse the second route and optionally use separate seam indices.
+    vertices = [[0, 0, 0], [2, 0, 0], [2, 3, 0], [2, 0, 4]]
+    faces = [[0, 1, 2], [1, 0, 3]]
+    root, junction = 0, 1
+    if split_indices:
+        vertices.extend([[0, 0, 0], [2, 0, 0]])
+        root, junction = 4, 5
+        faces[1] = [junction, root, 3]
+    params = {
+        **PARAMS,
+        "vertices": vertices,
+        "faces": faces,
+        "surface_path_vertex_pairs": None,
+        "surface_trace_vertex_paths": [
+            [0, 1, 2],
+            [3, junction, root] if shared else [3, junction],
+        ],
+    }
+    direct = measure_mesh_preview(**params)
+    warning = "surface_traces_share_geometric_edges"
+    assert (warning in direct["qc_warnings"]) is shared
+    traces = direct["surface_edge_traces"]
+    assert [trace["length_m"] for trace in traces] == pytest.approx(
+        [0.05, 0.06 if shared else 0.04]
+    )
+    for trace in traces:
+        assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
+        assert trace["human_review_verified"] is False
+
+    project_id = str(create_project(client, "Shared trace trunk")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    assert expected["surface_edge_traces"] == traces
+    assert expected["qc_warnings"] == direct["qc_warnings"]
+    assert expected["provenance"]["calibration_verified"] is False
+    graph = {
+        "graph_id": "shared-trace-trunk",
+        "name": "Provisional overlapping trace selections",
+        "nodes": [
+            {"node_id": "p", "node_type": "project_source"},
+            {"node_id": "m", "node_type": "mesh_surface_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "e",
+                "source_node_id": "p",
+                "source_port_id": "project",
+                "target_node_id": "m",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        )
+        assert artifact["payload_json"]["surface_edge_traces"] == expected["surface_edge_traces"]
+        assert artifact["payload_json"]["qc_warnings"] == expected["qc_warnings"]
+        assert artifact["payload_json"]["provenance"] == expected["provenance"]
+        assert len(artifact["payload_sha256"]) == 64
+        hashes.append(artifact["payload_sha256"])
+    assert hashes[0] == hashes[1]
