@@ -135,6 +135,37 @@ $parseErrors = $null
 Assert-True (@($parseErrors).Count -eq 0) "Windows acceptance PowerShell syntax invalid: $($parseErrors -join '; ')"
 $acceptanceScript = Get-Content -LiteralPath $acceptancePath -Raw
 
+# Exercise the actual timeout path without launching or signaling any desktop.
+# Distinguish the initial baseline launch from the candidate relaunch in evidence.
+$startupAst = [System.Management.Automation.Language.Parser]::ParseFile(
+    $acceptancePath,
+    [ref]$parseTokens,
+    [ref]$parseErrors
+)
+$waitFunction = $startupAst.Find({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Wait-BackendPort'
+}, $true)
+Assert-True ($null -ne $waitFunction) 'Backend startup wait function is missing.'
+. ([scriptblock]::Create($waitFunction.Extent.Text))
+foreach ($launchStage in @('initial installed launch (1.0.3)', 'candidate relaunch (1.1.0)')) {
+    $missingPath = Join-Path $env:TEMP ([guid]::NewGuid().ToString('N') + '-backend-port.txt')
+    $timeoutMessage = ''
+    $currentProcess = [System.Diagnostics.Process]::GetCurrentProcess()
+    try {
+        Wait-BackendPort -Path $missingPath -DesktopProcess $currentProcess -BackendLogPath "$missingPath.log" -LaunchStage $launchStage -Seconds 0 | Out-Null
+    } catch {
+        $timeoutMessage = $_.Exception.Message
+    } finally {
+        $currentProcess.Dispose()
+    }
+    Assert-True ($timeoutMessage.Contains('Backend did not publish its port within 0 seconds')) 'Missing port must fail on timeout.'
+    Assert-True ($timeoutMessage.Contains($launchStage)) 'Startup timeout evidence must identify the launch stage and version.'
+    Assert-True ($timeoutMessage.Contains("desktop PID $PID")) 'Startup timeout evidence must identify the desktop PID.'
+}
+Assert-True ($acceptanceScript.Contains('-LaunchStage "initial installed launch ($initialVersion)"')) 'Initial launch must identify the actual installed version.'
+Assert-True ($acceptanceScript.Contains('-LaunchStage "candidate relaunch ($ProductVersion)"')) 'Candidate relaunch must identify the candidate version.'
+
 Assert-True ($acceptanceScript.Contains('$null = $view.Execute()')) 'MSI property extraction must suppress COM Execute output.'
 Assert-True ($acceptanceScript.Contains('$null = $view.Close()')) 'MSI property extraction must suppress COM Close output.'
 

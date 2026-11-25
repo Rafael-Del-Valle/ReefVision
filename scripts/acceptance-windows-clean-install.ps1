@@ -145,6 +145,7 @@ function Wait-BackendPort(
     [string]$Path,
     [System.Diagnostics.Process]$DesktopProcess,
     [string]$BackendLogPath,
+    [Parameter(Mandatory = $true)][string]$LaunchStage,
     [int]$Seconds = 180
 ) {
     $deadline = [DateTime]::UtcNow.AddSeconds($Seconds)
@@ -161,11 +162,11 @@ function Wait-BackendPort(
             } else {
                 '(backend log unavailable)'
             }
-            throw "ReefVision.exe exited before the backend published its port (exit code: $exitCode). Backend log tail:`n$logTail"
+            throw "ReefVision.exe exited before the backend published its port during $LaunchStage (desktop PID $($DesktopProcess.Id), exit code: $exitCode). Backend log tail:`n$logTail"
         }
         Start-Sleep -Milliseconds 250
     }
-    throw "Backend did not publish its port within $Seconds seconds: $Path"
+    throw "Backend did not publish its port within $Seconds seconds during $LaunchStage (desktop PID $($DesktopProcess.Id)): $Path"
 }
 function Start-AcceptanceDesktop {
     $BackendPortPath = Join-Path $DataRoot 'runtime\backend-port.txt'
@@ -327,10 +328,10 @@ try {
     $report.shortcuts = if ($shortcuts.Count) { New-ReefVisionEvidenceResult -Status 'PASS' -Detail ($shortcuts -join '; ') } else { New-ReefVisionEvidenceResult -Status 'FAIL' -Detail 'No ReefVision desktop or Start menu shortcut was found.' }
     if (-not $shortcuts.Count) { throw 'The MSI installed no discoverable ReefVision shortcut.' }
 
-    $desktop = Start-AcceptanceDesktop
-    $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
-    $api = "http://127.0.0.1:$port/api/v1"
     $initialVersion = Get-AcceptanceMsiProperty -Path $initialInstaller -Name 'ProductVersion'
+    $desktop = Start-AcceptanceDesktop
+    $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log') -LaunchStage "initial installed launch ($initialVersion)"
+    $api = "http://127.0.0.1:$port/api/v1"
     $initialRevision = if ($initialInstaller -eq $InstallerPath) { $ExpectedSchemaRevision } else { '' }
     $migrationPayload = Assert-AcceptancePackagedBackend -Api $api -ExpectedAppVersion $initialVersion -ExpectedRevision $initialRevision
     $report.first_launch = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and packaged backend started; database initialized; API version $initialVersion"
@@ -587,7 +588,7 @@ try {
     }
 
     $desktop = Start-AcceptanceDesktop
-    $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
+    $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log') -LaunchStage "candidate relaunch ($ProductVersion)"
     $api = "http://127.0.0.1:$port/api/v1"
     $finalMigration = Assert-AcceptancePackagedBackend -Api $api -ExpectedAppVersion $ProductVersion -ExpectedRevision $ExpectedSchemaRevision
     $report.schema_migration = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Packaged database reached $($finalMigration.current_schema_revision)."
