@@ -1167,7 +1167,9 @@ def test_pose_worker_checks_frozen_lineage_before_export(
                 elif tampered_field == "architecture":
                     original = request["pose_training_architecture"]
                     run.architecture = (
-                        "yolo11s-pose.yaml" if original == "yolo11n-pose.yaml" else "yolo11n-pose.yaml"
+                        "yolo11s-pose.yaml"
+                        if original == "yolo11n-pose.yaml"
+                        else "yolo11n-pose.yaml"
                     )
                     run.resolved_model_asset_id = f"builtin_architecture:{run.architecture}"
                 else:
