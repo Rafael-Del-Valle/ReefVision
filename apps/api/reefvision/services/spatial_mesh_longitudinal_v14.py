@@ -1319,25 +1319,25 @@ def compare_mesh_observations(
                         registration.registration_alignment_error_bound_m,
                     )
                     if all(bound is not None for bound in centroid_bounds):
-                        bounds = [bound for bound in centroid_bounds if bound is not None]
+                        radii = [bound for bound in centroid_bounds if bound is not None]
                         # Sum each endpoint directly to avoid rounding the total
                         # radius before subtracting it from a near-equal separation.
                         try:
-                            upper_bound = fsum([separation, *bounds])
+                            upper_bound = fsum([separation, *radii])
                         except OverflowError:
                             upper_bound = float("inf")
                         if isfinite(upper_bound):
                             registered_surface_centroid_separation_caller_bound_interval_m = [
-                                max(0.0, fsum([separation, *(-bound for bound in bounds)])),
+                                max(0.0, fsum([separation, *(-bound for bound in radii)])),
                                 upper_bound,
                             ]
-                            # A Euclidean error radius also bounds each signed
+                            # A Euclidean error radius also radii each signed
                             # target-frame offset component, without assuming
                             # independent axes or a probability distribution.
                             centroid_axis_bound_intervals_m = [
                                 [
-                                    fsum([component, *(-bound for bound in bounds)]),
-                                    fsum([component, *bounds]),
+                                    fsum([component, *(-bound for bound in radii)]),
+                                    fsum([component, *radii]),
                                 ]
                                 for component in offset
                             ]
