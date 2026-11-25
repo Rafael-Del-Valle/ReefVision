@@ -211,6 +211,10 @@ def _valid_v3_signal_normalization(item: Any) -> bool:
     # Minimum pending-prediction confidence cannot exceed its mean.
     # The two stored priority signals are 1 - mean and 1 - minimum,
     # respectively. Check the relation only when pending predictions exist.
+    if raw["pending_proposals"] == 1:
+        # For a single pending prediction the mean and minimum are the same
+        # stored confidence. Both inverse confidence signals must agree exactly.
+        return bool(raw["low_min_confidence"] == raw["low_mean_confidence"])
     return not (
         raw["pending_proposals"] > 0 and raw["low_min_confidence"] < raw["low_mean_confidence"]
     )

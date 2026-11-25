@@ -1000,7 +1000,7 @@ def test_v3_accepts_coherent_cross_signal_scientific_observations() -> None:
     for signal_id, value in {
         "unreviewed_state": 1.0,
         "stale_review_state": 0.25,
-        "pending_proposals": 1.0,
+        "pending_proposals": 2.0,
         "low_min_confidence": 0.9,
     }.items():
         _set_v3_unweighted_signal(item, signal_id, value)
@@ -1171,3 +1171,28 @@ def test_v3_resigned_confidence_filter_preserves_selection_evidence(
         with pytest.raises(ValidationError, match="snapshot failed integrity"):
             validate_saved_queue_snapshot(queue, items)
     assert all(item.review_state == "in_progress" for item in items)
+
+
+@pytest.mark.parametrize("minimum", [0.0, 0.1, 0.9, 1.0])
+def test_v3_single_pending_prediction_requires_equal_confidence_signals(minimum: float) -> None:
+    """A singleton cannot have a different mean and minimum confidence."""
+    queue, items = _v3_snapshot()
+    item = items[0]
+    item.review_state = "in_progress"
+    _set_v3_unweighted_signal(item, "pending_proposals", 1.0)
+    _set_v3_unweighted_signal(item, "low_min_confidence", minimum)
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+    assert item.review_state == "in_progress"
+
+
+def test_v3_single_pending_prediction_accepts_equal_confidence_signals() -> None:
+    queue, items = _v3_snapshot()
+    for item in items:
+        _set_v3_unweighted_signal(item, "pending_proposals", 1.0)
+        _set_v3_unweighted_signal(
+            item, "low_min_confidence", item.signal_values_json["low_mean_confidence"]
+        )
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    validate_saved_queue_snapshot(queue, items)
