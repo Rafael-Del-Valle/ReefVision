@@ -1082,6 +1082,10 @@ def main() -> int:
         "--expected-validation-manifest-sha256",
         help="Expected holdout manifest digest from an independent scientific review record",
     )
+    parser.add_argument(
+        "--expected-seed-model-sha256",
+        help="Expected SHA-256 of the original local weights, recorded before retraining",
+    )
     args = parser.parse_args()
     try:
         evidence = inspect(args.db, args.run_id, args.data_dir)
@@ -1110,6 +1114,20 @@ def main() -> int:
                 else None
             ),
         }
+        expected_seed_sha = args.expected_seed_model_sha256
+        if expected_seed_sha is not None:
+            _require(
+                len(expected_seed_sha) == 64
+                and all(c in "0123456789abcdefABCDEF" for c in expected_seed_sha),
+                "Expected seed model digest must be a 64-character hexadecimal SHA-256",
+            )
+            expected_seed_sha = expected_seed_sha.lower()
+            _require(
+                bool(evidence["seed_model_id"])
+                and evidence["seed_model_sha256"] == expected_seed_sha,
+                "Verified registered seed differs from the independently recorded local weights",
+            )
+        evidence["expected_seed_model_sha256"] = expected_seed_sha
         if args.require_registered_seed:
             _require(
                 bool(evidence["seed_model_id"]),
