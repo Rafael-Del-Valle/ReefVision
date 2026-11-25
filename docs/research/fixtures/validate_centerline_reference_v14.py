@@ -20,40 +20,60 @@ def validate_reference(path: Path = REFERENCE) -> list[str]:
     assert data["schema"] == "reefvision.track_c.centerline_reference.v1"
     assert data["status"] == "synthetic_reference_only_not_anatomical_validation"
     assert data["calibration"]["review_state"] == "provisional", "synthetic calibration must remain provisional"
-    assert data["interpretation"].startswith("Observed unique-edge lengths only."), "reference interpretation must not claim total uncertainty"
+    assert data["units"] == "raw_coordinate_units", "unexpected reference coordinate units"
+    assert data["interpretation"] == (
+        "Observed unique-edge lengths only. Scale-only absolute bound; "
+        "not a confidence interval or total uncertainty."
+    ), "reference interpretation must not claim total uncertainty"
     scale = data["calibration"]["meters_per_unit"]
     bound = data["calibration"]["absolute_scale_bound_meters_per_unit"]
-    assert math.isfinite(scale) and scale > 0
-    assert math.isfinite(bound) and 0 <= bound < scale
+    assert type(scale) in (int, float) and math.isfinite(scale) and scale > 0
+    assert type(bound) in (int, float) and math.isfinite(bound) and 0 <= bound < scale
     seen: set[str] = set()
     for case in data["cases"]:
         name = case["id"]
         assert name not in seen, f"duplicate case: {name}"
         seen.add(name)
+        assert all(
+            isinstance(row, list) and len(row) == 4
+            and isinstance(row[0], str) and bool(row[0].strip())
+            for row in case["nodes"]
+        ), f"invalid node record in {name}"
         nodes = {row[0]: tuple(row[1:]) for row in case["nodes"]}
         assert len(nodes) == len(case["nodes"]), f"duplicate node in {name}"
-        assert all(len(p) == 3 and all(math.isfinite(x) for x in p) for p in nodes.values())
+        assert all(
+            all(type(x) in (int, float) and math.isfinite(x) for x in p)
+            for p in nodes.values()
+        ), f"invalid coordinate in {name}"
         assert nodes, f"empty centerline graph in {name}"
         edges: set[tuple[str, str]] = set()
         adjacency: dict[str, set[str]] = defaultdict(set)
-        total = 0.0
+        lengths: list[float] = []
         for a, b in case["edges"]:
             assert a in nodes and b in nodes and a != b, name
             key = tuple(sorted((a, b)))
             assert key not in edges, f"duplicate undirected edge in {name}"
-            assert math.dist(nodes[a], nodes[b]) > 0, f"zero-length edge in {name}"
+            length = math.dist(nodes[a], nodes[b])
+            assert math.isfinite(length) and length > 0, f"invalid edge length in {name}"
             edges.add(key)
             adjacency[a].add(b)
             adjacency[b].add(a)
-            total += math.dist(nodes[a], nodes[b])
+            lengths.append(length)
         assert all(adjacency[node] for node in nodes), f"isolated node in {name}"
+        total = math.fsum(lengths)
         expected = case["expected"]
         for key, observed in (
             ("unique_edge_total_raw", total),
             ("observed_length_m", total * scale),
             ("scale_only_bound_m", total * bound),
         ):
-            assert math.isclose(observed, expected[key], rel_tol=1e-10, abs_tol=1e-12), (name, key)
+            claimed = expected[key]
+            assert type(claimed) in (int, float) and math.isfinite(claimed) and claimed >= 0, (
+                name, key, "reference measurement must be finite and nonnegative"
+            )
+            assert math.isfinite(observed) and math.isclose(
+                observed, claimed, rel_tol=1e-10, abs_tol=1e-12
+            ), (name, key)
         # A forest has |E| = |V| - components; loops must remain unresolved.
         remaining = set(nodes)
         components = 0
@@ -85,6 +105,9 @@ def validate_reference(path: Path = REFERENCE) -> list[str]:
             assert b not in reachable, f"gap endpoints already connected in {name}"
         assert type(expected["unresolved"]) is bool, (name, "unresolved must be boolean")
         assert expected["unresolved"] == (has_cycle or has_gap), name
+        assert ("branch_count" in expected) == (not expected["unresolved"]), (
+            name, "branch count required only for resolved cases"
+        )
         if "branch_count" in expected:
             assert not has_cycle and not has_gap and components == 1, name
             # Count maximal chains, not degree-two sampling vertices.
