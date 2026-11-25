@@ -1309,3 +1309,46 @@ def test_v3_selected_confidence_requires_joint_sample_bounds(
         with pytest.raises(ValidationError, match="snapshot failed integrity"):
             validate_saved_queue_snapshot(queue, items)
     assert item.review_state == "in_progress"
+
+
+@pytest.mark.parametrize("invalid_weight", [0.0, 1e308])
+def test_empty_v2_snapshot_requires_finite_positive_weight_total(invalid_weight: float) -> None:
+    queue, _ = snapshot()
+    queue.item_count = 0
+    queue.summary_json = {
+        "average_score": 0.0,
+        "counts_by_severity": {},
+        "counts_by_split": {},
+        "top_image_ids": [],
+    }
+    queue.input_checksums_json["item_count"] = 0
+    queue.input_checksums_json["queue_scope_sha256"] = canonical_json_sha256(
+        {"image_ids": [], "scores": {}, "source_quality_control_run_id": None}
+    )
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256([])
+    validate_saved_queue_snapshot(queue, [])
+
+    queue.configuration_json["weights"] = {"signal": invalid_weight, "other": invalid_weight}
+    queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
+        {
+            "formula_id": queue.formula_id,
+            "formula_version": queue.formula_version,
+            "configuration": queue.configuration_json,
+        }
+    )
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, [])
+    # Genuine unversioned historical snapshots keep their compatibility path.
+    del queue.input_checksums_json["integrity_schema_version"]
+    validate_saved_queue_snapshot(queue, [])
+
+
+def test_v2_rejects_resigned_boolean_item_weight() -> None:
+    queue, items = snapshot()
+    validate_saved_queue_snapshot(queue, items)
+    items[0].weights_json = {"signal": True}
+    items[0].review_state = "in_progress"
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+    assert items[0].review_state == "in_progress"
