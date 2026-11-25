@@ -26,9 +26,7 @@ from reefvision.tests.test_review_queue_annotation_evidence_16 import (
 )
 
 
-def _local_prediction(
-    client: TestClient, *, additional_pending: bool = False
-) -> tuple[str, str]:
+def _local_prediction(client: TestClient, *, additional_pending: bool = False) -> tuple[str, str]:
     project = create_project(client, "Imported model confidence scientific QC")
     project_id = project["id"]
     imported = import_one(client, project_id, filename="confidence-coral.png")
