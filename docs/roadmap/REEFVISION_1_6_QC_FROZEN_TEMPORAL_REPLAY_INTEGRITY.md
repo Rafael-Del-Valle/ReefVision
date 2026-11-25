@@ -209,3 +209,18 @@ Four synthetic v2/v3 cases and two persisted standalone/saved workflow
 cases check refusal, rollback and recovery without changing review status,
 formula, units or typed ports. The independent JSON presence/null matrix
 passed; repository CI and installed Windows validation remain separate gates.
+
+## Explicit null version markers cannot select historical compatibility (2026-11-25)
+
+Only an absent integrity_schema_version key denotes a historical unversioned
+QC snapshot. Explicit JSON null previously selected the legacy path and could
+bypass both required digests and versioned scientific checks. The shared
+validator now rejects a present unsupported marker, including null, while
+preserving genuine unversioned snapshots. Two v2/v3 synthetic downgrade
+regressions, the unknown-version matrix and a persisted standalone/saved
+workflow regression remove both digests and set the marker to null; replay
+must fail, rollback must restore the original pending-review artifact.
+Independent JSON predicate checks passed (42 cases); repository tests and
+installed Windows validation remain unconfirmed. This is not a cryptographic
+signature or proof against arbitrary coordinated removal of all provenance.
+No migration, units, scoring formula, or researcher-approval semantics change.
