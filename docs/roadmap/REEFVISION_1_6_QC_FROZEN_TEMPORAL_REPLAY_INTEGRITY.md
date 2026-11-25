@@ -48,3 +48,23 @@ Exact-head CI, representative biological-data review, independent 1.1/1.6
 Alembic revision-0038 reconciliation, Windows MSI/CAB upgrade/rollback,
 installed-GUI and hardware validation remain required. Do not merge or
 release based solely on this integrity regression.
+
+
+## Frozen prediction evidence and selection replay (2026-11-25)
+
+The frozen dataset QC context intentionally supplies no prediction rows. A v3
+saved version-scoped queue must therefore have an empty prediction model ID
+list for every item and an explicit null confidence filter, including when
+the queue contains no items. A re-signed queue with an invented model
+reference is not valid even if every prediction-derived signal is zero.
+This does not prohibit preserved model provenance on reviewed annotations.
+Live project queues and historical v2 snapshots retain their existing
+contracts. The existing prediction-signal guard enforces zero model-derived
+signals when no prediction models are present.
+
+Regression coverage includes synthetic populated and empty snapshots, the
+live-project positive control, and the existing standalone/saved executable
+frozen QC parity and rollback/retry test expanded to reject invented model
+references. Researcher review, dimensional units, original observations and
+saved graph identity remain unchanged. This is not migration reconciliation
+or installed Windows acceptance.

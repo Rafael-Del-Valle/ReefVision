@@ -16,6 +16,7 @@ from reefvision.services.workflow_review_queue_integrity import (
     queue_item_evidence_sha256,
     validate_saved_queue_snapshot,
 )
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_review_queue_annotation_evidence_16 import _queue_item
 from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
     _frozen_graph,
@@ -24,14 +25,14 @@ from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
 )
 from reefvision.tests.test_workflow_review_queue_integrity_16 import (
     _set_v3_unweighted_signal,
-    _v3_snapshot,
+    _v3_human_only_snapshot,
 )
 
 
 @pytest.mark.parametrize("signal_id", ["recent_import", "stale_review_state"])
 def test_resigned_v3_frozen_snapshot_rejects_invented_temporal_signal(signal_id: str) -> None:
     """Even matching score/digests cannot add timestamps absent from a frozen version."""
-    queue, items = _v3_snapshot()
+    queue, items = _v3_human_only_snapshot()
     queue.dataset_version_id = "frozen-study"
     queue.scope_type = "dataset_version"
     for item in items:
@@ -47,7 +48,7 @@ def test_resigned_v3_frozen_snapshot_rejects_invented_temporal_signal(signal_id:
     assert item.review_state == "in_progress"
 
 
-@pytest.mark.parametrize("signal_id", ["recent_import", "stale_review_state"])
+@pytest.mark.parametrize("signal_id", ["recent_import", "stale_review_state", "model_reference"])
 def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
     client: TestClient, signal_id: str
 ) -> None:
@@ -102,15 +103,19 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
         assert project_artifact is not None and dataset_artifact is not None
         assert queue is not None and len(queue.items) == 1
         item = queue.items[0]
-        assert item.weights_json[signal_id] == 0.0
-        item.signal_values_json = {**item.signal_values_json, signal_id: 0.5}
-        item.normalized_signals_json = {**item.normalized_signals_json, signal_id: 0.5}
-        breakdown = [dict(part) for part in item.score_breakdown_json]
-        for part in breakdown:
-            if part["signal_id"] == signal_id:
-                part["raw_value"] = 0.5
-                part["normalized_value"] = 0.5
-        item.score_breakdown_json = breakdown
+        if signal_id == "model_reference":
+            assert item.model_ids_json == []
+            item.model_ids_json = ["not-a-frozen-prediction-model"]
+        else:
+            assert item.weights_json[signal_id] == 0.0
+            item.signal_values_json = {**item.signal_values_json, signal_id: 0.5}
+            item.normalized_signals_json = {**item.normalized_signals_json, signal_id: 0.5}
+            breakdown = [dict(part) for part in item.score_breakdown_json]
+            for part in breakdown:
+                if part["signal_id"] == signal_id:
+                    part["raw_value"] = 0.5
+                    part["normalized_value"] = 0.5
+            item.score_breakdown_json = breakdown
         queue.input_checksums_json = {
             **queue.input_checksums_json,
             "item_evidence_sha256": queue_item_evidence_sha256(queue.items),
@@ -136,3 +141,59 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
         session.rollback()
 
     assert _queue_item(client, payload["queue_id"])["review_state"] == "pending"
+
+
+@pytest.mark.parametrize("empty", [False, True])
+def test_frozen_snapshot_rejects_resigned_prediction_selection(empty: bool) -> None:
+    queue, items = _v3_human_only_snapshot()
+    queue.dataset_version_id = "frozen-study"
+    queue.scope_type = "dataset_version"
+    for item in items:
+        item.dataset_version_id = queue.dataset_version_id
+    if empty:
+        items = []
+        queue.item_count = 0
+        queue.summary_json = {
+            "average_score": 0.0,
+            "counts_by_severity": {},
+            "counts_by_split": {},
+            "top_image_ids": [],
+        }
+        queue.input_checksums_json["item_count"] = 0
+        queue.input_checksums_json["queue_scope_sha256"] = canonical_json_sha256(
+            {"image_ids": [], "scores": {}, "source_quality_control_run_id": None}
+        )
+        queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    validate_saved_queue_snapshot(queue, items)
+
+    queue.configuration_json["review_below_confidence"] = 1.0
+    queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
+        {
+            "formula_id": queue.formula_id,
+            "formula_version": queue.formula_version,
+            "configuration": queue.configuration_json,
+            "integrity_schema_version": "qc-review-queue-v3",
+        }
+    )
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+
+
+def test_frozen_snapshot_rejects_resigned_prediction_model_reference() -> None:
+    queue, items = _v3_human_only_snapshot()
+    queue.dataset_version_id = "frozen-study"
+    queue.scope_type = "dataset_version"
+    for item in items:
+        item.dataset_version_id = queue.dataset_version_id
+    validate_saved_queue_snapshot(queue, items)
+
+    items[0].model_ids_json = ["not-a-frozen-prediction-model"]
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+    # The same model reference can be legitimate for a live project queue.
+    queue.dataset_version_id = None
+    queue.scope_type = "project"
+    for item in items:
+        item.dataset_version_id = None
+    validate_saved_queue_snapshot(queue, items)

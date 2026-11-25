@@ -371,6 +371,14 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
         ):
             raise invalid
         threshold = configuration.get("review_below_confidence")
+        # Frozen versions never snapshot prediction proposals. This also
+        # applies to empty queues, where per-item checks cannot enforce it.
+        if (
+            integrity_version == "qc-review-queue-v3"
+            and queue.dataset_version_id is not None
+            and threshold is not None
+        ):
+            raise invalid
         ruleset = configuration.get("ruleset_version")
         if (
             type(ruleset) is not str
@@ -477,6 +485,10 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             and (
                 item.signal_values_json["recent_import"] != 0.0
                 or item.signal_values_json["stale_review_state"] != 0.0
+                # The frozen context has no prediction rows. Annotation
+                # provenance may identify a model, but this list specifically
+                # represents predictions, not annotation source model IDs.
+                or item.model_ids_json
             )
         ):
             raise invalid
