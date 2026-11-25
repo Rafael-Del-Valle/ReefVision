@@ -169,6 +169,8 @@ def _assert_projected_gap_workflow_replay(
         "axis_aligned_dimensions_m",
         "axis_aligned_dimension_scale_interval_m",
         "axis_aligned_dimension_scale_uncertainty_m",
+        "axis_aligned_bounding_box_envelope_volume_m3",
+        "axis_aligned_bounding_box_envelope_volume_scale_interval_m3",
         "qc_warnings",
     ):
         assert expected[key] == direct[key]
@@ -372,6 +374,35 @@ def test_extent_and_scale_uncertainty_use_unrounded_source_span(
         gap = result["axis_largest_adjacent_coordinate_gaps"][axis]
         assert gap["calibrated_gap_m"] == extent
         assert gap["calibrated_gap_scale_interval_m"] == interval
+    _assert_projected_gap_workflow_replay(client, params, result)
+
+
+@pytest.mark.parametrize(
+    ("uncertainty", "interval"),
+    [
+        (0.1, [0.0007290000000000004, 0.0013310000000000006]),
+        (0.0, [0.0010000000000000005, 0.0010000000000000005]),
+        (1.0, [0.0, 0.008000000000000004]),
+    ],
+)
+def test_envelope_uses_exact_calibrated_spans(
+    client: TestClient, uncertainty: float, interval: list[float]
+) -> None:
+    # Independent high-precision Decimal reference using exact binary inputs.
+    # Two diagonal endpoints define an envelope, not a biological volume.
+    params: dict[str, Any] = {
+        "points": [[-1.0, -1.0, -1.0], [1e-16, 1e-16, 1e-16]],
+        "meters_per_unit": 0.1,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic envelope precision control; unverified",
+        "relative_scale_uncertainty": uncertainty,
+    }
+    result = measure_point_cloud_preview(**params)
+    assert result["axis_aligned_bounding_box_envelope_volume_m3"] == 0.0010000000000000005
+    assert result["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"] == interval
+    assert "positive_bounding_envelope_for_lower_dimensional_source" in result["qc_warnings"]
+    assert result["surface_area_m2"] is None
+    assert result["branch_length_m"] is None
     _assert_projected_gap_workflow_replay(client, params, result)
 
 
