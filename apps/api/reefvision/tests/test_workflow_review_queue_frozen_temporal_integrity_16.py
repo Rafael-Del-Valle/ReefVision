@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
@@ -11,7 +11,10 @@ from sqlalchemy import select
 
 from reefvision.db.models import ReviewQueue, WorkflowArtifact, WorkflowNodeRun
 from reefvision.domain.errors import ValidationError
-from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
+from reefvision.services.workflow_review_queue import (
+    _frozen_incomplete_provenance,
+    create_review_queue_workflow_artifact,
+)
 from reefvision.services.workflow_review_queue_integrity import (
     queue_item_evidence_sha256,
     validate_saved_queue_snapshot,
@@ -60,6 +63,7 @@ def test_resigned_v3_frozen_snapshot_rejects_invented_temporal_signal(signal_id:
         "count_disagreement_endpoint",
         "unreviewed_state",
         "missing_group_metadata",
+        "incomplete_provenance",
     ],
 )
 def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
@@ -75,6 +79,7 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
         "rare_class_presence": 0.0,
         "unreviewed_state": 0.0,
         "missing_group_metadata": 0.0,
+        "incomplete_provenance": 0.0,
     }
     standalone = client.post(
         f"/api/v1/dataset-versions/{version_id}/review-queues",
@@ -100,6 +105,7 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
         assert item["signal_values_json"]["rare_class_presence"] == 0.0
         assert item["signal_values_json"]["unreviewed_state"] == 0.0
         assert item["signal_values_json"]["missing_group_metadata"] in (0.0, 1.0)
+        assert item["signal_values_json"]["incomplete_provenance"] == 0.0
         assert len(item["label_class_ids_json"]) == 1
         assert item["review_state"] == "pending"
     assert workflow_item["signal_values_json"] == standalone_item["signal_values_json"]
@@ -166,6 +172,7 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
             "count_disagreement_endpoint",
             "unreviewed_state",
             "missing_group_metadata",
+            "incomplete_provenance",
         }:
             # All internal score and evidence checks still pass. Only the
             # independent frozen annotation census reveals this substitution.
@@ -287,3 +294,28 @@ def test_prediction_free_count_gap_replay(gap: float) -> None:
             item.model_ids_json = ["prediction-model"]
         queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
         validate_saved_queue_snapshot(queue, items)
+
+
+@pytest.mark.parametrize(
+    ("annotations", "expected"),
+    [
+        ([], 0.0),
+        ([{"source_type": "human"}], 0.0),
+        ([{"source_type": "accepted_prediction"}], 1.0),
+        ([{"source_type": "assist_mask", "provenance_json": {}}], 1.0),
+        ([{"source_type": "assist_mask", "provenance_json": {"local": True}}], 0.0),
+        (
+            [
+                {"source_type": "accepted_prediction", "provenance_json": None},
+                {"source_type": "assist_mask", "provenance_json": {"local": True}},
+                {"source_type": "human"},
+                {},
+            ],
+            0.5,
+        ),
+    ],
+)
+def test_frozen_incomplete_provenance_ratio(
+    annotations: list[dict[str, Any]], expected: float
+) -> None:
+    assert _frozen_incomplete_provenance(annotations) == expected
