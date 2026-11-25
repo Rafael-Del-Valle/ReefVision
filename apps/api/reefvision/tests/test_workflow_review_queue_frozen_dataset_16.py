@@ -14,7 +14,10 @@ from reefvision.db.models import ReviewQueue, WorkflowArtifact, WorkflowNodeRun
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
-from reefvision.services.workflow_review_queue_integrity import queue_item_evidence_sha256
+from reefvision.services.workflow_review_queue_integrity import (
+    queue_item_evidence_sha256,
+    validate_saved_queue_snapshot,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_annotations import create_project, import_one
 from reefvision.tests.test_dataset_versions import create_version, save_annotations
@@ -234,13 +237,18 @@ def test_saved_frozen_qc_rejects_resigned_dataset_manifest(
         ("wrong_queue_scope", "retry parameters changed or queue incomplete"),
         ("wrong_item_version", "snapshot failed integrity"),
         ("resigned_wrong_item_split", "frozen dataset item membership or split"),
+        ("resigned_missing_item", "frozen dataset image coverage is incomplete"),
     ],
 )
 def test_saved_frozen_qc_replay_enforces_dataset_scope(
     client: TestClient, tamper: str, expected_error: str
 ) -> None:
-    """A completed frozen queue must be replayable, but never as live evidence."""
-    project_id, _, version_id, _ = _study(client)
+    """A completed frozen queue must retain its entire immutable study cohort."""
+    project_id, image_id, version_id, _ = _study(client)
+    standalone = client.post(f"/api/v1/dataset-versions/{version_id}/review-queues", json={})
+    assert standalone.status_code == 201, standalone.text
+    assert standalone.json()["item_count"] == 1
+    assert _queue_item(client, standalone.json()["id"])["image_id"] == image_id
     graph = _frozen_graph(version_id)
     saved = client.post(f"/api/v1/projects/{project_id}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
@@ -289,6 +297,42 @@ def test_saved_frozen_qc_replay_enforces_dataset_scope(
             queue.scope_type = "project"
         elif tamper == "wrong_item_version":
             queue.items[0].dataset_version_id = None
+        elif tamper == "resigned_missing_item":
+            # Disposable transaction: omit the only frozen image and re-sign
+            # every affected count, checksum and saved output. Internal queue
+            # integrity alone cannot detect the lost biological observation.
+            session.delete(queue.items[0])
+            session.flush()
+            session.expire(queue, ["items"])
+            assert not queue.items
+            queue.item_count = 0
+            queue.summary_json = {
+                "average_score": 0.0,
+                "counts_by_severity": {},
+                "counts_by_split": {},
+                "top_image_ids": [],
+            }
+            queue.input_checksums_json = {
+                **queue.input_checksums_json,
+                "item_count": 0,
+                "queue_scope_sha256": canonical_json_sha256(
+                    {
+                        "image_ids": [],
+                        "scores": {},
+                        "source_quality_control_run_id": queue.source_quality_control_run_id,
+                    }
+                ),
+                "item_evidence_sha256": queue_item_evidence_sha256(queue.items),
+            }
+            validate_saved_queue_snapshot(queue, queue.items)
+            saved_output = session.get(WorkflowArtifact, qc_node.output_artifact_ids_json[0])
+            assert saved_output is not None
+            saved_output.payload_json = {
+                **saved_output.payload_json,
+                "item_count": 0,
+                "input_checksums": queue.input_checksums_json,
+            }
+            saved_output.payload_sha256 = canonical_json_sha256(saved_output.payload_json)
         else:
             # A corrupt but re-signed queue can pass its own scope, ranking,
             # score and evidence-digest checks while assigning the image to
