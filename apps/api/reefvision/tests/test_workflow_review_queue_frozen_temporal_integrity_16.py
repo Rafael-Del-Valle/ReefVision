@@ -64,6 +64,7 @@ def test_resigned_v3_frozen_snapshot_rejects_invented_temporal_signal(signal_id:
         "unreviewed_state",
         "missing_group_metadata",
         "incomplete_provenance",
+        "boolean_weight",
     ],
 )
 def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
@@ -139,6 +140,20 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
             item.model_ids_json = ["not-a-frozen-prediction-model"]
         elif signal_id == "class_reference":
             item.label_class_ids_json = ["not-a-frozen-annotation-class"]
+        elif signal_id == "boolean_weight":
+            assert item.weights_json["recent_import"] == 0.0
+            item.weights_json = {**item.weights_json, "recent_import": False}
+            standalone_queue = session.get(ReviewQueue, standalone.json()["id"])
+            assert standalone_queue is not None and len(standalone_queue.items) == 1
+            standalone_row = standalone_queue.items[0]
+            standalone_row.weights_json = {**standalone_row.weights_json, "recent_import": False}
+            standalone_queue.input_checksums_json = {
+                **standalone_queue.input_checksums_json,
+                "item_evidence_sha256": queue_item_evidence_sha256(standalone_queue.items),
+            }
+            session.flush()
+            with pytest.raises(ValidationError, match="snapshot failed integrity"):
+                validate_saved_queue_snapshot(standalone_queue, standalone_queue.items)
         else:
             target = (
                 "count_disagreement" if signal_id == "count_disagreement_endpoint" else signal_id
@@ -321,3 +336,35 @@ def test_frozen_incomplete_provenance_ratio(
     annotations: list[dict[str, Any]], expected: float
 ) -> None:
     assert _frozen_incomplete_provenance(annotations) == expected
+
+
+@pytest.mark.parametrize("invalid_total", [0.0, 1e308])
+def test_empty_v3_snapshot_requires_finite_positive_weight_total(invalid_total: float) -> None:
+    queue, _ = _v3_human_only_snapshot()
+    queue.item_count = 0
+    queue.summary_json = {
+        "average_score": 0.0,
+        "counts_by_severity": {},
+        "counts_by_split": {},
+        "top_image_ids": [],
+    }
+    queue.input_checksums_json["item_count"] = 0
+    queue.input_checksums_json["queue_scope_sha256"] = canonical_json_sha256(
+        {"image_ids": [], "scores": {}, "source_quality_control_run_id": None}
+    )
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256([])
+    validate_saved_queue_snapshot(queue, [])
+
+    queue.configuration_json["weights"] = {
+        key: invalid_total for key in queue.configuration_json["weights"]
+    }
+    queue.input_checksums_json["scoring_provenance_sha256"] = canonical_json_sha256(
+        {
+            "formula_id": queue.formula_id,
+            "formula_version": queue.formula_version,
+            "configuration": queue.configuration_json,
+            "integrity_schema_version": "qc-review-queue-v3",
+        }
+    )
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, [])
