@@ -1200,11 +1200,7 @@ def measure_mesh_preview(
             + (["coincident_mesh_patch_coordinates"] if coincident_patch_coordinates else [])
             + (["inconsistent_face_winding"] if inconsistent_winding_edge_count else [])
             + (["unreferenced_mesh_vertices"] if unreferenced_vertex_count else [])
-            + (
-                ["surface_traces_share_geometric_edges"]
-                if traces_share_geometric_edge
-                else []
-            )
+            + (["surface_traces_share_geometric_edges"] if traces_share_geometric_edge else [])
             + (
                 ["preview_omits_edge_connected_mesh_patches"]
                 if preview_omitted_patch_indices
