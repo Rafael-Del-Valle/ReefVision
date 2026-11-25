@@ -255,3 +255,15 @@ persisted saved graph's rehashed test-split substitution, then restores
 the same queue, dimensionless priority and pending researcher review.
 No migration, scientific score, model, or biological annotation changes.
 Exact-head repository CI and installed Windows validation remain gates.
+
+### Typed scoring input boundary (1.6)
+
+The shared review-score weights model rejects JSON Boolean flags before numeric
+coercion, both for standalone queue creation and saved Workflow Builder replay.
+Numeric zero and one remain legitimate dimensionless weights; the aggregate
+must still be finite and positive. Previously a Boolean could silently become
+0.0 or 1.0 and change the review-priority formula. A malformed persisted node
+fails closed rather than producing or rewriting scientific evidence. Existing
+numeric saved graphs, historical queue snapshots and manual review gates are
+unchanged. Regression coverage includes both flags, numeric controls, saved
+node rejection and restoration of the original queue and review state.
