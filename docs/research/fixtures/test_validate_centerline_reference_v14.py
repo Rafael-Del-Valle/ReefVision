@@ -148,5 +148,56 @@ class CenterlineReferenceIntegrityTests(unittest.TestCase):
         )
 
 
+    def test_boolean_coordinate_is_rejected(self) -> None:
+        # False is numerically zero, so this does not change the reference length.
+        self.check_mutation_rejected(
+            lambda data: data["cases"][0]["nodes"][0].__setitem__(1, False)
+        )
+
+    def test_boolean_scale_bound_is_rejected(self) -> None:
+        def mutate(data) -> None:
+            data["calibration"]["absolute_scale_bound_meters_per_unit"] = False
+            for case in data["cases"]:
+                case["expected"]["scale_only_bound_m"] = 0.0
+
+        self.check_mutation_rejected(mutate)
+
+    def test_boolean_expected_measurement_is_rejected(self) -> None:
+        def mutate(data) -> None:
+            data["calibration"]["absolute_scale_bound_meters_per_unit"] = 0.0
+            for case in data["cases"]:
+                case["expected"]["scale_only_bound_m"] = False
+
+        self.check_mutation_rejected(mutate)
+
+    def test_units_cannot_be_relabelled_without_conversion(self) -> None:
+        self.check_mutation_rejected(lambda data: data.update(units="meters"))
+
+    def test_interpretation_cannot_append_verified_claim(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data.update(
+                interpretation=data["interpretation"] + " Verified anatomical length."
+            )
+        )
+
+    def test_resolved_reference_requires_branch_count(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][0]["expected"].pop("branch_count")
+        )
+
+    def test_unresolved_reference_cannot_claim_branch_count(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][3]["expected"].update(branch_count=3)
+        )
+
+    def test_blank_node_identity_is_rejected(self) -> None:
+        def mutate(data) -> None:
+            case = data["cases"][0]
+            case["nodes"][0][0] = " "
+            case["edges"][0][0] = " "
+
+        self.check_mutation_rejected(mutate)
+
+
 if __name__ == "__main__":
     unittest.main()
