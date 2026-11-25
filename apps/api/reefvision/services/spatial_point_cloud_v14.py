@@ -644,7 +644,10 @@ def measure_point_cloud_preview(
                 float(exact_value * (1 - uncertainty)),
                 float(exact_value * (1 + uncertainty)),
             )
-            if _scale_interval_unresolved(nominal, relative_scale_uncertainty, *candidates):
+            nominal_underflow = exact_value != 0 and nominal == 0.0
+            if nominal_underflow or _scale_interval_unresolved(
+                nominal, relative_scale_uncertainty, *candidates
+            ):
                 coordinate_scale_interval_underflow = True
                 intervals.append(None)
             else:
@@ -686,9 +689,7 @@ def measure_point_cloud_preview(
     exact_centroid_offset = [
         a - b for a, b in zip(exact_centroid, exact_unique_centroid, strict=True)
     ]
-    centroid_separation = dist(
-        (0.0, 0.0, 0.0), [float(value) for value in exact_centroid_offset]
-    )
+    centroid_separation = dist((0.0, 0.0, 0.0), [float(value) for value in exact_centroid_offset])
     if len(set(coordinate_multiplicities.values())) == 1:
         # Equal multiplicities cannot move the mathematical centroid. Avoid
         # a false difference from independent floating-point summation paths.
@@ -699,7 +700,8 @@ def measure_point_cloud_preview(
         lower, upper = _centroid_separation_scale_bounds(
             exact_centroid_offset, centroid_separation, relative_scale_uncertainty
         )
-        if _scale_interval_unresolved(
+        nominal_underflow = any(exact_centroid_offset) and centroid_separation == 0.0
+        if nominal_underflow or _scale_interval_unresolved(
             centroid_separation, relative_scale_uncertainty, lower, upper
         ):
             centroid_separation_interval_unresolved = True
@@ -1116,7 +1118,8 @@ def measure_point_cloud_preview(
                 min(offset_bound_candidates),
                 max(offset_bound_candidates),
             )
-            if _scale_interval_unresolved(
+            nominal_underflow = exact_offset != 0 and offset == 0.0
+            if nominal_underflow or _scale_interval_unresolved(
                 offset, relative_scale_uncertainty, offset_lower, offset_upper
             ):
                 preview_centroid_offset_interval_unresolved = True
@@ -1129,12 +1132,27 @@ def measure_point_cloud_preview(
         lower, upper = _centroid_separation_scale_bounds(
             exact_preview_offset, preview_centroid_separation, relative_scale_uncertainty
         )
-        if _scale_interval_unresolved(
+        nominal_underflow = any(exact_preview_offset) and preview_centroid_separation == 0.0
+        if nominal_underflow or _scale_interval_unresolved(
             preview_centroid_separation, relative_scale_uncertainty, lower, upper
         ):
             preview_centroid_interval_unresolved = True
         else:
             preview_centroid_scale_interval = [lower, upper]
+    # The nominal fields retain their float representation for compatibility.
+    # A nonzero exact centroid or displacement that rounds to zero is not
+    # evidence of a zero measurement, even without supplied scale uncertainty.
+    centroid_nominal_underflow = any(
+        value != 0 and float(value) == 0.0
+        for values in (
+            exact_centroid,
+            exact_unique_centroid,
+            exact_preview_centroid,
+            exact_centroid_offset,
+            exact_preview_offset,
+        )
+        for value in values
+    )
     # The dimensionless fraction is valid only for a nonzero source envelope.
     # Shared scale uncertainty cancels; reconstruction and sampling uncertainty
     # are not evaluated by this ratio.
@@ -1320,6 +1338,7 @@ def measure_point_cloud_preview(
                 if duplicate_row_count and len(set(coordinate_multiplicities.values())) > 1
                 else []
             )
+            + (["centroid_nominal_below_numeric_resolution"] if centroid_nominal_underflow else [])
             + (
                 ["centroid_separation_uncertainty_interval_below_numeric_resolution"]
                 if centroid_separation_interval_unresolved
