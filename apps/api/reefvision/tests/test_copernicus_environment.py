@@ -155,6 +155,9 @@ def test_worker_rejects_implicit_dimension_coordinates(monkeypatch, axis):
 @pytest.mark.parametrize(
     ("axis", "coordinates", "message"),
     [
+        ("latitude", [True, False, True], "spatial coordinates must be real"),
+        ("depth", [1 + 2j, 5 + 2j, 9 + 2j], "spatial coordinates must be real"),
+        ("time", [0, 1, 2], "time coordinates must be decoded"),
         ("latitude", [32.25, 32.25, 32.75], "strictly monotonic"),
         ("latitude", [32.25, 32.75, 32.25], "strictly monotonic"),
         ("latitude", [32.25, np.nan, 32.75], "Non-finite"),
