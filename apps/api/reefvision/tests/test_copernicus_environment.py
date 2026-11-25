@@ -299,6 +299,61 @@ def test_null_ocean_value_is_missing_data_not_an_omitted_grid_cell(
     assert all(item.qc == "unassessed" for item in result.items)
 
 
+def test_all_missing_refresh_keeps_cache_but_zero_current_is_valid(
+    client, test_settings, monkeypatch
+):
+    """A missing model subset must not replace data or masquerade as slack water."""
+    project = create_project(client)
+    raw = raw_fixture(monkeypatch)
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    later = now + timedelta(days=2)
+    with client.app.state.session_factory() as session:
+        cached = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: deepcopy(raw), now=now
+        ).acquire(project["id"], request())
+
+    missing = deepcopy(raw)
+    for sample in missing["samples"]:
+        sample["value"] = None
+    with (
+        client.app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="no available ocean values"),
+    ):
+        CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: missing, now=later
+        ).acquire(project["id"], request(refresh=True))
+
+    with client.app.state.session_factory() as session:
+        offline = CopernicusEnvironmentService(
+            session,
+            test_settings,
+            fetch=lambda *_: pytest.fail("offline must not acquire remote data"),
+            now=later,
+        ).acquire(project["id"], request(offline=True))
+    assert offline.cache_status == "stale_offline"
+    assert [item.id for item in offline.items] == [item.id for item in cached.items]
+    assert [item.content_sha256 for item in offline.items] == [
+        item.content_sha256 for item in cached.items
+    ]
+
+    # Zero-valued current components are actual modeled values, not missing data.
+    calm = deepcopy(missing)
+    for sample in calm["samples"]:
+        if sample["variable"] in {"uo", "vo"}:
+            sample["value"] = 0.0
+    with client.app.state.session_factory() as session:
+        refreshed = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: calm, now=later
+        ).acquire(project["id"], request(refresh=True))
+    assert refreshed.skipped_missing == 2
+    assert {item.variable for item in refreshed.items} == {
+        "current_eastward_velocity",
+        "current_northward_velocity",
+    }
+    assert all(item.normalized_value == 0.0 for item in refreshed.items)
+    assert all(item.qc == "unassessed" for item in refreshed.items)
+
+
 def test_invalid_copernicus_resolution_refresh_keeps_prior_offline_snapshot(
     client, test_settings, monkeypatch
 ):
