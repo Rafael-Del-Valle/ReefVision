@@ -50,6 +50,7 @@ jobs:
           export MIGRATION_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           verify_revision() {
             python - "$1" "$2" <<'PY'
+          import difflib
           import hashlib
           import json
           import os
@@ -82,13 +83,14 @@ jobs:
               json.dumps(schema_objects, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
           ).hexdigest()
           report_path = Path(os.environ["MIGRATION_EVIDENCE"])
+          schema_matches_initial = None
           if stage == "final_upgrade":
               first, second = [
                   json.loads(line) for line in report_path.read_text(encoding="utf-8").splitlines()
               ]
               assert first["stage"] == "initial_upgrade", first
               assert second["stage"] == "downgrade", second
-              assert schema_sha256 == first["schema_sha256"], "Roundtrip changed SQLite schema"
+              schema_matches_initial = schema_sha256 == first["schema_sha256"]
           evidence = {
               "stage": stage,
               "checkout_sha": os.environ["GITHUB_SHA"],
@@ -99,9 +101,18 @@ jobs:
               "foreign_key_violations": len(foreign_keys),
               "schema_sha256": schema_sha256,
               "schema_object_count": len(schema_objects),
+              "schema_objects": schema_objects,
+              "schema_matches_initial": schema_matches_initial,
           }
           with report_path.open("a", encoding="utf-8") as report:
               report.write(json.dumps(evidence, sort_keys=True) + "\n")
+          if schema_matches_initial is False:
+              before = json.dumps(first["schema_objects"], indent=2).splitlines()
+              after = json.dumps(schema_objects, indent=2).splitlines()
+              print("\n".join(difflib.unified_diff(
+                  before, after, fromfile="initial_schema", tofile="final_schema", lineterm=""
+              )))
+              raise AssertionError("Roundtrip changed SQLite schema; see schema diff above")
           print(f"Verified revision {expected}; quick_check=ok; foreign_key_check=ok")
           PY
           }
@@ -112,6 +123,7 @@ jobs:
           python -m alembic -c apps/api/alembic.ini upgrade head
           verify_revision final_upgrade head
       - name: Retain scratch migration evidence
+        if: ${{ !cancelled() && env.MIGRATION_EVIDENCE != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: pose-migration-evidence-${{ github.run_attempt }}
