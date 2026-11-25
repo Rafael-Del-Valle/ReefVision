@@ -622,8 +622,8 @@ def test_quantized_subnormal_envelope_uncertainty_has_no_false_exact_interval(
 def test_axis_chord_rounds_only_after_calibration_and_uncertainty(
     client: TestClient, source_format: str, uncertainty: float
 ) -> None:
-    """An axis-aligned chord has the same scale interval as its measured extent."""
-    points = [[0.0, 2.0, 0.0], [3.0, 2.0, 0.0]]
+    """Check chord and signed coordinate intervals against a Decimal oracle."""
+    points = [[0.0, -2.0, 0.0], [3.0, -2.0, 0.0]]
     geometry = (
         {"points": points}
         if source_format == "xyz"
@@ -631,7 +631,7 @@ def test_axis_chord_rounds_only_after_calibration_and_uncertainty(
             "ply_text": (
                 "ply\nformat ascii 1.0\nelement vertex 2\n"
                 "property double x\nproperty double y\nproperty double z\n"
-                "end_header\n0 2 0\n3 2 0\n"
+                "end_header\n0 -2 0\n3 -2 0\n"
             )
         }
     )
@@ -650,6 +650,15 @@ def test_axis_chord_rounds_only_after_calibration_and_uncertainty(
         nominal = float(exact_length)
         bounds = [float(exact_length * (1 - u)), float(exact_length * (1 + u))]
         absolute = float(exact_length * u)
+        coordinate_intervals = []
+        for point in points:
+            intervals = []
+            for value in point:
+                coordinate = Decimal.from_float(value) * Decimal.from_float(0.1)
+                intervals.append(
+                    sorted([float(coordinate * (1 - u)), float(coordinate * (1 + u))])
+                )
+            coordinate_intervals.append(intervals)
     project_id = str(create_project(client, f"Chord rounding {source_format}")["id"])
     base = f"/api/v1/projects/{project_id}"
     response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
@@ -660,6 +669,13 @@ def test_axis_chord_rounds_only_after_calibration_and_uncertainty(
         assert chord["chord_distance_scale_interval_m"] == bounds
         assert chord["scale_uncertainty_m"] == absolute
     assert expected["axis_aligned_dimensions_m"][0] == nominal
+    assert expected["preview_point_scale_intervals_m"] == coordinate_intervals
+    assert expected["axis_aligned_min_in_source_frame_scale_interval_m"] == (
+        coordinate_intervals[0]
+    )
+    assert expected["axis_aligned_max_in_source_frame_scale_interval_m"] == (
+        coordinate_intervals[1]
+    )
     assert expected["branch_length_m"] is None
     assert expected["provenance"]["calibration_verified"] is False
 
