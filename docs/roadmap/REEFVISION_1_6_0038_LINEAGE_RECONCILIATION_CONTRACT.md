@@ -283,3 +283,25 @@ authorize upgrade, change any Workflow Builder capability, or establish
 installed Windows acceptance. The integrated lineage, full CI, representative
 saved biological workflows, real installer/GUI validation and researcher
 approval remain HOLD.
+
+
+## Alembic primary-key semantics in read-only lineage inventory (2026-11-25)
+
+The lightweight read-only inspector now requires one ordinary ascending,
+BINARY-collated primary-key index on the canonical version_num column.
+An unchanged 0039 stamp, valid SQLite integrity check, and matching column
+metadata could previously hide NOCASE/RTRIM key comparison or descending
+key order. The inspector uses SQLite index_list/index_xinfo and reports
+the existing noncanonical_alembic_stamp_constraints warning without
+exposing key values or index names. Strict mode refuses that evidence.
+Eight disposable QC database cases cover ordinary text and VARCHAR
+controls, explicit BINARY, alternate collations, and descending keys,
+including table-level primary-key declarations; the original file bytes
+and review-note privacy are checked on repeat inspection and CLI execution.
+
+This is diagnostic evidence only, not migration authorization, integration
+of the independent 0038 branches, or a new scientific Workflow Builder node.
+Original typed QC graphs, saved runs, provenance, retries, and researcher
+review gates are unchanged. Real migration reconciliation, final CI,
+representative biological saved-workflow acceptance, and installed Windows
+MSI/GUI upgrade and rollback remain required.
