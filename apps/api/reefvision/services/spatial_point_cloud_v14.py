@@ -432,7 +432,21 @@ def measure_point_cloud_preview(
                 raise ValueError("Point pair requires two distinct in-range integer indices")
             selected_endpoint_indices.update(pair)
             endpoints = [vertices[pair[0]], vertices[pair[1]]]
-            chord_m = dist(*endpoints) * scale
+            varying_axes = [
+                axis for axis in range(3) if endpoints[0][axis] != endpoints[1][axis]
+            ]
+            # Axis-aligned chords have an exact rational source length. For
+            # oblique chords retain the rounded Euclidean norm, but avoid
+            # additional rounding before scale uncertainty is applied.
+            if len(varying_axes) == 1:
+                axis = varying_axes[0]
+                source_distance = abs(
+                    Fraction(endpoints[1][axis]) - Fraction(endpoints[0][axis])
+                )
+            else:
+                source_distance = Fraction(dist(*endpoints))
+            exact_chord = source_distance * Fraction(scale)
+            chord_m = float(exact_chord)
             # Global cloud extents can remain resolvable while a selected pair
             # loses its smaller separation. Distinct source geometry must never
             # become an apparently zero or coincident measured chord.
@@ -449,27 +463,18 @@ def measure_point_cloud_preview(
             # A positive chord and positive lower scale factor must not
             # acquire a false zero lower distance from floating-point underflow.
             # Preserve the nominal chord and mark its interval unresolved.
-            chord_interval_underflow = (
-                relative_scale_uncertainty is not None
-                and _scale_interval_unresolved(
-                    chord_m,
-                    relative_scale_uncertainty,
-                    chord_m * (1 - relative_scale_uncertainty),
-                    chord_m * (1 + relative_scale_uncertainty),
-                )
-            )
-            if chord_interval_underflow:
-                chord_qc_warnings.append("chord_uncertainty_interval_below_numeric_resolution")
-                selected_chord_interval_underflow = True
-            # An unresolved scale interval cannot supply a trustworthy
-            # absolute uncertainty, even if floating point rounds it to zero.
-            chord_scale_uncertainty_m = (
-                chord_m * relative_scale_uncertainty
-                if relative_scale_uncertainty is not None
-                else None
-            )
-            if chord_interval_underflow:
-                chord_scale_uncertainty_m = None
+            chord_interval: list[float] | None = None
+            chord_scale_uncertainty_m: float | None = None
+            if relative_scale_uncertainty is not None:
+                uncertainty = Fraction(relative_scale_uncertainty)
+                lower = float(exact_chord * (1 - uncertainty))
+                upper = float(exact_chord * (1 + uncertainty))
+                if _scale_interval_unresolved(chord_m, relative_scale_uncertainty, lower, upper):
+                    chord_qc_warnings.append("chord_uncertainty_interval_below_numeric_resolution")
+                    selected_chord_interval_underflow = True
+                else:
+                    chord_interval = [lower, upper]
+                    chord_scale_uncertainty_m = float(exact_chord * uncertainty)
             # Reversing a chord does not make an independent measurement.
             unordered_pair = (min(pair), max(pair))
             repeated_pair = unordered_pair in seen_point_pairs
@@ -500,14 +505,7 @@ def measure_point_cloud_preview(
                         [coordinate * scale for coordinate in vertex] for vertex in endpoints
                     ],
                     "chord_distance_m": chord_m,
-                    "chord_distance_scale_interval_m": (
-                        [
-                            chord_m * (1 - relative_scale_uncertainty),
-                            chord_m * (1 + relative_scale_uncertainty),
-                        ]
-                        if relative_scale_uncertainty is not None and not chord_interval_underflow
-                        else None
-                    ),
+                    "chord_distance_scale_interval_m": chord_interval,
                     "scale_uncertainty_m": chord_scale_uncertainty_m,
                 }
             )
