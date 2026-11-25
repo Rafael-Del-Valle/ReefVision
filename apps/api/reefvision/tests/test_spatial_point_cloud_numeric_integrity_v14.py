@@ -835,3 +835,98 @@ def test_exact_affine_rank_does_not_round_almost_planar_source_to_flat() -> None
     assert result["source_affine_dimension"] == 3
     assert "source_point_cloud_affine_dimension_below_3" not in result["qc_warnings"]
     assert result["provenance"]["calibration_verified"] is False
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+@pytest.mark.parametrize(
+    ("first", "second", "scale"),
+    [(3.0, 3.0000000000000004, 0.1), (1e-20, 1.0000000001e-20, 1e-300)],
+)
+def test_unselected_locus_collapse_rejects_saved_workflow_artifacts(
+    client: TestClient, source_format: str, first: float, second: float, scale: float
+) -> None:
+    """A representable cloud extent must not mask distinct interior loci."""
+    points = [[first, 0.0, 0.0], [second, 0.0, 0.0], [10.0, 0.0, 0.0]]
+    assert first != second
+    assert first * scale == second * scale != 0.0
+    assert 10.0 * scale != first * scale
+    params: dict[str, Any] = {
+        "meters_per_unit": scale,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic coordinate resolution control; unverified",
+        "point_index_pairs": [[0, 2]],
+        "preserve_distinct_xyz_loci_in_preview": True,
+    }
+    if source_format == "xyz":
+        params["points"] = points
+    else:
+        params["ply_text"] = (
+            "ply\nformat ascii 1.0\nelement vertex 3\n"
+            "property double x\nproperty double y\nproperty double z\n"
+            f"end_header\n{first} 0 0\n{second} 0 0\n10 0 0\n"
+        )
+    with pytest.raises(ValueError, match="Distinct point-cloud loci collapse"):
+        measure_point_cloud_preview(
+            points=points,
+            meters_per_unit=scale,
+            calibration_method="ruler",
+            calibration_evidence=params["calibration_evidence"],
+            point_index_pairs=[[0, 2]],
+            preserve_distinct_xyz_loci_in_preview=True,
+        )
+
+    project_id = str(create_project(client, "Unselected calibrated locus collapse")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert standalone.status_code == 400, standalone.text
+    assert "Distinct point-cloud loci collapse" in standalone.json()["detail"]
+
+    graph = {
+        "graph_id": "unselected-calibrated-locus-collapse-v14",
+        "name": "Reject indistinguishable calibrated source loci",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert not process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "failed"
+        assert not any(
+            item["data_type"] == "point_cloud_measurement_preview"
+            for item in detail.json()["artifacts"]
+        )
+
+
+def test_genuine_repeat_acquisitions_survive_calibrated_locus_guard() -> None:
+    result = measure_point_cloud_preview(
+        points=[[3.0, 0.0, 0.0], [3.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
+        meters_per_unit=0.1,
+        calibration_method="ruler",
+        calibration_evidence="Synthetic repeated acquisition; unverified",
+        preserve_distinct_xyz_loci_in_preview=True,
+    )
+    assert len(result["preview_points_in_source_frame_m"]) == 3
+    assert result["preview_points_in_source_frame_m"][0] == (
+        result["preview_points_in_source_frame_m"][1]
+    )
+    assert result["provenance"]["calibration_verified"] is False
+    assert result["branch_length_m"] is None
+
