@@ -432,17 +432,13 @@ def measure_point_cloud_preview(
                 raise ValueError("Point pair requires two distinct in-range integer indices")
             selected_endpoint_indices.update(pair)
             endpoints = [vertices[pair[0]], vertices[pair[1]]]
-            varying_axes = [
-                axis for axis in range(3) if endpoints[0][axis] != endpoints[1][axis]
-            ]
+            varying_axes = [axis for axis in range(3) if endpoints[0][axis] != endpoints[1][axis]]
             # Axis-aligned chords have an exact rational source length. For
             # oblique chords retain the rounded Euclidean norm, but avoid
             # additional rounding before scale uncertainty is applied.
             if len(varying_axes) == 1:
                 axis = varying_axes[0]
-                source_distance = abs(
-                    Fraction(endpoints[1][axis]) - Fraction(endpoints[0][axis])
-                )
+                source_distance = abs(Fraction(endpoints[1][axis]) - Fraction(endpoints[0][axis]))
             else:
                 source_distance = Fraction(dist(*endpoints))
             exact_chord = source_distance * Fraction(scale)
