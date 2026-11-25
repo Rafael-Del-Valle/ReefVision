@@ -836,6 +836,7 @@ def test_exact_affine_rank_does_not_round_almost_planar_source_to_flat() -> None
     assert "source_point_cloud_affine_dimension_below_3" not in result["qc_warnings"]
     assert result["provenance"]["calibration_verified"] is False
 
+
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
 @pytest.mark.parametrize(
     ("first", "second", "scale"),
