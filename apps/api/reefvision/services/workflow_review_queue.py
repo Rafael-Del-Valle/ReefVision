@@ -378,6 +378,7 @@ def create_review_queue_workflow_artifact(
             for item in existing.items:
                 frozen_item = frozen_items_by_image_id[item.image_id]
                 class_ids = sorted(frozen_item.per_class_counts_json)
+                group_key = frozen_item.group_key
                 rare_class_presence = max(
                     (1.0 - class_counts[class_id] / max_class_count for class_id in class_ids),
                     default=0.0,
@@ -387,6 +388,10 @@ def create_review_queue_workflow_artifact(
                     or item.signal_values_json["rare_class_presence"] != rare_class_presence
                     or item.signal_values_json["count_disagreement"]
                     != float(frozen_item.annotation_count > 0)
+                    or item.signal_values_json["unreviewed_state"]
+                    != float(frozen_item.image_annotation_status != "reviewed")
+                    or item.signal_values_json["missing_group_metadata"]
+                    != float(not (group_key and group_key.strip()))
                 ):
                     raise ValidationError(
                         "QC review-queue frozen annotation evidence does not match manifest"
