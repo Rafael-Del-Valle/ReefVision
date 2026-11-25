@@ -549,13 +549,26 @@ def measure_point_cloud_preview(
     # zero-width uncertainty from limited floating-point resolution.
     diagonal_scale_interval_underflow = False
     diagonal_scale_interval: list[float] | None = None
+    diagonal_scale_uncertainty_m: float | None = None
     if relative_scale_uncertainty is not None:
-        lower = diagonal * (1 - relative_scale_uncertainty)
-        upper = diagonal * (1 + relative_scale_uncertainty)
+        # For a collinear axis-aligned cloud, the diagonal is exactly its
+        # single nonzero extent. Match the extent and selected-chord scale
+        # intervals without rounding the calibrated length a second time.
+        if sum(value > 0 for value in exact_dimensions) <= 1:
+            exact_diagonal = max(exact_dimensions)
+            uncertainty = Fraction(relative_scale_uncertainty)
+            lower = float(exact_diagonal * (1 - uncertainty))
+            upper = float(exact_diagonal * (1 + uncertainty))
+            absolute = float(exact_diagonal * uncertainty)
+        else:
+            lower = diagonal * (1 - relative_scale_uncertainty)
+            upper = diagonal * (1 + relative_scale_uncertainty)
+            absolute = diagonal * relative_scale_uncertainty
         if _scale_interval_unresolved(diagonal, relative_scale_uncertainty, lower, upper):
             diagonal_scale_interval_underflow = True
         else:
             diagonal_scale_interval = [lower, upper]
+            diagonal_scale_uncertainty_m = absolute
     # Keep all three calibrated extents exact through their product. Neither
     # rounded extents nor intermediate underflow should alter the envelope.
     # This is a bounding envelope, not an estimate of biological tissue volume.
@@ -1251,11 +1264,7 @@ def measure_point_cloud_preview(
             if relative_scale_uncertainty is not None and dimension_scale_intervals is not None
             else None
         ),
-        "axis_aligned_bounding_box_diagonal_scale_uncertainty_m": (
-            diagonal * relative_scale_uncertainty
-            if relative_scale_uncertainty is not None and not diagonal_scale_interval_underflow
-            else None
-        ),
+        "axis_aligned_bounding_box_diagonal_scale_uncertainty_m": diagonal_scale_uncertainty_m,
         "arithmetic_centroid_in_source_frame_m": centroid,
         "arithmetic_centroid_in_source_frame_scale_interval_m": coordinate_scale_intervals(
             exact_centroid
