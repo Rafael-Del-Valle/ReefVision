@@ -467,8 +467,7 @@ def test_representable_mixed_scale_envelope_not_lost_to_intermediate_underflow(
     expected = response.json()
     assert expected["axis_aligned_bounding_box_envelope_volume_m3"] == target
     assert (
-        expected["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"]
-        == target_interval
+        expected["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"] == target_interval
     )
     assert expected["qc_warnings"] == direct["qc_warnings"]
 
@@ -616,3 +615,90 @@ def test_quantized_subnormal_envelope_uncertainty_has_no_false_exact_interval(
     assert len(artifact["payload_sha256"]) == 64
     assert artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
     assert artifact["payload_json"]["provenance"]["calibration_verified"] is False
+
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+@pytest.mark.parametrize("uncertainty", [0.0, 0.1, 1.0])
+def test_axis_chord_rounds_only_after_calibration_and_uncertainty(
+    client: TestClient, source_format: str, uncertainty: float
+) -> None:
+    """An axis-aligned chord has the same scale interval as its measured extent."""
+    points = [[0.0, 2.0, 0.0], [3.0, 2.0, 0.0]]
+    geometry = (
+        {"points": points}
+        if source_format == "xyz"
+        else {
+            "ply_text": (
+                "ply\nformat ascii 1.0\nelement vertex 2\n"
+                "property double x\nproperty double y\nproperty double z\n"
+                "end_header\n0 2 0\n3 2 0\n"
+            )
+        }
+    )
+    params = {
+        **geometry,
+        "meters_per_unit": 0.1,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic chord; calibration unverified",
+        "relative_scale_uncertainty": uncertainty,
+        "point_index_pairs": [[0, 1], [1, 0]],
+    }
+    with localcontext() as context:
+        context.prec = 120
+        exact_length = Decimal(3) * Decimal.from_float(0.1)
+        u = Decimal.from_float(uncertainty)
+        nominal = float(exact_length)
+        bounds = [float(exact_length * (1 - u)), float(exact_length * (1 + u))]
+        absolute = float(exact_length * u)
+    project_id = str(create_project(client, f"Chord rounding {source_format}")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    for chord in expected["selected_point_chords"]:
+        assert chord["chord_distance_m"] == nominal
+        assert chord["chord_distance_scale_interval_m"] == bounds
+        assert chord["scale_uncertainty_m"] == absolute
+    assert expected["axis_aligned_dimensions_m"][0] == nominal
+    assert expected["branch_length_m"] is None
+    assert expected["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": f"axis-chord-rounding-{source_format}",
+        "name": "Axis-aligned chord uncertainty",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        )
+        assert artifact["payload_json"] == expected
+        assert len(artifact["payload_sha256"]) == 64
+        hashes.append(artifact["payload_sha256"])
+    assert hashes[0] == hashes[1]
