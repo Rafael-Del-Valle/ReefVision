@@ -2228,3 +2228,18 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
         assert len(artifact["payload_sha256"]) == 64
         hashes.append(artifact["payload_sha256"])
     assert hashes[0] == hashes[1]
+
+
+def test_shared_trace_pairs_count_distinct_edges_not_repeated_traversals() -> None:
+    params = {
+        **PARAMS,
+        "surface_path_vertex_pairs": None,
+        "surface_trace_vertex_paths": [[0, 1, 2, 1, 0], [2, 1, 0], [1, 0]],
+    }
+    result = measure_mesh_preview(**params)
+    assert result["surface_trace_shared_geometric_edge_pairs"] == [
+        {"trace_indices": [0, 1], "shared_distinct_geometric_edge_count": 2},
+        {"trace_indices": [0, 2], "shared_distinct_geometric_edge_count": 1},
+        {"trace_indices": [1, 2], "shared_distinct_geometric_edge_count": 1},
+    ]
+    assert "surface_traces_share_geometric_edges" in result["qc_warnings"]
