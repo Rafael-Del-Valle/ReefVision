@@ -2261,8 +2261,8 @@ def test_shared_trace_pairs_count_distinct_edges_not_repeated_traversals() -> No
     params = {
         **PARAMS,
         "surface_path_vertex_pairs": None,
-        "vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 0], [1, 0, 0]],
-        "faces": [[0, 1, 2], [2, 4, 3]],
+        "vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 0], [1, 0, 0], [1, -1, 0]],
+        "faces": [[0, 1, 2], [2, 4, 5], [4, 3, 5]],
         "surface_trace_vertex_paths": [[0, 1, 2, 4, 3], [2, 1, 0], [1, 0]],
     }
     result = measure_mesh_preview(**params)
@@ -2273,5 +2273,5 @@ def test_shared_trace_pairs_count_distinct_edges_not_repeated_traversals() -> No
     ]
     assert "surface_traces_share_geometric_edges" in result["qc_warnings"]
     union = result["surface_trace_exact_edge_union"]
-    assert union["distinct_nonzero_edge_count"] == 3
-    assert union["source_length_mesh_units"] == pytest.approx(2 + sqrt(2))
+    assert union["distinct_nonzero_edge_count"] == 2
+    assert union["source_length_mesh_units"] == pytest.approx(1 + sqrt(2))
