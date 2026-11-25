@@ -16,6 +16,7 @@ import json
 import sqlite3
 import sys
 import warnings
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,25 @@ def _digest(path: Path) -> str:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             hash_value.update(chunk)
     return hash_value.hexdigest()
+
+
+def _audit_runtime() -> dict[str, Any]:
+    """Identify the verifier and decoding environment used for this evidence."""
+    import cv2
+    import numpy as np
+
+    return {
+        "auditor_source_sha256": _digest(Path(__file__).resolve(strict=True)),
+        "python_version": sys.version.split()[0],
+        "sqlite_version": sqlite3.sqlite_version,
+        "alembic_version": version("alembic"),
+        "sqlalchemy_version": version("SQLAlchemy"),
+        "numpy_version": np.__version__,
+        "opencv_version": cv2.__version__,
+        "opencv_build_sha256": hashlib.sha256(
+            cv2.getBuildInformation().encode("utf-8")
+        ).hexdigest(),
+    }
 
 
 def _managed_file(root: Path, value: str) -> Path:
@@ -1013,6 +1033,7 @@ def inspect(
                 "verified_database_alembic_revision": database_revision,
                 "source_migration_count": migration_count,
                 "source_migration_lineage_sha256": migration_sha256,
+                "audit_runtime": _audit_runtime(),
                 "project_id": run.project_id,
                 "workflow_run_id": run.id,
                 "workflow_job_id": parent_job.id,
