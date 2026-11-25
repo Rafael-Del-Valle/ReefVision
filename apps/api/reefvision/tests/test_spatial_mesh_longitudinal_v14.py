@@ -3683,12 +3683,12 @@ def test_registered_centroid_caller_bounds_survive_saved_workflow(
     ]
     for actual, reference in zip(axis_intervals, expected_axis_intervals, strict=True):
         assert actual == pytest.approx(reference, rel=1e-15, abs=0.0)
-    assert expected["registration_rotation_angle_degrees"] == pytest.approx(
-        90.0 if rotate else 0.0
-    )
-    assert expected["provenance"]["registration_evidence"]["source_to_target_transform_m"] == (
-        transform
-    )
+    expected_angle = 90.0 if rotate else 0.0
+    assert expected["registration_rotation_angle_degrees"] == pytest.approx(expected_angle)
+    preserved_transform = expected["provenance"]["registration_evidence"][
+        "source_to_target_transform_m"
+    ]
+    assert preserved_transform == transform
     assert expected["provenance"]["coordinate_registration_verified"] is False
     assert expected["provenance"]["specimen_identity_verified"] is False
     assert (
