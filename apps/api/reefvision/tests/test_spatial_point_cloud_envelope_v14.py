@@ -916,3 +916,110 @@ def test_centroid_offsets_survive_large_common_origin(
         assert len(artifact["payload_sha256"]) == 64
         hashes.append(artifact["payload_sha256"])
     assert hashes[0] == hashes[1]
+
+
+@pytest.mark.parametrize("uncertainty", [None, 0.0, 0.1])
+@pytest.mark.parametrize(("source_format", "sign"), [("xyz", 1), ("ply", -1)])
+def test_subnormal_centroid_is_not_exact_zero(
+    client: TestClient, source_format: str, sign: int, uncertainty: float | None
+) -> None:
+    """Representable points can yield nonzero centroids below float resolution."""
+    points = [[0, 0, 0] for _ in range(513)]
+    points[511][0] = sign
+    geometry = (
+        {"points": points}
+        if source_format == "xyz"
+        else {
+            "ply_text": (
+                "ply\nformat ascii 1.0\nelement vertex 513\n"
+                "property double x\nproperty double y\nproperty double z\n"
+                "end_header\n" + "".join(f"{point[0]} 0 0\n" for point in points)
+            )
+        }
+    )
+    params = {
+        **geometry,
+        "meters_per_unit": 5e-324,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic subnormal centroid; calibration unverified",
+        "relative_scale_uncertainty": uncertainty,
+    }
+    # Independent oracle: the source row centroid is nonzero, the unique
+    # centroid is half a subnormal, and the display omits the one nonzero row.
+    with localcontext() as context:
+        context.prec = 1600
+        source = Decimal.from_float(5e-324) * sign / 513
+        unique = Decimal.from_float(5e-324) * sign / 2
+        assert source != 0 and float(source) == 0.0
+        assert unique != 0 and float(unique) == 0.0
+        assert unique != source and float(unique - source) == 0.0
+    project_id = str(create_project(client, f"Subnormal centroid {source_format}")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    assert expected["axis_aligned_dimensions_m"] == [5e-324, 0.0, 0.0]
+    assert expected["preview_vs_source_row_centroid_separation_m"] == 0.0
+    assert expected["row_vs_unique_coordinate_centroid_separation_m"] == 0.0
+    assert "centroid_nominal_below_numeric_resolution" in expected["qc_warnings"]
+    if uncertainty is not None:
+        for prefix in ("arithmetic_centroid", "unique_coordinate_centroid"):
+            assert expected[f"{prefix}_in_source_frame_scale_interval_m"] == [
+                None,
+                [0.0, 0.0],
+                [0.0, 0.0],
+            ]
+        assert expected["preview_row_centroid_in_source_frame_scale_interval_m"] == [
+            [0.0, 0.0],
+            [0.0, 0.0],
+            [0.0, 0.0],
+        ]
+        assert expected["preview_minus_source_row_centroid_offset_scale_interval_m"] == [
+            None,
+            [0.0, 0.0],
+            [0.0, 0.0],
+        ]
+    assert expected["preview_vs_source_row_centroid_separation_scale_interval_m"] is None
+    assert expected["row_vs_unique_coordinate_centroid_separation_scale_interval_m"] is None
+    assert expected["branch_length_m"] is None
+    assert expected["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": f"subnormal-centroid-{source_format}",
+        "name": "Centroid below numeric resolution",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        )
+        assert artifact["payload_json"] == expected
+        assert len(artifact["payload_sha256"]) == 64
+        hashes.append(artifact["payload_sha256"])
+    assert hashes[0] == hashes[1]
