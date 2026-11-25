@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal, localcontext
 from typing import cast
 
 import pytest
@@ -401,8 +402,9 @@ def test_positive_chord_lower_interval_underflow_is_unresolved_in_saved_workflow
 
 
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
+@pytest.mark.parametrize("uncertainty", [0.0, 0.1, 1.0])
 def test_representable_mixed_scale_envelope_not_lost_to_intermediate_underflow(
-    client: TestClient, source_format: str
+    client: TestClient, source_format: str, uncertainty: float
 ) -> None:
     """Small axes and a large third axis yield a representable positive envelope."""
     points = [[0.0, 0.0, 0.0], [1e-170, 1e-155, 1e9]]
@@ -412,13 +414,26 @@ def test_representable_mixed_scale_envelope_not_lost_to_intermediate_underflow(
         meters_per_unit=1.0,
         calibration_method="ruler",
         calibration_evidence="Synthetic mixed-scale envelope; unverified",
-        relative_scale_uncertainty=0.1,
+        relative_scale_uncertainty=uncertainty,
     )
     volume = direct["axis_aligned_bounding_box_envelope_volume_m3"]
     assert volume is not None and volume > 0.0
-    assert volume == pytest.approx(1e-316, rel=1e-6, abs=0)
+    # Independent oracle: round each final value only once. Deriving the
+    # bounds from the already rounded subnormal nominal volume is incorrect.
+    with localcontext() as context:
+        context.prec = 1600
+        exact_volume = Decimal(1)
+        for coordinate in points[1]:
+            exact_volume *= Decimal.from_float(coordinate)
+        exact_uncertainty = Decimal.from_float(uncertainty)
+        target = float(exact_volume)
+        target_interval = [
+            float(exact_volume * (1 - exact_uncertainty) ** 3),
+            float(exact_volume * (1 + exact_uncertainty) ** 3),
+        ]
+    assert volume == target
     interval = direct["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"]
-    assert interval == pytest.approx([volume * 0.9**3, volume * 1.1**3], abs=0)
+    assert interval == target_interval
     assert "envelope_volume_below_numeric_resolution" not in direct["qc_warnings"]
     assert "envelope_uncertainty_interval_below_numeric_resolution" not in direct["qc_warnings"]
     assert direct["surface_area_m2"] is None
@@ -441,14 +456,15 @@ def test_representable_mixed_scale_envelope_not_lost_to_intermediate_underflow(
         "meters_per_unit": 1.0,
         "calibration_method": "ruler",
         "calibration_evidence": "Synthetic mixed-scale envelope; unverified",
-        "relative_scale_uncertainty": 0.1,
+        "relative_scale_uncertainty": uncertainty,
     }
     project_id = str(create_project(client, f"Mixed-scale envelope {source_format}")["id"])
     base = f"/api/v1/projects/{project_id}"
     response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
     assert response.status_code == 200, response.text
     expected = response.json()
-    assert expected["axis_aligned_bounding_box_envelope_volume_m3"] == volume
+    assert expected["axis_aligned_bounding_box_envelope_volume_m3"] == target
+    assert expected["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"] == target_interval
     assert expected["qc_warnings"] == direct["qc_warnings"]
 
     graph = {
@@ -473,24 +489,28 @@ def test_representable_mixed_scale_envelope_not_lost_to_intermediate_underflow(
     assert plan.json()["executable"] is True
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
-    assert run.status_code == 202, run.text
-    app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    )
-    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
-    assert detail.status_code == 200, detail.text
-    assert detail.json()["run"]["status"] == "succeeded"
-    artifact = next(
-        item
-        for item in detail.json()["artifacts"]
-        if item["data_type"] == "point_cloud_measurement_preview"
-    )
-    assert artifact["payload_json"] == expected
-    assert len(artifact["payload_sha256"]) == 64
-    assert artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
-    assert artifact["payload_json"]["provenance"]["calibration_verified"] is False
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        )
+        assert artifact["payload_json"] == expected
+        assert len(artifact["payload_sha256"]) == 64
+        assert artifact["payload_json"]["measurement_status"] == "caller_supplied_unverified"
+        assert artifact["payload_json"]["provenance"]["calibration_verified"] is False
+        hashes.append(artifact["payload_sha256"])
+    assert hashes[0] == hashes[1]
 
 
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
