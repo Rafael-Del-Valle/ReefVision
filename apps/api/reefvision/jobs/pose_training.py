@@ -1098,6 +1098,27 @@ def process_pose_training_job(
                 raise ValidationError(
                     "Pose training requires random or registered_model initialization"
                 )
+            # The generic resolver can prefer an asset ID over the separately
+            # stored seed ID. For sealed workflow jobs, bind both to the frozen
+            # initialization snapshot before resolving any checkpoint.
+            if sealed_digest is not None:
+                seed_id = run.initial_checkpoint_model_id
+                registered_seed = run.initial_checkpoint_source == "registered_model"
+                expected_asset = (
+                    f"registered_model:{seed_id}"
+                    if registered_seed
+                    else f"builtin_architecture:{run.architecture}"
+                )
+                if (
+                    (registered_seed and (not seed_id or not run.resolved_model_checksum))
+                    or (not registered_seed and run.resolved_model_checksum is not None)
+                    or run.resolved_model_asset_id != expected_asset
+                    or snapshot.get("initialization_mode")
+                    != ("registered_model" if registered_seed else "random")
+                    or snapshot.get("seed_model_id") != seed_id
+                    or snapshot.get("seed_model_sha256") != run.resolved_model_checksum
+                ):
+                    raise ValidationError("Queued pose training frozen initialization lineage changed")
             checkpoint_source = _resolve_model_source(settings, session, run)
             if run.initial_checkpoint_model_id:
                 # Recheck schema and checksum at execution, after any queue delay.
