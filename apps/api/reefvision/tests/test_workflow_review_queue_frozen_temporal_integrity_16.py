@@ -66,6 +66,7 @@ def test_resigned_v3_frozen_snapshot_rejects_invented_temporal_signal(signal_id:
         "missing_group_metadata",
         "incomplete_provenance",
         "boolean_weight",
+        "v2_boolean_weight",
         "null_scoring_digest",
         "null_item_digest",
         "null_version_marker",
@@ -178,12 +179,27 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
             assert standalone_queue.input_checksums_json[digest_key] is None
             with pytest.raises(ValidationError, match="snapshot failed integrity"):
                 validate_saved_queue_snapshot(standalone_queue, standalone_queue.items)
-        elif signal_id == "boolean_weight":
+        elif signal_id in {"boolean_weight", "v2_boolean_weight"}:
             assert item.weights_json["recent_import"] == 0.0
-            item.weights_json = {**item.weights_json, "recent_import": False}
-            flag_modified(item, "weights_json")
             standalone_queue = session.get(ReviewQueue, standalone.json()["id"])
             assert standalone_queue is not None and len(standalone_queue.items) == 1
+            if signal_id == "v2_boolean_weight":
+                # Establish valid historical v2 evidence before the substitution.
+                for legacy_queue in (standalone_queue, queue):
+                    legacy_queue.input_checksums_json = {
+                        **legacy_queue.input_checksums_json,
+                        "integrity_schema_version": "qc-review-queue-v2",
+                        "scoring_provenance_sha256": canonical_json_sha256(
+                            {
+                                "formula_id": legacy_queue.formula_id,
+                                "formula_version": legacy_queue.formula_version,
+                                "configuration": legacy_queue.configuration_json,
+                            }
+                        ),
+                    }
+                    validate_saved_queue_snapshot(legacy_queue, legacy_queue.items)
+            item.weights_json = {**item.weights_json, "recent_import": False}
+            flag_modified(item, "weights_json")
             standalone_row = standalone_queue.items[0]
             standalone_row.weights_json = {**standalone_row.weights_json, "recent_import": False}
             flag_modified(standalone_row, "weights_json")
