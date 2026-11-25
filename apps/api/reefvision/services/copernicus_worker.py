@@ -48,6 +48,13 @@ def read_dataset(request: dict[str, Any], username: str, password: str) -> dict[
         # zigzag coordinates can masquerade as regular spacing after abs().
         for name in required:
             coordinates = dataset.coords[name].values
+            # Reject nonphysical coordinate types before float conversion can
+            # silently turn booleans into numbers or discard imaginary parts.
+            if name == "time":
+                if coordinates.dtype.kind != "M":
+                    raise ValueError("Copernicus time coordinates must be decoded datetimes")
+            elif coordinates.dtype.kind not in "iuf":
+                raise ValueError("Copernicus spatial coordinates must be real numbers")
             if not numpy.isfinite(coordinates).all():
                 raise ValueError("Non-finite Copernicus grid coordinate")
             if not (
