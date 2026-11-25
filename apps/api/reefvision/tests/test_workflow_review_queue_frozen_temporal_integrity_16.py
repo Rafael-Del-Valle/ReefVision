@@ -58,6 +58,8 @@ def test_resigned_v3_frozen_snapshot_rejects_invented_temporal_signal(signal_id:
         "class_reference",
         "rare_class_presence",
         "count_disagreement_endpoint",
+        "unreviewed_state",
+        "missing_group_metadata",
     ],
 )
 def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
@@ -71,6 +73,8 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
         "stale_review_state": 0.0,
         "count_disagreement": 0.0,
         "rare_class_presence": 0.0,
+        "unreviewed_state": 0.0,
+        "missing_group_metadata": 0.0,
     }
     standalone = client.post(
         f"/api/v1/dataset-versions/{version_id}/review-queues",
@@ -94,8 +98,11 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
         assert item["signal_values_json"]["stale_review_state"] == 0.0
         assert item["signal_values_json"]["count_disagreement"] == 1.0
         assert item["signal_values_json"]["rare_class_presence"] == 0.0
+        assert item["signal_values_json"]["unreviewed_state"] == 0.0
+        assert item["signal_values_json"]["missing_group_metadata"] in (0.0, 1.0)
         assert len(item["label_class_ids_json"]) == 1
         assert item["review_state"] == "pending"
+    assert workflow_item["signal_values_json"] == standalone_item["signal_values_json"]
     assert workflow_item["score"] == standalone_item["score"]
     assert workflow_item["input_checksum"] == standalone_item["input_checksum"]
 
@@ -129,6 +136,8 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
         else:
             target = "count_disagreement" if signal_id == "count_disagreement_endpoint" else signal_id
             value = 0.0 if signal_id == "count_disagreement_endpoint" else 0.5
+            if signal_id in {"unreviewed_state", "missing_group_metadata"}:
+                value = 1.0 - item.signal_values_json[target]
             assert item.weights_json[target] == 0.0
             item.signal_values_json = {**item.signal_values_json, target: value}
             item.normalized_signals_json = {**item.normalized_signals_json, target: value}
@@ -151,7 +160,13 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
         }
         inputs = {"project": [project_artifact], "dataset": [dataset_artifact]}
         expected_error = "snapshot failed integrity"
-        if signal_id in {"class_reference", "rare_class_presence", "count_disagreement_endpoint"}:
+        if signal_id in {
+            "class_reference",
+            "rare_class_presence",
+            "count_disagreement_endpoint",
+            "unreviewed_state",
+            "missing_group_metadata",
+        }:
             # All internal score and evidence checks still pass. Only the
             # independent frozen annotation census reveals this substitution.
             validate_saved_queue_snapshot(queue, queue.items)
