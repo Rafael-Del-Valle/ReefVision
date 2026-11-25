@@ -1059,9 +1059,33 @@ def main() -> int:
     parser.add_argument(
         "--data-dir", type=Path, required=True, help="Local ReefVision data root"
     )
+    parser.add_argument(
+        "--require-registered-seed",
+        action="store_true",
+        help="Fail unless the saved training run used verified local registered weights",
+    )
+    parser.add_argument(
+        "--require-independent-validation",
+        action="store_true",
+        help="Fail unless a separate frozen validation dataset was verified",
+    )
     args = parser.parse_args()
     try:
         evidence = inspect(args.db, args.run_id, args.data_dir)
+        if args.require_registered_seed:
+            _require(
+                bool(evidence["seed_model_id"]),
+                "Registered-model retraining acceptance requires a verified local seed",
+            )
+        if args.require_independent_validation:
+            _require(
+                evidence["validation_mode"] == "separate_frozen_pose_dataset",
+                "Independent-validation acceptance requires a separate frozen holdout",
+            )
+        evidence["required_acceptance_checks"] = {
+            "registered_seed": args.require_registered_seed,
+            "independent_validation": args.require_independent_validation,
+        }
     except Exception as exc:
         # A failed scientific integrity check (including domain/SQLAlchemy
         # exceptions) must never be emitted as a passing evidence record.
