@@ -627,9 +627,9 @@ def test_copernicus_cache_freshness_does_not_mutate_scientific_records(
         return deepcopy(raw)
 
     with client.app.state.session_factory() as session:
-        cached = CopernicusEnvironmentService(
-            session, test_settings, fetch=fetch, now=now
-        ).acquire(project["id"], request())
+        cached = CopernicusEnvironmentService(session, test_settings, fetch=fetch, now=now).acquire(
+            project["id"], request()
+        )
     with client.app.state.session_factory() as session:
         reused = CopernicusEnvironmentService(
             session, test_settings, fetch=fetch, now=now + elapsed
