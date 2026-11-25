@@ -12,6 +12,7 @@ from pydantic import ValidationError as SchemaError
 
 from reefvision.domain.errors import ValidationError
 from reefvision.schemas.copernicus import CopernicusRequest
+from reefvision.schemas.environmental_context import EnvironmentalLookup
 from reefvision.services.copernicus_environment import CopernicusEnvironmentService
 from reefvision.services.copernicus_worker import read_dataset
 from reefvision.tests.test_annotations import create_project
@@ -646,6 +647,57 @@ def test_copernicus_cache_freshness_does_not_mutate_scientific_records(
     ]
     assert all(item.provenance.acquired_at == now for item in reused.items)
     assert all(item.qc == "unassessed" for item in reused.items)
+
+
+def test_changed_copernicus_refresh_preserves_history_and_excludes_superseded_values(
+    client, test_settings, monkeypatch
+):
+    """A refreshed model snapshot must not double-count superseded environmental values."""
+    project = create_project(client)
+    original = raw_fixture(monkeypatch)
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    later = now + timedelta(days=2)
+    with client.app.state.session_factory() as session:
+        cached = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: deepcopy(original), now=now
+        ).acquire(project["id"], request())
+
+    changed = deepcopy(original)
+    changed["samples"][0]["value"] = 6.0
+    with client.app.state.session_factory() as session:
+        service = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: changed, now=later
+        )
+        refreshed = service.acquire(project["id"], request(refresh=True))
+        lookup = service.environment.lookup(
+            project["id"],
+            EnvironmentalLookup(
+                variable="current_eastward_velocity",
+                location={"latitude": 32.5, "longitude": -79.5},
+                observed_at=datetime(2026, 4, 3, tzinfo=UTC),
+                max_distance_m=0,
+                max_time_delta_s=0,
+                source_kinds=["modeled"],
+            ),
+        )
+    assert len(refreshed.items) == 4
+    assert all(item.environmental_snapshot_current is True for item in refreshed.items)
+    assert len(lookup.matches) == 1
+    assert lookup.matches[0].record.normalized_value == 6.0
+    assert lookup.matches[0].record.qc == "unassessed"
+
+    response = client.get(f"/api/v1/projects/{project['id']}/scientific-records")
+    assert response.status_code == 200, response.text
+    assert response.json()["total"] == 8
+    records = {item["id"]: item for item in response.json()["items"]}
+    for item in cached.items:
+        historical = records[str(item.id)]
+        assert historical["environmental_snapshot_current"] is False
+        assert historical["content_sha256"] == item.content_sha256
+        assert historical["normalized_value"] == item.normalized_value
+    assert {str(item.id) for item in refreshed.items}.isdisjoint(
+        str(item.id) for item in cached.items
+    )
 
 
 def test_missing_copernicus_configuration_fails_without_leaking_secrets(client):
