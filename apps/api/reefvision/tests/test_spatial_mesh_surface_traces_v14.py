@@ -2163,10 +2163,10 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
     assert (warning in direct["qc_warnings"]) is shared
     traces = direct["surface_edge_traces"]
     assert [trace["length_m"] for trace in traces] == pytest.approx(expected_lengths)
+    assert [trace["vertex_indices"] for trace in traces] == paths
     for trace, length in zip(traces, expected_lengths, strict=True):
-        assert trace["length_scale_only_interval_m"] == pytest.approx(
-            [length * 0.9, length * 1.1]
-        )
+        expected_interval = [length * 0.9, length * 1.1]
+        assert trace["length_scale_only_interval_m"] == pytest.approx(expected_interval)
         assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
         assert trace["human_review_verified"] is False
 
