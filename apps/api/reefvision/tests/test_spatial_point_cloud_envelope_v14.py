@@ -716,3 +716,91 @@ def test_axis_chord_rounds_only_after_calibration_and_uncertainty(
         assert len(artifact["payload_sha256"]) == 64
         hashes.append(artifact["payload_sha256"])
     assert hashes[0] == hashes[1]
+
+
+@pytest.mark.parametrize("source_format", ["xyz", "ply"])
+@pytest.mark.parametrize("uncertainty", [0.0, 0.1, 1.0])
+def test_calibrated_centroid_preserves_cancellation_and_signed_scale(
+    client: TestClient, source_format: str, uncertainty: float
+) -> None:
+    """Calibrating individual rows must not create a false centroid offset."""
+    points = [[1.0, -2.0, 1.0], [2.0, -2.0, 2.0], [-3.0, -2.0, 2.0]]
+    geometry = (
+        {"points": points}
+        if source_format == "xyz"
+        else {
+            "ply_text": (
+                "ply\nformat ascii 1.0\nelement vertex 3\n"
+                "property double x\nproperty double y\nproperty double z\n"
+                "end_header\n1 -2 1\n2 -2 2\n-3 -2 2\n"
+            )
+        }
+    )
+    params = {
+        **geometry,
+        "meters_per_unit": 0.1,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic centroid; calibration unverified",
+        "relative_scale_uncertainty": uncertainty,
+    }
+    with localcontext() as context:
+        context.prec = 120
+        scale = Decimal.from_float(0.1)
+        u = Decimal.from_float(uncertainty)
+        coordinates = [Decimal(0), -2 * scale, 5 * scale / 3]
+        nominal = [float(value) for value in coordinates]
+        intervals = [
+            sorted([float(value * (1 - u)), float(value * (1 + u))])
+            for value in coordinates
+        ]
+    project_id = str(create_project(client, f"Centroid cancellation {source_format}")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    for prefix in ("arithmetic_centroid", "unique_coordinate_centroid", "preview_row_centroid"):
+        assert expected[f"{prefix}_in_source_frame_m"] == nominal
+        assert expected[f"{prefix}_in_source_frame_scale_interval_m"] == intervals
+    assert expected["preview_minus_source_row_centroid_offset_m"] == [0.0, 0.0, 0.0]
+    assert expected["branch_length_m"] is None
+    assert expected["provenance"]["calibration_verified"] is False
+
+    graph = {
+        "graph_id": f"centroid-cancellation-{source_format}",
+        "name": "Exact calibrated centroid cancellation",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    hashes: list[str] = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        )
+        assert artifact["payload_json"] == expected
+        assert len(artifact["payload_sha256"]) == 64
+        hashes.append(artifact["payload_sha256"])
+    assert hashes[0] == hashes[1]
