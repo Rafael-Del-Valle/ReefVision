@@ -45,8 +45,11 @@ jobs:
           export REEFVISION_DATA_DIR="$(mktemp -d "$RUNNER_TEMP/reefvision-pose-migration.XXXXXX")"
           # Pin the scratch database explicitly; never use an inherited application DB URL.
           export REEFVISION_DATABASE_URL="sqlite:///$REEFVISION_DATA_DIR/reefvision.db"
+          export MIGRATION_EVIDENCE="$REEFVISION_DATA_DIR/migration-evidence.jsonl"
+          echo "MIGRATION_EVIDENCE=$MIGRATION_EVIDENCE" >> "$GITHUB_ENV"
           verify_revision() {
-            python - "$1" <<'PY'
+            python - "$1" "$2" <<'PY'
+          import json
           import os
           import sqlite3
           import sys
@@ -55,7 +58,7 @@ jobs:
           from alembic.config import Config
           from alembic.script import ScriptDirectory
 
-          expected = sys.argv[1]
+          stage, expected = sys.argv[1:3]
           if expected == "head":
               expected = ScriptDirectory.from_config(
                   Config("apps/api/alembic.ini")
@@ -67,15 +70,31 @@ jobs:
               integrity = conn.execute("PRAGMA quick_check").fetchall()
           assert revisions == [(expected,)], (expected, revisions)
           assert integrity == [("ok",)], integrity
+          evidence = {
+              "stage": stage,
+              "checkout_sha": os.environ["GITHUB_SHA"],
+              "expected_revision": expected,
+              "actual_revision": revisions[0][0],
+              "quick_check": integrity[0][0],
+          }
+          with Path(os.environ["MIGRATION_EVIDENCE"]).open("a", encoding="utf-8") as report:
+              report.write(json.dumps(evidence, sort_keys=True) + "\n")
           print(f"Verified scratch database revision {expected}; quick_check=ok")
           PY
           }
           python -m alembic -c apps/api/alembic.ini upgrade head
-          verify_revision head
+          verify_revision initial_upgrade head
           python -m alembic -c apps/api/alembic.ini downgrade 0030
-          verify_revision 0030
+          verify_revision downgrade 0030
           python -m alembic -c apps/api/alembic.ini upgrade head
-          verify_revision head
+          verify_revision final_upgrade head
+      - name: Retain scratch migration evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: pose-migration-evidence-${{ github.run_attempt }}
+          path: ${{ env.MIGRATION_EVIDENCE }}
+          if-no-files-found: error
+          retention-days: 7
 
   frontend-pose:
     runs-on: ubuntu-latest
