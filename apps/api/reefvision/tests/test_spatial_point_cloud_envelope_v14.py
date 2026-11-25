@@ -403,15 +403,16 @@ def test_positive_chord_lower_interval_underflow_is_unresolved_in_saved_workflow
 
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
 @pytest.mark.parametrize("uncertainty", [0.0, 0.1, 1.0])
+@pytest.mark.parametrize("scale", [1.0, 0.3])
 def test_representable_mixed_scale_envelope_not_lost_to_intermediate_underflow(
-    client: TestClient, source_format: str, uncertainty: float
+    client: TestClient, source_format: str, uncertainty: float, scale: float
 ) -> None:
     """Small axes and a large third axis yield a representable positive envelope."""
     points = [[0.0, 0.0, 0.0], [1e-170, 1e-155, 1e9]]
     assert (1e-170 * 1e-155) * 1e9 == 0.0
     direct = measure_point_cloud_preview(
         points=points,
-        meters_per_unit=1.0,
+        meters_per_unit=scale,
         calibration_method="ruler",
         calibration_evidence="Synthetic mixed-scale envelope; unverified",
         relative_scale_uncertainty=uncertainty,
@@ -425,6 +426,7 @@ def test_representable_mixed_scale_envelope_not_lost_to_intermediate_underflow(
         exact_volume = Decimal(1)
         for coordinate in points[1]:
             exact_volume *= Decimal.from_float(coordinate)
+        exact_volume *= Decimal.from_float(scale) ** 3
         exact_uncertainty = Decimal.from_float(uncertainty)
         target = float(exact_volume)
         target_interval = [
@@ -453,7 +455,7 @@ def test_representable_mixed_scale_envelope_not_lost_to_intermediate_underflow(
     )
     params = {
         **geometry,
-        "meters_per_unit": 1.0,
+        "meters_per_unit": scale,
         "calibration_method": "ruler",
         "calibration_evidence": "Synthetic mixed-scale envelope; unverified",
         "relative_scale_uncertainty": uncertainty,
@@ -464,7 +466,10 @@ def test_representable_mixed_scale_envelope_not_lost_to_intermediate_underflow(
     assert response.status_code == 200, response.text
     expected = response.json()
     assert expected["axis_aligned_bounding_box_envelope_volume_m3"] == target
-    assert expected["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"] == target_interval
+    assert (
+        expected["axis_aligned_bounding_box_envelope_volume_scale_interval_m3"]
+        == target_interval
+    )
     assert expected["qc_warnings"] == direct["qc_warnings"]
 
     graph = {
