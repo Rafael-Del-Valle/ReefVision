@@ -108,3 +108,16 @@ signals. Standalone generation and saved graph regression cover parity,
 re-signed class substitution, rare-class priority, an incorrect count-gap
 endpoint, refusal and rollback to pending researcher review. No new scoring
 version, migration or automatic biological approval is introduced.
+
+## Frozen review status and biological grouping (2026-11-25)
+
+The original image annotation status and biological group key are also part
+of the authenticated frozen manifest. A re-signed v3 saved queue cannot
+flip its binary unreviewed-state or missing-group priority while preserving
+its aggregate score, even when the researcher assigns zero weight to those
+signals. The replay checks use the same reviewed-status and Unicode-aware
+blank-group semantics as standalone generation, never mutable live image
+metadata or the queue's current researcher review decision. Two additional
+standalone/saved graph regressions compare raw signals, flip each binary flag,
+re-sign both the queue and output, require refusal, then roll back and replay
+the original pending-review evidence. Historical pre-v3 queues are unchanged.
