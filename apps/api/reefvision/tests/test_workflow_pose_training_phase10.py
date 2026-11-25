@@ -1109,6 +1109,7 @@ def test_pose_materialization_rejects_overridden_frozen_dataset_paths(
         ("snapshot_split", "frozen split manifest changed"),
         ("snapshot_schema", "frozen schema lineage changed"),
         ("resolved_asset", "frozen initialization lineage changed"),
+        ("architecture", "frozen architecture changed"),
         ("snapshot_seed", "frozen initialization lineage changed"),
     ),
 )
@@ -1163,6 +1164,12 @@ def test_pose_worker_checks_frozen_lineage_before_export(
                     run.dataset_manifest_sha256 = "0" * 64
                 elif tampered_field == "resolved_asset":
                     run.resolved_model_asset_id = "registered_model:unrelated-model"
+                elif tampered_field == "architecture":
+                    original = request["pose_training_architecture"]
+                    run.architecture = (
+                        "yolo11s-pose.yaml" if original == "yolo11n-pose.yaml" else "yolo11n-pose.yaml"
+                    )
+                    run.resolved_model_asset_id = f"builtin_architecture:{run.architecture}"
                 else:
                     snapshot = dict(run.draft_snapshot_json or {})
                     if tampered_field == "snapshot_split":
