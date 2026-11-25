@@ -138,3 +138,23 @@ Six direct ratio cases and an additional standalone/saved graph regression
 cover the new guard, including rejection of re-signed evidence at zero
 signal weight, rollback and replay of the original pending-review output.
 Historical pre-v3 queues and project-scoped scoring are unchanged.
+
+## Typed saved QC output identity (2026-11-25)
+
+The saved review-queue reference has integer observation counts, including
+its nested input-checksum inventory. Python mapping equality treats a
+Boolean or floating-point value equal to the corresponding integer. A
+self-consistently re-signed saved output could therefore substitute either
+for a genuine count. After verifying the saved artifact's own digest, the
+adapter now compares it to the canonical JSON SHA-256 of the reconstructed
+output. Key ordering is immaterial; JSON types are preserved at every depth.
+The existing schema, units, producer bindings, queue and reviewer status
+remain unchanged. No new workflow node or migration is required.
+
+Four disposable database regression configurations use an actual standalone
+frozen QC queue and saved executable graph, then re-sign Boolean or float
+counts at either the top level or inside the checksum inventory. Persist and
+reload the corruption, require rejection, roll back and retry the original
+pending-review evidence. Independent canonical JSON probes verify numeric
+type separation; full repository and installed Windows qualification remain
+release gates, not inferred from these probes.
