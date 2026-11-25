@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
@@ -156,17 +156,85 @@ def test_exact_tied_largest_gaps_preserve_row_support_and_disclose_ambiguity() -
     assert original["branch_length_m"] is None
 
 
-def test_positive_axis_gap_below_calibration_resolution_is_not_zero() -> None:
-    # All calibrated points and the full calibrated axis extent are nonzero;
-    # adjacent source-coordinate differences alone underflow after scaling.
-    points = [[1e-4 + index * 1e-20, 0.0, 0.0] for index in range(512)]
-    result = measure_point_cloud_preview(
-        points=points,
-        meters_per_unit=1e-304,
-        calibration_method="ruler",
-        calibration_evidence="Unphysical floating-point synthetic stress fixture",
-        relative_scale_uncertainty=0.1,
-    )
+def _assert_projected_gap_workflow_replay(
+    client: TestClient, params: dict[str, Any], direct: dict[str, Any]
+) -> None:
+    project_id = str(create_project(client, "Projected gap numeric resolution")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    response = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert response.status_code == 200, response.text
+    expected = response.json()
+    for key in (
+        "axis_largest_adjacent_coordinate_gaps",
+        "axis_aligned_dimensions_m",
+        "qc_warnings",
+    ):
+        assert expected[key] == direct[key]
+    graph = {
+        "graph_id": "projected-gap-numeric-resolution-v14",
+        "name": "Projected sampling gap numeric resolution",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-to-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    plan = client.post(f"{base}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["executable"] is True
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    hashes = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifacts = [
+            artifact
+            for artifact in detail.json()["artifacts"]
+            if artifact["data_type"] == "point_cloud_measurement_preview"
+        ]
+        assert len(artifacts) == 1
+        assert artifacts[0]["payload_json"] == expected
+        assert artifacts[0]["payload_json"]["measurement_status"] == "caller_supplied_unverified"
+        assert artifacts[0]["payload_json"]["provenance"]["calibration_verified"] is False
+        assert artifacts[0]["payload_json"]["branch_length_m"] is None
+        hashes.append(artifacts[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
+
+
+def test_positive_axis_gap_below_calibration_resolution_is_not_zero(
+    client: TestClient,
+) -> None:
+    # Distinct y coordinates keep the calibrated XYZ loci distinguishable.
+    # The x projection alone loses adjacent gaps; its full extent survives.
+    scale = 1e-304
+    points = [[1e-4 + index * 1e-20, float(index), 0.0] for index in range(512)]
+    assert len({tuple(value * scale for value in point) for point in points}) == len(points)
+    assert len({point[0] * scale for point in points}) < len({point[0] for point in points})
+    params: dict[str, Any] = {
+        "points": points,
+        "meters_per_unit": scale,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Unphysical floating-point synthetic stress fixture",
+        "relative_scale_uncertainty": 0.1,
+    }
+    result = measure_point_cloud_preview(**params)
     gap = result["axis_largest_adjacent_coordinate_gaps"]["x"]
     assert gap["largest_adjacent_source_gap_units"] > 0.0
     assert gap["calibrated_gap_m"] is None
@@ -175,6 +243,35 @@ def test_positive_axis_gap_below_calibration_resolution_is_not_zero() -> None:
     assert result["axis_aligned_dimensions_m"][0] > 0.0
     assert "axis_sampling_gap_below_numeric_resolution" in result["qc_warnings"]
     assert result["provenance"]["calibration_verified"] is False
+    _assert_projected_gap_workflow_replay(client, params, result)
+
+
+@pytest.mark.parametrize(
+    ("levels", "expected_gap_m", "expected_fraction"),
+    [
+        ([-1.0, 1e-16, 1.0], 0.10000000000000002, 0.5),
+        ([-1e-16, 0.0, 1.0], 0.1, 0.9999999999999999),
+    ],
+)
+def test_projected_gap_scale_and_span_avoid_intermediate_rounding(
+    client: TestClient,
+    levels: list[float],
+    expected_gap_m: float,
+    expected_fraction: float,
+) -> None:
+    params: dict[str, Any] = {
+        "points": [[value, 0.0, 0.0] for value in levels],
+        "meters_per_unit": 0.1,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic projected gap precision control; unverified",
+    }
+    result = measure_point_cloud_preview(**params)
+    gap = result["axis_largest_adjacent_coordinate_gaps"]["x"]
+    assert gap["calibrated_gap_m"] == expected_gap_m
+    assert gap["fraction_of_source_axis_span"] == expected_fraction
+    assert gap["largest_adjacent_source_gap_units"] == 1.0
+    assert gap["equally_largest_adjacent_gap_count"] == 1
+    _assert_projected_gap_workflow_replay(client, params, result)
 
 
 @pytest.mark.parametrize("source_format", ["xyz", "ply"])
