@@ -219,6 +219,11 @@ def test_saved_workflow_executes_and_reloads_persisted_metric_result(
         "mismatched_location",
         "mismatched_depth",
         "mismatched_dataset",
+        "mismatched_station",
+        "mismatched_depth_reference",
+        "unknown_shared_location",
+        "unknown_shared_depth",
+        "unknown_shared_dataset",
     ],
 )
 def test_workflow_metric_failure_is_persisted_without_result(
@@ -227,6 +232,16 @@ def test_workflow_metric_failure_is_persisted_without_result(
     project = create_project(client, f"Metric workflow {failure}")
     qc_by_failure = {"qc_rejected": "rejected", "qc_suspect": "suspect"}
     context_overrides: dict[str, object] = {}
+    shared_overrides: dict[str, object] = {}
+    if failure == "unknown_shared_location":
+        shared_overrides["location"] = None
+    elif failure == "unknown_shared_depth":
+        shared_overrides.update(depth_m=None, depth_reference=None)
+    elif failure == "unknown_shared_dataset":
+        shared_overrides["provenance"] = {
+            "source": "Reef survey",
+            "acquired_at": "2026-04-03T13:05:00Z",
+        }
     if failure == "mismatched_location":
         context_overrides["location"] = {"latitude": 25.1, "longitude": -80}
     elif failure == "mismatched_depth":
@@ -237,6 +252,15 @@ def test_workflow_metric_failure_is_persisted_without_result(
             "dataset_id": "different-survey",
             "acquired_at": "2026-04-03T13:05:00Z",
         }
+    elif failure == "mismatched_station":
+        context_overrides["provenance"] = {
+            "source": "Reef survey",
+            "dataset_id": "survey-2026",
+            "acquired_at": "2026-04-03T13:05:00Z",
+            "source_metadata": {"station_id": "station-b"},
+        }
+    elif failure == "mismatched_depth_reference":
+        context_overrides["depth_reference"] = "chart_datum"
     organisms, area = add_records(
         client,
         project["id"],
@@ -247,6 +271,7 @@ def test_workflow_metric_failure_is_persisted_without_result(
                 "count",
                 qc=qc_by_failure.get(failure, "unassessed"),
                 uncertainty={"value": 2, "kind": "standard_deviation"},
+                **shared_overrides,
             ),
             scientific_record(
                 "surveyed_area",
@@ -267,7 +292,7 @@ def test_workflow_metric_failure_is_persisted_without_result(
                         "bounded_uncertainty": "bound",
                     }.get(failure, "standard_deviation"),
                 },
-                **context_overrides,
+                **{**shared_overrides, **context_overrides},
             ),
         ],
     )
@@ -321,5 +346,14 @@ def test_workflow_metric_failure_is_persisted_without_result(
             assert "Division by zero" in (failed_node.error_message or "")
         if failure == "mismatched_observation_time":
             assert "exact observation time" in (failed_node.error_message or "")
-        if failure in {"mismatched_location", "mismatched_depth", "mismatched_dataset"}:
+        if failure in {
+            "mismatched_location",
+            "mismatched_depth",
+            "mismatched_dataset",
+            "mismatched_station",
+            "mismatched_depth_reference",
+            "unknown_shared_location",
+            "unknown_shared_depth",
+            "unknown_shared_dataset",
+        }:
             assert "explicit shared contextual identity" in (failed_node.error_message or "")
