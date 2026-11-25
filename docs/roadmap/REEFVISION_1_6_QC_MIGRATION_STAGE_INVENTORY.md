@@ -383,3 +383,28 @@ reproduced the invalid event acceptance despite a successful integrity
 check. Repository tests and exact-head CI remain unverified until run.
 Existing saved typed QC workflows and researcher approval are unchanged;
 this is a startup guard, not an additional workflow node.
+
+
+## 2026-11-24 — additional QC CHECK restrictions
+
+The independent 0038–0040 event migrations have exactly one named
+event-vocabulary CHECK; 0041 adds no CHECK to the bulk request registry.
+Desktop preflight previously checked the named event vocabulary but did
+not exclude an additional CHECK on either audit table. A constraint
+restricting the actor to an existing reviewer can pass integrity checks
+and reject subsequent legitimate reviews. SQLAlchemy reflection misses
+a CHECK followed by a SQL comment. Reuse the existing DDL tokenizer to
+reject extra CHECK clauses before writes, ignoring quoted text and
+comments. The original named-check validation remains in place.
+
+Twenty persisted regression configurations cover all four event stages
+and the 0041 registry, canonical controls, ordinary and named extra
+checks, and a comment-separated CHECK. Existing research and reviewer
+rows, schema, revision and foreign-key integrity must remain unchanged
+across repeated inspection. Ten independent disposable SQLite/SQLAlchemy
+probes reproduced the failure and tested the lexical guard, including
+comment-only negative controls. Full repository tests and exact-head CI
+remain unverified. No new migration or scientific workflow node is
+introduced; existing executable saved QC graphs, review gates and
+provenance remain unchanged. Release HOLD and independent biological
+and installed Windows validation requirements remain in force.
