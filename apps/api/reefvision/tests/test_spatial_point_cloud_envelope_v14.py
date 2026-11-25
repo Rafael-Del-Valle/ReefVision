@@ -750,8 +750,7 @@ def test_calibrated_centroid_preserves_cancellation_and_signed_scale(
         coordinates = [Decimal(0), -2 * scale, 5 * scale / 3]
         nominal = [float(value) for value in coordinates]
         intervals = [
-            sorted([float(value * (1 - u)), float(value * (1 + u))])
-            for value in coordinates
+            sorted([float(value * (1 - u)), float(value * (1 + u))]) for value in coordinates
         ]
     project_id = str(create_project(client, f"Centroid cancellation {source_format}")["id"])
     base = f"/api/v1/projects/{project_id}"
