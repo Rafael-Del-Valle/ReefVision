@@ -219,8 +219,8 @@ def test_worker_accepts_descending_and_irregular_monotonic_axes(monkeypatch, lat
 
 
 def test_worker_reports_true_spacing_for_descending_unsigned_depth(monkeypatch):
-    original = dataset().isel(depth=[0, 0, 0]).assign_coords(
-        depth=np.array([9, 5, 1], dtype=np.uint16)
+    original = (
+        dataset().isel(depth=[0, 0, 0]).assign_coords(depth=np.array([9, 5, 1], dtype=np.uint16))
     )
     monkeypatch.setitem(
         sys.modules,
