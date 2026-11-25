@@ -925,9 +925,88 @@ def test_genuine_repeat_acquisitions_survive_calibrated_locus_guard() -> None:
         preserve_distinct_xyz_loci_in_preview=True,
     )
     assert len(result["preview_points_in_source_frame_m"]) == 3
-    assert result["preview_points_in_source_frame_m"][0] == (
-        result["preview_points_in_source_frame_m"][1]
-    )
+    preview = result["preview_points_in_source_frame_m"]
+    assert preview[0] == preview[1]
     assert result["provenance"]["calibration_verified"] is False
     assert result["branch_length_m"] is None
 
+
+@pytest.mark.parametrize("middle", [-1e-20, 0.0, 1e-20])
+def test_exact_projected_gap_maxima_survive_workflow_replay(
+    client: TestClient, middle: float
+) -> None:
+    """Rounded gap magnitudes must not select the wrong boundary or invent ties."""
+    assert middle - (-1.0) == 1.0 - middle == 1.0
+    expected_bounds = [middle, 1.0] if middle < 0.0 else [-1.0, middle]
+    expected_count = 2 if middle == 0.0 else 1
+    params: dict[str, Any] = {
+        "points": [[-1.0, 0.0, 0.0], [middle, 0.0, 0.0], [1.0, 0.0, 0.0]],
+        "meters_per_unit": 1.0,
+        "calibration_method": "ruler",
+        "calibration_evidence": "Synthetic exact projected gap control; unverified",
+        "preserve_largest_axis_gap_boundary_loci_in_preview": True,
+    }
+    direct = measure_point_cloud_preview(**params)
+    gap = direct["axis_largest_adjacent_coordinate_gaps"]["x"]
+    assert gap["source_endpoint_values"] == expected_bounds
+    assert gap["equally_largest_adjacent_gap_count"] == expected_count
+    assert gap["largest_adjacent_source_gap_units"] == 1.0
+    coverage = direct["preview_largest_axis_gap_interval_coverage"]["x"]
+    assert coverage["total_intervals"] == expected_count
+    assert coverage["fully_displayed_intervals"] == expected_count
+    support = direct["preview_largest_axis_gap_boundary_locus_support"]["x"]
+    assert support["source_distinct_xyz_loci"] == expected_count + 1
+    assert support["preview_distinct_xyz_loci"] == expected_count + 1
+    warning = "axis_sampling_multiple_equally_largest_gaps"
+    assert (warning in direct["qc_warnings"]) is (middle == 0.0)
+
+    project_id = str(create_project(client, "Exact projected gap maxima")["id"])
+    base = f"/api/v1/projects/{project_id}"
+    standalone = client.post(f"{base}/spatial/point-cloud-preview", json=params)
+    assert standalone.status_code == 200, standalone.text
+    expected = standalone.json()
+    for key in (
+        "axis_largest_adjacent_coordinate_gaps",
+        "preview_largest_axis_gap_interval_coverage",
+        "preview_largest_axis_gap_boundary_locus_support",
+        "qc_warnings",
+    ):
+        assert expected[key] == direct[key]
+    graph = {
+        "graph_id": "exact-projected-gap-maxima-v14",
+        "name": "Exact projected gap boundary coverage",
+        "nodes": [
+            {"node_id": "project", "node_type": "project_source"},
+            {"node_id": "cloud", "node_type": "point_cloud_preview", "parameters": params},
+        ],
+        "edges": [
+            {
+                "edge_id": "project-cloud",
+                "source_node_id": "project",
+                "source_port_id": "project",
+                "target_node_id": "cloud",
+                "target_port_id": "project",
+            }
+        ],
+    }
+    saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
+    assert saved.status_code == 201, saved.text
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        app = cast(FastAPI, client.app)
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item["payload_json"]
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "point_cloud_measurement_preview"
+        )
+        assert all(artifact[key] == value for key, value in expected.items())
+        assert artifact["measurement_status"] == "caller_supplied_unverified"
+        assert artifact["provenance"]["calibration_verified"] is False
+        assert artifact["branch_length_m"] is None
