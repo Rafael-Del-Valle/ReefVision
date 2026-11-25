@@ -40,11 +40,14 @@ jobs:
           -q
       - name: Verify temporal pose migration roundtrip
         run: |
-          export REEFVISION_DATA_ROOT="$RUNNER_TEMP/reefvision-pose-migration"
-          mkdir -p "$REEFVISION_DATA_ROOT"
+          export REEFVISION_DATA_DIR="$(mktemp -d "$RUNNER_TEMP/reefvision-pose-migration.XXXXXX")"
+          # Pin the scratch database explicitly; never use an inherited application DB URL.
+          export REEFVISION_DATABASE_URL="sqlite:///$REEFVISION_DATA_DIR/reefvision.db"
           python -m alembic -c apps/api/alembic.ini upgrade head
+          test -f "$REEFVISION_DATA_DIR/reefvision.db"
           python -m alembic -c apps/api/alembic.ini downgrade 0030
           python -m alembic -c apps/api/alembic.ini upgrade head
+          test -f "$REEFVISION_DATA_DIR/reefvision.db"
 
   frontend-pose:
     runs-on: ubuntu-latest
