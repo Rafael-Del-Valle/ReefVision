@@ -239,3 +239,19 @@ a persisted standalone/saved-workflow v2 replay regression cover refusal,
 rollback and researcher-review preservation. Independent numerical and
 JSON-type controls passed (93 cases); full repository CI remains a separate
 gate. No migration, scientific formula, units, or model change.
+
+## Project-scoped split provenance (2026-11-25)
+
+The standalone project queue generator does not assign dataset split
+membership: its items have null split values and are summarized as
+unspecified. On saved v3 workflow replay, enforce this project-scope
+contract independently of the recomputed item digest and aggregate split
+counts. A live image cannot be relabeled as a held-out test observation.
+Frozen dataset queues retain their separate manifest-membership check,
+and historical v2 queues retain their prior compatibility contract.
+
+Regression coverage asserts standalone producer parity and rejects a
+persisted saved graph's rehashed test-split substitution, then restores
+the same queue, dimensionless priority and pending researcher review.
+No migration, scientific score, model, or biological annotation changes.
+Exact-head repository CI and installed Windows validation remain gates.
