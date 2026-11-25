@@ -392,7 +392,13 @@ def measure_point_cloud_preview(
     # the more specific selected-chord guard below.
     source_bounds_min = [min(p[axis] for p in vertices) for axis in range(3)]
     source_bounds_max = [max(p[axis] for p in vertices) for axis in range(3)]
-    dimensions = [(source_bounds_max[axis] - source_bounds_min[axis]) * scale for axis in range(3)]
+    # Subtraction can lose a small opposing coordinate before calibration.
+    # Preserve the imported binary coordinates through scaling, then round once.
+    exact_dimensions = [
+        (Fraction(source_bounds_max[axis]) - Fraction(source_bounds_min[axis])) * Fraction(scale)
+        for axis in range(3)
+    ]
+    dimensions = [float(dimension) for dimension in exact_dimensions]
     bounds_min = [value * scale for value in source_bounds_min]
     bounds_max = [value * scale for value in source_bounds_max]
     if any(
@@ -521,9 +527,10 @@ def measure_point_cloud_preview(
     dimension_scale_intervals: list[list[float] | None] | None = None
     if relative_scale_uncertainty is not None:
         dimension_scale_intervals = []
-        for dimension in dimensions:
-            lower = dimension * (1 - relative_scale_uncertainty)
-            upper = dimension * (1 + relative_scale_uncertainty)
+        dimension_uncertainty = Fraction(relative_scale_uncertainty)
+        for dimension, exact_dimension in zip(dimensions, exact_dimensions, strict=True):
+            lower = float(exact_dimension * (1 - dimension_uncertainty))
+            upper = float(exact_dimension * (1 + dimension_uncertainty))
             if _scale_interval_unresolved(dimension, relative_scale_uncertainty, lower, upper):
                 dimension_scale_interval_underflow = True
                 dimension_scale_intervals.append(None)
@@ -1221,8 +1228,8 @@ def measure_point_cloud_preview(
         # zero dimensions and zero caller uncertainty as zero.
         "axis_aligned_dimension_scale_uncertainty_m": (
             [
-                None if interval is None else value * relative_scale_uncertainty
-                for value, interval in zip(dimensions, dimension_scale_intervals, strict=True)
+                None if interval is None else float(value * Fraction(relative_scale_uncertainty))
+                for value, interval in zip(exact_dimensions, dimension_scale_intervals, strict=True)
             ]
             if relative_scale_uncertainty is not None and dimension_scale_intervals is not None
             else None
