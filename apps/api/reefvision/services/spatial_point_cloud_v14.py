@@ -661,6 +661,7 @@ def measure_point_cloud_preview(
     # three-dimensional region, missing coral tissue or biological branch gap.
     # Duplicated acquisition rows must not masquerade as extra coverage.
     axis_sampling_gaps: dict[str, dict[str, Any]] = {}
+    largest_gap_intervals: dict[str, list[tuple[float, float]]] = {}
     sampling_gap_nominal_underflow = False
     sampling_gap_interval_unresolved = False
     multiple_tied_largest_axis_gaps = False
@@ -678,21 +679,24 @@ def measure_point_cloud_preview(
             "calibrated_gap_m": None,
             "calibrated_gap_scale_interval_m": None,
         }
-        if len(levels) > 1:
-            # max() keeps the lower-coordinate interval when two gaps tie.
-            largest_index = max(
-                range(len(levels) - 1),
-                key=lambda index: levels[index + 1] - levels[index],
-            )
-            left = levels[largest_index]
-            right = levels[largest_index + 1]
-            gap = right - left
-            # Report exact source-coordinate ties instead of implying that
-            # the representative lower-coordinate interval is the only one.
-            # This does not imply empty 3D space or biological tissue loss.
-            tied_count = sum(
-                levels[index + 1] - levels[index] == gap for index in range(len(levels) - 1)
-            )
+        # Compare exact binary-float differences before rounding the reported
+        # distance. Otherwise unequal intervals can become artificial ties.
+        # Reuse the selected intervals for pinning and preview coverage.
+        intervals: list[tuple[float, float]] = []
+        max_exact_gap = Fraction(0)
+        for gap_left, gap_right in pairwise(levels):
+            exact_gap = Fraction(gap_right) - Fraction(gap_left)
+            if exact_gap > max_exact_gap:
+                max_exact_gap = exact_gap
+                intervals = [(gap_left, gap_right)]
+            elif exact_gap == max_exact_gap:
+                intervals.append((gap_left, gap_right))
+        largest_gap_intervals[label] = intervals
+        if intervals:
+            # The first exact maximum remains the lower-coordinate interval.
+            left, right = intervals[0]
+            gap = float(max_exact_gap)
+            tied_count = len(intervals)
             gap_details["equally_largest_adjacent_gap_count"] = tied_count
             if tied_count > 1:
                 multiple_tied_largest_axis_gaps = True
@@ -774,16 +778,11 @@ def measure_point_cloud_preview(
         or preserve_largest_axis_gap_boundary_loci_in_preview
     ):
         for axis, label in enumerate(("x", "y", "z")):
-            maximum_gap = axis_sampling_gaps[label]["largest_adjacent_source_gap_units"]
-            if maximum_gap is None:
-                continue
-            levels = sorted({vertex[axis] for vertex in vertices})
             boundary_levels = {
-                level
-                for lower, upper in pairwise(levels)
-                if upper - lower == maximum_gap
-                for level in (lower, upper)
+                level for interval in largest_gap_intervals[label] for level in interval
             }
+            if not boundary_levels:
+                continue
             first_index_per_level: dict[float, int] = {}
             first_index_per_locus: dict[tuple[float, float, float], int] = {}
             for index, vertex in enumerate(vertices):
@@ -945,18 +944,14 @@ def measure_point_cloud_preview(
     preview_largest_axis_gap_interval_coverage: dict[str, dict[str, int] | None] = {}
     preview_largest_axis_gap_boundary_locus_support: dict[str, dict[str, int | float] | None] = {}
     for axis, label in enumerate(("x", "y", "z")):
-        maximum_gap = axis_sampling_gaps[label]["largest_adjacent_source_gap_units"]
-        if maximum_gap is None:
+        if not largest_gap_intervals[label]:
             preview_largest_axis_gap_interval_coverage[label] = None
             preview_largest_axis_gap_boundary_locus_support[label] = None
             continue
-        source_levels = sorted({vertex[axis] for vertex in vertices})
         sampled_levels = {vertices[index][axis] for index in preview_indices}
         full = partial = hidden = 0
         largest_gap_boundary_levels: set[float] = set()
-        for lower, upper in pairwise(source_levels):
-            if upper - lower != maximum_gap:
-                continue
+        for lower, upper in largest_gap_intervals[label]:
             largest_gap_boundary_levels.update((lower, upper))
             visible_count = int(lower in sampled_levels) + int(upper in sampled_levels)
             if visible_count == 2:
