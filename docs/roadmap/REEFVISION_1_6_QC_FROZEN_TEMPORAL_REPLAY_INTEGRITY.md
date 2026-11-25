@@ -121,3 +121,20 @@ metadata or the queue's current researcher review decision. Two additional
 standalone/saved graph regressions compare raw signals, flip each binary flag,
 re-sign both the queue and output, require refusal, then roll back and replay
 the original pending-review evidence. Historical pre-v3 queues are unchanged.
+
+## Frozen assisted annotation provenance (2026-11-25)
+
+The v3 missing-provenance signal is the fraction of frozen detection
+annotations sourced from accepted predictions or assisted masks that lack
+nonempty provenance metadata. Human annotations and absent legacy source
+types do not enter this denominator. With no eligible detections the signal
+is zero; mask-only observations and later live predictions are not added
+to the original v3 formula. Saved retries independently recompute this
+ratio from the validated manifest, rather than trusting the saved signal
+and its re-signed score and artifact digests. This does not authenticate
+model provenance or imply that a researcher has accepted a QC queue.
+
+Six direct ratio cases and an additional standalone/saved graph regression
+cover the new guard, including rejection of re-signed evidence at zero
+signal weight, rollback and replay of the original pending-review output.
+Historical pre-v3 queues and project-scoped scoring are unchanged.
