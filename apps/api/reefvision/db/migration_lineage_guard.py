@@ -80,18 +80,32 @@ def _sqlite_stamp_has_check(ddl: str) -> bool:
     return any(token.group().upper() == "CHECK" for token in tokens)
 
 
-def _sqlite_has_explicit_conflict_policy(ddl: str) -> bool:
-    """Find unquoted ON CONFLICT clauses, including intervening comments."""
+def _sqlite_ddl_tokens(ddl: str) -> list[str]:
+    """Return SQL tokens without treating quoted text or comments as keywords."""
     matches = re.finditer(
         r"--[^\n]*|/\*.*?\*/|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|"
         r"\x60(?:\x60\x60|[^\x60])*\x60|\[[^\]]*\]|[A-Za-z0-9_$\u0080-\U0010ffff]+|[^\s]",
         ddl,
         re.DOTALL,
     )
-    tokens = [
+    return [
         match.group().upper() for match in matches if not match.group().startswith(("--", "/*"))
     ]
+
+
+def _sqlite_has_explicit_conflict_policy(ddl: str) -> bool:
+    """Find unquoted ON CONFLICT clauses, including intervening comments."""
+    tokens = _sqlite_ddl_tokens(ddl)
     return any(left == "ON" and right == "CONFLICT" for left, right in itertools.pairwise(tokens))
+
+
+def _sqlite_has_nonbinary_collation(ddl: str) -> bool:
+    tokens = _sqlite_ddl_tokens(ddl)
+    binary_names = {"BINARY", '"BINARY"', "'BINARY'", "`BINARY`", "[BINARY]"}
+    return any(
+        left == "COLLATE" and right not in binary_names
+        for left, right in itertools.pairwise(tokens)
+    )
 
 
 def assert_compatible_revision_0038(connection: Connection) -> None:
@@ -754,3 +768,18 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
     # Verify the relationship topology before desktop migrations or QC writes.
     # This validator is read-only and deliberately refuses to repair user data.
     assert_review_event_relationship_topology(connection)
+
+    if connection.dialect.name == "sqlite":
+        # Index metadata does not cover unindexed audit fields. For example,
+        # NOCASE on event_type weakens the original exact CHECK allowlist.
+        for table in sorted(tables & {_REVIEW_TABLE, _BULK_TABLE}):
+            ddl = connection.execute(
+                text("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = :name"),
+                {"name": table},
+            ).scalar()
+            if not isinstance(ddl, str) or _sqlite_has_nonbinary_collation(ddl):
+                raise RuntimeError(
+                    f"Unsafe ReefVision Alembic revision {revision} collision: "
+                    "nonbinary QC audit column collation. Preserve reviewer history "
+                    "and reconcile without rewriting research data."
+                )

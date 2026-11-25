@@ -365,3 +365,21 @@ actual index distinction, including blocked distinct IDs with NOCASE
 and RTRIM. Full repository CI remains required. The existing typed
 standalone and saved QC workflow, provenance, retries and researcher
 approval are unchanged; this is a preflight gate, not a workflow node.
+
+## 2026-11-24 — unindexed audit column collation
+
+The original QC event vocabulary is case-sensitive. A restored SQLite
+event_type column declared with NOCASE or RTRIM retains the same reflected
+CHECK expression and original indexes, but accepts uppercase or
+trailing-space event types. Other unindexed audit fields can likewise
+change equality semantics. Desktop startup now checks the table DDL for
+nonbinary collations on both QC tables, after the existing index and
+relationship checks. Explicit BINARY and harmless quoted or commented text
+remain valid. This check never updates research data or the revision stamp.
+
+Thirty-two persisted cases exercise all four review revisions, including
+valid explicit BINARY and commented controls. Independent SQLite probes
+reproduced the invalid event acceptance despite a successful integrity
+check. Repository tests and exact-head CI remain unverified until run.
+Existing saved typed QC workflows and researcher approval are unchanged;
+this is a startup guard, not an additional workflow node.
