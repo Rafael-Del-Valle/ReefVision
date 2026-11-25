@@ -505,6 +505,15 @@ def measure_point_cloud_preview(
                     "scale_uncertainty_m": chord_scale_uncertainty_m,
                 }
             )
+    # A resolved bounding box and valid selected chords do not guarantee
+    # that all interior source loci remain distinguishable in the calibrated
+    # preview. Reject a lossy coordinate mapping before reporting distinct
+    # locus coverage. Genuine repeated acquisition rows remain valid.
+    calibrated_loci: dict[tuple[float, float, float], tuple[float, float, float]] = {}
+    for vertex in vertices:
+        calibrated = (vertex[0] * scale, vertex[1] * scale, vertex[2] * scale)
+        if calibrated_loci.setdefault(calibrated, vertex) != vertex:
+            raise ValueError("Distinct point-cloud loci collapse after calibration")
     # A positive calibrated extent with positive lower scale factor must not
     # claim zero lower uncertainty solely because floating-point precision
     # cannot represent the product. A truly planar axis stays [0, 0].
