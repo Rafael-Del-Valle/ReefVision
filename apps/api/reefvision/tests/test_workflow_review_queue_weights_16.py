@@ -216,7 +216,8 @@ def test_prediction_confidence_evidence_on_saved_qc_retry(
     )
     assert standalone.status_code == 201, standalone.text
     graph = _weighted_graph(weights)
-    graph["nodes"][1]["parameters"]["review_below_confidence"] = threshold
+    if threshold is not None:
+        graph["nodes"][1]["parameters"]["review_below_confidence"] = threshold
     payload = _payload(_execute(client, project_id, graph))
     assert payload["priority_score_unit"] == "dimensionless"
     assert payload["review_status"] == "requires_researcher_review"
