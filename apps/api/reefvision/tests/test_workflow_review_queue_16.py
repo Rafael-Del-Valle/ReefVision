@@ -156,6 +156,10 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     standalone = client.post(f"/api/v1/projects/{project['id']}/review-queues", json={})
     assert standalone.status_code == 201, standalone.text
     assert standalone.json()["item_count"] == 1
+    assert standalone.json()["summary_json"]["counts_by_split"] == {"unspecified": 1}
+    standalone_items = client.get(f"/api/v1/review-queues/{standalone.json()['id']}/items")
+    assert standalone_items.status_code == 200, standalone_items.text
+    assert standalone_items.json()["items"][0]["split"] is None
     assert len(standalone.json()["input_checksums_json"]["scoring_provenance_sha256"]) == 64
     assert len(standalone.json()["input_checksums_json"]["item_evidence_sha256"]) == 64
     assert standalone.json()["input_checksums_json"]["integrity_schema_version"] == (
@@ -1127,3 +1131,45 @@ def test_saved_qc_workflow_rejects_changed_priority_order(client: TestClient) ->
         )
         assert recovered[0]["payload"]["queue_id"] == queue_id
         assert recovered[0]["payload"]["review_status"] == "requires_researcher_review"
+
+        # A project-scoped queue cannot certify held-out dataset membership,
+        # even if the substituted split and aggregate summary agree.
+        original_summary = dict(queue.summary_json)
+        assert original_summary["counts_by_split"] == {"unspecified": 2}
+        assert all(row.split is None for row in rows)
+        rows[0].split = "test"
+        queue.summary_json = {
+            **original_summary,
+            "counts_by_split": {"test": 1, "unspecified": 1},
+        }
+        queue.input_checksums_json = {
+            **original_checksums,
+            "item_evidence_sha256": queue_item_evidence_sha256(rows),
+        }
+        session.flush()
+        with pytest.raises(ValidationError, match="project scope cannot claim dataset splits"):
+            execute_runtime_adapter(
+                "qc_review_queue",
+                session=session,
+                settings=app.state.settings,
+                project_id=project["id"],
+                parameters=params,
+                inputs={"project": [source]},
+            )
+        assert rows[0].review_state == "in_progress"
+        assert queue.item_count == 2
+        rows[0].split = None
+        queue.summary_json = original_summary
+        queue.input_checksums_json = original_checksums
+        session.flush()
+        recovered = execute_runtime_adapter(
+            "qc_review_queue",
+            session=session,
+            settings=app.state.settings,
+            project_id=project["id"],
+            parameters=params,
+            inputs={"project": [source]},
+        )
+        assert recovered[0]["payload"]["queue_id"] == queue_id
+        assert recovered[0]["payload"]["review_status"] == "requires_researcher_review"
+        assert recovered[0]["payload"]["priority_score_unit"] == "dimensionless"
