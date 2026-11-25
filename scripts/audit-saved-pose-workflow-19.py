@@ -1086,9 +1086,45 @@ def main() -> int:
         "--expected-seed-model-sha256",
         help="Expected SHA-256 of the original local weights, recorded before retraining",
     )
+    parser.add_argument(
+        "--expected-workflow-graph-sha256",
+        help="Expected saved graph digest recorded before executing the workflow",
+    )
+    parser.add_argument(
+        "--require-independent-evidence",
+        action="store_true",
+        help="Require independently recorded graph, training, holdout and seed digests",
+    )
     args = parser.parse_args()
     try:
+        if args.require_independent_evidence:
+            _require(
+                all(
+                    value is not None
+                    for value in (
+                        args.expected_workflow_graph_sha256,
+                        args.expected_dataset_manifest_sha256,
+                        args.expected_validation_manifest_sha256,
+                        args.expected_seed_model_sha256,
+                    )
+                ),
+                "Independent acceptance requires graph, training, holdout and seed digests",
+            )
+        expected_graph = args.expected_workflow_graph_sha256
+        if expected_graph is not None:
+            _require(
+                len(expected_graph) == 64
+                and all(c in "0123456789abcdefABCDEF" for c in expected_graph),
+                "Expected workflow graph digest must be a 64-character hexadecimal SHA-256",
+            )
+            expected_graph = expected_graph.lower()
         evidence = inspect(args.db, args.run_id, args.data_dir)
+        if expected_graph is not None:
+            _require(
+                evidence["workflow_graph_sha256"] == expected_graph,
+                "Saved workflow graph differs from the independently recorded graph",
+            )
+        evidence["expected_workflow_graph_sha256"] = expected_graph
         for expected, key in (
             (args.expected_dataset_manifest_sha256, "dataset_manifest_sha256"),
             (args.expected_validation_manifest_sha256, "validation_dataset_manifest_sha256"),
@@ -1128,19 +1164,22 @@ def main() -> int:
                 "Verified registered seed differs from the independently recorded local weights",
             )
         evidence["expected_seed_model_sha256"] = expected_seed_sha
-        if args.require_registered_seed:
+        if args.require_registered_seed or args.require_independent_evidence:
             _require(
                 bool(evidence["seed_model_id"]),
                 "Registered-model retraining acceptance requires a verified local seed",
             )
-        if args.require_independent_validation:
+        if args.require_independent_validation or args.require_independent_evidence:
             _require(
                 evidence["validation_mode"] == "separate_frozen_pose_dataset",
                 "Independent-validation acceptance requires a separate frozen holdout",
             )
         evidence["required_acceptance_checks"] = {
-            "registered_seed": args.require_registered_seed,
-            "independent_validation": args.require_independent_validation,
+            "registered_seed": args.require_registered_seed or args.require_independent_evidence,
+            "independent_validation": (
+                args.require_independent_validation or args.require_independent_evidence
+            ),
+            "independent_evidence": args.require_independent_evidence,
         }
     except Exception as exc:
         # A failed scientific integrity check (including domain/SQLAlchemy
