@@ -1720,6 +1720,7 @@ def create_pose_workflow_training_result(
                 validation_dataset.manifest_sha256 if validation_dataset is not None else None
             ),
             "pose_split_manifest_sha256": split_manifest_sha256,
+            "pose_training_architecture": architecture,
             "created_by_workflow": True,
             "workflow_run_id": (workflow_run_id),
             "workflow_node_run_id": (workflow_node_run_id),
