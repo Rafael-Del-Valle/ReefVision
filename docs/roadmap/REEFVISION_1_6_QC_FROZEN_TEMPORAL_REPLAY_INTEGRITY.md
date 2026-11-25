@@ -224,3 +224,18 @@ Independent JSON predicate checks passed (42 cases); repository tests and
 installed Windows validation remain unconfirmed. This is not a cryptographic
 signature or proof against arbitrary coordinated removal of all provenance.
 No migration, units, scoring formula, or researcher-approval semantics change.
+
+
+## Versioned weight-vector parity (2026-11-25)
+
+Historical v2 and current v3 versioned queues now both require a finite,
+positive sum of scoring weights even when no observations were selected.
+V2 already required this total for nonempty queues. Both versions reject
+JSON Boolean values in per-item weights, rather than relying on Python
+mapping equality (where False equals zero and True equals one). Genuine
+unversioned historical records retain the previous compatibility path.
+Two empty-v2 regression cases, a direct Boolean-weight regression and
+a persisted standalone/saved-workflow v2 replay regression cover refusal,
+rollback and researcher-review preservation. Independent numerical and
+JSON-type controls passed (93 cases); full repository CI remains a separate
+gate. No migration, scientific formula, units, or model change.
