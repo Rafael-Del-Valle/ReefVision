@@ -140,7 +140,9 @@ def test_saved_frozen_workflow_rejects_resigned_temporal_evidence(
         elif signal_id == "class_reference":
             item.label_class_ids_json = ["not-a-frozen-annotation-class"]
         else:
-            target = "count_disagreement" if signal_id == "count_disagreement_endpoint" else signal_id
+            target = (
+                "count_disagreement" if signal_id == "count_disagreement_endpoint" else signal_id
+            )
             value = 0.0 if signal_id == "count_disagreement_endpoint" else 0.5
             if signal_id in {"unreviewed_state", "missing_group_metadata"}:
                 value = 1.0 - item.signal_values_json[target]
