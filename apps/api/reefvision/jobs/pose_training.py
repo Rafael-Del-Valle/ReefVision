@@ -1390,10 +1390,16 @@ def process_pose_training_job(
                 settings,
                 f"{base_relative}/pose-dataset",
             )
-            # Capture the original persisted provenance before invoking the
-            # trainer; a later manifest rewrite cannot authorize altered inputs.
-            frozen_materialization = dict(run.artifact_manifest_json or {}).get("materialization")
-            _verify_prelaunch_pose_dataset(dataset_root, frozen_materialization)
+            # Compare persisted provenance against the original export result,
+            # not just a freshly read digest that could have been substituted.
+            artifact_manifest = dict(run.artifact_manifest_json or {})
+            frozen_materialization = artifact_manifest.get("materialization")
+            if (
+                frozen_materialization != materialized
+                or artifact_manifest.get("validation_mode") != materialized["validation_mode"]
+            ):
+                raise ValidationError("Pose training materialization changed before launch")
+            _verify_prelaunch_pose_dataset(dataset_root, materialized)
 
             train_args = dict(run.training_config_json or {})
 
