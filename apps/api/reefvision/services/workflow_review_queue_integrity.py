@@ -489,10 +489,16 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             threshold = configuration["review_below_confidence"]
             if threshold is not None:
                 raw_signals = item.signal_values_json
-                if (
-                    raw_signals["pending_proposals"] <= 0
-                    or raw_signals["low_mean_confidence"] + 1e-12 < 1.0 - threshold
-                ):
+                count = raw_signals["pending_proposals"]
+                if count <= 0:
+                    raise invalid
+                # All selected deficits are at least 1 - threshold, and one
+                # is the observed maximum. Their mean must satisfy both
+                # constraints jointly, not merely each bound independently.
+                baseline = 1.0 - threshold
+                largest = raw_signals["low_min_confidence"]
+                lower_bound = baseline + max(0.0, largest - baseline) / count
+                if raw_signals["low_mean_confidence"] + 1e-12 < lower_bound:
                     raise invalid
         scores[item.image_id] = item.score
         ranks.add(item.rank_position)
