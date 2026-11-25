@@ -669,6 +669,9 @@ def test_axis_chord_rounds_only_after_calibration_and_uncertainty(
         assert chord["chord_distance_scale_interval_m"] == bounds
         assert chord["scale_uncertainty_m"] == absolute
     assert expected["axis_aligned_dimensions_m"][0] == nominal
+    assert expected["axis_aligned_bounding_box_diagonal_m"] == nominal
+    assert expected["axis_aligned_bounding_box_diagonal_scale_interval_m"] == bounds
+    assert expected["axis_aligned_bounding_box_diagonal_scale_uncertainty_m"] == absolute
     assert expected["preview_point_scale_intervals_m"] == coordinate_intervals
     minimum = expected["axis_aligned_min_in_source_frame_scale_interval_m"]
     maximum = expected["axis_aligned_max_in_source_frame_scale_interval_m"]
@@ -822,8 +825,7 @@ def test_centroid_offsets_survive_large_common_origin(
             "ply_text": (
                 "ply\nformat ascii 1.0\nelement vertex 513\n"
                 "property double x\nproperty double y\nproperty double z\n"
-                "end_header\n"
-                + "".join(f"{point[0]} 0 0\n" for point in points)
+                "end_header\n" + "".join(f"{point[0]} 0 0\n" for point in points)
             )
         }
     )
