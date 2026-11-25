@@ -570,6 +570,41 @@ def test_invalid_provider_provenance_preserves_validated_offline_snapshot(
     )
 
 
+def test_offline_cache_isolated_by_pinned_version_and_variable_selection(
+    client, test_settings, monkeypatch
+):
+    """A cached model subset cannot silently satisfy a different scientific request."""
+    project = create_project(client)
+    raw = raw_fixture(monkeypatch)
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    with client.app.state.session_factory() as session:
+        cached = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: deepcopy(raw), now=now
+        ).acquire(project["id"], request())
+
+    endpoint = f"/api/v1/projects/{project['id']}/environment/copernicus"
+    for overrides in ({"dataset_version": "202602"}, {"variables": ["uo", "vo"]}):
+        payload = request(offline=True).model_dump(mode="json")
+        payload.update(overrides)
+        response = client.post(endpoint, json=payload)
+        assert response.status_code == 404, response.text
+
+    with client.app.state.session_factory() as session:
+        reopened = CopernicusEnvironmentService(
+            session,
+            test_settings,
+            fetch=lambda *_: pytest.fail("offline must not acquire remote data"),
+            now=now + timedelta(days=2),
+        ).acquire(project["id"], request(offline=True))
+    assert reopened.cache_status == "stale_offline"
+    assert [item.id for item in reopened.items] == [item.id for item in cached.items]
+    assert [item.content_sha256 for item in reopened.items] == [
+        item.content_sha256 for item in cached.items
+    ]
+    assert all(item.provenance.model_version == "202601" for item in reopened.items)
+    assert all(item.qc == "unassessed" for item in reopened.items)
+
+
 def test_missing_copernicus_configuration_fails_without_leaking_secrets(client):
     project = create_project(client)
     response = client.post(
