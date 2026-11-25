@@ -183,18 +183,20 @@ def test_saved_qc_retry_preserves_original_weights_and_legacy_defaults(
 
 
 @pytest.mark.parametrize(
-    ("prediction_status", "minimum"),
+    ("prediction_status", "minimum", "threshold"),
     [
-        ("pending", 0.1),
-        ("pending", 0.5),
-        ("rejected", 0.1),
-        ("rejected", 0.5),
-        ("two_pending", 0.6),
-        ("two_pending", 0.9),
+        ("pending", 0.1, None),
+        ("pending", 0.5, None),
+        ("rejected", 0.1, None),
+        ("rejected", 0.5, None),
+        ("two_pending", 0.6, None),
+        ("two_pending", 0.9, None),
+        ("two_pending", 0.4, 0.75),
+        ("two_pending", 0.5, 0.75),
     ],
 )
 def test_prediction_confidence_evidence_on_saved_qc_retry(
-    client: TestClient, prediction_status: str, minimum: float
+    client: TestClient, prediction_status: str, minimum: float, threshold: float | None
 ) -> None:
     project_id, prediction_id = _local_prediction(
         client, additional_pending=prediction_status == "two_pending"
@@ -209,10 +211,13 @@ def test_prediction_confidence_evidence_on_saved_qc_retry(
     weights = {name: 0.0 for name in ReviewScoreWeights.model_fields}
     weights["unreviewed_state"] = 1.0
     standalone = client.post(
-        f"/api/v1/projects/{project_id}/review-queues", json={"signal_weights": weights}
+        f"/api/v1/projects/{project_id}/review-queues",
+        json={"signal_weights": weights, "review_below_confidence": threshold},
     )
     assert standalone.status_code == 201, standalone.text
-    payload = _payload(_execute(client, project_id, _weighted_graph(weights)))
+    graph = _weighted_graph(weights)
+    graph["nodes"][1]["parameters"]["review_below_confidence"] = threshold
+    payload = _payload(_execute(client, project_id, graph))
     assert payload["priority_score_unit"] == "dimensionless"
     assert payload["review_status"] == "requires_researcher_review"
 
