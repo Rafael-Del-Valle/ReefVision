@@ -360,6 +360,16 @@ def create_review_queue_workflow_artifact(
         ):
             raise ValidationError("QC review-queue retry parameters changed or queue incomplete")
         validate_saved_queue_snapshot(existing, existing.items)
+        # Project-scoped queues have no frozen split membership. Recomputed
+        # item digests and summary counts cannot turn a live image into a
+        # held-out observation. Keep historical v2 compatibility unchanged.
+        if (
+            dataset_version_id is None
+            and existing.input_checksums_json.get("integrity_schema_version")
+            == "qc-review-queue-v3"
+            and any(item.split is not None for item in existing.items)
+        ):
+            raise ValidationError("QC review-queue project scope cannot claim dataset splits")
         # A re-signed queue digest can still relabel an image's frozen split
         # or substitute an image absent from the original dataset version.
         # Bind every persisted QC item to its immutable version membership.
