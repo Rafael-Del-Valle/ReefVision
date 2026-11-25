@@ -2128,10 +2128,12 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             in artifact["surface_edge_traces"][0]["qc_warnings"]
         )
 
+
 @pytest.mark.parametrize("shared", [True, False])
 @pytest.mark.parametrize("split_indices", [False, True])
+@pytest.mark.parametrize("reverse_order", [False, True])
 def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
-    client: TestClient, shared: bool, split_indices: bool
+    client: TestClient, shared: bool, split_indices: bool, reverse_order: bool
 ) -> None:
     # Two tip routes on a Y-shaped reference share a two-unit trunk.
     # Reverse the second route and optionally use separate seam indices.
@@ -2142,24 +2144,29 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
         vertices.extend([[0, 0, 0], [2, 0, 0]])
         root, junction = 4, 5
         faces[1] = [junction, root, 3]
+    # An intervening edge touches both routes at most at endpoints; shared
+    # trunk detection must compare nonadjacent selections in either order.
+    paths = [[0, 1, 2], [2, 0], [3, junction, root] if shared else [3, junction]]
+    expected_lengths = [0.05, sqrt(13) * 0.01, 0.06 if shared else 0.04]
+    if reverse_order:
+        paths.reverse()
+        expected_lengths.reverse()
     params = {
         **PARAMS,
         "vertices": vertices,
         "faces": faces,
         "surface_path_vertex_pairs": None,
-        "surface_trace_vertex_paths": [
-            [0, 1, 2],
-            [3, junction, root] if shared else [3, junction],
-        ],
+        "surface_trace_vertex_paths": paths,
     }
     direct = measure_mesh_preview(**params)
     warning = "surface_traces_share_geometric_edges"
     assert (warning in direct["qc_warnings"]) is shared
     traces = direct["surface_edge_traces"]
-    assert [trace["length_m"] for trace in traces] == pytest.approx(
-        [0.05, 0.06 if shared else 0.04]
-    )
-    for trace in traces:
+    assert [trace["length_m"] for trace in traces] == pytest.approx(expected_lengths)
+    for trace, length in zip(traces, expected_lengths, strict=True):
+        assert trace["length_scale_only_interval_m"] == pytest.approx(
+            [length * 0.9, length * 1.1]
+        )
         assert trace["biological_validation_status"] == "not_verified_anatomical_centerline"
         assert trace["human_review_verified"] is False
 
