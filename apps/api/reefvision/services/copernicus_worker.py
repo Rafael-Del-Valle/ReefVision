@@ -99,10 +99,11 @@ def read_dataset(request: dict[str, Any], username: str, password: str) -> dict[
         for name in required:
             coordinates = subset[name].values
             if len(coordinates) > 1:
+                # Python scalars prevent fixed-width integer subtraction overflow.
                 deltas = [
                     abs(float((b - a) / numpy.timedelta64(1, "s")))
                     if name == "time"
-                    else abs(float(b - a))
+                    else abs(float(b.item() - a.item()))
                     for a, b in pairwise(coordinates)
                 ]
                 if deltas and all(math.isclose(value, deltas[0]) for value in deltas):
