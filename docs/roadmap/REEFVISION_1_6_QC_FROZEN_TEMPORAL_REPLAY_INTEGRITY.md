@@ -178,3 +178,22 @@ verify the original pending researcher review. Independent producer-formula
 checks covered 134,784 valid small-count combinations and four contradictory
 controls. Full repository CI and genuine installed Windows validation
 remain separate release gates.
+
+## Weight-vector integrity with empty queues and JSON type aliases (2026-11-25)
+
+The v3 QC weight vector must have a finite positive total even if no images
+meet a selection threshold. Previously, the total was checked only while
+validating individual score explanations, so an empty re-signed snapshot
+could retain an all-zero or overflowing vector. The shared replay validator
+now checks the total at queue level. Each v3 item's recorded weights must
+also be real finite numbers, not Boolean values that Python compares equal
+to zero or one. Numeric integer/float representations remain compatible.
+Historical pre-v3 snapshots retain their prior contract.
+
+Two synthetic empty-snapshot cases and one additional database-backed
+standalone/saved frozen workflow case exercise re-signed evidence. The
+Boolean case explicitly persists and reloads the mutated JSON before
+checking rejection, then rolls back and retries the original pending-review
+artifact. No priority formula, typed port, migration or human approval
+semantics change. Full exact-head CI and installed Windows validation are
+still separate release gates.
