@@ -970,6 +970,18 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     assert len(listing.json()) == 2
 
 
+@pytest.mark.parametrize("value", [True, False])
+def test_standalone_qc_rejects_boolean_weight(client: TestClient, value: bool) -> None:
+    project = create_project(client, "QC weight input type")
+    url = f"/api/v1/projects/{project['id']}/review-queues"
+    rejected = client.post(url, json={"signal_weights": {"recent_import": value}})
+    assert rejected.status_code == 422, rejected.text
+    assert client.get(url).json() == []
+    valid = client.post(url, json={"signal_weights": {"recent_import": int(value)}})
+    assert valid.status_code == 201, valid.text
+    assert valid.json()["configuration_json"]["weights"]["recent_import"] == int(value)
+
+
 def test_saved_qc_workflow_rejects_changed_priority_order(client: TestClient) -> None:
     """A saved workflow must reject swapped ranks without altering review decisions."""
     project = create_project(client, "QC saved ordering integrity")
@@ -1120,6 +1132,40 @@ def test_saved_qc_workflow_rejects_changed_priority_order(client: TestClient) ->
         assert rows[0].review_state == "in_progress"
         rows[0].model_ids_json = original_model_ids
         queue.input_checksums_json = original_checksums
+        session.flush()
+        recovered = execute_runtime_adapter(
+            "qc_review_queue",
+            session=session,
+            settings=app.state.settings,
+            project_id=project["id"],
+            parameters=params,
+            inputs={"project": [source]},
+        )
+        assert recovered[0]["payload"]["queue_id"] == queue_id
+        assert recovered[0]["payload"]["review_status"] == "requires_researcher_review"
+
+        # A saved run cannot coerce a Boolean supplied as a scoring weight,
+        # even if its persisted node parameters and retry input agree.
+        original_parameters = dict(node.parameters_json or {})
+        for value in (True, False):
+            invalid_parameters = {
+                **original_parameters,
+                "signal_weights": {"recent_import": value},
+            }
+            node.parameters_json = invalid_parameters
+            session.flush()
+            with pytest.raises(ValidationError, match="invalid signal_weights"):
+                execute_runtime_adapter(
+                    "qc_review_queue",
+                    session=session,
+                    settings=app.state.settings,
+                    project_id=project["id"],
+                    parameters={**params, **invalid_parameters},
+                    inputs={"project": [source]},
+                )
+            assert rows[0].review_state == "in_progress"
+            assert queue.item_count == 2
+        node.parameters_json = original_parameters
         session.flush()
         recovered = execute_runtime_adapter(
             "qc_review_queue",
