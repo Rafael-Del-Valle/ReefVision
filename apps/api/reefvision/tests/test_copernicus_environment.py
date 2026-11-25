@@ -346,9 +346,7 @@ def test_shared_grid_hole_cannot_replace_validated_offline_snapshot(
     # Every variable has the same three cells of a two-by-two spatial grid.
     for latitude, longitude in ((32.5, -79.4), (32.6, -79.5)):
         for sample in original["samples"]:
-            damaged["samples"].append(
-                {**sample, "latitude": latitude, "longitude": longitude}
-            )
+            damaged["samples"].append({**sample, "latitude": latitude, "longitude": longitude})
     with (
         client.app.state.session_factory() as session,
         pytest.raises(ValidationError, match="incomplete rectilinear grid coverage"),
@@ -369,9 +367,7 @@ def test_shared_grid_hole_cannot_replace_validated_offline_snapshot(
 
     # Explicit nulls complete the grid but must not fabricate measurements.
     for sample in original["samples"]:
-        damaged["samples"].append(
-            {**sample, "latitude": 32.6, "longitude": -79.4, "value": None}
-        )
+        damaged["samples"].append({**sample, "latitude": 32.6, "longitude": -79.4, "value": None})
     with client.app.state.session_factory() as session:
         refreshed = CopernicusEnvironmentService(
             session, test_settings, fetch=lambda *_: damaged, now=now + timedelta(days=2)
