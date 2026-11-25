@@ -214,6 +214,8 @@ def test_saved_workflow_executes_and_reloads_persisted_metric_result(
         "area_qc_suspect",
         "mixed_uncertainty_kind",
         "bounded_uncertainty",
+        "zero_area",
+        "mismatched_observation_time",
     ],
 )
 def test_workflow_metric_failure_is_persisted_without_result(
@@ -234,8 +236,13 @@ def test_workflow_metric_failure_is_persisted_without_result(
             ),
             scientific_record(
                 "surveyed_area",
-                2,
+                0 if failure == "zero_area" else 2,
                 "m2",
+                observed_at=(
+                    "2026-04-03T13:01:00Z"
+                    if failure == "mismatched_observation_time"
+                    else "2026-04-03T13:00:00Z"
+                ),
                 qc={"area_qc_rejected": "rejected", "area_qc_suspect": "suspect"}.get(
                     failure, "unassessed"
                 ),
@@ -295,3 +302,7 @@ def test_workflow_metric_failure_is_persisted_without_result(
             assert "suspect or rejected" in (failed_node.error_message or "")
         if failure in {"mixed_uncertainty_kind", "bounded_uncertainty"}:
             assert "Unsupported uncertainty kind combination" in (failed_node.error_message or "")
+        if failure == "zero_area":
+            assert "Division by zero" in (failed_node.error_message or "")
+        if failure == "mismatched_observation_time":
+            assert "exact observation time" in (failed_node.error_message or "")
