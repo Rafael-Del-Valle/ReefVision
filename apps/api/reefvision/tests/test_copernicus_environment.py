@@ -377,6 +377,49 @@ def test_shared_grid_hole_cannot_replace_validated_offline_snapshot(
     assert all(item.qc == "unassessed" for item in refreshed.items)
 
 
+def test_reported_resolution_must_match_multi_cell_grid(client, test_settings, monkeypatch):
+    """Contradictory spacing cannot overwrite a validated modeled data snapshot."""
+    project = create_project(client)
+    raw = raw_fixture(monkeypatch)
+    original = deepcopy(raw["samples"])
+    for time in ("2026-04-03T00:00:00Z", "2026-04-03T01:00:00Z"):
+        for longitude in (-79.5, -79.25):
+            if time == "2026-04-03T00:00:00Z" and longitude == -79.5:
+                continue
+            for sample in original:
+                raw["samples"].append({**sample, "observed_at": time, "longitude": longitude})
+    raw["coordinate_resolution"] = {"time": 3600.0, "longitude": 0.25}
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    with client.app.state.session_factory() as session:
+        cached = CopernicusEnvironmentService(
+            session, test_settings, fetch=lambda *_: deepcopy(raw), now=now
+        ).acquire(project["id"], request())
+    assert len(cached.items) == 16
+    assert all(item.provenance.temporal_resolution_s == 3600.0 for item in cached.items)
+
+    for axis, wrong_spacing in (("time", 1800.0), ("longitude", 0.5)):
+        damaged = deepcopy(raw)
+        damaged["coordinate_resolution"][axis] = wrong_spacing
+        with (
+            client.app.state.session_factory() as session,
+            pytest.raises(ValidationError, match="reported resolution disagrees"),
+        ):
+            CopernicusEnvironmentService(
+                session, test_settings, fetch=lambda *_: damaged, now=now + timedelta(days=2)
+            ).acquire(project["id"], request(refresh=True))
+
+    with client.app.state.session_factory() as session:
+        offline = CopernicusEnvironmentService(
+            session,
+            test_settings,
+            fetch=lambda *_: pytest.fail("offline must not acquire remote data"),
+            now=now + timedelta(days=2),
+        ).acquire(project["id"], request(offline=True))
+    assert offline.cache_status == "stale_offline"
+    assert [item.id for item in offline.items] == [item.id for item in cached.items]
+    assert all(item.qc == "unassessed" for item in offline.items)
+
+
 def test_valid_provider_grid_spacing_is_retained_as_unassessed_provenance(
     client, test_settings, monkeypatch
 ):

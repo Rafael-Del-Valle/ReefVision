@@ -9,6 +9,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from datetime import datetime
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -270,6 +271,22 @@ def parse_copernicus(
             "Copernicus response has incomplete rectilinear grid coverage; "
             "explicit nulls are required for missing model values"
         )
+    # Verify reported regular spacing against the actual grid wherever the
+    # subset contains more than one coordinate. Singleton axes cannot
+    # independently establish provider resolution, so retain their metadata.
+    axis_values = {
+        "time": {cell[0].timestamp() for cell in reference_cells},
+        "depth": {cell[1] for cell in reference_cells},
+        "latitude": {cell[2] for cell in reference_cells},
+        "longitude": {cell[3] for cell in reference_cells},
+    }
+    for name, spacing in coordinate_resolution.items():
+        tolerance = 1e-6 if name == "time" else 1e-9
+        if any(
+            not math.isclose(right - left, spacing, abs_tol=tolerance)
+            for left, right in pairwise(sorted(axis_values[name]))
+        ):
+            raise ValidationError("Copernicus reported resolution disagrees with grid coordinates")
     if not records:
         raise ValidationError("Copernicus subset contains no available ocean values")
     return records, missing
