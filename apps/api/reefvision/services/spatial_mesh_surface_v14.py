@@ -920,7 +920,9 @@ def measure_mesh_preview(
     if trace_edge_sets:
         # Count each nonzero exact endpoint-pair once, even within a trace.
         # Unequal, partially overlapping segments are NOT geometrically merged.
-        unique_edges = set().union(*trace_edge_sets)
+        unique_edges: set[frozenset[tuple[float, float, float]]] = set()
+        for trace_edges in trace_edge_sets:
+            unique_edges.update(trace_edges)
         source_total = sum(
             (Fraction(dist(min(edge), max(edge))) for edge in unique_edges), Fraction(0)
         )
