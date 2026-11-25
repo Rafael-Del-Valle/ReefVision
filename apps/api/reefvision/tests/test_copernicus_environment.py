@@ -405,7 +405,10 @@ def test_reported_resolution_must_match_multi_cell_grid(client, test_settings, m
             pytest.raises(ValidationError, match="reported resolution disagrees"),
         ):
             CopernicusEnvironmentService(
-                session, test_settings, fetch=lambda *_: damaged, now=now + timedelta(days=2)
+                session,
+                test_settings,
+                fetch=lambda *_, damaged=damaged: damaged,
+                now=now + timedelta(days=2),
             ).acquire(project["id"], request(refresh=True))
 
     with client.app.state.session_factory() as session:
