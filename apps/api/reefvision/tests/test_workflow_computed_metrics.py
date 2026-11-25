@@ -74,14 +74,31 @@ def save_and_queue(client: TestClient, project_id: str, graph: dict[str, object]
     return queued.json()
 
 
-def test_saved_workflow_executes_and_reloads_persisted_metric_result(client: TestClient) -> None:
+@pytest.mark.parametrize("area_uncertainty", [None, 0.0, 1000.0])
+def test_saved_workflow_executes_and_reloads_persisted_metric_result(
+    client: TestClient, area_uncertainty: float | None
+) -> None:
     project = create_project(client, "Metric workflow")
     organisms, area = add_records(
         client,
         project["id"],
         [
-            scientific_record("organism_count", 12, "count"),
-            scientific_record("surveyed_area", 2, "m2"),
+            scientific_record(
+                "organism_count",
+                12,
+                "count",
+                uncertainty={"value": 2, "kind": "standard_deviation"},
+            ),
+            scientific_record(
+                "surveyed_area",
+                20000,
+                "cm2",
+                uncertainty=(
+                    {"value": area_uncertainty, "kind": "standard_deviation"}
+                    if area_uncertainty is not None
+                    else None
+                ),
+            ),
         ],
     )
     definition = create_density_definition(client, project["id"])
@@ -119,10 +136,29 @@ def test_saved_workflow_executes_and_reloads_persisted_metric_result(client: Tes
     assert results["items"][0]["workflow_run_id"] == run["id"]
     metric_node = next(node for node in payload["nodes"] if node["node_type"] == "computed_metric")
     assert results["items"][0]["workflow_node_run_id"] == metric_node["id"]
+    result = results["items"][0]
+    assert result["input_snapshot"]["surveyed_area"]["unit"] == "cm2"
+    expected = None if area_uncertainty is None else (1 + (3 * area_uncertainty / 10000) ** 2) ** 0.5
+    if expected is None:
+        assert result["uncertainty"] is None
+        assert result["normalized_uncertainty"] is None
+        assert result["provenance"]["uncertainty_kind"] is None
+        assert result["provenance"]["uncertainty_method"] == "unavailable_missing_input_uncertainty"
+    else:
+        assert result["uncertainty"] == pytest.approx(expected)
+        assert result["normalized_uncertainty"] == pytest.approx(expected)
+        assert result["provenance"]["uncertainty_kind"] == "standard_deviation"
+        assert result["provenance"]["uncertainty_method"] == "independent_first_order_root_sum_square"
     exported = client.get(f"/api/v1/projects/{project['id']}/computed-metric-results.csv")
     csv_row = next(csv.DictReader(io.StringIO(exported.text)))
     assert csv_row["workflow_run_id"] == run["id"]
     assert csv_row["workflow_node_run_id"] == metric_node["id"]
+    if expected is None:
+        assert csv_row["uncertainty"] == ""
+        assert csv_row["normalized_uncertainty"] == ""
+    else:
+        assert float(csv_row["uncertainty"]) == pytest.approx(expected)
+        assert float(csv_row["normalized_uncertainty"]) == pytest.approx(expected)
 
     with app.state.session_factory() as session:
         replay = ComputedMetricService(session).calculate(
