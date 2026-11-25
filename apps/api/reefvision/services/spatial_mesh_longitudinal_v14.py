@@ -1331,7 +1331,7 @@ def compare_mesh_observations(
                                 max(0.0, fsum([separation, *(-bound for bound in radii)])),
                                 upper_bound,
                             ]
-                            # A Euclidean error radius also radii each signed
+                            # A Euclidean error radius also bounds each signed
                             # target-frame offset component, without assuming
                             # independent axes or a probability distribution.
                             centroid_axis_bound_intervals_m = [
