@@ -36,6 +36,21 @@ def _scale_interval_unresolved(
     )
 
 
+def _centroid_separation_scale_bounds(
+    offset: list[Fraction], separation: float, uncertainty: float
+) -> tuple[float, float]:
+    """Keep axis-aligned centroid separation exact through scale uncertainty."""
+    if sum(value != 0 for value in offset) <= 1:
+        exact_separation = sum((abs(value) for value in offset), Fraction())
+        exact_uncertainty = Fraction(uncertainty)
+        return (
+            float(exact_separation * (1 - exact_uncertainty)),
+            float(exact_separation * (1 + exact_uncertainty)),
+        )
+    # Oblique offsets retain the existing Euclidean norm approximation.
+    return separation * (1 - uncertainty), separation * (1 + uncertainty)
+
+
 def _source_affine_dimension(vertices: list[tuple[float, float, float]]) -> int:
     """Exact imported-coordinate affine rank, not verified organism dimensions.
 
@@ -668,10 +683,10 @@ def measure_point_cloud_preview(
     unique_coordinate_centroid = [float(value) for value in exact_unique_centroid]
     # Difference the exact centroids before rounding: a large shared origin
     # can hide real acquisition-weighting bias in the displayed coordinates.
-    centroid_separation = dist(
-        (0.0, 0.0, 0.0),
-        [float(a - b) for a, b in zip(exact_centroid, exact_unique_centroid, strict=True)],
-    )
+    exact_centroid_offset = [
+        a - b for a, b in zip(exact_centroid, exact_unique_centroid, strict=True)
+    ]
+    centroid_separation = dist((0.0, 0.0, 0.0), [float(value) for value in exact_centroid_offset])
     if len(set(coordinate_multiplicities.values())) == 1:
         # Equal multiplicities cannot move the mathematical centroid. Avoid
         # a false difference from independent floating-point summation paths.
@@ -679,8 +694,9 @@ def measure_point_cloud_preview(
     centroid_separation_scale_interval: list[float] | None = None
     centroid_separation_interval_unresolved = False
     if relative_scale_uncertainty is not None:
-        lower = centroid_separation * (1 - relative_scale_uncertainty)
-        upper = centroid_separation * (1 + relative_scale_uncertainty)
+        lower, upper = _centroid_separation_scale_bounds(
+            exact_centroid_offset, centroid_separation, relative_scale_uncertainty
+        )
         if _scale_interval_unresolved(
             centroid_separation, relative_scale_uncertainty, lower, upper
         ):
@@ -1108,8 +1124,9 @@ def measure_point_cloud_preview(
     preview_centroid_scale_interval: list[float] | None = None
     preview_centroid_interval_unresolved = False
     if relative_scale_uncertainty is not None:
-        lower = preview_centroid_separation * (1 - relative_scale_uncertainty)
-        upper = preview_centroid_separation * (1 + relative_scale_uncertainty)
+        lower, upper = _centroid_separation_scale_bounds(
+            exact_preview_offset, preview_centroid_separation, relative_scale_uncertainty
+        )
         if _scale_interval_unresolved(
             preview_centroid_separation, relative_scale_uncertainty, lower, upper
         ):
