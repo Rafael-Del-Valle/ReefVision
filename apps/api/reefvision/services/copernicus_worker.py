@@ -35,6 +35,11 @@ def read_dataset(request: dict[str, Any], username: str, password: str) -> dict[
         variables = request["variables"]
         if any(set(dataset[name].dims) != required for name in variables):
             raise ValueError("Only rectilinear WGS84 time/depth grids are supported")
+        # xarray synthesizes positional indices for dimensions without coordinates.
+        # Never interpret these indices as physical depth, latitude or longitude.
+        for name in required:
+            if name not in dataset.coords or dataset.coords[name].dims != (name,):
+                raise ValueError("Explicit one-dimensional Copernicus grid coordinates are required")
         if sum(dataset[name].size for name in variables) > MAX_SAMPLES:
             raise ValueError("Subset exceeds 5000 samples; narrow the request")
         # Check shape before materializing remote arrays. Never fetch an unbounded cube.
