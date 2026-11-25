@@ -9,7 +9,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from reefvision.db.models import ReviewQueue, ReviewQueueItem, WorkflowArtifact, WorkflowNodeRun
+from reefvision.db.models import (
+    PredictionProposal,
+    ReviewQueue,
+    ReviewQueueItem,
+    WorkflowArtifact,
+    WorkflowNodeRun,
+)
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.review_queues import ReviewScoreWeights
@@ -176,11 +182,21 @@ def test_saved_qc_retry_preserves_original_weights_and_legacy_defaults(
     assert items.json()["items"][0]["review_state"] == "pending"
 
 
-@pytest.mark.parametrize("minimum", [0.1, 0.5])
-def test_single_prediction_confidence_evidence_on_saved_qc_retry(
-    client: TestClient, minimum: float
+@pytest.mark.parametrize(
+    ("prediction_status", "minimum"),
+    [("pending", 0.1), ("pending", 0.5), ("rejected", 0.1), ("rejected", 0.5)],
+)
+def test_prediction_confidence_evidence_on_saved_qc_retry(
+    client: TestClient, prediction_status: str, minimum: float
 ) -> None:
-    project_id, _ = _local_prediction(client)
+    project_id, prediction_id = _local_prediction(client)
+    app = cast(FastAPI, client.app)
+    if prediction_status == "rejected":
+        with app.state.session_factory() as session:
+            proposal = session.get(PredictionProposal, prediction_id)
+            assert proposal is not None
+            proposal.review_status = "rejected"
+            session.commit()
     weights = {name: 0.0 for name in ReviewScoreWeights.model_fields}
     weights["unreviewed_state"] = 1.0
     standalone = client.post(
@@ -191,7 +207,6 @@ def test_single_prediction_confidence_evidence_on_saved_qc_retry(
     assert payload["priority_score_unit"] == "dimensionless"
     assert payload["review_status"] == "requires_researcher_review"
 
-    app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
         for queue_id in (standalone.json()["id"], payload["queue_id"]):
             queue = session.get(ReviewQueue, queue_id)
@@ -201,9 +216,12 @@ def test_single_prediction_confidence_evidence_on_saved_qc_retry(
             ).all()
             assert len(items) == 1
             item = items[0]
-            assert item.signal_values_json["pending_proposals"] == 1.0
-            assert item.signal_values_json["low_mean_confidence"] == 0.25
-            assert item.signal_values_json["low_min_confidence"] == 0.25
+            expected_count = 1.0 if prediction_status == "pending" else 0.0
+            expected_signal = 0.25 if prediction_status == "pending" else 0.0
+            assert item.signal_values_json["pending_proposals"] == expected_count
+            assert item.signal_values_json["low_mean_confidence"] == expected_signal
+            assert item.signal_values_json["low_min_confidence"] == expected_signal
+            assert item.model_ids_json
             validate_saved_queue_snapshot(queue, items)
 
             # The minimum has zero weight. Change its evidence and re-sign

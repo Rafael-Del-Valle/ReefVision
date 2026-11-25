@@ -631,20 +631,22 @@ def _v3_snapshot():
         original = item.normalized_signals_json["signal"]
         raw = {signal: 0.0 for signal in V3_SUPPORTED_SIGNALS}
         raw["low_mean_confidence"] = original
+        raw["low_min_confidence"] = original
+        raw["pending_proposals"] = 2.0
         if item.highest_qc_severity is not None:
             raw["unresolved_qc_severity"] = V3_QC_SEVERITY_SCORES[item.highest_qc_severity]
         else:
             item.related_issue_ids_json = []
         item.weights_json = dict(weights)
         item.signal_values_json = raw
-        item.normalized_signals_json = dict(raw)
+        item.normalized_signals_json = {**raw, "pending_proposals": 0.2}
         item.score_breakdown_json = sorted(
             [
                 {
                     "signal_id": signal,
                     "label": V3_SIGNAL_LABELS[signal],
                     "raw_value": value,
-                    "normalized_value": round(value, 6),
+                    "normalized_value": round(item.normalized_signals_json[signal], 6),
                     "weight": weights[signal],
                     "contribution": round(value * weights[signal] * 100, 2),
                     "description": (
@@ -861,7 +863,7 @@ def test_v3_rejects_resigned_false_raw_normalization(signal_id: str, altered_raw
 @pytest.mark.parametrize("pending_count", [0, 5, 10, 15, 0.0, 5.0, 10.0, 15.0])
 def test_v3_accepts_real_pending_count_normalization(pending_count: int | float) -> None:
     """Valid raw counts saturate at ten without rewriting reviewer history."""
-    queue, items = _v3_snapshot()
+    queue, items = _v3_snapshot() if pending_count else _v3_human_only_snapshot()
     normalized = min(pending_count / 10.0, 1.0)
     for item in items:
         item.signal_values_json["pending_proposals"] = pending_count
@@ -873,7 +875,7 @@ def test_v3_accepts_real_pending_count_normalization(pending_count: int | float)
         part["normalized_value"] = normalized
         if pending_count > 0:
             # An actual pending prediction must have min confidence <= mean.
-            # The synthetic fixture has no predictions until this test adds them.
+            # Keep the original fixture confidence coherent with the new count.
             minimum = item.signal_values_json["low_mean_confidence"]
             item.signal_values_json["low_min_confidence"] = minimum
             item.normalized_signals_json["low_min_confidence"] = minimum
@@ -1196,3 +1198,26 @@ def test_v3_single_pending_prediction_accepts_equal_confidence_signals() -> None
         )
     queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
     validate_saved_queue_snapshot(queue, items)
+
+
+@pytest.mark.parametrize(
+    ("mean_signal", "min_signal"),
+    [(0.1, 0.0), (0.0, 0.1), (0.25, 0.25), (1.0, 1.0)],
+)
+def test_v3_no_pending_predictions_cannot_invent_confidence(
+    mean_signal: float, min_signal: float
+) -> None:
+    queue, items = _v3_human_only_snapshot()
+    for item in items:
+        # Previously reviewed predictions may still contribute model provenance.
+        item.model_ids_json = ["model-a"]
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    validate_saved_queue_snapshot(queue, items)
+    item = items[0]
+    item.review_state = "in_progress"
+    _set_v3_unweighted_signal(item, "low_mean_confidence", mean_signal)
+    _set_v3_unweighted_signal(item, "low_min_confidence", min_signal)
+    queue.input_checksums_json["item_evidence_sha256"] = queue_item_evidence_sha256(items)
+    with pytest.raises(ValidationError, match="snapshot failed integrity"):
+        validate_saved_queue_snapshot(queue, items)
+    assert item.review_state == "in_progress"
