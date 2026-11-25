@@ -166,7 +166,21 @@ def _verify_database_revision(connection: Any, api_dir: Path) -> tuple[str, int,
     return actual[0], len(lineage), digest
 
 
-def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
+def inspect(
+    db: Path,
+    run_id: str,
+    data_dir: Path,
+    *,
+    expected_digests: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    # Reject an independently identified wrong run before decoding original
+    # footage or hashing potentially multi-gigabyte materialized datasets.
+    def check_expected(key: str, actual: str | None) -> None:
+        if expected_digests is not None and key in expected_digests:
+            _require(
+                actual == expected_digests[key],
+                f"Saved run {key} differs from independently recorded evidence",
+            )
     # The app imports are delayed so the script works from a source checkout.
     api_dir = Path(__file__).resolve().parents[1] / "apps" / "api"
     sys.path.insert(0, str(api_dir))
@@ -237,6 +251,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             # Reuse the app's checksum, node-graph, artifact and closeout validators.
             provenance = build_workflow_run_provenance(session, run_id=run_id)
             _require(bool(provenance), "Saved workflow provenance is missing")
+            check_expected("workflow_graph_sha256", run.graph_sha256)
 
             nodes = session.scalars(
                 select(WorkflowNodeRun).where(WorkflowNodeRun.workflow_run_id == run_id)
@@ -275,6 +290,7 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
             # Performs the app's deep verification of human review, frozen
             # canonical poses, source model/job identities and signed summaries.
             PoseTrainingDatasetService(session).manifest(dataset.id)
+            check_expected("dataset_manifest_sha256", dataset.manifest_sha256)
 
             training = session.get(TrainingRun, result.get("training_run_id"))
             _require(
@@ -374,6 +390,11 @@ def inspect(db: Path, run_id: str, data_dir: Path) -> dict[str, Any]:
                     ),
                     "Separate frozen validation dataset reuses source video identity or content",
                 )
+            check_expected(
+                "validation_dataset_manifest_sha256",
+                validation_dataset.manifest_sha256 if validation_id is not None else None,
+            )
+            check_expected("seed_model_sha256", training.resolved_model_checksum)
             # The split digest alone only proves internal consistency. Rebuild
             # the production split contract from independently verified rows
             # so a rehashed manifest cannot silently misstate its inputs.
@@ -1110,60 +1131,40 @@ def main() -> int:
                 ),
                 "Independent acceptance requires graph, training, holdout and seed digests",
             )
-        expected_graph = args.expected_workflow_graph_sha256
-        if expected_graph is not None:
-            _require(
-                len(expected_graph) == 64
-                and all(c in "0123456789abcdefABCDEF" for c in expected_graph),
-                "Expected workflow graph digest must be a 64-character hexadecimal SHA-256",
-            )
-            expected_graph = expected_graph.lower()
-        evidence = inspect(args.db, args.run_id, args.data_dir)
-        if expected_graph is not None:
-            _require(
-                evidence["workflow_graph_sha256"] == expected_graph,
-                "Saved workflow graph differs from the independently recorded graph",
-            )
-        evidence["expected_workflow_graph_sha256"] = expected_graph
-        for expected, key in (
-            (args.expected_dataset_manifest_sha256, "dataset_manifest_sha256"),
-            (args.expected_validation_manifest_sha256, "validation_dataset_manifest_sha256"),
+        expected_digests: dict[str, str] = {}
+        for key, value in (
+            ("workflow_graph_sha256", args.expected_workflow_graph_sha256),
+            ("dataset_manifest_sha256", args.expected_dataset_manifest_sha256),
+            ("validation_dataset_manifest_sha256", args.expected_validation_manifest_sha256),
+            ("seed_model_sha256", args.expected_seed_model_sha256),
         ):
-            if expected is not None:
+            if value is not None:
                 _require(
-                    len(expected) == 64 and all(c in "0123456789abcdefABCDEF" for c in expected),
+                    len(value) == 64 and all(c in "0123456789abcdefABCDEF" for c in value),
                     f"Expected {key} must be a 64-character hexadecimal SHA-256",
                 )
-                _require(
-                    evidence[key] == expected.lower(),
-                    f"Saved run {key} differs from independently recorded reviewed manifest",
-                )
+                expected_digests[key] = value.lower()
+        evidence = inspect(
+            args.db, args.run_id, args.data_dir, expected_digests=expected_digests
+        )
+        # Retain the independent pins in the final evidence and reconcile the
+        # fully verified return value too, rather than trusting preflight alone.
+        for key, expected in expected_digests.items():
+            _require(
+                evidence[key] == expected,
+                f"Saved run {key} differs from independently recorded evidence",
+            )
+        evidence["expected_workflow_graph_sha256"] = expected_digests.get("workflow_graph_sha256")
         evidence["expected_reviewed_manifest_sha256"] = {
-            "training": (
-                args.expected_dataset_manifest_sha256.lower()
-                if args.expected_dataset_manifest_sha256 is not None
-                else None
-            ),
-            "validation": (
-                args.expected_validation_manifest_sha256.lower()
-                if args.expected_validation_manifest_sha256 is not None
-                else None
-            ),
+            "training": expected_digests.get("dataset_manifest_sha256"),
+            "validation": expected_digests.get("validation_dataset_manifest_sha256"),
         }
-        expected_seed_sha = args.expected_seed_model_sha256
-        if expected_seed_sha is not None:
+        evidence["expected_seed_model_sha256"] = expected_digests.get("seed_model_sha256")
+        if "seed_model_sha256" in expected_digests:
             _require(
-                len(expected_seed_sha) == 64
-                and all(c in "0123456789abcdefABCDEF" for c in expected_seed_sha),
-                "Expected seed model digest must be a 64-character hexadecimal SHA-256",
+                bool(evidence["seed_model_id"]),
+                "Verified registered seed is missing",
             )
-            expected_seed_sha = expected_seed_sha.lower()
-            _require(
-                bool(evidence["seed_model_id"])
-                and evidence["seed_model_sha256"] == expected_seed_sha,
-                "Verified registered seed differs from the independently recorded local weights",
-            )
-        evidence["expected_seed_model_sha256"] = expected_seed_sha
         if args.require_registered_seed or args.require_independent_evidence:
             _require(
                 bool(evidence["seed_model_id"]),
