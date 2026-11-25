@@ -623,13 +623,17 @@ def _verify_prelaunch_pose_dataset(
 
 
 def _verify_postlaunch_pose_dataset(
-    destination: Path, materialization: object, persisted_manifest: object
+    destination: Path,
+    materialization: object,
+    persisted_manifest: object,
+    dataset_relative: str,
 ) -> None:
     """Reject changed inputs or persisted provenance after GPU training."""
 
     if (
         not isinstance(materialization, dict)
         or not isinstance(persisted_manifest, dict)
+        or persisted_manifest.get("dataset_output_path") != dataset_relative
         or persisted_manifest.get("materialization") != materialization
         or persisted_manifest.get("validation_mode") != materialization.get("validation_mode")
     ):
@@ -1388,16 +1392,16 @@ def process_pose_training_job(
 
             base_relative = f"{project.storage_root}/training/{run.id}"
 
-            dataset_root = _resolve_unlinked_pose_run_path(
-                settings,
-                f"{base_relative}/pose-dataset",
-            )
+            if f"{base_relative}/pose-dataset" != dataset_relative:
+                raise ValidationError("Pose training dataset path changed before launch")
+            dataset_root = _resolve_unlinked_pose_run_path(settings, dataset_relative)
             # Compare persisted provenance against the original export result,
             # not just a freshly read digest that could have been substituted.
             artifact_manifest = dict(run.artifact_manifest_json or {})
             frozen_materialization = artifact_manifest.get("materialization")
             if (
-                frozen_materialization != materialized
+                artifact_manifest.get("dataset_output_path") != dataset_relative
+                or frozen_materialization != materialized
                 or artifact_manifest.get("validation_mode") != materialized["validation_mode"]
             ):
                 raise ValidationError("Pose training materialization changed before launch")
@@ -1542,7 +1546,9 @@ def process_pose_training_job(
                 # A training process (or another local process) can alter
                 # frozen inputs after preflight. Never register a successful
                 # experiment against bytes that were not the reviewed input.
-                _verify_postlaunch_pose_dataset(dataset_root, materialized, manifest)
+                _verify_postlaunch_pose_dataset(
+                    dataset_root, materialized, manifest, dataset_relative
+                )
                 _complete_training_run(
                     session,
                     run,
