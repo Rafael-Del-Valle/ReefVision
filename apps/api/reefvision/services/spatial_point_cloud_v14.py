@@ -589,17 +589,34 @@ def measure_point_cloud_preview(
     # representable axes, including genuine zero coordinates.
     coordinate_scale_interval_underflow = False
 
-    def coordinate_scale_intervals(bounds: list[float]) -> list[list[float] | None] | None:
+    def coordinate_scale_intervals(
+        bounds: list[float] | tuple[float, float, float],
+        *,
+        source_coordinates: bool = False,
+    ) -> list[list[float] | None] | None:
         nonlocal coordinate_scale_interval_underflow
         if relative_scale_uncertainty is None:
             return None
         intervals: list[list[float] | None] = []
         for value in bounds:
-            candidates = (
-                value * (1 - relative_scale_uncertainty),
-                value * (1 + relative_scale_uncertainty),
-            )
-            if _scale_interval_unresolved(value, relative_scale_uncertainty, *candidates):
+            if source_coordinates:
+                # Source coordinates are available before calibration. Avoid
+                # rounding twice and preserve signed interval ordering.
+                exact_value = Fraction(value) * Fraction(scale)
+                uncertainty = Fraction(relative_scale_uncertainty)
+                nominal = float(exact_value)
+                candidates = (
+                    float(exact_value * (1 - uncertainty)),
+                    float(exact_value * (1 + uncertainty)),
+                )
+            else:
+                # Derived centroids already have a rounded nominal value.
+                nominal = value
+                candidates = (
+                    value * (1 - relative_scale_uncertainty),
+                    value * (1 + relative_scale_uncertainty),
+                )
+            if _scale_interval_unresolved(nominal, relative_scale_uncertainty, *candidates):
                 coordinate_scale_interval_underflow = True
                 intervals.append(None)
             else:
@@ -1192,7 +1209,10 @@ def measure_point_cloud_preview(
         ),
         "preview_points_in_source_frame_m": preview_points,
         "preview_point_scale_intervals_m": (
-            [coordinate_scale_intervals(point) for point in preview_points]
+            [
+                coordinate_scale_intervals(vertices[index], source_coordinates=True)
+                for index in preview_indices
+            ]
             if relative_scale_uncertainty is not None
             else None
         ),
@@ -1209,8 +1229,12 @@ def measure_point_cloud_preview(
         "axis_aligned_dimension_scale_interval_m": dimension_scale_intervals,
         "axis_aligned_min_in_source_frame_m": bounds_min,
         "axis_aligned_max_in_source_frame_m": bounds_max,
-        "axis_aligned_min_in_source_frame_scale_interval_m": coordinate_scale_intervals(bounds_min),
-        "axis_aligned_max_in_source_frame_scale_interval_m": coordinate_scale_intervals(bounds_max),
+        "axis_aligned_min_in_source_frame_scale_interval_m": coordinate_scale_intervals(
+            source_bounds_min, source_coordinates=True
+        ),
+        "axis_aligned_max_in_source_frame_scale_interval_m": coordinate_scale_intervals(
+            source_bounds_max, source_coordinates=True
+        ),
         "axis_aligned_bounding_box_diagonal_m": diagonal,
         "axis_aligned_bounding_box_diagonal_scale_interval_m": diagonal_scale_interval,
         "axis_aligned_bounding_box_envelope_volume_m3": envelope_volume,
