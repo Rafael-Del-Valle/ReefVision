@@ -1108,6 +1108,8 @@ def test_pose_materialization_rejects_overridden_frozen_dataset_paths(
         ("snapshot_manifest", "frozen snapshot lineage changed"),
         ("snapshot_split", "frozen split manifest changed"),
         ("snapshot_schema", "frozen schema lineage changed"),
+        ("resolved_asset", "frozen initialization lineage changed"),
+        ("snapshot_seed", "frozen initialization lineage changed"),
     ),
 )
 def test_pose_worker_checks_frozen_lineage_before_export(
@@ -1159,6 +1161,8 @@ def test_pose_worker_checks_frozen_lineage_before_export(
                 assert run is not None
                 if tampered_field == "run_manifest":
                     run.dataset_manifest_sha256 = "0" * 64
+                elif tampered_field == "resolved_asset":
+                    run.resolved_model_asset_id = "registered_model:unrelated-model"
                 else:
                     snapshot = dict(run.draft_snapshot_json or {})
                     if tampered_field == "snapshot_split":
@@ -1170,6 +1174,8 @@ def test_pose_worker_checks_frozen_lineage_before_export(
                         }
                     elif tampered_field == "snapshot_schema":
                         snapshot["pose_schema_revision"] = 999
+                    elif tampered_field == "snapshot_seed":
+                        snapshot["seed_model_sha256"] = "0" * 64
                     else:
                         snapshot["pose_training_dataset_manifest_sha256"] = "0" * 64
                     run.draft_snapshot_json = snapshot
