@@ -124,6 +124,7 @@ def create_review_queue_workflow_artifact(
     dataset_version: DatasetVersion | None = None
     expected_input_ids = [source.id]
     frozen_split_by_image_id: dict[str, str] = {}
+    frozen_items_by_image_id: dict[str, DatasetVersionItem] = {}
     if dataset_inputs:
         dataset_source = dataset_inputs[0]
         dataset_payload = dataset_source.payload_json
@@ -179,6 +180,7 @@ def create_review_queue_workflow_artifact(
         validate_frozen_dataset_manifest(dataset_version, frozen_items)
         expected_image_ids = [item.image_id for item in frozen_items]
         frozen_split_by_image_id = {item.image_id: item.split for item in frozen_items}
+        frozen_items_by_image_id = {item.image_id: item for item in frozen_items}
         expected_split_counts = dict(Counter(str(item.split) for item in frozen_items))
         if (
             dataset_source.workflow_run_id != run_id
@@ -363,9 +365,32 @@ def create_review_queue_workflow_artifact(
             dataset_version_id is not None
             and existing.input_checksums_json.get("integrity_schema_version")
             == "qc-review-queue-v3"
-            and {item.image_id for item in existing.items} != frozen_split_by_image_id.keys()
         ):
-            raise ValidationError("QC review-queue frozen dataset image coverage is incomplete")
+            if {item.image_id for item in existing.items} != frozen_split_by_image_id.keys():
+                raise ValidationError("QC review-queue frozen dataset image coverage is incomplete")
+            # The validated manifest independently authenticates the original
+            # detection annotation census. Do not read live labels or include
+            # mask-only observations in the existing v3 scoring formula.
+            class_counts: Counter[str] = Counter()
+            for frozen_item in frozen_items_by_image_id.values():
+                class_counts.update(frozen_item.per_class_counts_json)
+            max_class_count = max(class_counts.values(), default=1)
+            for item in existing.items:
+                frozen_item = frozen_items_by_image_id[item.image_id]
+                class_ids = sorted(frozen_item.per_class_counts_json)
+                rare_class_presence = max(
+                    (1.0 - class_counts[class_id] / max_class_count for class_id in class_ids),
+                    default=0.0,
+                )
+                if (
+                    item.label_class_ids_json != class_ids
+                    or item.signal_values_json["rare_class_presence"] != rare_class_presence
+                    or item.signal_values_json["count_disagreement"]
+                    != float(frozen_item.annotation_count > 0)
+                ):
+                    raise ValidationError(
+                        "QC review-queue frozen annotation evidence does not match manifest"
+                    )
         queue = service.get_queue(existing.id)
     else:
         try:

@@ -95,3 +95,16 @@ unchanged. The disposable regression verifies standalone coverage, saved
 workflow rejection after re-signing the empty queue and output, and rollback
 to the original pending researcher-review state. No research data or workflow
 artifact is rewritten by the guard.
+
+## Frozen annotation census replay (2026-11-25)
+
+V3 saved frozen QC retries now reconcile detection class references, the
+cohort-wide rare-class priority and the binary prediction-free count gap
+against the independently validated immutable manifest census. Mask-only
+observations remain excluded from the existing v3 detection scoring formula;
+live classes and live predictions are not consulted. Re-signing the queue
+and output cannot substitute a taxon or falsify these annotation-derived
+signals. Standalone generation and saved graph regression cover parity,
+re-signed class substitution, rare-class priority, an incorrect count-gap
+endpoint, refusal and rollback to pending researcher review. No new scoring
+version, migration or automatic biological approval is introduced.
