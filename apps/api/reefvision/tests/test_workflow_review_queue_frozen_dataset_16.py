@@ -9,6 +9,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.orm.attributes import flag_modified
 
 from reefvision.db.models import ReviewQueue, WorkflowArtifact, WorkflowNodeRun
 from reefvision.domain.errors import ValidationError
@@ -324,6 +325,11 @@ def test_saved_frozen_qc_replay_enforces_dataset_scope(
             assert canonical_json_sha256(changed) != saved_output.payload_sha256
             saved_output.payload_json = changed
             saved_output.payload_sha256 = canonical_json_sha256(changed)
+            # Force persistence even when ORM value equality also conflates types.
+            flag_modified(saved_output, "payload_json")
+            session.flush()
+            session.refresh(saved_output)
+            assert saved_output.payload_sha256 == canonical_json_sha256(saved_output.payload_json)
         elif tamper == "resigned_missing_item":
             # Disposable transaction: omit the only frozen image and re-sign
             # every affected count, checksum and saved output. Internal queue
