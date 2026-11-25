@@ -533,13 +533,10 @@ def measure_point_cloud_preview(
     # Sum the imported coordinates exactly before calibration. Rounding each
     # calibrated row can create a false nonzero centroid after cancellation.
     # A point centroid is not a tissue centroid or a verified organism position.
-    def exact_calibrated_centroid(
-        rows: list[tuple[float, float, float]],
-    ) -> list[Fraction]:
+    def exact_calibrated_centroid(rows: list[tuple[float, float, float]]) -> list[Fraction]:
+        exact_scale = Fraction(scale)
         return [
-            sum((Fraction(point[axis]) for point in rows), Fraction())
-            * Fraction(scale)
-            / len(rows)
+            sum((Fraction(point[axis]) for point in rows), Fraction()) * exact_scale / len(rows)
             for axis in range(3)
         ]
 
