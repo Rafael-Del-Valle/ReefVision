@@ -1069,9 +1069,42 @@ def main() -> int:
         action="store_true",
         help="Fail unless a separate frozen validation dataset was verified",
     )
+    parser.add_argument(
+        "--expected-dataset-manifest-sha256",
+        help="Expected training manifest digest from an independent scientific review record",
+    )
+    parser.add_argument(
+        "--expected-validation-manifest-sha256",
+        help="Expected holdout manifest digest from an independent scientific review record",
+    )
     args = parser.parse_args()
     try:
         evidence = inspect(args.db, args.run_id, args.data_dir)
+        for expected, key in (
+            (args.expected_dataset_manifest_sha256, "dataset_manifest_sha256"),
+            (args.expected_validation_manifest_sha256, "validation_dataset_manifest_sha256"),
+        ):
+            if expected is not None:
+                _require(
+                    len(expected) == 64 and all(c in "0123456789abcdefABCDEF" for c in expected),
+                    f"Expected {key} must be a 64-character hexadecimal SHA-256",
+                )
+                _require(
+                    evidence[key] == expected.lower(),
+                    f"Saved run {key} differs from independently recorded reviewed manifest",
+                )
+        evidence["expected_reviewed_manifest_sha256"] = {
+            "training": (
+                args.expected_dataset_manifest_sha256.lower()
+                if args.expected_dataset_manifest_sha256 is not None
+                else None
+            ),
+            "validation": (
+                args.expected_validation_manifest_sha256.lower()
+                if args.expected_validation_manifest_sha256 is not None
+                else None
+            ),
+        }
         if args.require_registered_seed:
             _require(
                 bool(evidence["seed_model_id"]),
