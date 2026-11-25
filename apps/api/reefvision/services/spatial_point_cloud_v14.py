@@ -686,7 +686,9 @@ def measure_point_cloud_preview(
     exact_centroid_offset = [
         a - b for a, b in zip(exact_centroid, exact_unique_centroid, strict=True)
     ]
-    centroid_separation = dist((0.0, 0.0, 0.0), [float(value) for value in exact_centroid_offset])
+    centroid_separation = dist(
+        (0.0, 0.0, 0.0), [float(value) for value in exact_centroid_offset]
+    )
     if len(set(coordinate_multiplicities.values())) == 1:
         # Equal multiplicities cannot move the mathematical centroid. Avoid
         # a false difference from independent floating-point summation paths.
