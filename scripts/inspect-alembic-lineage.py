@@ -883,6 +883,16 @@ def _annotation_aggregate_column_contract_matches(db: sqlite3.Connection) -> boo
     return True
 
 
+def _canonical_stamp_key(db: sqlite3.Connection) -> bool:
+    """Require the original ascending, BINARY Alembic primary key."""
+    indexes = list(db.execute('PRAGMA index_list("alembic_version")'))
+    if len(indexes) != 1 or indexes[0][3] != "pk" or indexes[0][4]:
+        return False
+    index_name = '"' + indexes[0][1].replace('"', '""') + '"'
+    key_rows = [row for row in db.execute(f"PRAGMA index_xinfo({index_name})") if row[5]]
+    return [(row[2], row[3], row[4]) for row in key_rows] == [("version_num", 0, "BINARY")]
+
+
 def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
     if not path.is_file():
         raise ValueError(f"Database file does not exist: {path}")
@@ -992,6 +1002,7 @@ def inspect(path: Path, *, verify_structural_contracts: bool = False) -> dict:
             and version_table_info[0][6] == 0
             and not version_has_check
             and version_index_count == 0
+            and _canonical_stamp_key(db)
         )
         # A malformed Alembic table is a diagnostic finding, not an inspector crash.
         revisions = (
