@@ -28,3 +28,23 @@ Release remains held for integrated migration reconciliation, full CI,
 representative biological workflows, installed Windows MSI/CAB GUI and
 upgrade/rollback, and explicit researcher approval. No new migration,
 duplicate node, external weights or changes to other version branches.
+
+## Joint filtered-sample bound (2026-11-25)
+
+When a researcher selects pending predictions with confidence at most t,
+every confidence deficit is at least b = 1 - t. If the largest observed
+deficit is d and the selected count is n, the mean deficit must be at
+least b + max(0, d - b) / n. Checking the selection and unfiltered sample
+bounds independently is insufficient. The v3 validator now checks their
+joint bound with the existing 1e-12 selection tolerance. This is a
+necessary consistency check, not authentication of the original model
+predictions. No live predictions are read or review state changed.
+
+Five synthetic re-signed cases and two additional standalone API and
+saved-graph replay cases cover this constraint. Independent Python checks
+passed for 1,926 valid producer samples and four contradictory filtered
+samples that met both former separate bounds. Full repository pytest is
+not yet verified. Exact-head CI #45562778337 passed frontend and native
+Windows preservation but stopped at the fixture signature Ruff formatting;
+that exact formatting has been corrected. Release HOLD and all earlier
+scientific, integrated migration and installed GUI gates remain in force.
