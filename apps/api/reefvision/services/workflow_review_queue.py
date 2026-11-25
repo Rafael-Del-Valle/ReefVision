@@ -346,8 +346,8 @@ def create_review_queue_workflow_artifact(
         validate_saved_queue_snapshot(existing, existing.items)
         # A re-signed queue digest can still relabel an image's frozen split
         # or substitute an image absent from the original dataset version.
-        # Bind every persisted QC item to its immutable version membership;
-        # confidence-filtered queues may legitimately contain only a subset.
+        # Bind every persisted QC item to its immutable version membership.
+        # Historical confidence-filtered snapshots may contain a subset.
         if dataset_version_id is not None and any(
             item.image_id not in frozen_split_by_image_id
             or item.split != frozen_split_by_image_id[item.image_id]
@@ -356,6 +356,16 @@ def create_review_queue_workflow_artifact(
             raise ValidationError(
                 "QC review-queue frozen dataset item membership or split does not match"
             )
+        # V3 frozen queues prohibit confidence selection and rank every
+        # frozen image. A self-consistent queue and output digest can otherwise
+        # hide missing biological observations, even an entirely empty queue.
+        if (
+            dataset_version_id is not None
+            and existing.input_checksums_json.get("integrity_schema_version")
+            == "qc-review-queue-v3"
+            and {item.image_id for item in existing.items} != frozen_split_by_image_id.keys()
+        ):
+            raise ValidationError("QC review-queue frozen dataset image coverage is incomplete")
         queue = service.get_queue(existing.id)
     else:
         try:
