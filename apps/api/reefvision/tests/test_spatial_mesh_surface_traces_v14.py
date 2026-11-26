@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from fractions import Fraction
 from itertools import pairwise
-from math import pi, sqrt
+from math import dist, pi, sqrt
 from typing import Any, cast
 
 import pytest
@@ -1844,7 +1845,13 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert topology["biological_validation_status"] == "not_verified_anatomical_centerline"
     chains = union["endpoint_graph_chains"]
     _assert_chain_traversals(chains, params["vertices"], params["surface_trace_vertex_paths"])
-    _assert_endpoint_components(union, params["vertices"], params["surface_trace_vertex_paths"])
+    _assert_endpoint_components(
+        union,
+        params["vertices"],
+        params["surface_trace_vertex_paths"],
+        params["meters_per_unit"],
+        params["relative_scale_uncertainty"],
+    )
     assert sum(chain["edge_count"] for chain in chains) == union["distinct_nonzero_edge_count"]
     assert all(chain["human_review_verified"] is False for chain in chains)
     assert {warning for chain in chains for warning in chain["qc_warnings"]} <= set(
@@ -1869,6 +1876,12 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             {"trace_index": 1, "chain_edge_offsets": [0]}
         ]
         assert artifact["qc_warnings"].count(warning) == 1
+        components = union["endpoint_graph_components"]
+        component_warning = "surface_trace_component_length_underflow"
+        assert components[0]["length_m"] is None
+        assert components[0]["qc_warnings"] == [component_warning]
+        assert components[1]["length_m"] == union["length_m"]
+        assert artifact["qc_warnings"].count(component_warning) == 1
     if case in {"closed_loop", "closed_loop_reverse", "closed_loop_rotated"}:
         assert len(chains) == 1
         assert chains[0]["is_closed"] is True
@@ -2280,7 +2293,11 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
 
 
 def _assert_endpoint_components(
-    union: dict[str, Any], vertices: list[list[float]], paths: list[list[int]]
+    union: dict[str, Any],
+    vertices: list[list[float]],
+    paths: list[list[int]],
+    scale: float = 0.01,
+    uncertainty: float | None = 0.1,
 ) -> None:
     # Independent set-merging oracle, starting from submitted edges.
     edges = {
@@ -2304,6 +2321,20 @@ def _assert_endpoint_components(
     for group in sorted(groups, key=min):
         group_edges = [edge for edge in edges if edge <= group]
         degrees = [sum(point in edge for edge in group_edges) for point in group]
+        source_length = sum((Fraction(dist(*edge)) for edge in group_edges), Fraction(0))
+        calibrated = source_length * Fraction(scale)
+        nominal = float(calibrated)
+        interval = None
+        warnings = []
+        if nominal == 0:
+            warnings.append("surface_trace_component_length_underflow")
+        elif uncertainty is not None:
+            lower = float(calibrated * (1 - Fraction(uncertainty)))
+            upper = float(calibrated * (1 + Fraction(uncertainty)))
+            if (uncertainty < 1 and lower == 0) or (uncertainty > 0 and lower == upper):
+                warnings.append("surface_trace_component_interval_unrepresentable")
+            else:
+                interval = [lower, upper]
         expected.append(
             {
                 "source_min_vertex_mesh_units": list(min(group)),
@@ -2312,6 +2343,10 @@ def _assert_endpoint_components(
                 "degree_one_vertex_count": degrees.count(1),
                 "degree_three_or_more_vertex_count": sum(degree >= 3 for degree in degrees),
                 "cycle_rank": len(group_edges) - len(group) + 1,
+                "source_length_mesh_units": float(source_length),
+                "length_m": nominal if nominal > 0 else None,
+                "length_scale_only_interval_m": interval,
+                "qc_warnings": warnings,
                 "chain_indices": [
                     index
                     for index, chain in enumerate(chains)
@@ -2614,7 +2649,13 @@ def test_exact_trace_endpoint_graph_does_not_connect_interior_crossings() -> Non
     assert topology["degree_one_vertex_count"] == 4
     assert topology["degree_three_or_more_vertex_count"] == 0
     assert topology["cycle_rank"] == 0
-    _assert_endpoint_components(union, params["vertices"], params["surface_trace_vertex_paths"])
+    _assert_endpoint_components(
+        union,
+        params["vertices"],
+        params["surface_trace_vertex_paths"],
+        params["meters_per_unit"],
+        params["relative_scale_uncertainty"],
+    )
     assert union["source_length_mesh_units"] == pytest.approx(4.0)
     chains = union["endpoint_graph_chains"]
     assert [chain["source_waypoints_mesh_units"] for chain in chains] == [
@@ -2622,6 +2663,10 @@ def test_exact_trace_endpoint_graph_does_not_connect_interior_crossings() -> Non
         [[0, -1, 0], [0, 1, 0]],
     ]
     assert [chain["length_m"] for chain in chains] == pytest.approx([0.02, 0.02])
+    components = union["endpoint_graph_components"]
+    assert [component["length_m"] for component in components] == pytest.approx([0.02, 0.02])
+    for component in components:
+        assert component["length_scale_only_interval_m"] == pytest.approx([0.018, 0.022])
     assert topology["human_review_verified"] is False
 
 
@@ -2685,6 +2730,7 @@ def test_trace_union_numeric_qc_is_visible_at_preview_level(uncertainty: float |
         "surface_trace_exact_edge_union_interval_unrepresentable",
         "surface_trace_collinear_union_interval_unrepresentable",
         "surface_trace_chain_interval_unrepresentable",
+        "surface_trace_component_interval_unrepresentable",
     }
     expected_warnings = warnings if uncertainty == 1e-30 else set()
     assert warnings.intersection(result["qc_warnings"]) == expected_warnings
