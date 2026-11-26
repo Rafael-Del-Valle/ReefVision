@@ -947,7 +947,38 @@ def measure_mesh_preview(
                 union_warnings.append("surface_trace_exact_edge_union_interval_unrepresentable")
             else:
                 interval = [lower, upper]
+        # This graph connects only exact coincident endpoints of selected
+        # nonzero edges. Interior crossings and partial overlaps are not
+        # split, and these graph degrees are not anatomical landmarks.
+        adjacency: dict[tuple[float, float, float], set[tuple[float, float, float]]] = {}
+        for edge in traversal_counts:
+            first, second = min(edge), max(edge)
+            adjacency.setdefault(first, set()).add(second)
+            adjacency.setdefault(second, set()).add(first)
+        unseen_vertices = set(adjacency)
+        component_count = 0
+        while unseen_vertices:
+            component_count += 1
+            frontier = [unseen_vertices.pop()]
+            while frontier:
+                for neighbor in adjacency[frontier.pop()]:
+                    if neighbor in unseen_vertices:
+                        unseen_vertices.remove(neighbor)
+                        frontier.append(neighbor)
+        topology = {
+            "method": "exact_nonzero_edge_endpoint_graph",
+            "vertex_count": len(adjacency),
+            "connected_component_count": component_count,
+            "degree_one_vertex_count": sum(len(neighbors) == 1 for neighbors in adjacency.values()),
+            "degree_three_or_more_vertex_count": sum(
+                len(neighbors) >= 3 for neighbors in adjacency.values()
+            ),
+            "cycle_rank": len(traversal_counts) - len(adjacency) + component_count,
+            "biological_validation_status": "not_verified_anatomical_centerline",
+            "human_review_verified": False,
+        }
         exact_edge_union = {
+            "endpoint_graph_topology": topology,
             "method": "exact_endpoint_pair_equality_only",
             "distinct_nonzero_edge_count": len(traversal_counts),
             "nonzero_edge_traversal_count": traversal_count,
