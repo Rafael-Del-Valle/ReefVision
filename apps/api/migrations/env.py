@@ -84,6 +84,17 @@ def run_migrations_online() -> None:
                     "inside the migration transaction; refusing to commit."
                 )
             assert_compatible_revision_0038(connection)
+            # Alembic batch migrations may run with SQLite foreign-key
+            # enforcement disabled. Check the final graph before committing
+            # so orphaned scientific or reviewer records cannot survive.
+            if (
+                connection.dialect.name == "sqlite"
+                and connection.exec_driver_sql("PRAGMA foreign_key_check").first() is not None
+            ):
+                raise RuntimeError(
+                    "ReefVision desktop migration found orphaned scientific or reviewer "
+                    "references; refusing to commit."
+                )
 
 
 if context.is_offline_mode():
