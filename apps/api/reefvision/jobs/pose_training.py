@@ -253,7 +253,9 @@ def _preflight_pose_zip_frame_inventory(archive: zipfile.ZipFile) -> None:
             # Frozen frames and labels are flat. Even an empty nested directory
             # would fail post-extraction verification after claiming the run.
             if parts and parts[0] in {"images", "labels"} and len(parts) > 2:
-                raise ValidationError("Ultralytics pose export has unmatched image/label frame sets")
+                raise ValidationError(
+                    "Ultralytics pose export has unmatched image/label frame sets"
+                )
             continue
         if name.startswith("images/train/"):
             images.add(name.removeprefix("images/train/"))
