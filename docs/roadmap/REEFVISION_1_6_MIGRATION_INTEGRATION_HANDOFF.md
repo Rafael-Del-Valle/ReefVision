@@ -435,3 +435,32 @@ workflow node or cross-version DAG reconciliation. Release HOLD remains until
 integrated lineage reconciliation, exact-head CI, representative biological
 acceptance, installed Windows MSI/CAB and GUI upgrade/rollback, and explicit
 researcher approval.
+
+## 2026-11-26 — Validate biological and reviewer foreign keys before commit
+
+SQLite Alembic connections may leave foreign-key enforcement disabled for
+batch table recreation. A valid final revision and QC table schema do not
+prove that a migration retained parent records. The existing desktop
+pre-commit verification now also runs SQLite `PRAGMA foreign_key_check`
+within the same write transaction. Any violation, including a preexisting
+orphan carried into the candidate schema, refuses the upgrade and rolls back
+all migration DDL, stamps and data changes. The error does not expose
+observation values or offending record identities. No rows are repaired,
+deleted or automatically approved. This check applies to actual desktop
+upgrades, not ordinary CLI migrations or an already-current startup.
+
+The real desktop migration postcondition regression now injects a deleted
+coral-colony parent while the final migration executes, for both DELETE and
+WAL journal modes. It checks that the full schema, original revision,
+observation and parent rows survive the refusal, and that a clean retry
+reaches 0041 with no foreign-key violations. Four independent
+SQLAlchemy/Alembic-context/SQLite fault-and-control probes passed across the
+two journal modes; these are not the full repository tests.
+
+No new scientific workflow node or migration revision is introduced.
+Existing standalone and saved executable QC workflows, typed references,
+provenance and explicit researcher review remain unchanged. This is not a
+reconciliation of the independently published 1.1/1.6 migration histories.
+Release HOLD pending integrated reconciliation, full exact-head CI,
+representative biological/saved-workflow acceptance, genuine installed
+Windows MSI/CAB GUI upgrade/rollback, and researcher approval.
