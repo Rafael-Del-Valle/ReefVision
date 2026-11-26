@@ -326,6 +326,18 @@ def test_standalone_longitudinal_comparison_resolves_project_assets(client: Test
         == expected["provenance"]["after_geometry_sha256"]
     )
 
+    # Source lineage must survive even when no pairwise review was supplied.
+    provenance = expected["provenance"]
+    assert provenance["review_evidence_bundle"] is None
+    assert provenance["review_evidence_bundle_sha256"] is None
+    assert provenance["longitudinal_change_withheld_due_to_reused_spatial_source_asset"] is True
+    for side in ("before", "after"):
+        assert provenance[f"{side}_spatial_source_asset_id"] == asset_id
+        assert provenance[f"{side}_source_payload_sha256"] == imported.json()["sha256"]
+        assert provenance[f"{side}_source_format"] == "obj"
+        assert provenance[f"{side}_source_payload_size_bytes"] == len(OBJ)
+        assert provenance[f"{side}_source_payload_integrity_checked"] is True
+
     # The persisted typed graph must make the same conservative scientific
     # decision as the standalone endpoint when it re-reads the original.
     before_params = {
@@ -381,21 +393,22 @@ def test_standalone_longitudinal_comparison_resolves_project_assets(client: Test
     assert plan.json()["executable"] is True
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
-    assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    )
-    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
-    assert detail.status_code == 200, detail.text
-    assert detail.json()["run"]["status"] == "succeeded"
-    comparisons = [
-        item["payload_json"]
-        for item in detail.json()["artifacts"]
-        if item["data_type"] == "mesh_longitudinal_comparison"
-    ]
-    assert comparisons == [expected]
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        comparisons = [
+            item["payload_json"]
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_longitudinal_comparison"
+        ]
+        assert comparisons == [expected]
 
 
 @pytest.mark.parametrize(
