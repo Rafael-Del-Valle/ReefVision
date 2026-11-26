@@ -10,3 +10,13 @@ Regression coverage: seven invalid standalone/planning cases refuse without crea
 ## Retry parameter type integrity — 2026-11-26
 
 Python dictionary equality considers Boolean flags equal to numeric zero and one. The saved-workflow retry now independently validates the persisted authoritative weights and confidence threshold as well as the supplied request; a malformed Boolean cannot be disguised by an equal-looking numeric retry. Valid historical omitted/default weights and numerical boundaries remain supported. Added eight persisted-workflow regression cases (both directions of substitution, both boundaries, threshold and weights), rollback/replay, queue identity, dimensionless units and pending human review checks. Corrected the exact prior CI formatting diagnostic in the boundary test. No migration, scoring change or automatic review. Independent Pydantic/equality probes are not full repository tests; exact-head CI and installed Windows/biological acceptance remain required.
+
+Persisted QC node parameters must also retain their JSON object shape. A JSON
+array of key/value pairs, including a duplicate key that is silently overwritten
+by a later pair, must not be coerced into an apparently valid replay contract.
+Null, Boolean and other non-object shapes are rejected before queue reuse or
+creation. A real empty object remains valid for historical default parameters;
+existing optional-weight compatibility is unchanged. The regression writes
+malformed JSON into a disposable transaction, verifies refusal, rolls back,
+then verifies the original dimensionless, researcher-review-required queue
+is replayed without creating another queue.
