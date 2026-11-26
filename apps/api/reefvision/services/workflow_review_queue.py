@@ -342,6 +342,10 @@ def create_review_queue_workflow_artifact(
     # reuse another queue with the same owner. This protects researcher audit
     # history even if an attacker re-signs a substituted artifact payload.
     saved_outputs = node.output_artifact_ids_json
+    # Only a real empty JSON list represents an interrupted node without an
+    # output. Falsey non-list values must not authorize artifact regeneration.
+    if not isinstance(saved_outputs, list):
+        raise ValidationError("QC review-queue saved output binding is invalid")
     # A completed node cannot lose either its output binding OR its owned
     # queue. If both disappear, an empty output list otherwise bypasses
     # validation and silently creates replacement scientific evidence.
@@ -351,15 +355,16 @@ def create_review_queue_workflow_artifact(
             "QC review-queue completed node is missing saved output binding or queue"
         )
     if saved_outputs and (
-        not isinstance(saved_outputs, list)
-        or len(saved_outputs) != 1
+        len(saved_outputs) != 1
         or type(saved_outputs[0]) is not str
         or existing is None
     ):
         raise ValidationError("QC review-queue saved output binding is invalid")
     expected_scope_type = "dataset_version" if dataset_version_id else "project"
     if existing is not None:
-        config = dict(existing.configuration_json or {})
+        config = existing.configuration_json
+        if not isinstance(config, dict):
+            raise ValidationError("Saved QC review queue snapshot failed integrity validation")
         if (
             existing.status != "complete"
             or existing.dataset_version_id != dataset_version_id
