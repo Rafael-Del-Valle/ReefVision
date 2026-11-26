@@ -2355,7 +2355,7 @@ def _assert_endpoint_components(
             for low, high in zip(minima, maxima, strict=True)
         ]
         spans = [None if span and not float(span) else float(span) for span in exact_spans]
-        intervals = []
+        intervals: list[list[float] | None] = []
         lost_interval = False
         for span, nominal_span in zip(exact_spans, spans, strict=True):
             if nominal_span is None or uncertainty is None:
@@ -2840,9 +2840,21 @@ def test_trace_union_numeric_qc_is_visible_at_preview_level(uncertainty: float |
         "surface_trace_collinear_union_interval_unrepresentable",
         "surface_trace_chain_interval_unrepresentable",
         "surface_trace_component_interval_unrepresentable",
+        "surface_trace_component_axis_span_interval_unrepresentable",
     }
     expected_warnings = warnings if uncertainty == 1e-30 else set()
     assert warnings.intersection(result["qc_warnings"]) == expected_warnings
+    component = union["endpoint_graph_components"][0]
+    assert component["axis_aligned_spans_m"] == [0.01, 0.01, 0.0]
+    span_intervals = component["axis_aligned_span_scale_only_intervals_m"]
+    if uncertainty is None:
+        assert span_intervals == [None, None, None]
+    elif uncertainty == 1e-30:
+        assert span_intervals == [None, None, [0.0, 0.0]]
+    else:
+        for interval in span_intervals[:2]:
+            assert interval == pytest.approx([0.01 * (1 - uncertainty), 0.01 * (1 + uncertainty)])
+        assert span_intervals[2] == [0.0, 0.0]
     if uncertainty is None or uncertainty == 1e-30:
         assert corrected["length_scale_only_interval_m"] is None
     else:
