@@ -182,6 +182,35 @@ def _verify_effective_training_config(
     )
 
 
+def _verify_requested_random_seed(parameters: dict[str, Any], actual: int | None) -> None:
+    """Reconcile the saved node's seed with the effective training run."""
+    supplied = parameters.get("training_config", {})
+    raw_seed = parameters.get("random_seed")
+    if raw_seed is None and "seed" in supplied:
+        raw_seed = supplied["seed"]
+    expected = None
+    if raw_seed is not None:
+        _require(
+            type(raw_seed) is int
+            or (isinstance(raw_seed, str) and raw_seed.isascii() and raw_seed.isdecimal()),
+            "Saved pose random seed is not a non-negative integer",
+        )
+        expected = int(raw_seed)
+        _require(
+            0 <= expected <= 2**63 - 1,
+            "Saved pose random seed is outside SQLite integer range",
+        )
+    _require(
+        "seed" not in supplied
+        or (not isinstance(supplied["seed"], bool) and supplied["seed"] == expected),
+        "Saved pose configuration contains conflicting random seeds",
+    )
+    _require(
+        type(actual) is type(expected) and actual == expected,
+        "Effective pose random seed differs from the saved workflow parameters",
+    )
+
+
 def _verify_database_revision(connection: Any, api_dir: Path) -> tuple[str, int, str]:
     """Require one linear migration chain and record its exact source identity."""
     from alembic.config import Config
@@ -465,6 +494,7 @@ def inspect(
                 training.warnings_json,
                 has_validation=validation_id is not None,
             )
+            _verify_requested_random_seed(training_node.parameters_json, training.random_seed)
             if validation_id is not None:
                 validation_dataset = _pose_dataset(
                     session,
