@@ -374,3 +374,37 @@ This closes an evidence-reporting discrepancy only. The independent 1.1/1.6
 revision-0038 collision still requires a reviewed unified DAG, copied-database
 science validation, Windows MSI/CAB upgrade and installed-GUI acceptance.
 **1.6 remains on RELEASE HOLD.**
+
+
+## 2026-11-25 — Atomic SQLite migration preflight and first DDL
+
+The online Alembic environment previously relied on SQLAlchemy's outer
+transaction. With sqlite3 legacy transaction control, SELECT and DDL do not
+begin a physical SQLite transaction. An interrupted first migration step can
+therefore persist a QC table without its revision stamp, and another local
+writer can invalidate the lineage guard's snapshot before the first DML.
+
+The SQLite online migration path now explicitly starts BEGIN IMMEDIATE before
+running the lineage guard and any migration operation. This acquires the local
+writer reservation and makes DDL and stamp DML part of the same outer
+transaction. Failure rolls both back; retry requires the ordinary reviewed
+startup path. Non-SQLite and offline SQL-generation paths are unchanged.
+
+The real desktop regression injects an exception during the first QC index
+creation after the actual 0037 -> 0038 table DDL, verifies a competing writer
+is refused, checks that original schema, revision and observation values are
+unchanged, then exercises 0037 -> 0041 recovery. It covers DELETE and WAL
+journal modes using disposable files. Four independent minimal
+SQLAlchemy/Alembic probes reproduced the old partial DDL and verified the
+new lock, rollback and retry in both modes; these are not full repository
+tests. Full exact-head migration/backend/frontend/E2E and Windows installed
+acceptance remain required.
+
+This protects the isolated 1.6 lineage, but does not reconcile 1.1/1.6's
+conflicting revision identities, certify backups, or authorize upgrades
+against original research assets. Existing standalone and saved executable
+QC workflows, typed scientific units, provenance and reviewer approval are
+preserved. No new scientific operation or workflow node is introduced.
+Release HOLD pending integrated migration reconciliation, representative
+biology, real MSI/CAB installation and upgrade/rollback, GUI acceptance and
+explicit researcher approval.
