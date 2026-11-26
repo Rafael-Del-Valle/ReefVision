@@ -485,6 +485,16 @@ submitted selection order. Repeated traversals must not duplicate offsets;
 unequal overlapping segments are not exact edge memberships. This evidence
 locates the source selections for review, not a persistent organism identity
 or verified anatomical branch assignment.
+The separate `selected_trace_traversals` records every original nonzero
+edge traversal in submitted trace/edge order, including repeats. It binds
+the zero-based trace edge offset to the canonical chain edge offset and
+reports whether its orientation follows that chain. Coincident consecutive
+coordinates have no nonzero edge traversal and are omitted without
+renumbering later offsets. Validate reversals, repeated traversals, rotated
+closed loops and split-index seams against a directed source-edge scan.
+Across all chains the traversal count must equal the number of submitted
+nonzero edge steps; the same records must survive saved-workflow replay.
+The orientation is a geometric convention, not evidence of growth direction.
 The endpoint graph and chain fingerprints remain unchanged; their
 lengths need not sum to the corrected union. Do not interpret this result as anatomical total linear
 extension. Near-collinear segments require separate registration and
