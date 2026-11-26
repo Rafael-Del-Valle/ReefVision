@@ -900,12 +900,15 @@ def measure_mesh_preview(
     # double-count that geometry, even across split-index mesh seams.
     trace_edge_sets: list[set[frozenset[tuple[float, float, float]]]] = []
     shared_trace_edge_pairs: list[dict[str, Any]] = []
+    traversal_counts: Counter[frozenset[tuple[float, float, float]]] = Counter()
     for path in surface_trace_vertex_paths or []:
-        trace_edges = {
+        path_counts = Counter(
             frozenset((points[first], points[second]))
             for first, second in pairwise(path)
             if points[first] != points[second]
-        }
+        )
+        traversal_counts.update(path_counts)
+        trace_edges = set(path_counts)
         for earlier_index, earlier_edges in enumerate(trace_edge_sets):
             shared_count = len(earlier_edges.intersection(trace_edges))
             if shared_count:
@@ -920,12 +923,19 @@ def measure_mesh_preview(
     if trace_edge_sets:
         # Count each nonzero exact endpoint-pair once, even within a trace.
         # Unequal, partially overlapping segments are NOT geometrically merged.
-        unique_edges: set[frozenset[tuple[float, float, float]]] = set()
-        for trace_edges in trace_edge_sets:
-            unique_edges.update(trace_edges)
-        source_total = sum(
-            (Fraction(dist(min(edge), max(edge))) for edge in unique_edges), Fraction(0)
+        edge_lengths = {
+            edge: Fraction(dist(min(edge), max(edge))) for edge in traversal_counts
+        }
+        source_total = sum(edge_lengths.values(), Fraction(0))
+        redundant_source_total = sum(
+            (
+                length * (traversal_counts[edge] - 1)
+                for edge, length in edge_lengths.items()
+            ),
+            Fraction(0),
         )
+        traversal_count = sum(traversal_counts.values())
+        trace_membership_count = sum(len(edges) for edges in trace_edge_sets)
         calibrated_total = source_total * Fraction(scale)
         length_m = float(calibrated_total)
         union_warnings: list[str] = []
@@ -944,7 +954,11 @@ def measure_mesh_preview(
                 interval = [lower, upper]
         exact_edge_union = {
             "method": "exact_endpoint_pair_equality_only",
-            "distinct_nonzero_edge_count": len(unique_edges),
+            "distinct_nonzero_edge_count": len(traversal_counts),
+            "nonzero_edge_traversal_count": traversal_count,
+            "within_trace_redundant_traversal_count": traversal_count - trace_membership_count,
+            "cross_trace_redundant_traversal_count": trace_membership_count - len(traversal_counts),
+            "redundant_traversal_source_length_mesh_units": float(redundant_source_total),
             "source_length_mesh_units": float(source_total),
             "length_m": None if calibrated_total > 0 and length_m == 0 else length_m,
             "length_scale_only_interval_m": interval,
