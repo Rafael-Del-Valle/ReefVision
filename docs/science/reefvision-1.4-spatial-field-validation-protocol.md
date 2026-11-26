@@ -541,5 +541,16 @@ workflow artifacts, including the existing replay/hash checks. Exact
 endpoint connectivity does not weld interior crossings or partial
 overlaps. Components may represent disconnected selections of one coral
 or multiple corals; they do not establish biological identity, independence,
-anatomical branch counts or completed human review. Calibrated chain
-measurements remain separate from this topology inventory.
+anatomical branch counts or completed human review. Each component also reports its exact-endpoint source edge length, calibrated
+length in meters and scale-only interval. Sum distinct edge distances before
+calibration and rounding; do not sum already-rounded chain measurements.
+Unequal collinear overlaps can still double-count geometry, including across
+components. The separately reported global collinear union is the appropriate
+overlap-corrected geometric measure, not an anatomical centerline.
+
+For the two disconnected crossing edges of length two source units each,
+a scale of 0.01 m/unit with 10% relative uncertainty yields 0.02 m per
+component and bounds [0.018, 0.022] m. Compare against direct edge enumeration,
+including missing and full scale uncertainty and a component whose positive
+calibrated length rounds to zero. Such a length and its interval must be null,
+with component QC surfaced in the standalone and replayed workflow artifact.
