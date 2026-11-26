@@ -1443,3 +1443,30 @@ def test_log_tail_rechecks_path_after_verification_reread(
     assert reads == 2
     assert log.read_bytes() == original
     assert replacement.read_bytes() == unrelated
+
+
+@pytest.mark.parametrize(
+    "edited_record",
+    [
+        b"train/box_loss=0.2\x1b(B5",
+        b"train/cl\x1b)0s_loss=0.30",
+        b"train/dfl_loss=0.1\x1b#80",
+    ],
+)
+def test_log_tail_quarantines_legacy_terminal_escape_splices(
+    tmp_path: Path, edited_record: bytes
+) -> None:
+    """Character-set and other ESC commands must not manufacture losses."""
+    log = tmp_path / "training.log"
+    original = edited_record + b"\n\x1b(Btrain/box_loss=0.22\n\x1b7train/cls_loss=0.31\n"
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": (
+            "[terminal-edited training log record omitted]\n"
+            "train/box_loss=0.22\n"
+            "train/cls_loss=0.31\n"
+        ),
+    }
+    assert log.read_bytes() == original
