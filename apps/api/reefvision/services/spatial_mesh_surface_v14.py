@@ -64,9 +64,18 @@ def _trace_endpoint_chains(
                 warnings.append("surface_trace_chain_interval_unrepresentable")
             else:
                 interval = [lower, upper]
+        # Bind review evidence to the ordered source geometry, not calibration,
+        # vertex IDs or selection order. Normalize signed zero for the digest.
+        source_waypoints = [[0.0 if value == 0 else value for value in point] for point in path]
+        chain_hash = hashlib.sha256(
+            json.dumps(source_waypoints, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
         chains.append(
             {
-                "source_waypoints_mesh_units": [list(point) for point in path],
+                "source_waypoints_mesh_units": source_waypoints,
+                "source_chain_geometry_sha256": chain_hash,
+                "source_chain_geometry_canonicalization": "ordered_float64_xyz_compact_json_v1",
+                "endpoint_graph_degrees": [len(adjacency[path[0]]), len(adjacency[path[-1]])],
                 "edge_count": len(path) - 1,
                 "is_closed": path[0] == path[-1],
                 "source_length_mesh_units": float(source_length),
