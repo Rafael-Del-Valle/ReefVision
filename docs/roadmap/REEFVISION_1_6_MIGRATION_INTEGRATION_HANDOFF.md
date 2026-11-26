@@ -408,3 +408,30 @@ preserved. No new scientific operation or workflow node is introduced.
 Release HOLD pending integrated migration reconciliation, representative
 biology, real MSI/CAB installation and upgrade/rollback, GUI acceptance and
 explicit researcher approval.
+
+
+## 2026-11-25 — Validate desktop migration postconditions before committing
+
+The desktop previously checked the migrated revision and QC schema only after
+Alembic committed its transaction. A defective final migration could therefore
+persist an invalid registry or incorrect stamp even when startup correctly
+refused to serve the API. The desktop now passes its independently resolved
+packaged head into the online Alembic environment. Before the outer transaction
+commits, the environment verifies the exact single revision and runs the
+existing lineage guard against the resulting schema. SQLite rolls back failed
+postconditions together with migration DDL and stamp writes. The separate
+post-commit reopen check remains in place. Standalone CLI upgrade/downgrade
+behavior is unchanged when the desktop expected-head attribute is absent.
+
+Four new real desktop regression configurations inject either an extra bulk
+registry index or an incorrect final revision during 0041, in DELETE and WAL
+journal modes. They require the complete original schema, 0037 marker, and
+coral observation to survive failure and the normal retry to reach valid 0041.
+Four isolated SQLAlchemy/Alembic/SQLite probes confirmed rollback and retry
+for both fault types and journal modes; these are not the full repository
+tests. Existing typed standalone and saved-workflow QC provenance and human
+review gates remain unchanged. This is a migration safety change, not a new
+workflow node or cross-version DAG reconciliation. Release HOLD remains until
+integrated lineage reconciliation, exact-head CI, representative biological
+acceptance, installed Windows MSI/CAB and GUI upgrade/rollback, and explicit
+researcher approval.
