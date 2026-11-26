@@ -466,6 +466,11 @@ reports source and calibrated lengths and scale-only intervals after
 merging positive-length intervals on each exact source line. Lengths
 are Euclidean binary64 distances summed before rounding. Its QC
 withholds underflowed positive lengths or unrepresentable intervals.
+Both union methods also surface their numerical QC codes in the preview's
+`qc_warnings` so a valid full mesh cannot mask an unavailable trace length
+or scale-only interval. Check positive underflow and positive uncertainty
+below binary64 resolution; missing uncertainty and an explicitly zero
+uncertainty must remain distinct from an unrepresentable interval.
 The endpoint graph and chain fingerprints remain unchanged; their
 lengths need not sum to the corrected union. Do not interpret this result as anatomical total linear
 extension. Near-collinear segments require separate registration and
