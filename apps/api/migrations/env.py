@@ -73,6 +73,18 @@ def run_migrations_online() -> None:
         with context.begin_transaction():
             context.run_migrations()
 
+        # Desktop verification must happen before the outer transaction
+        # commits, not only after reopening the migrated database. A defective
+        # migration can otherwise leave a valid-looking but unusable QC schema.
+        expected_revision = config.attributes.get("desktop_expected_revision")
+        if expected_revision is not None:
+            if context.get_context().get_current_heads() != (expected_revision,):
+                raise RuntimeError(
+                    "ReefVision desktop migration did not reach the expected Alembic revision "
+                    "inside the migration transaction; refusing to commit."
+                )
+            assert_compatible_revision_0038(connection)
+
 
 if context.is_offline_mode():
     run_migrations_offline()
