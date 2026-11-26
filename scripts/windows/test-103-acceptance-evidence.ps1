@@ -171,6 +171,32 @@ try {
     $candidateManifest.files = $validManifestFiles
     $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
 
+    # A provenance manifest being rewritten by the packager is not stable
+    # evidence even if its current bytes happen to contain a valid JSON record.
+    $manifestWriter = [IO.File]::Open(
+        $manifestPath,
+        [IO.FileMode]::Open,
+        [IO.FileAccess]::ReadWrite,
+        [IO.FileShare]::ReadWrite
+    )
+    try {
+        $mutableManifestRejected = $false
+        try {
+            $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $sixCabPaths -ProvenancePath $manifestPath 2>&1
+        } catch { $mutableManifestRejected = $true }
+        if (-not $mutableManifestRejected) {
+            throw 'A writer-open provenance manifest was incorrectly accepted.'
+        }
+    } finally {
+        $manifestWriter.Dispose()
+    }
+    $stableManifest = (& $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $sixCabPaths -ProvenancePath $manifestPath |
+        Out-String | ConvertFrom-Json)
+    if ($stableManifest.provenance.status -cne 'matched_complete' -or
+        $stableManifest.provenance.verifiedArtifacts -ne 7) {
+        throw 'A stable provenance manifest could not be validated after its writer closed.'
+    }
+
     $duplicatePathRejected = $false
     try { $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath @($candidateCab, $candidateCab) 2>&1 }
     catch { $duplicatePathRejected = $true }

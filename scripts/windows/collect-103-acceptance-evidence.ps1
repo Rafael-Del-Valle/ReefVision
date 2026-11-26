@@ -157,7 +157,24 @@ if (-not [string]::IsNullOrWhiteSpace($ProvenancePath)) {
     if (-not [string]::Equals($manifestFile.DirectoryName, $msiDirectory, [StringComparison]::OrdinalIgnoreCase)) {
         throw 'Manifest and MSI must be in the same staging directory.'
     }
-    $manifest = Get-Content -LiteralPath $manifestFile.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
+    # Read a stable manifest snapshot, just as for installer payloads. A
+    # concurrent writer must not produce a partial or mixed provenance record.
+    $manifestStream = [IO.File]::Open(
+        $manifestFile.FullName,
+        [IO.FileMode]::Open,
+        [IO.FileAccess]::Read,
+        [IO.FileShare]::Read
+    )
+    try {
+        $manifestReader = [IO.StreamReader]::new($manifestStream)
+        try {
+            $manifest = $manifestReader.ReadToEnd() | ConvertFrom-Json
+        } finally {
+            $manifestReader.Dispose()
+        }
+    } finally {
+        $manifestStream.Dispose()
+    }
     if ($manifest.version -cne '1.0.3' -or
         $manifest.source_commit -cne $CandidateSha.ToLowerInvariant() -or
         # JSON numbers and strings must not masquerade as Boolean proof that
