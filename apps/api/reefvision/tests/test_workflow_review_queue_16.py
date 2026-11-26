@@ -973,13 +973,52 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
 @pytest.mark.parametrize("value", [True, False])
 def test_standalone_qc_rejects_boolean_weight(client: TestClient, value: bool) -> None:
     project = create_project(client, "QC weight input type")
+    imported = import_one(client, project["id"], filename="qc-weight-input.png")
+    assert len(imported["successful"]) == 1
     url = f"/api/v1/projects/{project['id']}/review-queues"
+    plan_url = f"/api/v1/projects/{project['id']}/workflow-graphs/plan"
+    graph = _graph()
+    graph["nodes"] = [
+        {"node_id": "project", "node_type": "project_source"},
+        {
+            "node_id": "qc",
+            "node_type": "qc_review_queue",
+            "parameters": {"signal_weights": {"recent_import": value}},
+        },
+    ]
+
     rejected = client.post(url, json={"signal_weights": {"recent_import": value}})
     assert rejected.status_code == 422, rejected.text
-    assert client.get(url).json() == []
+    invalid_plan = client.post(plan_url, json=graph)
+    assert invalid_plan.status_code == 200, invalid_plan.text
+    assert not invalid_plan.json()["valid"] and not invalid_plan.json()["executable"]
+    assert any(
+        issue["code"] == "invalid_qc_signal_weights" for issue in invalid_plan.json()["issues"]
+    )
+    listing = client.get(url)
+    assert listing.status_code == 200, listing.text
+    assert listing.json() == []
+
     valid = client.post(url, json={"signal_weights": {"recent_import": int(value)}})
     assert valid.status_code == 201, valid.text
-    assert valid.json()["configuration_json"]["weights"]["recent_import"] == int(value)
+    queue = valid.json()
+    assert queue["configuration_json"]["weights"]["recent_import"] == int(value)
+    assert queue["item_count"] == 1
+    items = client.get(f"/api/v1/review-queues/{queue['id']}/items")
+    assert items.status_code == 200, items.text
+    assert items.json()["items"][0]["review_state"] == "pending"
+
+    graph["nodes"] = [
+        {"node_id": "project", "node_type": "project_source"},
+        {
+            "node_id": "qc",
+            "node_type": "qc_review_queue",
+            "parameters": {"signal_weights": {"recent_import": int(value)}},
+        },
+    ]
+    valid_plan = client.post(plan_url, json=graph)
+    assert valid_plan.status_code == 200, valid_plan.text
+    assert valid_plan.json()["valid"] and valid_plan.json()["executable"]
 
 
 def test_saved_qc_workflow_rejects_changed_priority_order(client: TestClient) -> None:
