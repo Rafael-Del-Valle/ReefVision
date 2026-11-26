@@ -1860,10 +1860,19 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert chains[0]["qc_warnings"] == [warning]
         assert chains[1]["length_m"] == union["length_m"]
         assert chains[1]["qc_warnings"] == []
+        assert chains[0]["selected_trace_memberships"] == [
+            {"trace_index": 0, "chain_edge_offsets": [0]}
+        ]
+        assert chains[1]["selected_trace_memberships"] == [
+            {"trace_index": 1, "chain_edge_offsets": [0]}
+        ]
         assert artifact["qc_warnings"].count(warning) == 1
     if case in {"closed_loop", "closed_loop_reverse", "closed_loop_rotated"}:
         assert len(chains) == 1
         assert chains[0]["is_closed"] is True
+        assert chains[0]["selected_trace_memberships"] == [
+            {"trace_index": 0, "chain_edge_offsets": [0, 1, 2]}
+        ]
         assert chains[0]["source_waypoints_mesh_units"] == [
             [0, 0, 0],
             [0, 1, 0],
@@ -2310,6 +2319,19 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
     assert union["unequal_collinear_overlap_pair_count"] == 0
     chains = union["endpoint_graph_chains"]
     assert [chain["edge_count"] for chain in chains] == [3, 1]
+    first_trace, last_trace = (2, 0) if reverse_order else (0, 2)
+    loop_memberships = [
+        {"trace_index": first_trace, "chain_edge_offsets": [0, 2]},
+        {"trace_index": 1, "chain_edge_offsets": [1]},
+    ]
+    if shared:
+        loop_memberships.append({"trace_index": last_trace, "chain_edge_offsets": [0]})
+    assert chains[0]["selected_trace_memberships"] == sorted(
+        loop_memberships, key=lambda item: item["trace_index"]
+    )
+    assert chains[1]["selected_trace_memberships"] == [
+        {"trace_index": last_trace, "chain_edge_offsets": [0]}
+    ]
     assert [chain["is_closed"] for chain in chains] == [True, False]
     assert [chain["endpoint_graph_degrees"] for chain in chains] == [[3, 3], [3, 1]]
     assert [chain["source_chain_geometry_sha256"] for chain in chains] == [
@@ -2449,6 +2471,13 @@ def test_shared_trace_pairs_count_distinct_edges_not_repeated_traversals() -> No
     assert union["cross_trace_redundant_traversal_count"] == 3
     assert union["redundant_traversal_source_length_mesh_units"] == pytest.approx(3 + 2 * sqrt(2))
     assert union["source_length_mesh_units"] == pytest.approx(1 + sqrt(2))
+    chains = union["endpoint_graph_chains"]
+    assert len(chains) == 1
+    assert chains[0]["selected_trace_memberships"] == [
+        {"trace_index": 0, "chain_edge_offsets": [0, 1]},
+        {"trace_index": 1, "chain_edge_offsets": [0, 1]},
+        {"trace_index": 2, "chain_edge_offsets": [0]},
+    ]
 
 
 def test_exact_trace_endpoint_graph_does_not_connect_interior_crossings() -> None:
