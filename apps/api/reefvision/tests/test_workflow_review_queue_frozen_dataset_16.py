@@ -237,6 +237,7 @@ def test_saved_frozen_qc_rejects_resigned_dataset_manifest(
     ("tamper", "expected_error"),
     [
         ("wrong_queue_scope", "retry parameters changed or queue incomplete"),
+        ("incomplete_queue", "retry parameters changed or queue incomplete"),
         ("wrong_item_version", "snapshot failed integrity"),
         ("resigned_wrong_item_split", "frozen dataset item membership or split"),
         ("resigned_missing_item", "frozen dataset image coverage is incomplete"),
@@ -303,6 +304,8 @@ def test_saved_frozen_qc_replay_enforces_dataset_scope(
 
         if tamper == "wrong_queue_scope":
             queue.scope_type = "project"
+        elif tamper == "incomplete_queue":
+            queue.status = "failed"
         elif tamper == "wrong_item_version":
             queue.items[0].dataset_version_id = None
         elif tamper in {
@@ -412,6 +415,9 @@ def test_saved_frozen_qc_replay_enforces_dataset_scope(
             create_review_queue_workflow_artifact(
                 session, app.state.settings, project_id, parameters, inputs
             )
+        if tamper == "incomplete_queue":
+            with pytest.raises(ValidationError, match="Cannot regenerate incomplete QC"):
+                ReviewQueueService(session, app.state.settings).regenerate(queue.id)
         if tamper in {
             "resigned_wrong_item_split",
             "resigned_missing_item",
@@ -590,4 +596,48 @@ def test_manual_regeneration_refuses_resigned_frozen_class_evidence(
     item = _queue_item(client, recovered.json()["id"])
     assert item["label_class_ids_json"] == [annotation["label_class_id"]]
     assert item["review_state"] == "pending"
+    assert _queue_item(client, queue_id)["review_state"] == "pending"
+
+
+@pytest.mark.parametrize("status", ["pending", "running", "failed", "unknown"])
+def test_manual_regeneration_requires_complete_queue(client: TestClient, status: str) -> None:
+    """Incomplete generation cannot seed fresh scientific evidence or review history."""
+    _, _, version_id, _ = _study(client)
+    endpoint = f"/api/v1/dataset-versions/{version_id}/review-queues"
+    created = client.post(endpoint, json={})
+    assert created.status_code == 201, created.text
+    queue_id = created.json()["id"]
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        queue = session.get(ReviewQueue, queue_id)
+        assert queue is not None and len(queue.items) == 1
+        assert queue.status == "complete"
+        original_checksums = dict(queue.input_checksums_json)
+        queue.status = status
+        session.commit()
+
+    regenerate = f"/api/v1/review-queues/{queue_id}/regenerate"
+    refused = client.post(regenerate)
+    assert refused.status_code == 422, refused.text
+    assert "Cannot regenerate incomplete QC review queue" in refused.text
+
+    with app.state.session_factory() as session:
+        queues = session.scalars(
+            select(ReviewQueue).where(ReviewQueue.dataset_version_id == version_id)
+        ).all()
+        assert len(queues) == 1
+        queue = queues[0]
+        assert queue.id == queue_id
+        assert queue.status == status
+        assert queue.input_checksums_json == original_checksums
+        assert queue.items[0].review_state == "pending"
+        queue.status = "complete"
+        session.commit()
+
+    recovered = client.post(regenerate)
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["regenerated_from_queue_id"] == queue_id
+    assert recovered.json()["id"] != queue_id
+    assert _queue_item(client, recovered.json()["id"])["review_state"] == "pending"
     assert _queue_item(client, queue_id)["review_state"] == "pending"
