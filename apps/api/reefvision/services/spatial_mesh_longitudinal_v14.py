@@ -1714,6 +1714,21 @@ def compare_mesh_observations(
         "provenance": {
             "before_geometry_sha256": first.get("geometry_sha256"),
             "after_geometry_sha256": second.get("geometry_sha256"),
+            # Preserve original lineage even without a pairwise review bundle.
+            "before_source_payload_sha256": first_source_hash,
+            "after_source_payload_sha256": second_source_hash,
+            "before_spatial_source_asset_id": first_asset_id,
+            "after_spatial_source_asset_id": second_asset_id,
+            "before_source_format": first.get("source_format"),
+            "after_source_format": second.get("source_format"),
+            "before_source_payload_size_bytes": first.get("source_payload_size_bytes"),
+            "after_source_payload_size_bytes": second.get("source_payload_size_bytes"),
+            "before_source_payload_integrity_checked": first.get(
+                "source_payload_integrity_checked"
+            ),
+            "after_source_payload_integrity_checked": second.get(
+                "source_payload_integrity_checked"
+            ),
             "before_coordinate_frame_id": frames[0],
             "after_coordinate_frame_id": frames[1],
             "registration_evidence": registration_record,
