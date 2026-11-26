@@ -281,3 +281,11 @@ introduced. SHA-256 is an **unkeyed consistency checksum**, not a cryptographic
 attestation of a study's original researcher decisions. Exact-head CI, real
 Windows clean install/upgrade/rollback and independently reconciled Alembic
 lineage remain release gates.
+
+## 2026-11-26 — Exact integer biological census
+
+Python mapping equality treats JSON booleans and integral floats as equal to integer counts. The existing frozen QC manifest validator now requires positive integer entries in both detection and mask class censuses (an empty census is valid), and exact integer summary counts for images, detections and, for schema 0007, masks. The detection-only schema 0006 remains supported. This is a shared scientific validation boundary for standalone creation, manual regeneration and saved typed QC workflows; no duplicate node or migration. Priority remains dimensionless and explicitly requires researcher review.
+
+Five additional database-backed regression configurations re-sign a frozen study with boolean/float taxon counts or malformed summary counts, test standalone refusal and manual regeneration refusal, saved-workflow refusal and rollback to the original queue. Twelve isolated SQLite JSON census checks and six summary-type probes passed; full repository tests and final exact-head CI are unverified (local GitHub DNS prevents checkout; Ruff unavailable). These probes do not establish biological or installed Windows acceptance.
+
+Release HOLD: independent 1.1/1.6 Alembic-0038 reconciliation, complete CI, representative scientific and saved-workflow acceptance, genuine Windows MSI/CAB installed GUI clean installation/upgrade/rollback and explicit researcher approval. No cross-version merging, release, deployment, weights or user-asset changes.
