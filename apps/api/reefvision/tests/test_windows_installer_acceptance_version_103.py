@@ -324,3 +324,33 @@ def test_windows_cab_preflight_rejects_removed_msi_media_verification() -> None:
             "must verify MSI Media table" in error
             for error in MODULE.check_cab_artifact_partition(modified)
         )
+
+
+def test_windows_cab_preflight_requires_provenance_manifest_in_part_one() -> None:
+    manifest_path = (
+        "            apps/web/src-tauri/target/x86_64-pc-windows-msvc/"
+        "release/bundle/msi/build-provenance.json"
+    )
+    assert CAB_WORKFLOW.count(manifest_path) == 1
+    removed = CAB_WORKFLOW.replace(manifest_path + "\n", "", 1)
+    duplicated = CAB_WORKFLOW.replace(manifest_path, manifest_path + "\n" + manifest_path, 1)
+    cab_path = (
+        "            apps/web/src-tauri/target/x86_64-pc-windows-msvc/"
+        "release/bundle/msi/rv4.cab"
+    )
+    moved = removed.replace(cab_path, cab_path + "\n" + manifest_path, 1)
+    for modified in (removed, duplicated, moved):
+        assert any(
+            "provenance manifest must appear only in Part-1" in error
+            for error in MODULE.check_cab_artifact_partition(modified)
+        )
+
+
+@pytest.mark.parametrize("replacement", ["if ($bytes -gt 2GB)", "if ($bytes -ge 3GB)"])
+def test_windows_cab_preflight_requires_partition_limit(replacement: str) -> None:
+    modified = CAB_WORKFLOW.replace("if ($bytes -ge 2GB)", replacement, 1)
+    assert modified != CAB_WORKFLOW
+    assert any(
+        "2 GiB artifact partition limit" in error
+        for error in MODULE.check_cab_artifact_partition(modified)
+    )

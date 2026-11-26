@@ -266,6 +266,13 @@ def check_cab_artifact_partition(workflow: str) -> list[str]:
         )
         if len(msi_paths) != (1 if name.endswith("Part-1") else 0):
             errors.append(f"{name} MSI manifest must appear only in Part-1")
+        provenance_paths = re.findall(
+            r"(?m)^            apps/web/src-tauri/target/x86_64-pc-windows-msvc/"
+            r"release/bundle/msi/build-provenance\.json\s*$",
+            step,
+        )
+        if len(provenance_paths) != (1 if name.endswith("Part-1") else 0):
+            errors.append(f"{name} provenance manifest must appear only in Part-1")
         if "if-no-files-found: error" not in step:
             errors.append(f"{name} must reject missing upload files")
 
@@ -277,6 +284,8 @@ def check_cab_artifact_partition(workflow: str) -> list[str]:
         "$lastPartitionCabs = @($actual | Where-Object { $_ -in @('rv5.cab', 'rv6.cab') })",
         "@{ Name = 'Part-3'; Files = $lastPartitionCabs }",
     )
+    if "if ($bytes -ge 2GB)" not in build_job:
+        errors.append("Windows build must enforce the 2 GiB artifact partition limit")
     if any(marker not in build_job for marker in dynamic_partition_checks):
         errors.append(
             "Windows build must derive its final size-check partition from the actual CAB set"
