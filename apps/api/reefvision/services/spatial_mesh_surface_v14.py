@@ -1151,6 +1151,29 @@ def measure_mesh_preview(
                 if offsets:
                     memberships.append({"trace_index": trace_index, "chain_edge_offsets": offsets})
             chain["selected_trace_memberships"] = memberships
+        # Retain each original traversal, including direction and repetition.
+        # The canonical chains partition the exact nonzero selected edges.
+        chain_by_edge: dict[frozenset[_TracePoint], tuple[int, int, _TracePoint]] = {}
+        for chain_index, chain in enumerate(chains):
+            chain["selected_trace_traversals"] = []
+            for offset, (first, last) in enumerate(pairwise(chain["source_waypoints_mesh_units"])):
+                start = (first[0], first[1], first[2])
+                end = (last[0], last[1], last[2])
+                chain_by_edge[frozenset((start, end))] = (chain_index, offset, start)
+        for trace_index, path in enumerate(surface_trace_vertex_paths or []):
+            for trace_offset, (first, last) in enumerate(pairwise(path)):
+                start, end = points[first], points[last]
+                if start == end:
+                    continue
+                chain_index, chain_offset, chain_start = chain_by_edge[frozenset((start, end))]
+                chains[chain_index]["selected_trace_traversals"].append(
+                    {
+                        "trace_index": trace_index,
+                        "trace_edge_offset": trace_offset,
+                        "chain_edge_offset": chain_offset,
+                        "follows_chain_orientation": start == chain_start,
+                    }
+                )
         chain_warnings = sorted({warning for chain in chains for warning in chain["qc_warnings"]})
         # A representable aggregate can conceal an unavailable individual
         # chain measurement. Surface-level QC must expose both.
