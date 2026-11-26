@@ -1881,7 +1881,10 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         components = union["endpoint_graph_components"]
         component_warning = "surface_trace_component_length_underflow"
         assert components[0]["length_m"] is None
-        assert components[0]["qc_warnings"] == [component_warning]
+        span_warning = "surface_trace_component_axis_span_underflow"
+        assert components[0]["qc_warnings"] == [component_warning, span_warning]
+        assert None in components[0]["axis_aligned_spans_m"]
+        assert artifact["qc_warnings"].count(span_warning) == 1
         assert components[1]["length_m"] == union["length_m"]
         assert artifact["qc_warnings"].count(component_warning) == 1
     if case in {"closed_loop", "closed_loop_reverse", "closed_loop_rotated"}:
@@ -2345,6 +2348,30 @@ def _assert_endpoint_components(
         digest = hashlib.sha256(
             json.dumps(canonical_edges, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
+        minima = [min(point[axis] for point in group) for axis in range(3)]
+        maxima = [max(point[axis] for point in group) for axis in range(3)]
+        exact_spans = [
+            (Fraction(high) - Fraction(low)) * Fraction(scale)
+            for low, high in zip(minima, maxima, strict=True)
+        ]
+        spans = [None if span and not float(span) else float(span) for span in exact_spans]
+        intervals = []
+        lost_interval = False
+        for span, nominal_span in zip(exact_spans, spans, strict=True):
+            if nominal_span is None or uncertainty is None:
+                intervals.append(None)
+                continue
+            error = span * Fraction(uncertainty)
+            limits = [float(span - error), float(span + error)]
+            if span and ((uncertainty < 1 and not limits[0]) or (error and limits[0] == limits[1])):
+                lost_interval = True
+                intervals.append(None)
+            else:
+                intervals.append(limits)
+        if None in spans:
+            warnings.append("surface_trace_component_axis_span_underflow")
+        if lost_interval:
+            warnings.append("surface_trace_component_axis_span_interval_unrepresentable")
         # Independently enumerate the original submitted steps in this component.
         selected_steps = [
             (trace_index, frozenset((tuple(vertices[a]), tuple(vertices[b]))))
@@ -2360,6 +2387,9 @@ def _assert_endpoint_components(
                 "nonzero_edge_traversal_count": len(selected_steps),
                 "distinct_trace_edge_membership_count": len(set(selected_steps)),
                 "source_min_vertex_mesh_units": list(min(group)),
+                "source_axis_aligned_bounds_mesh_units": {"minimum": minima, "maximum": maxima},
+                "axis_aligned_spans_m": spans,
+                "axis_aligned_span_scale_only_intervals_m": intervals,
                 "source_component_geometry_sha256": digest,
                 "source_component_geometry_canonicalization": "sorted_float64_xyz_edges_json_v1",
                 "vertex_count": len(group),
@@ -2705,6 +2735,14 @@ def test_exact_trace_endpoint_graph_does_not_connect_interior_crossings() -> Non
     assert [chain["length_m"] for chain in chains] == pytest.approx([0.02, 0.02])
     components = union["endpoint_graph_components"]
     assert [component["length_m"] for component in components] == pytest.approx([0.02, 0.02])
+    assert [component["axis_aligned_spans_m"] for component in components] == [
+        [0.02, 0.0, 0.0],
+        [0.0, 0.02, 0.0],
+    ]
+    assert components[1]["source_axis_aligned_bounds_mesh_units"] == {
+        "minimum": [0, -1, 0],
+        "maximum": [0, 1, 0],
+    }
     for component in components:
         assert component["length_scale_only_interval_m"] == pytest.approx([0.018, 0.022])
     assert topology["human_review_verified"] is False
@@ -2752,6 +2790,9 @@ def test_component_geometry_digest_is_source_bound_not_calibration_or_signed_zer
         for item in component["source_endpoint_graph_landmarks"]
     )
     assert component["length_m"] == pytest.approx(0.5 * (1 + sqrt(2)))
+    assert component["axis_aligned_spans_m"] == [0.5, 0.5, 0.0]
+    assert component["axis_aligned_span_scale_only_intervals_m"] == [None, None, None]
+    assert "-0.0" not in json.dumps(component["source_axis_aligned_bounds_mesh_units"])
     params["surface_trace_vertex_paths"] = [[0, 1, 2]]
     changed = measure_mesh_preview(**params)["surface_trace_exact_edge_union"]
     assert changed["endpoint_graph_components"][0]["source_component_geometry_sha256"] != digest
