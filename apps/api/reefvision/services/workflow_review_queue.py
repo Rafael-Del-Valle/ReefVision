@@ -308,6 +308,7 @@ def create_review_queue_workflow_artifact(
 
     try:
         ReviewQueueCreateRequest(
+            source_quality_control_run_id=saved_parameters.get("source_quality_control_run_id"),
             review_below_confidence=saved_parameters.get("review_below_confidence"),
         )
         request = ReviewQueueCreateRequest(
