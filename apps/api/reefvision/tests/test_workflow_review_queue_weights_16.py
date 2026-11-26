@@ -606,3 +606,120 @@ def test_fully_rejected_prediction_evidence_on_saved_qc_retry(
                 )
                 assert replay[0]["payload"] == payload
             session.rollback()
+
+
+@pytest.mark.parametrize("shape", ["null", "false", "zero", "string", "object"])
+def test_interrupted_qc_retry_requires_real_output_list(client: TestClient, shape: str) -> None:
+    project_id = create_project(client, "Interrupted QC output contract")["id"]
+    assert len(import_one(client, project_id, filename="output-coral.png")["successful"]) == 1
+    payload = _payload(_execute(client, project_id, _weighted_graph(None)))
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        node = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == payload["workflow_run_id"],
+                WorkflowNodeRun.node_type == "qc_review_queue",
+            )
+        )
+        source = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.workflow_run_id == payload["workflow_run_id"],
+                WorkflowArtifact.producer_port_id == "project",
+            )
+        )
+        assert node is not None and source is not None
+        parameters = {
+            **node.parameters_json,
+            "__workflow_run_id": payload["workflow_run_id"],
+            "__workflow_node_run_id": node.id,
+        }
+        malformed: Any = {"null": None, "false": False, "zero": 0, "string": "", "object": {}}[
+            shape
+        ]
+        session.execute(
+            update(WorkflowNodeRun)
+            .where(WorkflowNodeRun.id == node.id)
+            .values(status="running", output_artifact_ids_json=malformed)
+            .execution_options(synchronize_session=False)
+        )
+        session.expire(node, ["status", "output_artifact_ids_json"])
+        assert node.status == "running"
+        assert type(node.output_artifact_ids_json) is type(malformed)
+        with pytest.raises(ValidationError, match="saved output binding is invalid"):
+            create_review_queue_workflow_artifact(
+                session, app.state.settings, project_id, parameters, {"project": [source]}
+            )
+        # A real empty list remains a supported interrupted-output retry.
+        session.execute(
+            update(WorkflowNodeRun)
+            .where(WorkflowNodeRun.id == node.id)
+            .values(output_artifact_ids_json=[])
+            .execution_options(synchronize_session=False)
+        )
+        session.expire(node, ["output_artifact_ids_json"])
+        replay = create_review_queue_workflow_artifact(
+            session, app.state.settings, project_id, parameters, {"project": [source]}
+        )
+        assert replay[0]["payload"] == payload
+        session.rollback()
+        replay = create_review_queue_workflow_artifact(
+            session, app.state.settings, project_id, parameters, {"project": [source]}
+        )
+        assert replay[0]["payload"] == payload
+        session.rollback()
+
+    queues = client.get(f"/api/v1/projects/{project_id}/review-queues")
+    assert queues.status_code == 200, queues.text
+    assert [queue["id"] for queue in queues.json()] == [payload["queue_id"]]
+    items = client.get(f"/api/v1/review-queues/{payload['queue_id']}/items")
+    assert items.status_code == 200, items.text
+    assert items.json()["items"][0]["review_state"] == "pending"
+
+
+
+@pytest.mark.parametrize("shape", ["scalar", "broken_pairs"])
+def test_qc_retry_refuses_malformed_queue_configuration(client: TestClient, shape: str) -> None:
+    project_id = create_project(client, "Malformed QC queue configuration")["id"]
+    assert len(import_one(client, project_id, filename="config-coral.png")["successful"]) == 1
+    payload = _payload(_execute(client, project_id, _weighted_graph(None)))
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        node = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == payload["workflow_run_id"],
+                WorkflowNodeRun.node_type == "qc_review_queue",
+            )
+        )
+        source = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.workflow_run_id == payload["workflow_run_id"],
+                WorkflowArtifact.producer_port_id == "project",
+            )
+        )
+        queue = session.get(ReviewQueue, payload["queue_id"])
+        assert node is not None and source is not None and queue is not None
+        parameters = {
+            **node.parameters_json,
+            "__workflow_run_id": payload["workflow_run_id"],
+            "__workflow_node_run_id": node.id,
+        }
+        malformed: Any = 7 if shape == "scalar" else [["weights"]]
+        session.execute(
+            update(ReviewQueue)
+            .where(ReviewQueue.id == queue.id)
+            .values(configuration_json=malformed)
+            .execution_options(synchronize_session=False)
+        )
+        session.expire(queue, ["configuration_json"])
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            validate_saved_queue_snapshot(queue, queue.items)
+        with pytest.raises(ValidationError, match="snapshot failed integrity"):
+            create_review_queue_workflow_artifact(
+                session, app.state.settings, project_id, parameters, {"project": [source]}
+            )
+        session.rollback()
+        replay = create_review_queue_workflow_artifact(
+            session, app.state.settings, project_id, parameters, {"project": [source]}
+        )
+        assert replay[0]["payload"] == payload
+        session.rollback()
