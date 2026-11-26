@@ -1493,3 +1493,28 @@ def test_log_tail_quarantines_mixed_invisible_sgr_splices(
         "text": ("[terminal-edited training log record omitted]\ntrain/box_loss=0.22\n"),
     }
     assert log.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "starter", [b"\x1bP", b"\x1bX", b"\x1b^", b"\x1b_", b"\x90", b"\x98", b"\x9e", b"\x9f"]
+)
+@pytest.mark.parametrize("terminator", [b"\x1b\\", b"\x9c"])
+def test_log_tail_bel_does_not_end_non_osc_terminal_strings(
+    tmp_path: Path, starter: bytes, terminator: bytes
+) -> None:
+    """Only OSC accepts BEL as a terminator; other payloads stay hidden until ST."""
+    log = tmp_path / "training.log"
+    original = (
+        b"train/box_loss=0.25\n"
+        + starter
+        + b"private payload\x07\ntrain/cls_loss=9.99\n"
+        + terminator
+        + b"train/dfl_loss=0.10\n"
+    )
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": "train/box_loss=0.25\ntrain/dfl_loss=0.10\n",
+    }
+    assert log.read_bytes() == original
