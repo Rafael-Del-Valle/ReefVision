@@ -46,6 +46,27 @@ def compare_reports(before: dict, after: dict) -> dict:
             "foreign_key_violations"
         ) != 0:
             issues.append(f"{label}: database integrity not established")
+        # Identical event rows can still acquire cross-project parent links
+        # or lose required constraints after reconciliation. SQLite integrity
+        # and foreign-key checks alone do not establish QC event semantics.
+        row_counts = report.get("affected_table_row_counts")
+        if isinstance(row_counts, dict) and "review_queue_item_events" in row_counts:
+            for field in ("qc_event_scope_violations", "qc_event_type_violations"):
+                value = report.get(field)
+                if type(value) is not int or value != 0:
+                    issues.append(f"{label}: {field} not established as zero")
+            for field in (
+                "qc_request_key_unique",
+                "qc_required_columns_not_null",
+                "qc_event_foreign_keys_valid",
+                "qc_event_primary_key_valid",
+            ):
+                if report.get(field) is not True:
+                    issues.append(f"{label}: {field} not established")
+            if report.get("review_event_check") not in (
+                "coordination", "triage", "triage_complete"
+            ):
+                issues.append(f"{label}: QC event CHECK not established")
         count = report.get("model_registry_row_count")
         checkpoint = report.get("model_registry_checkpoint_evidence")
         if (
