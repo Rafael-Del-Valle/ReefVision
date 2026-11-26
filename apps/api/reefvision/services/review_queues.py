@@ -824,6 +824,11 @@ class ReviewQueueService:
 
     def regenerate(self, queue_id: str) -> ReviewQueueResponse:
         queue = self._queue(queue_id)
+        # A failed or incomplete generation is not an authoritative scientific
+        # snapshot. Match the saved Workflow Builder's completion gate before
+        # reading configuration or creating another queue from its evidence.
+        if queue.status != "complete":
+            raise ValidationError("Cannot regenerate incomplete QC review queue")
         # Regeneration is a new manual snapshot, not an interrupted retry of
         # the saved Workflow Builder node. Reusing its internal owner identity
         # would create two queues for one run/node and poison future replays.
