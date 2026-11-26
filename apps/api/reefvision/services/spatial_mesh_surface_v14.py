@@ -271,10 +271,14 @@ def _trace_endpoint_components(
         # Localize positive-length overlap without welding endpoint components.
         # The global overlap count also includes pairs in different components.
         within_overlap_count = 0
+        corrected_source_length = source_length
         if has_collinear_overlaps:
-            within_overlap_count, _ = _collinear_edge_union(
+            within_overlap_count, corrected_source_length = _collinear_edge_union(
                 {frozenset(edge) for edge in component_edges}
             )
+        corrected_component = _collinear_union_measurement(
+            corrected_source_length, scale, relative_scale_uncertainty
+        )
         # Fingerprint the selected endpoint pairs, not the traversal order,
         # chain partition, calibration, or biological identity.
         canonical_edges = [
@@ -301,6 +305,7 @@ def _trace_endpoint_components(
                 "degree_three_or_more_vertex_count": junction_count,
                 "cycle_rank": edge_count - vertex_count + 1,
                 "unequal_collinear_overlap_pair_count": within_overlap_count,
+                "collinear_overlap_corrected_union": corrected_component,
                 "source_endpoint_graph_landmarks": [
                     {
                         "source_vertex_mesh_units": [
@@ -1363,8 +1368,19 @@ def measure_mesh_preview(
         component_warnings = sorted(
             {warning for component in components for warning in component["qc_warnings"]}
         )
+        corrected_component_warnings = sorted(
+            {
+                warning
+                for component in components
+                for warning in component["collinear_overlap_corrected_union"]["qc_warnings"]
+            }
+        )
         trace_union_qc_warnings = (
-            union_warnings + corrected_union["qc_warnings"] + chain_warnings + component_warnings
+            union_warnings
+            + corrected_union["qc_warnings"]
+            + chain_warnings
+            + component_warnings
+            + corrected_component_warnings
         )
         exact_edge_union = {
             "endpoint_graph_topology": topology,
