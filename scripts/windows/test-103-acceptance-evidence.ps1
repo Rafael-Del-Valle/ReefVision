@@ -148,6 +148,44 @@ try {
         @($completeSix.artifacts | Where-Object { $_.kind -eq 'cab' -and $_.status -eq 'hashed' }).Count -ne 6) {
         throw 'Six-CAB manifest did not produce complete installer evidence.'
     }
+    # JSON array values must not exploit PowerShell's array comparison or
+    # string conversion semantics to masquerade as scalar build identity.
+    foreach ($field in @('version', 'source_commit')) {
+        $originalValue = $candidateManifest[$field]
+        $candidateManifest[$field] = @($originalValue)
+        $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+        $arrayRejected = $false
+        try { $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $sixCabPaths -ProvenancePath $manifestPath 2>&1 }
+        catch { $arrayRejected = $true }
+        $candidateManifest[$field] = $originalValue
+        if (-not $arrayRejected) { throw "Array-valued provenance $field was accepted." }
+    }
+    # Even the unprovided sixth cabinet must have a well-typed, exact hash;
+    # a subset check must not accept malformed declarations it cannot verify.
+    foreach ($field in @('name', 'sha256')) {
+        $originalValue = $candidateManifest.files[-1][$field]
+        $candidateManifest.files[-1][$field] = @($originalValue)
+        $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+        $arrayRejected = $false
+        try { $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $candidateCabPaths -ProvenancePath $manifestPath 2>&1 }
+        catch { $arrayRejected = $true }
+        $candidateManifest.files[-1][$field] = $originalValue
+        if (-not $arrayRejected) { throw "Array-valued CAB provenance $field was accepted." }
+    }
+    $originalHashValue = $candidateManifest.files[-1].sha256
+    $candidateManifest.files[-1].sha256 = $originalHashValue + "`n"
+    $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    $newlineHashRejected = $false
+    try { $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $candidateCabPaths -ProvenancePath $manifestPath 2>&1 }
+    catch { $newlineHashRejected = $true }
+    $candidateManifest.files[-1].sha256 = $originalHashValue
+    if (-not $newlineHashRejected) { throw 'A SHA-256 with trailing newline was accepted.' }
+    $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    $newlineShaRejected = $false
+    try { $null = & $collector -CandidateSha ($sha + "`n") 2>&1 }
+    catch { $newlineShaRejected = $true }
+    if (-not $newlineShaRejected) { throw 'A candidate SHA with trailing newline was accepted.' }
+
     # A forged/partial manifest must never appear "matched_complete" merely
     # because the caller lists only the MSI. The CAB set must be complete in
     # the declaration, even when only an MSI is supplied for a subset check.

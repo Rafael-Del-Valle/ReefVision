@@ -9,7 +9,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-if ($CandidateSha -notmatch '^[0-9a-fA-F]{40}$') {
+if ($CandidateSha -notmatch '\A[0-9a-fA-F]{40}\z') {
     throw 'CandidateSha must be a full 40-character Git commit SHA.'
 }
 function Get-ArtifactEvidence([string]$Path, [string]$Kind) {
@@ -175,7 +175,11 @@ if (-not [string]::IsNullOrWhiteSpace($ProvenancePath)) {
     } finally {
         $manifestStream.Dispose()
     }
-    if ($manifest.version -cne '1.0.3' -or
+    # Require scalar JSON strings before comparisons: PowerShell comparison
+    # operators filter arrays rather than testing scalar equality.
+    if ($manifest.version -isnot [string] -or
+        $manifest.version -cne '1.0.3' -or
+        $manifest.source_commit -isnot [string] -or
         $manifest.source_commit -cne $CandidateSha.ToLowerInvariant() -or
         # JSON numbers and strings must not masquerade as Boolean proof that
         # a candidate was built from a clean source tree and MSI verified.
@@ -188,10 +192,13 @@ if (-not [string]::IsNullOrWhiteSpace($ProvenancePath)) {
     }
     $declared = @{}
     foreach ($entry in @($manifest.files)) {
-        $name = [string]$entry.name
-        $hash = [string]$entry.sha256
-        if ($name -cnotmatch '^(?:ReefVision_1\.0\.3_x64_en-US\.msi|rv[1-9][0-9]*\.cab)$' -or
-            $hash -cnotmatch '^[0-9a-f]{64}$' -or $declared.ContainsKey($name)) {
+        if ($entry.name -isnot [string] -or $entry.sha256 -isnot [string]) {
+            throw 'Build-provenance artifact name and SHA-256 must be scalar JSON strings.'
+        }
+        $name = $entry.name
+        $hash = $entry.sha256
+        if ($name -cnotmatch '\A(?:ReefVision_1\.0\.3_x64_en-US\.msi|rv[1-9][0-9]*\.cab)\z' -or
+            $hash -cnotmatch '\A[0-9a-f]{64}\z' -or $declared.ContainsKey($name)) {
             throw 'Unsafe, duplicate, or malformed build-provenance artifact.'
         }
         $declared[$name] = $hash
