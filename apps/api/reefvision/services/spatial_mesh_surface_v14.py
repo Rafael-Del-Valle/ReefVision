@@ -1274,6 +1274,13 @@ def measure_mesh_preview(
             has_collinear_overlaps=unequal_overlap_count > 0,
         )
         component_count = len(components)
+        cross_component_overlap_count = unequal_overlap_count - sum(
+            component["unequal_collinear_overlap_pair_count"] for component in components
+        )
+        # Local corrected lengths cannot be added when separate endpoint
+        # components share positive-length geometric support.
+        if cross_component_overlap_count:
+            union_warnings.append("surface_trace_cross_component_collinear_overlap")
         topology = {
             "method": "exact_nonzero_edge_endpoint_graph",
             "vertex_count": len(adjacency),
@@ -1389,10 +1396,7 @@ def measure_mesh_preview(
             "endpoint_graph_components": components,
             "method": "exact_endpoint_pair_equality_only",
             "unequal_collinear_overlap_pair_count": unequal_overlap_count,
-            "cross_component_unequal_collinear_overlap_pair_count": (
-                unequal_overlap_count
-                - sum(component["unequal_collinear_overlap_pair_count"] for component in components)
-            ),
+            "cross_component_unequal_collinear_overlap_pair_count": cross_component_overlap_count,
             "collinear_overlap_corrected_union": corrected_union,
             "distinct_nonzero_edge_count": len(traversal_counts),
             "nonzero_edge_traversal_count": traversal_count,
