@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from fractions import Fraction
-from itertools import pairwise
+from itertools import combinations, pairwise
 from math import dist, pi, sqrt
 from typing import Any, cast
 
@@ -1689,6 +1689,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "coincident_nonadjacent",
         "reverse_turn",
         "cross_trace_unequal_overlap",
+        "mixed_component_overlap",
         "reused_geometric_segment",
         "display_chord_rounding",
         "display_segment_rounding",
@@ -1739,6 +1740,13 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "cross_trace_unequal_overlap": {
             **REVERSE_TURN_PARAMS,
             "surface_trace_vertex_paths": [[0, 1], [2, 1]],
+        },
+        "mixed_component_overlap": {
+            **PARAMS,
+            "vertices": [[i, 0, 0] for i in range(5)] + [[0, 1, 0]],
+            "faces": [[0, 4, 5], [2, 4, 5], [1, 3, 5]],
+            "surface_path_vertex_pairs": None,
+            "surface_trace_vertex_paths": [[0, 4], [4, 2], [1, 3]],
         },
         "reused_geometric_segment": REUSED_GEOMETRIC_SEGMENT_PARAMS,
         "display_chord_rounding": DISPLAY_CHORD_ROUNDING_PARAMS,
@@ -1793,7 +1801,12 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         if item["data_type"] == "mesh_measurement_preview"
     )
     artifact = record["payload_json"]
-    if case in {"cross_trace_unequal_overlap", "segment_underflow", "mixed_chain_underflow"}:
+    if case in {
+        "cross_trace_unequal_overlap",
+        "mixed_component_overlap",
+        "segment_underflow",
+        "mixed_chain_underflow",
+    }:
         replay = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert replay.status_code == 202, replay.text
         assert process_workflow_run_job(
@@ -1813,13 +1826,22 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     union = artifact["surface_trace_exact_edge_union"]
     assert union == standalone.json()["surface_trace_exact_edge_union"]
     overlaps = case in {
+        "mixed_component_overlap",
         "contact_overlap_closed_loop",
         "reverse_turn",
         "cross_trace_unequal_overlap",
         "display_chord_rounding",
         "finite_detour_chord_underflow",
     }
-    assert union["unequal_collinear_overlap_pair_count"] == int(overlaps)
+    assert union["unequal_collinear_overlap_pair_count"] == (
+        3 if case == "mixed_component_overlap" else int(overlaps)
+    )
+    if case == "mixed_component_overlap":
+        assert union["cross_component_unequal_collinear_overlap_pair_count"] == 2
+        assert [
+            item["unequal_collinear_overlap_pair_count"]
+            for item in union["endpoint_graph_components"]
+        ] == [1, 0]
     overlap_warning = "surface_trace_unequal_collinear_edges_overlap"
     assert (overlap_warning in union["qc_warnings"]) is overlaps
     assert (overlap_warning in artifact["qc_warnings"]) is overlaps
@@ -2298,6 +2320,24 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         )
 
 
+def _overlap_pair_count(edges: list[frozenset[tuple[float, ...]]]) -> int:
+    # Independent pairwise exact-coordinate oracle: project onto one nonzero
+    # axis and test both endpoints against the first segment's infinite line.
+    count = 0
+    for first, second in combinations(edges, 2):
+        a, b = [tuple(map(Fraction, point)) for point in sorted(first)]
+        c, d = [tuple(map(Fraction, point)) for point in sorted(second)]
+        axis = next(i for i in range(3) if a[i] != b[i])
+        if all(
+            (point[i] - a[i]) * (b[axis] - a[axis])
+            == (point[axis] - a[axis]) * (b[i] - a[i])
+            for point in (c, d)
+            for i in range(3)
+        ) and max(a[axis], c[axis]) < min(b[axis], d[axis]):
+            count += 1
+    return count
+
+
 def _assert_endpoint_components(
     union: dict[str, Any],
     vertices: list[list[float]],
@@ -2397,6 +2437,7 @@ def _assert_endpoint_components(
                 "degree_one_vertex_count": degrees.count(1),
                 "degree_three_or_more_vertex_count": sum(degree >= 3 for degree in degrees),
                 "cycle_rank": len(group_edges) - len(group) + 1,
+                "unequal_collinear_overlap_pair_count": _overlap_pair_count(group_edges),
                 "source_endpoint_graph_landmarks": [
                     {"source_vertex_mesh_units": list(point), "degree": degree}
                     for point in sorted(group)
@@ -2416,6 +2457,11 @@ def _assert_endpoint_components(
             }
         )
     assert union["endpoint_graph_components"] == expected
+    assert union["unequal_collinear_overlap_pair_count"] == _overlap_pair_count(list(edges))
+    assert union["cross_component_unequal_collinear_overlap_pair_count"] == (
+        _overlap_pair_count(list(edges))
+        - sum(item["unequal_collinear_overlap_pair_count"] for item in expected)
+    )
     assert (
         sum(item["nonzero_edge_traversal_count"] for item in expected)
         == union["nonzero_edge_traversal_count"]
@@ -2816,6 +2862,7 @@ def test_unequal_collinear_overlap_counts_distinct_pairs_in_three_dimensions() -
         result = measure_mesh_preview(**{**params, "meters_per_unit": scale})
         union = result["surface_trace_exact_edge_union"]
         assert union["unequal_collinear_overlap_pair_count"] == 3
+        assert union["cross_component_unequal_collinear_overlap_pair_count"] == 3
         assert union["distinct_nonzero_edge_count"] == 5
         assert union["nonzero_edge_traversal_count"] == 6
         assert union["source_length_mesh_units"] == pytest.approx(14 * sqrt(14))
