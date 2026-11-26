@@ -1137,9 +1137,20 @@ def measure_mesh_preview(
         corrected_union = _collinear_union_measurement(
             collinear_source_total, scale, relative_scale_uncertainty
         )
-        chains = _trace_endpoint_chains(
-            adjacency, edge_lengths, scale, relative_scale_uncertainty
-        )
+        chains = _trace_endpoint_chains(adjacency, edge_lengths, scale, relative_scale_uncertainty)
+        # Map each canonical chain edge back to the original selections for
+        # review. Repeated traversal does not duplicate membership offsets.
+        for chain in chains:
+            chain_edges = [
+                frozenset((tuple(first), tuple(last)))
+                for first, last in pairwise(chain["source_waypoints_mesh_units"])
+            ]
+            memberships = []
+            for trace_index, trace_edges in enumerate(trace_edge_sets):
+                offsets = [index for index, edge in enumerate(chain_edges) if edge in trace_edges]
+                if offsets:
+                    memberships.append({"trace_index": trace_index, "chain_edge_offsets": offsets})
+            chain["selected_trace_memberships"] = memberships
         chain_warnings = sorted({warning for chain in chains for warning in chain["qc_warnings"]})
         # A representable aggregate can conceal an unavailable individual
         # chain measurement. Surface-level QC must expose both.
