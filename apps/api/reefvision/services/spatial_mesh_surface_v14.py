@@ -29,32 +29,84 @@ MAX_PREVIEW_TRIANGLES = 512
 _TracePoint = tuple[float, float, float]
 
 
-def _count_unequal_collinear_overlaps(edges: set[frozenset[_TracePoint]]) -> int:
-    """Count distinct edge pairs overlapping over positive source length.
+def _collinear_edge_union(
+    edges: set[frozenset[_TracePoint]],
+) -> tuple[int, Fraction]:
+    """Count overlapping pairs and measure their geometric union.
 
     Exact binary64 rational line keys avoid tolerance-dependent welding.
-    Sweep projected intervals on each line; endpoint contact is not overlap.
+    Only positive-length overlaps are merged; endpoint contact is unchanged.
+    Lengths use Euclidean binary64 distances, summed before rounding.
     """
-    lines: dict[tuple[Fraction, ...], list[tuple[Fraction, Fraction]]] = {}
+    lines: dict[
+        tuple[Fraction, ...],
+        list[tuple[Fraction, Fraction, _TracePoint, _TracePoint]],
+    ] = {}
     for edge in edges:
-        start = tuple(Fraction(value) for value in min(edge))
-        end = tuple(Fraction(value) for value in max(edge))
+        first, last = min(edge), max(edge)
+        start = tuple(Fraction(value) for value in first)
+        end = tuple(Fraction(value) for value in last)
         delta = tuple(b - a for a, b in zip(start, end, strict=True))
         pivot = next(index for index, value in enumerate(delta) if value)
         direction = tuple(value / delta[pivot] for value in delta)
         intercept = tuple(
             value - slope * start[pivot] for value, slope in zip(start, direction, strict=True)
         )
-        lines.setdefault(direction + intercept, []).append((start[pivot], end[pivot]))
+        lines.setdefault(direction + intercept, []).append(
+            (start[pivot], end[pivot], first, last)
+        )
     count = 0
+    total = Fraction(0)
     for intervals in lines.values():
         active: list[Fraction] = []
-        for lower, upper in sorted(intervals):
+        merged_upper: Fraction | None = None
+        merged_first: _TracePoint | None = None
+        merged_last: _TracePoint | None = None
+        for lower, upper, first, last in sorted(intervals):
             while active and active[0] <= lower:
                 heappop(active)
             count += len(active)
             heappush(active, upper)
-    return count
+            if merged_upper is None or lower >= merged_upper:
+                if merged_first is not None and merged_last is not None:
+                    total += Fraction(dist(merged_first, merged_last))
+                merged_first, merged_last, merged_upper = first, last, upper
+            elif upper > merged_upper:
+                merged_last, merged_upper = last, upper
+        if merged_first is not None and merged_last is not None:
+            total += Fraction(dist(merged_first, merged_last))
+    return count, total
+
+
+def _collinear_union_measurement(
+    source_total: Fraction, scale: float, relative_scale_uncertainty: float | None
+) -> dict[str, Any]:
+    """Keep corrected geometry distinct from exact endpoint graph measurements."""
+    calibrated = source_total * Fraction(scale)
+    nominal = float(calibrated)
+    warnings: list[str] = []
+    interval = None
+    if calibrated > 0 and nominal == 0:
+        warnings.append("surface_trace_collinear_union_length_underflow")
+    elif relative_scale_uncertainty is not None:
+        uncertainty = Fraction(relative_scale_uncertainty)
+        lower = float(calibrated * (1 - uncertainty))
+        upper = float(calibrated * (1 + uncertainty))
+        if calibrated > 0 and (
+            (uncertainty < 1 and lower == 0) or (uncertainty > 0 and lower == upper)
+        ):
+            warnings.append("surface_trace_collinear_union_interval_unrepresentable")
+        else:
+            interval = [lower, upper]
+    return {
+        "method": "exact_source_line_positive_overlap_union",
+        "source_length_mesh_units": float(source_total),
+        "length_m": None if calibrated > 0 and nominal == 0 else nominal,
+        "length_scale_only_interval_m": interval,
+        "biological_validation_status": "not_verified_anatomical_centerline",
+        "human_review_verified": False,
+        "qc_warnings": warnings,
+    }
 
 
 def _trace_endpoint_chains(
@@ -1040,7 +1092,9 @@ def measure_mesh_preview(
         calibrated_total = source_total * Fraction(scale)
         length_m = float(calibrated_total)
         union_warnings: list[str] = []
-        unequal_overlap_count = _count_unequal_collinear_overlaps(set(traversal_counts))
+        unequal_overlap_count, collinear_source_total = _collinear_edge_union(
+            set(traversal_counts)
+        )
         if unequal_overlap_count:
             union_warnings.append("surface_trace_unequal_collinear_edges_overlap")
         interval = None
@@ -1093,6 +1147,9 @@ def measure_mesh_preview(
             ),
             "method": "exact_endpoint_pair_equality_only",
             "unequal_collinear_overlap_pair_count": unequal_overlap_count,
+            "collinear_overlap_corrected_union": _collinear_union_measurement(
+                collinear_source_total, scale, relative_scale_uncertainty
+            ),
             "distinct_nonzero_edge_count": len(traversal_counts),
             "nonzero_edge_traversal_count": traversal_count,
             "within_trace_redundant_traversal_count": traversal_count - trace_membership_count,
