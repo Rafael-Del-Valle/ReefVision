@@ -690,3 +690,17 @@ review of the underlying raw acquisitions, not only reconstructed meshes.
 Compare six synthetic lineage cases and confirm standalone and twice-run
 persisted typed workflow artifact parity for reused imports. Existing
 change-withholding rules and review-bundle canonical hashes are unchanged.
+
+For a reused immutable project asset with missing legacy payload digests,
+compare known byte counts, source formats and geometry fingerprints.
+Conflicting known byte counts or formats emit
+`reused_spatial_source_asset_metadata_inconsistent`; different valid
+geometry fingerprints emit `reused_spatial_source_asset_geometry_inconsistent`.
+Missing fields alone are not contradictions. Both warnings are scientific
+QC, not verified evidence of corruption; all longitudinal change remains
+withheld for reused assets. Confirm five legacy-record cases. Additionally,
+replay a standalone and twice-executed saved graph with identical triangles
+but a changed OBJ comment and doubled calibration scale: the fourfold
+nominal area remains visible, while the biological change and rate are
+withheld. The lineage status distinguishes rescaled re-export from exact
+byte reuse, and both retain unverified identity and acquisition status.
