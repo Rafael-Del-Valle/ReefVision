@@ -1798,6 +1798,10 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             [0, 0, 0],
         ]
         assert chains[0]["source_length_mesh_units"] == pytest.approx(2 + sqrt(2))
+        assert chains[0]["endpoint_graph_degrees"] == [2, 2]
+        assert chains[0]["source_chain_geometry_sha256"] == (
+            "f371682a882db4038a7bb7b121baeb4dcf9f5126a2979177352894a8ed089cdb"
+        )
         assert topology["vertex_count"] == 3
         assert topology["connected_component_count"] == 1
         assert topology["degree_one_vertex_count"] == 0
@@ -1812,6 +1816,10 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             [1, 0, 0],
         ]
         assert chains[0]["length_m"] == pytest.approx(0.01 * (1 + sqrt(2)))
+        assert chains[0]["endpoint_graph_degrees"] == [1, 1]
+        assert chains[0]["source_chain_geometry_sha256"] == (
+            "dd2f72285179362d3e0783cc74f3dabca119d597806abced40b93260edda4ac9"
+        )
         assert topology["vertex_count"] == 3
         assert topology["connected_component_count"] == 1
         assert topology["degree_one_vertex_count"] == 2
@@ -2228,6 +2236,15 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
     chains = union["endpoint_graph_chains"]
     assert [chain["edge_count"] for chain in chains] == [3, 1]
     assert [chain["is_closed"] for chain in chains] == [True, False]
+    assert [chain["endpoint_graph_degrees"] for chain in chains] == [[3, 3], [3, 1]]
+    assert [chain["source_chain_geometry_sha256"] for chain in chains] == [
+        "68f72cd19b70a9ad34a3f467194d6819d00d427a1fac1616ffe93f987af30469",
+        "445e311472282eff7992e2124f223b752110241a2d68897ec0bd7a9d9726b1d0",
+    ]
+    assert all(
+        chain["source_chain_geometry_canonicalization"] == "ordered_float64_xyz_compact_json_v1"
+        for chain in chains
+    )
     assert [chain["source_waypoints_mesh_units"] for chain in chains] == [
         [[2, 0, 0], [0, 0, 0], [2, 3, 0], [2, 0, 0]],
         [[2, 0, 0], [2, 0, 4]],
@@ -2384,3 +2401,23 @@ def test_exact_trace_endpoint_graph_does_not_connect_interior_crossings() -> Non
     ]
     assert [chain["length_m"] for chain in chains] == pytest.approx([0.02, 0.02])
     assert topology["human_review_verified"] is False
+
+
+def test_chain_geometry_digest_is_source_bound_not_calibration_or_signed_zero() -> None:
+    baseline = measure_mesh_preview(**PARAMS)["surface_trace_exact_edge_union"]
+    expected = baseline["endpoint_graph_chains"][0]["source_chain_geometry_sha256"]
+    params = {
+        **PARAMS,
+        "vertices": [[-0.0, -0.0, 0.0], [1, -0.0, 0.0], [-0.0, 1, -0.0]],
+        "surface_trace_vertex_paths": [[1, 2, 0]],
+        "meters_per_unit": 0.5,
+        "relative_scale_uncertainty": None,
+    }
+    reversed_chain = measure_mesh_preview(**params)["surface_trace_exact_edge_union"][
+        "endpoint_graph_chains"
+    ][0]
+    assert reversed_chain["source_chain_geometry_sha256"] == expected
+    assert reversed_chain["length_m"] == pytest.approx(0.5 * (1 + sqrt(2)))
+    params["vertices"] = [[0, 0, 0], [1, 0, 0], [0, 2, 0]]
+    changed = measure_mesh_preview(**params)["surface_trace_exact_edge_union"]
+    assert changed["endpoint_graph_chains"][0]["source_chain_geometry_sha256"] != expected
