@@ -1885,6 +1885,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert components[1]["length_m"] == union["length_m"]
         assert artifact["qc_warnings"].count(component_warning) == 1
     if case in {"closed_loop", "closed_loop_reverse", "closed_loop_rotated"}:
+        assert union["endpoint_graph_components"][0]["source_endpoint_graph_landmarks"] == []
         assert len(chains) == 1
         assert chains[0]["is_closed"] is True
         assert chains[0]["selected_trace_memberships"] == [
@@ -2747,7 +2748,7 @@ def test_component_geometry_digest_is_source_bound_not_calibration_or_signed_zer
         {"source_vertex_mesh_units": [1.0, 0.0, 0.0], "degree": 1},
     ]
     assert all(
-        json.dumps(item["source_vertex_mesh_units"]).find("-0.0") == -1
+        "-0.0" not in json.dumps(item["source_vertex_mesh_units"])
         for item in component["source_endpoint_graph_landmarks"]
     )
     assert component["length_m"] == pytest.approx(0.5 * (1 + sqrt(2)))
