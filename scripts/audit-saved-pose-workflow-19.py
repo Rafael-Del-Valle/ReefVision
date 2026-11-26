@@ -115,7 +115,7 @@ def _verify_source_frame_pixels(
     frame_indices: set[int],
     width: int,
     height: int,
-) -> int:
+) -> tuple[int, set[str]]:
     """Stream original frames and compare lossless materialized pixels."""
     import cv2
     import numpy as np
@@ -123,6 +123,7 @@ def _verify_source_frame_pixels(
     _require(bool(frame_indices) and min(frame_indices) >= 0, "Invalid frozen frame indices")
     capture = cv2.VideoCapture(str(source))
     verified = 0
+    pixel_digests: set[str] = set()
     try:
         _require(capture.isOpened(), "Cannot decode original frozen source video")
         # Match the exporter's sequential, zero-based decoding. Seeking to a
@@ -143,10 +144,22 @@ def _verify_source_frame_pixels(
                 and np.array_equal(saved, frame),
                 f"Materialized image pixels differ from frozen source frame: {image_path.name}",
             )
+            # Different videos or PNG encodings can contain exactly the same
+            # decoded frame. Include array geometry and dtype in the digest.
+            digest = hashlib.sha256(f"{frame.shape}:{frame.dtype}:".encode("ascii"))
+            digest.update(np.ascontiguousarray(frame).tobytes())
+            pixel_digests.add(digest.hexdigest())
             verified += 1
     finally:
         capture.release()
-    return verified
+    return verified, pixel_digests
+
+
+def _verify_disjoint_frame_pixels(training: set[str], validation: set[str]) -> None:
+    _require(
+        training.isdisjoint(validation),
+        "Separate frozen validation dataset reuses decoded training frame pixels",
+    )
 
 
 def _verify_effective_training_config(
@@ -827,6 +840,7 @@ def inspect(
             exporter = PoseTrainingExportService(session, Settings(data_dir=root))
             verified_label_count = 0
             verified_image_count = 0
+            training_pixel_digests: set[str] = set()
             training_yaml: str | None = None
             materialized_yaml = root / dataset_path / "data.yaml"
             for split, frozen_dataset in (
@@ -838,13 +852,18 @@ def inspect(
                 items = exporter._items(frozen_dataset)
                 schema = exporter._schema(frozen_dataset)
                 video, source, _, _ = exporter._source_video(items)
-                verified_image_count += _verify_source_frame_pixels(
+                image_count, pixel_digests = _verify_source_frame_pixels(
                     source,
                     root / dataset_path / "images" / split,
                     {item.frame_index for item in items},
                     video.width_px,
                     video.height_px,
                 )
+                verified_image_count += image_count
+                if split == "train":
+                    training_pixel_digests = pixel_digests
+                else:
+                    _verify_disjoint_frame_pixels(training_pixel_digests, pixel_digests)
                 expected_labels = exporter._ultralytics(
                     items=items,
                     schema=schema,
@@ -1314,6 +1333,9 @@ def inspect(
                 "separate_validation_source_video_overlap_checked": validation_id is not None,
                 "separate_validation_frame_overlap_checked": (
                     validation_id is not None and validation_id != dataset.id
+                ),
+                "validation_frame_overlap_algorithm": (
+                    "decoded-frame-shape-dtype-sha256-v1" if validation_id is not None else None
                 ),
                 "training_run_id": training.id,
                 "training_job_id": job.id,
