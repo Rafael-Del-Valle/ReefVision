@@ -581,3 +581,17 @@ cross-trace redundant traversals. Compare these fields in standalone
 previews and repeated executions of the saved typed graph, including
 artifact hashes. Selection provenance does not change source geometry
 fingerprints, calibration uncertainty or provisional review status.
+
+Component review now also exposes `source_endpoint_graph_landmarks`:
+lexicographically ordered source XYZ coordinates (signed zero normalized)
+and exact graph degrees for degree-one terminals and degree-three-or-more
+junctions. Degree-two vertices are intentionally omitted; a closed isolated
+cycle has no such landmarks. The Y-like loop-and-stem reference has the
+junction [2, 0, 0] (degree 3) and terminal [2, 0, 4] (degree 1).
+Compare direct submitted-edge degrees, reversed and repeated traces,
+signed-zero aliases, disconnected components, and closed cycles. Verify
+standalone and repeated saved typed workflow artifacts. These coordinates
+are in uncalibrated source units and do not establish anatomical tips,
+branch points, registration correspondences, growth direction or verified
+organism identity. They do not change geometry fingerprints, scale-only
+uncertainty, or the pending human-review requirement.
