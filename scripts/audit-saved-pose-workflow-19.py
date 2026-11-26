@@ -149,6 +149,39 @@ def _verify_source_frame_pixels(
     return verified
 
 
+def _verify_effective_training_config(
+    parameters: dict[str, Any],
+    effective: dict[str, Any],
+    defaults: dict[str, Any],
+    warning_list: list[str],
+    *,
+    has_validation: bool,
+) -> None:
+    """Reconcile the saved node's requested settings with the executed config."""
+    supplied = parameters.get("training_config", {})
+    _require(isinstance(supplied, dict), "Saved pose training config is not a JSON object")
+    _require(
+        ("amp" not in supplied or supplied["amp"] is False)
+        and ("val" not in supplied or supplied["val"] is has_validation),
+        "Saved pose training config contradicts offline precision or validation policy",
+    )
+    expected = {**defaults, **supplied, "amp": False, "val": has_validation}
+    windows_warning = (
+        "Windows pose training uses workers=0; the saved training "
+        "configuration records this effective setting."
+    )
+    # The auditor may run on a different OS than the original training job.
+    # Apply the production Windows normalization only when it was recorded.
+    if windows_warning in warning_list:
+        _require(expected["workers"] != 0, "Inconsistent Windows worker normalization")
+        expected["workers"] = 0
+    _require(
+        isinstance(effective, dict)
+        and json.dumps(expected, sort_keys=True) == json.dumps(effective, sort_keys=True),
+        "Effective pose training config differs from the saved workflow parameters",
+    )
+
+
 def _verify_database_revision(connection: Any, api_dir: Path) -> tuple[str, int, str]:
     """Require one linear migration chain and record its exact source identity."""
     from alembic.config import Config
@@ -239,7 +272,10 @@ def inspect(
     from reefvision.jobs.pose_training import _verify_prelaunch_pose_dataset
     from reefvision.services.pose_training_datasets import PoseTrainingDatasetService
     from reefvision.services.pose_training_exports import PoseTrainingExportService
-    from reefvision.services.workflow_pose_training import _pose_dataset
+    from reefvision.services.workflow_pose_training import (
+        DEFAULT_POSE_TRAINING_CONFIG,
+        _pose_dataset,
+    )
     from reefvision.services.workflow_provenance import build_workflow_run_provenance
     from reefvision.storage.datasets import canonical_json_sha256
 
@@ -414,6 +450,20 @@ def inspect(
                 and training.evaluation_config_json.get("validation_mode")
                 == expected_validation_mode,
                 "Effective pose precision or independent validation policy changed",
+            )
+            # The frozen graph and training result can agree on dataset IDs
+            # while the separately persisted worker hyperparameters drift.
+            _require(
+                isinstance(training_node.parameters_json, dict)
+                and isinstance(training.warnings_json, list),
+                "Saved pose node parameters or training warnings are invalid",
+            )
+            _verify_effective_training_config(
+                training_node.parameters_json,
+                training.training_config_json,
+                DEFAULT_POSE_TRAINING_CONFIG,
+                training.warnings_json,
+                has_validation=validation_id is not None,
             )
             if validation_id is not None:
                 validation_dataset = _pose_dataset(
