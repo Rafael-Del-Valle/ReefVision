@@ -1542,6 +1542,18 @@ class PoseTrainingExportService:
 
         bundle = self._write_zip(files)
 
+        # Decoding reviewed frames and building a native artifact can take
+        # minutes. Do not issue a bundle claiming the frozen source checksum
+        # if the managed video changed or disappeared during that interval.
+        try:
+            final_source_hash = sha256_file(source)
+        except OSError as exc:
+            raise ConflictError(
+                "Managed source video became unavailable during pose export"
+            ) from exc
+        if final_source_hash != source_hash:
+            raise ConflictError("Managed source video bytes changed during pose export")
+
         return PoseTrainingExportArtifact(
             filename=(f"pose-training-{dataset.id}.{export_format}.zip"),
             media_type="application/zip",
