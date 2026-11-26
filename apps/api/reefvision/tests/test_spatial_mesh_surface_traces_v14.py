@@ -1782,6 +1782,21 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert artifact["surface_edge_traces"] == standalone.json()["surface_edge_traces"]
     union = artifact["surface_trace_exact_edge_union"]
     assert union == standalone.json()["surface_trace_exact_edge_union"]
+    topology = union["endpoint_graph_topology"]
+    assert topology["human_review_verified"] is False
+    assert topology["biological_validation_status"] == "not_verified_anatomical_centerline"
+    if case in {"closed_loop", "closed_loop_reverse", "closed_loop_rotated"}:
+        assert topology["vertex_count"] == 3
+        assert topology["connected_component_count"] == 1
+        assert topology["degree_one_vertex_count"] == 0
+        assert topology["degree_three_or_more_vertex_count"] == 0
+        assert topology["cycle_rank"] == 1
+    if case == "ordinary":
+        assert topology["vertex_count"] == 3
+        assert topology["connected_component_count"] == 1
+        assert topology["degree_one_vertex_count"] == 2
+        assert topology["degree_three_or_more_vertex_count"] == 0
+        assert topology["cycle_rank"] == 0
     assert union["human_review_verified"] is False
     if case == "segment_underflow":
         assert union["source_length_mesh_units"] == pytest.approx(1e-250, abs=0)
@@ -2187,6 +2202,16 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
     union = direct["surface_trace_exact_edge_union"]
     source_length = 9 + sqrt(13)
     assert union["distinct_nonzero_edge_count"] == 4
+    assert union["endpoint_graph_topology"] == {
+        "method": "exact_nonzero_edge_endpoint_graph",
+        "vertex_count": 4,
+        "connected_component_count": 1,
+        "degree_one_vertex_count": 1,
+        "degree_three_or_more_vertex_count": 1,
+        "cycle_rank": 1,
+        "biological_validation_status": "not_verified_anatomical_centerline",
+        "human_review_verified": False,
+    }
     assert union["nonzero_edge_traversal_count"] == (5 if shared else 4)
     assert union["within_trace_redundant_traversal_count"] == 0
     assert union["cross_trace_redundant_traversal_count"] == int(shared)
@@ -2282,8 +2307,35 @@ def test_shared_trace_pairs_count_distinct_edges_not_repeated_traversals() -> No
     assert "surface_traces_share_geometric_edges" in result["qc_warnings"]
     union = result["surface_trace_exact_edge_union"]
     assert union["distinct_nonzero_edge_count"] == 2
+    topology = union["endpoint_graph_topology"]
+    assert topology["vertex_count"] == 3
+    assert topology["connected_component_count"] == 1
+    assert topology["degree_one_vertex_count"] == 2
+    assert topology["degree_three_or_more_vertex_count"] == 0
+    assert topology["cycle_rank"] == 0
     assert union["nonzero_edge_traversal_count"] == 7
     assert union["within_trace_redundant_traversal_count"] == 2
     assert union["cross_trace_redundant_traversal_count"] == 3
     assert union["redundant_traversal_source_length_mesh_units"] == pytest.approx(3 + 2 * sqrt(2))
     assert union["source_length_mesh_units"] == pytest.approx(1 + sqrt(2))
+
+
+def test_exact_trace_endpoint_graph_does_not_connect_interior_crossings() -> None:
+    # Two edges cross at their interiors, not at selected endpoints.
+    # Their graph is disconnected even though the rendered traces intersect.
+    params = {
+        **PARAMS,
+        "surface_path_vertex_pairs": None,
+        "vertices": [[-1, 0, 0], [1, 0, 0], [0, 0, 1], [0, -1, 0], [0, 1, 0], [1, 1, 1]],
+        "faces": [[0, 1, 2], [3, 4, 5]],
+        "surface_trace_vertex_paths": [[0, 1], [4, 3]],
+    }
+    union = measure_mesh_preview(**params)["surface_trace_exact_edge_union"]
+    topology = union["endpoint_graph_topology"]
+    assert topology["vertex_count"] == 4
+    assert topology["connected_component_count"] == 2
+    assert topology["degree_one_vertex_count"] == 4
+    assert topology["degree_three_or_more_vertex_count"] == 0
+    assert topology["cycle_rank"] == 0
+    assert union["source_length_mesh_units"] == pytest.approx(4.0)
+    assert topology["human_review_verified"] is False
