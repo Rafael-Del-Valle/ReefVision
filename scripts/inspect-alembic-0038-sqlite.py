@@ -37,6 +37,17 @@ TABLE_COLUMNS = {
 SCIENTIFIC_38 = ("scientific_records", "environmental_cache_entries")
 SCIENTIFIC_39 = ("computed_metric_definitions", "computed_metric_results")
 REVIEW_TABLE = "review_queue_item_events"
+# Tables created or altered by the colliding 1.1/1.6 migrations 0038–0042.
+# Counts support preservation review, but do not establish content equality.
+AFFECTED_TABLES = (
+    *SCIENTIFIC_38,
+    *SCIENTIFIC_39,
+    REVIEW_TABLE,
+    "environmental_event_definitions",
+    "environmental_analysis_definitions",
+    "environmental_analysis_results",
+    "review_queue_bulk_requests",
+)
 
 
 def _without_sql_comments(ddl: str) -> str:
@@ -93,6 +104,14 @@ def inspect_database(path: Path) -> dict[str, object]:
             for name, ddl in connection.execute(
                 "SELECT name, sql FROM sqlite_master WHERE type='table'"
             )
+        }
+        # Record baseline row counts in the same pinned read snapshot as DDL.
+        # Missing tables are omitted, distinct from existing empty tables.
+        # Fixed migration-owned names avoid interpolating arbitrary identifiers.
+        affected_table_row_counts = {
+            table: connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+            for table in sorted(AFFECTED_TABLES)
+            if table in tables
         }
         # Later 1.1/1.6 migrations also reuse revision IDs. Record their
         # distinguishing objects even if the database carries an older stamp.
@@ -342,6 +361,7 @@ def inspect_database(path: Path) -> dict[str, object]:
         "observed_schema_sha256": schema_sha256,
         "observed_schema_fingerprint_algorithm": "sqlite-master-ddl-json-sha256-v1",
         "table_signatures": signatures,
+        "affected_table_row_counts": affected_table_row_counts,
         "observed_later_migration_objects": sorted(later_objects),
         "review_event_check": review_check if groups["review_0038"] else None,
         "qc_event_scope_violations": qc_scope_violations,
