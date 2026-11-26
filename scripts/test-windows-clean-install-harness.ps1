@@ -163,6 +163,45 @@ foreach ($launchStage in @('initial installed launch (1.0.3)', 'candidate relaun
     Assert-True ($timeoutMessage.Contains($launchStage)) 'Startup timeout evidence must identify the launch stage and version.'
     Assert-True ($timeoutMessage.Contains("desktop PID $PID")) 'Startup timeout evidence must identify the desktop PID.'
 }
+# Test diagnostic contents, not just the timeout prefix. These are isolated
+# fixture logs; no real application is started and no process is signaled.
+$diagnosticRoot = Join-Path $env:TEMP ('reefvision-startup-logs-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $diagnosticRoot | Out-Null
+$diagnosticProcess = [System.Diagnostics.Process]::GetCurrentProcess()
+try {
+    $diagnosticPort = Join-Path $diagnosticRoot 'backend-port.txt'
+    $diagnosticBackend = Join-Path $diagnosticRoot 'backend.log'
+    $diagnosticApi = Join-Path $diagnosticRoot 'api.log'
+    Set-Content -LiteralPath $diagnosticBackend -Value @(1..25 | ForEach-Object { 'backend-record-{0:D2}' -f $_ })
+    Set-Content -LiteralPath $diagnosticApi -Value @(1..25 | ForEach-Object { 'api-record-{0:D2}' -f $_ })
+    $diagnosticMessage = ''
+    try {
+        Wait-BackendPort -Path $diagnosticPort -DesktopProcess $diagnosticProcess -BackendLogPath $diagnosticBackend -LaunchStage 'fixture launch' -Seconds 0 | Out-Null
+    } catch {
+        $diagnosticMessage = $_.Exception.Message
+    }
+    Assert-True ($diagnosticMessage.Contains('Backend did not publish its port within 0 seconds')) 'Log diagnostics must not turn a startup timeout into success.'
+    Assert-True ($diagnosticMessage.Contains('backend.log:') -and $diagnosticMessage.Contains('api.log:')) 'Both isolated startup logs must be identified.'
+    Assert-True ($diagnosticMessage.Contains('backend-record-06') -and $diagnosticMessage.Contains('backend-record-25')) 'Backend diagnostics must retain the latest 20 records.'
+    Assert-True ($diagnosticMessage.Contains('api-record-06') -and $diagnosticMessage.Contains('api-record-25')) 'API diagnostics must retain the latest 20 records.'
+    Assert-True (-not $diagnosticMessage.Contains('backend-record-05') -and -not $diagnosticMessage.Contains('api-record-05')) 'Startup diagnostics must omit earlier records.'
+
+    Clear-Content -LiteralPath $diagnosticBackend
+    Remove-Item -LiteralPath $diagnosticApi
+    $diagnosticMessage = ''
+    try {
+        Wait-BackendPort -Path $diagnosticPort -DesktopProcess $diagnosticProcess -BackendLogPath $diagnosticBackend -LaunchStage 'fixture launch' -Seconds 0 | Out-Null
+    } catch {
+        $diagnosticMessage = $_.Exception.Message
+    }
+    Assert-True ($diagnosticMessage.Contains('Backend did not publish its port within 0 seconds')) 'Absent diagnostic content must not mask the startup failure.'
+    Assert-True ($diagnosticMessage -match 'backend\.log:\s*\(empty\)') 'An empty backend log must be distinguished from a missing log.'
+    Assert-True ($diagnosticMessage -match 'api\.log:\s*\(unavailable\)') 'A missing API log must be explicitly unavailable.'
+} finally {
+    $diagnosticProcess.Dispose()
+    Remove-Item -LiteralPath $diagnosticRoot -Recurse -Force
+}
+
 Assert-True ($acceptanceScript.Contains('-LaunchStage "initial installed launch ($initialVersion)"')) 'Initial launch must identify the actual installed version.'
 Assert-True ($acceptanceScript.Contains('-LaunchStage "candidate relaunch ($ProductVersion)"')) 'Candidate relaunch must identify the candidate version.'
 
