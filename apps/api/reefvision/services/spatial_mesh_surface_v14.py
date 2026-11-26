@@ -179,6 +179,52 @@ def _trace_endpoint_chains(
     return chains
 
 
+def _trace_endpoint_components(
+    adjacency: dict[_TracePoint, set[_TracePoint]],
+    chains: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Inventory connected endpoint components without implying biological identity."""
+    components: list[dict[str, Any]] = []
+    component_by_point: dict[_TracePoint, int] = {}
+    for start in sorted(adjacency):
+        if start in component_by_point:
+            continue
+        index = len(components)
+        component_by_point[start] = index
+        frontier = [start]
+        vertex_count = degree_sum = terminal_count = junction_count = 0
+        while frontier:
+            neighbors = adjacency[frontier.pop()]
+            degree = len(neighbors)
+            vertex_count += 1
+            degree_sum += degree
+            terminal_count += int(degree == 1)
+            junction_count += int(degree >= 3)
+            for neighbor in neighbors:
+                if neighbor not in component_by_point:
+                    component_by_point[neighbor] = index
+                    frontier.append(neighbor)
+        edge_count = degree_sum // 2
+        components.append(
+            {
+                "source_min_vertex_mesh_units": [0.0 if value == 0 else value for value in start],
+                "vertex_count": vertex_count,
+                "distinct_nonzero_edge_count": edge_count,
+                "degree_one_vertex_count": terminal_count,
+                "degree_three_or_more_vertex_count": junction_count,
+                "cycle_rank": edge_count - vertex_count + 1,
+                "chain_indices": [],
+                "biological_validation_status": "not_verified_anatomical_centerline",
+                "human_review_verified": False,
+            }
+        )
+    for index, chain in enumerate(chains):
+        first = chain["source_waypoints_mesh_units"][0]
+        component_index = component_by_point[(first[0], first[1], first[2])]
+        components[component_index]["chain_indices"].append(index)
+    return components
+
+
 def _surface_volume_ratio_per_m(area_m2: float, volume_m3: float | None) -> float | None:
     """Provisional A/V in inverse meters; undefined for rejected or zero volume."""
     if volume_m3 is None or volume_m3 <= 0 or area_m2 <= 0:
@@ -1112,16 +1158,9 @@ def measure_mesh_preview(
             endpoint_a, endpoint_b = min(geometric_edge), max(geometric_edge)
             adjacency.setdefault(endpoint_a, set()).add(endpoint_b)
             adjacency.setdefault(endpoint_b, set()).add(endpoint_a)
-        unseen_vertices = set(adjacency)
-        component_count = 0
-        while unseen_vertices:
-            component_count += 1
-            frontier = [unseen_vertices.pop()]
-            while frontier:
-                for neighbor in adjacency[frontier.pop()]:
-                    if neighbor in unseen_vertices:
-                        unseen_vertices.remove(neighbor)
-                        frontier.append(neighbor)
+        chains = _trace_endpoint_chains(adjacency, edge_lengths, scale, relative_scale_uncertainty)
+        components = _trace_endpoint_components(adjacency, chains)
+        component_count = len(components)
         topology = {
             "method": "exact_nonzero_edge_endpoint_graph",
             "vertex_count": len(adjacency),
@@ -1137,7 +1176,6 @@ def measure_mesh_preview(
         corrected_union = _collinear_union_measurement(
             collinear_source_total, scale, relative_scale_uncertainty
         )
-        chains = _trace_endpoint_chains(adjacency, edge_lengths, scale, relative_scale_uncertainty)
         # Retain each original traversal, including direction and repetition.
         # The canonical chains partition the exact nonzero selected edges.
         chain_by_edge: dict[frozenset[_TracePoint], tuple[int, int, _TracePoint]] = {}
@@ -1199,6 +1237,7 @@ def measure_mesh_preview(
         exact_edge_union = {
             "endpoint_graph_topology": topology,
             "endpoint_graph_chains": chains,
+            "endpoint_graph_components": components,
             "method": "exact_endpoint_pair_equality_only",
             "unequal_collinear_overlap_pair_count": unequal_overlap_count,
             "collinear_overlap_corrected_union": corrected_union,
