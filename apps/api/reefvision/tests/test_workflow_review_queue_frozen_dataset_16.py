@@ -14,6 +14,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from reefvision.db.models import ReviewQueue, WorkflowArtifact, WorkflowNodeRun
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
+from reefvision.services.review_queues import ReviewQueueService
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
 from reefvision.services.workflow_review_queue_integrity import (
     queue_item_evidence_sha256,
@@ -393,6 +394,10 @@ def test_saved_frozen_qc_replay_enforces_dataset_scope(
             create_review_queue_workflow_artifact(
                 session, app.state.settings, project_id, parameters, inputs
             )
+        if tamper in {"resigned_wrong_item_split", "resigned_missing_item"}:
+            # The same corrupt saved queue must not authorize manual regeneration.
+            with pytest.raises(ValidationError, match=expected_error):
+                ReviewQueueService(session, app.state.settings).regenerate(queue.id)
         session.rollback()
 
         # A failed attempt cannot rewrite the original queue or reviewer state.
@@ -453,9 +458,7 @@ def test_frozen_unannotated_study_has_no_invented_rare_class_priority(
 
 
 @pytest.mark.parametrize("scope", ["project", "frozen"])
-def test_manual_regeneration_refuses_resigned_false_split(
-    client: TestClient, scope: str
-) -> None:
+def test_manual_regeneration_refuses_resigned_false_split(client: TestClient, scope: str) -> None:
     """Standalone regeneration must enforce the same split contract as saved replay."""
     project_id, image_id, version_id, _ = _study(client)
     endpoint = (
