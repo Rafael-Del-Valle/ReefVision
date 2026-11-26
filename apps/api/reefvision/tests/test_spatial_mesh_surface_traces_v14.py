@@ -1788,13 +1788,17 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert union["length_m"] is None
         assert union["length_scale_only_interval_m"] is None
         assert union["qc_warnings"] == ["surface_trace_exact_edge_union_length_underflow"]
+    if case == "reused_geometric_segment":
+        assert union["nonzero_edge_traversal_count"] == 4
+        assert union["distinct_nonzero_edge_count"] == 3
+        assert union["within_trace_redundant_traversal_count"] == 1
+        assert union["cross_trace_redundant_traversal_count"] == 0
+        assert union["redundant_traversal_source_length_mesh_units"] == pytest.approx(1.0)
     if case == "uncertainty_missing":
         assert union["length_scale_only_interval_m"] is None
         assert union["qc_warnings"] == []
     if case == "uncertainty_max":
-        assert union["length_scale_only_interval_m"] == pytest.approx(
-            [0.0, 2 * union["length_m"]]
-        )
+        assert union["length_scale_only_interval_m"] == pytest.approx([0.0, 2 * union["length_m"]])
     assert artifact["provenance"] == standalone.json()["provenance"]
     assert artifact["measurement_status"] == "caller_supplied_unverified"
     trace = artifact["surface_edge_traces"][0]
@@ -2183,6 +2187,10 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
     union = direct["surface_trace_exact_edge_union"]
     source_length = 9 + sqrt(13)
     assert union["distinct_nonzero_edge_count"] == 4
+    assert union["nonzero_edge_traversal_count"] == (5 if shared else 4)
+    assert union["within_trace_redundant_traversal_count"] == 0
+    assert union["cross_trace_redundant_traversal_count"] == int(shared)
+    assert union["redundant_traversal_source_length_mesh_units"] == (2.0 if shared else 0.0)
     assert union["source_length_mesh_units"] == pytest.approx(source_length)
     assert union["length_m"] == pytest.approx(source_length * 0.01)
     assert union["length_scale_only_interval_m"] == pytest.approx(
@@ -2274,4 +2282,8 @@ def test_shared_trace_pairs_count_distinct_edges_not_repeated_traversals() -> No
     assert "surface_traces_share_geometric_edges" in result["qc_warnings"]
     union = result["surface_trace_exact_edge_union"]
     assert union["distinct_nonzero_edge_count"] == 2
+    assert union["nonzero_edge_traversal_count"] == 7
+    assert union["within_trace_redundant_traversal_count"] == 2
+    assert union["cross_trace_redundant_traversal_count"] == 3
+    assert union["redundant_traversal_source_length_mesh_units"] == pytest.approx(3 + 2 * sqrt(2))
     assert union["source_length_mesh_units"] == pytest.approx(1 + sqrt(2))
