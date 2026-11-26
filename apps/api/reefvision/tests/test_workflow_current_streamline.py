@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
+from reefvision.db.models import WorkflowNodeRun
 from reefvision.db.models.environmental_analysis import (
     EnvironmentalAnalysisDefinition,
     EnvironmentalAnalysisResult,
@@ -30,8 +31,9 @@ def _current_records(
     project_id: str,
     *,
     longitudes: tuple[float, ...] = (-1.0, 1.0),
+    first_record_overrides: dict[str, object] | None = None,
 ) -> list[str]:
-    records = []
+    records: list[dict[str, object]] = []
     for latitude in (-1.0, 1.0):
         for longitude in longitudes:
             for variable, value in (
@@ -62,6 +64,8 @@ def _current_records(
                         },
                     }
                 )
+    if first_record_overrides is not None:
+        records[0].update(first_record_overrides)
     response = client.post(
         f"/api/v1/projects/{project_id}/scientific-records", json={"records": records}
     )
@@ -258,11 +262,34 @@ def test_current_streamline_rejects_antimeridian_extent_in_saved_graph(
             assert source.content_sha256 == original_hash
 
 
-def test_failed_current_streamline_workflow_is_atomic(client: TestClient) -> None:
-    project = create_project(client, "Incomplete workflow current")
-    incomplete_ids = _current_records(client, project["id"])[:1]
-    queued = save_and_queue(client, project["id"], _graph(_parameters(incomplete_ids)))
+@pytest.mark.parametrize(
+    ("overrides", "omit_last", "diagnostic"),
+    [
+        (None, True, "complete paired component grid"),
+        ({"observed_at": "2026-01-01T01:00:00Z"}, False, "share UTC"),
+        ({"depth_m": 10.0}, False, "share UTC"),
+        ({"qc": "suspect"}, False, "Suspect or rejected"),
+        ({"qc": "rejected"}, False, "Suspect or rejected"),
+    ],
+)
+def test_failed_current_streamline_workflow_is_atomic(
+    client: TestClient,
+    overrides: dict[str, object] | None,
+    omit_last: bool,
+    diagnostic: str,
+) -> None:
+    project = create_project(client, "Invalid workflow current")
+    record_ids = _current_records(client, project["id"], first_record_overrides=overrides)
+    selected_ids = record_ids[:-1] if omit_last else record_ids
     app = cast(FastAPI, client.app)
+    original_hashes: dict[str, str] = {}
+    with app.state.session_factory() as session:
+        for record_id in record_ids:
+            source = session.get(ScientificRecord, record_id)
+            assert source is not None
+            original_hashes[record_id] = source.content_sha256
+
+    queued = save_and_queue(client, project["id"], _graph(_parameters(selected_ids)))
 
     assert not process_workflow_run_job(
         app.state.settings, app.state.session_factory, str(queued["job_id"])
@@ -285,6 +312,18 @@ def test_failed_current_streamline_workflow_is_atomic(client: TestClient) -> Non
         )
         assert definition_count == 0
         assert result_count == 0
+        failed_node = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == queued["id"],
+                WorkflowNodeRun.status == "failed",
+            )
+        )
+        assert failed_node is not None
+        assert diagnostic in (failed_node.error_message or "")
+        for record_id, original_hash in original_hashes.items():
+            source = session.get(ScientificRecord, record_id)
+            assert source is not None
+            assert source.content_sha256 == original_hash
 
 
 def test_current_streamline_rejects_obsolete_environmental_snapshot(
