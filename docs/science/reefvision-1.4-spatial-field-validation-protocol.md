@@ -459,10 +459,24 @@ do not contribute. Endpoint-only contact, parallel offset lines and
 noncollinear crossings are excluded. Exact rational arithmetic on the
 binary64 source coordinates avoids an implicit spatial tolerance.
 A nonzero count triggers `surface_trace_unequal_collinear_edges_overlap`
-in both union and preview QC. The reported length and scale-only
-interval are **not corrected** for these overlaps; they can overcount
-geometry. Do not interpret this result as anatomical total linear
+in both union and preview QC. The original endpoint-pair length and
+scale-only interval are **not corrected** for these overlaps; they can
+overcount geometry. The separate `collinear_overlap_corrected_union`
+reports source and calibrated lengths and scale-only intervals after
+merging positive-length intervals on each exact source line. Lengths
+are Euclidean binary64 distances summed before rounding. Its QC
+withholds underflowed positive lengths or unrepresentable intervals.
+The endpoint graph and chain fingerprints remain unchanged; their
+lengths need not sum to the corrected union. Do not interpret this result as anatomical total linear
 extension. Near-collinear segments require separate registration and
 uncertainty review. Check within- and cross-trace overlap, reversed
 direction, containment, a disjoint or touching interval, 3D oblique
 lines, and standalone versus saved typed workflow evidence.
+
+Independent references: segments [0, 2] and [1, 2] have endpoint-pair
+length 3 and corrected length 2 source units. Along direction (1, 2, 3),
+intervals [0, 4], [1, 3], [2, 5], [5, 6] and a parallel offset interval
+of length 4 have corrected length 10 times sqrt(14), versus 14 times
+sqrt(14) before correction. Verify source and calibrated results,
+scale-only bounds and saved-workflow replay. This correction is not
+an anatomical centerline, biological identity, or completed human review.
