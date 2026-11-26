@@ -1779,11 +1779,28 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["run"]["status"] == "succeeded"
-    artifact = next(
-        item["payload_json"]
+    record = next(
+        item
         for item in detail.json()["artifacts"]
         if item["data_type"] == "mesh_measurement_preview"
     )
+    artifact = record["payload_json"]
+    if case == "cross_trace_unequal_overlap":
+        replay = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert replay.status_code == 202, replay.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(replay.json()["job_id"])
+        )
+        replay_detail = client.get(f"/api/v1/workflow-runs/{replay.json()['id']}")
+        assert replay_detail.status_code == 200, replay_detail.text
+        assert replay_detail.json()["run"]["status"] == "succeeded"
+        replay_record = next(
+            item
+            for item in replay_detail.json()["artifacts"]
+            if item["data_type"] == "mesh_measurement_preview"
+        )
+        assert replay_record["payload_json"] == artifact
+        assert replay_record["payload_sha256"] == record["payload_sha256"]
     assert artifact["surface_edge_traces"] == standalone.json()["surface_edge_traces"]
     union = artifact["surface_trace_exact_edge_union"]
     assert union == standalone.json()["surface_trace_exact_edge_union"]
