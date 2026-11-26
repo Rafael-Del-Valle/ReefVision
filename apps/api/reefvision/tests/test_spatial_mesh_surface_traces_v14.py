@@ -1693,6 +1693,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "uncertainty_max",
         "finite_detour_chord_underflow",
         "segment_underflow",
+        "mixed_chain_underflow",
     ],
 )
 def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
@@ -1743,6 +1744,10 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "uncertainty_max": {**PARAMS, "relative_scale_uncertainty": 1.0},
         "finite_detour_chord_underflow": FINITE_DETOUR_CHORD_UNDERFLOW_PARAMS,
         "segment_underflow": SEGMENT_UNDERFLOW_PREVIEW_PARAMS,
+        "mixed_chain_underflow": {
+            **SEGMENT_UNDERFLOW_PREVIEW_PARAMS,
+            "surface_trace_vertex_paths": [[0, 1], [2, 3]],
+        },
     }[case]
     standalone = client.post(f"{base}/spatial/mesh-preview", json=params)
     assert standalone.status_code == 200, standalone.text
@@ -1785,7 +1790,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         if item["data_type"] == "mesh_measurement_preview"
     )
     artifact = record["payload_json"]
-    if case in {"cross_trace_unequal_overlap", "segment_underflow"}:
+    if case in {"cross_trace_unequal_overlap", "segment_underflow", "mixed_chain_underflow"}:
         replay = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert replay.status_code == 202, replay.text
         assert process_workflow_run_job(
@@ -1840,6 +1845,22 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     chains = union["endpoint_graph_chains"]
     assert sum(chain["edge_count"] for chain in chains) == union["distinct_nonzero_edge_count"]
     assert all(chain["human_review_verified"] is False for chain in chains)
+    assert {warning for chain in chains for warning in chain["qc_warnings"]} <= set(
+        artifact["qc_warnings"]
+    )
+    if case == "mixed_chain_underflow":
+        warning = "surface_trace_chain_length_underflow"
+        assert union["qc_warnings"] == corrected["qc_warnings"] == []
+        assert union["length_m"] == pytest.approx(sqrt(2) * 1e-100, abs=0)
+        assert corrected["length_m"] == union["length_m"]
+        assert len(chains) == 2
+        assert chains[0]["source_length_mesh_units"] == pytest.approx(1e-250, abs=0)
+        assert chains[0]["length_m"] is None
+        assert chains[0]["length_scale_only_interval_m"] is None
+        assert chains[0]["qc_warnings"] == [warning]
+        assert chains[1]["length_m"] == union["length_m"]
+        assert chains[1]["qc_warnings"] == []
+        assert artifact["qc_warnings"].count(warning) == 1
     if case in {"closed_loop", "closed_loop_reverse", "closed_loop_rotated"}:
         assert len(chains) == 1
         assert chains[0]["is_closed"] is True
@@ -2148,7 +2169,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert trace["endpoint_chord_length_m"] == pytest.approx(0.01)
         assert trace["maximum_turn_angle_deg"] == pytest.approx(135.0)
         assert trace["total_absolute_geometric_turn_deg"] == pytest.approx(135.0)
-    if case in ("uncertainty_missing", "segment_underflow"):
+    if case in ("uncertainty_missing", "segment_underflow", "mixed_chain_underflow"):
         assert trace["endpoint_chord_scale_only_interval_m"] is None
         assert trace["segment_length_scale_only_intervals_m"] is None
         assert trace["cumulative_length_scale_only_intervals_m"] is None
@@ -2516,6 +2537,7 @@ def test_trace_union_numeric_qc_is_visible_at_preview_level(uncertainty: float |
     warnings = {
         "surface_trace_exact_edge_union_interval_unrepresentable",
         "surface_trace_collinear_union_interval_unrepresentable",
+        "surface_trace_chain_interval_unrepresentable",
     }
     expected_warnings = warnings if uncertainty == 1e-30 else set()
     assert warnings.intersection(result["qc_warnings"]) == expected_warnings
