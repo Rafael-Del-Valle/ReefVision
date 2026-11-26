@@ -29,9 +29,7 @@ MAX_PREVIEW_TRIANGLES = 512
 _TracePoint = tuple[float, float, float]
 
 
-def _collinear_edge_union(
-    edges: set[frozenset[_TracePoint]],
-) -> tuple[int, Fraction]:
+def _collinear_edge_union(edges: set[frozenset[_TracePoint]]) -> tuple[int, Fraction]:
     """Count overlapping pairs and measure their geometric union.
 
     Exact binary64 rational line keys avoid tolerance-dependent welding.
@@ -52,9 +50,7 @@ def _collinear_edge_union(
         intercept = tuple(
             value - slope * start[pivot] for value, slope in zip(start, direction, strict=True)
         )
-        lines.setdefault(direction + intercept, []).append(
-            (start[pivot], end[pivot], first, last)
-        )
+        lines.setdefault(direction + intercept, []).append((start[pivot], end[pivot], first, last))
     count = 0
     total = Fraction(0)
     for intervals in lines.values():
@@ -1092,9 +1088,7 @@ def measure_mesh_preview(
         calibrated_total = source_total * Fraction(scale)
         length_m = float(calibrated_total)
         union_warnings: list[str] = []
-        unequal_overlap_count, collinear_source_total = _collinear_edge_union(
-            set(traversal_counts)
-        )
+        unequal_overlap_count, collinear_source_total = _collinear_edge_union(set(traversal_counts))
         if unequal_overlap_count:
             union_warnings.append("surface_trace_unequal_collinear_edges_overlap")
         interval = None
