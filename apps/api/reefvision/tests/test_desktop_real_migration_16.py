@@ -4,13 +4,15 @@ Unlike mocked migration tests, this exercises Alembic's env.py, all revision
 scripts, and the database that the desktop opens again after upgrading.
 """
 
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import inspect, text
+from sqlalchemy import Engine, event, inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from reefvision.config import Settings
@@ -803,3 +805,71 @@ def test_desktop_rejects_foreign_0038_stamp_without_touching_science(
             assert not inspect(connection).has_table("review_queue_item_events")
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize("journal_mode", ["DELETE", "WAL"])
+def test_qc_migration_failure_rolls_back_ddl_and_excludes_concurrent_writer(
+    tmp_path: Path, journal_mode: str
+) -> None:
+    """An interrupted 0037 -> 0041 upgrade must be safely retryable."""
+    database = tmp_path / "atomic-migration.sqlite"
+    settings = Settings(data_dir=tmp_path, database_url=f"sqlite:///{database.as_posix()}")
+    settings.ensure_directories()
+    alembic_ini, migrations_dir = resolve_alembic_paths()
+    config = Config(str(alembic_ini))
+    config.attributes["configure_logger"] = False
+    config.attributes["desktop_database_url"] = settings.resolved_database_url
+    config.set_main_option("script_location", str(migrations_dir))
+    config.set_main_option("sqlalchemy.url", settings.resolved_database_url)
+    command.upgrade(config, "0037")
+
+    with closing(sqlite3.connect(database)) as db:
+        assert db.execute(f"PRAGMA journal_mode={journal_mode}").fetchone() == (
+            journal_mode.lower(),
+        )
+        db.execute("CREATE TABLE preserved_coral_observations (note TEXT NOT NULL)")
+        db.execute("INSERT INTO preserved_coral_observations VALUES ('original observation')")
+        db.commit()
+
+    def snapshot() -> tuple[object, ...]:
+        with closing(sqlite3.connect(database)) as db:
+            return (
+                db.execute("SELECT type, name, sql FROM sqlite_master ORDER BY type, name").fetchall(),
+                db.execute("SELECT version_num FROM alembic_version").fetchall(),
+                db.execute("SELECT note FROM preserved_coral_observations").fetchall(),
+            )
+
+    before = snapshot()
+
+    def interrupt_after_first_ddl(
+        _connection: object, _cursor: object, statement: str, *_args: object
+    ) -> None:
+        if not statement.strip().startswith("CREATE INDEX ix_review_queue_item_events_item_created"):
+            return
+        # The first QC table has been created but the stamp has not advanced.
+        # A separate local connection must be unable to edit the research data.
+        with (
+            closing(sqlite3.connect(database, timeout=0)) as competing,
+            pytest.raises(sqlite3.OperationalError, match="database is locked"),
+        ):
+            competing.execute("UPDATE preserved_coral_observations SET note='concurrent edit'")
+        raise RuntimeError("injected QC migration index failure")
+
+    event.listen(Engine, "before_cursor_execute", interrupt_after_first_ddl)
+    try:
+        with pytest.raises(RuntimeError, match="injected QC migration index failure"):
+            run_pending_migrations(settings)
+    finally:
+        event.remove(Engine, "before_cursor_execute", interrupt_after_first_ddl)
+
+    assert snapshot() == before
+    run_pending_migrations(settings)
+    with closing(sqlite3.connect(database)) as db:
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0041",)
+        assert db.execute("SELECT note FROM preserved_coral_observations").fetchone() == (
+            "original observation",
+        )
+        assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert db.execute("SELECT COUNT(*) FROM review_queue_item_events").fetchone() == (0,)
+        assert db.execute("SELECT COUNT(*) FROM review_queue_bulk_requests").fetchone() == (0,)
