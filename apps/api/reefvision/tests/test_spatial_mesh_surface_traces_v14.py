@@ -1815,10 +1815,21 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     overlap_warning = "surface_trace_unequal_collinear_edges_overlap"
     assert (overlap_warning in union["qc_warnings"]) is overlaps
     assert (overlap_warning in artifact["qc_warnings"]) is overlaps
+    corrected = union["collinear_overlap_corrected_union"]
+    assert corrected["human_review_verified"] is False
+    assert corrected["biological_validation_status"] == "not_verified_anatomical_centerline"
+    if not overlaps:
+        assert corrected["source_length_mesh_units"] == union["source_length_mesh_units"]
+        assert corrected["length_m"] == union["length_m"]
+        assert corrected["length_scale_only_interval_m"] == union["length_scale_only_interval_m"]
     if case == "cross_trace_unequal_overlap":
         assert union["source_length_mesh_units"] == pytest.approx(3.0)
         assert union["length_m"] == pytest.approx(0.03)
         assert union["length_scale_only_interval_m"] == pytest.approx([0.027, 0.033])
+        assert corrected["source_length_mesh_units"] == pytest.approx(2.0)
+        assert corrected["length_m"] == pytest.approx(0.02)
+        assert corrected["length_scale_only_interval_m"] == pytest.approx([0.018, 0.022])
+        assert corrected["qc_warnings"] == []
         assert artifact["surface_trace_shared_geometric_edge_pairs"] == []
     topology = union["endpoint_graph_topology"]
     assert topology["human_review_verified"] is False
@@ -1869,6 +1880,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert union["length_m"] is None
         assert union["length_scale_only_interval_m"] is None
         assert union["qc_warnings"] == ["surface_trace_exact_edge_union_length_underflow"]
+        assert corrected["qc_warnings"] == ["surface_trace_collinear_union_length_underflow"]
         assert chains[0]["length_m"] is None
         assert chains[0]["length_scale_only_interval_m"] is None
         assert chains[0]["qc_warnings"] == ["surface_trace_chain_length_underflow"]
@@ -2482,4 +2494,11 @@ def test_unequal_collinear_overlap_counts_distinct_pairs_in_three_dimensions() -
         assert union["distinct_nonzero_edge_count"] == 5
         assert union["nonzero_edge_traversal_count"] == 6
         assert union["source_length_mesh_units"] == pytest.approx(14 * sqrt(14))
+        corrected = union["collinear_overlap_corrected_union"]
+        assert corrected["source_length_mesh_units"] == pytest.approx(10 * sqrt(14))
+        assert corrected["length_m"] == pytest.approx(10 * sqrt(14) * scale)
+        assert corrected["length_scale_only_interval_m"] == pytest.approx(
+            [9 * sqrt(14) * scale, 11 * sqrt(14) * scale]
+        )
+        assert corrected["human_review_verified"] is False
         assert union["human_review_verified"] is False
