@@ -665,3 +665,13 @@ overlaps, endpoint contact, and noncollinear interior crossings. Check it in
 standalone and twice-replayed typed workflow artifacts. It prohibits adding
 local corrected lengths as if they represented disjoint spatial support;
 it does not establish any biological identity or independent replicate.
+
+Longitudinal comparison provenance retains the original source payload SHA-256,
+source asset ID, import format, byte count and integrity-check flag separately
+for each timepoint, even when no pairwise registration or reidentification
+review bundle exists. Missing legacy fields remain null. Validate the exact
+original byte count and digest against a project-owned OBJ and compare the
+standalone result with two executions of the same persisted typed graph. Reusing
+that asset must still withhold cross-timepoint change metrics. An integrity
+check confirms byte agreement only, not field acquisition independence,
+calibration validity or specimen identity.
