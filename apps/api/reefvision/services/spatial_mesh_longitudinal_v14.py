@@ -1432,6 +1432,17 @@ def compare_mesh_observations(
     if reused_spatial_source_asset:
         warnings.append("same_spatial_source_asset_reused_across_observations")
         warnings.append("longitudinal_change_withheld_reused_spatial_source_asset")
+        # Legacy asset-linked previews can lack original digests. Known
+        # byte counts and formats must still agree for an immutable asset.
+        if any(
+            first.get(field) is not None
+            and second.get(field) is not None
+            and first[field] != second[field]
+            for field in ("source_payload_size_bytes", "source_format")
+        ):
+            warnings.append("reused_spatial_source_asset_metadata_inconsistent")
+        if first_hash_valid and second_hash_valid and first_geometry_hash != second_geometry_hash:
+            warnings.append("reused_spatial_source_asset_geometry_inconsistent")
     reused_imported_source_payload = (
         _is_sha256_fingerprint(first_source_hash)
         and _is_sha256_fingerprint(second_source_hash)
