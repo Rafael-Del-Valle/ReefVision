@@ -1690,6 +1690,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "reverse_turn",
         "cross_trace_unequal_overlap",
         "mixed_component_overlap",
+        "oblique_component_overlap",
         "reused_geometric_segment",
         "display_chord_rounding",
         "display_segment_rounding",
@@ -1748,6 +1749,13 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             "surface_path_vertex_pairs": None,
             "surface_trace_vertex_paths": [[0, 4], [4, 2], [1, 3]],
         },
+        "oblique_component_overlap": {
+            **PARAMS,
+            "vertices": [[i, 2 * i, 3 * i] for i in range(5)] + [[0, 1, 0]],
+            "faces": [[0, 4, 5], [2, 4, 5], [1, 3, 5]],
+            "surface_path_vertex_pairs": None,
+            "surface_trace_vertex_paths": [[3, 1], [2, 4], [4, 0], [0, 4]],
+        },
         "reused_geometric_segment": REUSED_GEOMETRIC_SEGMENT_PARAMS,
         "display_chord_rounding": DISPLAY_CHORD_ROUNDING_PARAMS,
         "display_segment_rounding": DISPLAY_SEGMENT_ROUNDING_PARAMS,
@@ -1804,6 +1812,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     if case in {
         "cross_trace_unequal_overlap",
         "mixed_component_overlap",
+        "oblique_component_overlap",
         "segment_underflow",
         "mixed_chain_underflow",
     }:
@@ -1827,16 +1836,16 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert union == standalone.json()["surface_trace_exact_edge_union"]
     overlaps = case in {
         "mixed_component_overlap",
+        "oblique_component_overlap",
         "contact_overlap_closed_loop",
         "reverse_turn",
         "cross_trace_unequal_overlap",
         "display_chord_rounding",
         "finite_detour_chord_underflow",
     }
-    assert union["unequal_collinear_overlap_pair_count"] == (
-        3 if case == "mixed_component_overlap" else int(overlaps)
-    )
-    if case == "mixed_component_overlap":
+    mixed_overlap = case in {"mixed_component_overlap", "oblique_component_overlap"}
+    assert union["unequal_collinear_overlap_pair_count"] == (3 if mixed_overlap else int(overlaps))
+    if mixed_overlap:
         assert union["cross_component_unequal_collinear_overlap_pair_count"] == 2
         assert [
             item["unequal_collinear_overlap_pair_count"]
@@ -1846,12 +1855,27 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             item["collinear_overlap_corrected_union"]
             for item in union["endpoint_graph_components"]
         ]
-        assert [item["source_length_mesh_units"] for item in local] == [4.0, 2.0]
-        assert [item["length_m"] for item in local] == pytest.approx([0.04, 0.02])
-        assert local[0]["length_scale_only_interval_m"] == pytest.approx([0.036, 0.044])
-        assert local[1]["length_scale_only_interval_m"] == pytest.approx([0.018, 0.022])
+        factor = sqrt(14) if case == "oblique_component_overlap" else 1.0
+        assert [item["source_length_mesh_units"] for item in local] == pytest.approx(
+            [4 * factor, 2 * factor]
+        )
+        assert [item["length_m"] for item in local] == pytest.approx(
+            [0.04 * factor, 0.02 * factor]
+        )
+        assert local[0]["length_scale_only_interval_m"] == pytest.approx(
+            [0.036 * factor, 0.044 * factor]
+        )
+        assert local[1]["length_scale_only_interval_m"] == pytest.approx(
+            [0.018 * factor, 0.022 * factor]
+        )
         # Overlap between components is corrected only in the global union.
-        assert union["collinear_overlap_corrected_union"]["length_m"] == pytest.approx(0.04)
+        assert union["collinear_overlap_corrected_union"]["length_m"] == pytest.approx(
+            0.04 * factor
+        )
+        assert union["nonzero_edge_traversal_count"] == (
+            4 if case == "oblique_component_overlap" else 3
+        )
+        assert union["distinct_nonzero_edge_count"] == 3
     overlap_warning = "surface_trace_unequal_collinear_edges_overlap"
     assert (overlap_warning in union["qc_warnings"]) is overlaps
     assert (overlap_warning in artifact["qc_warnings"]) is overlaps
@@ -2484,8 +2508,9 @@ def _assert_endpoint_components(
                 corrected["length_scale_only_interval_m"]
                 == reference["length_scale_only_interval_m"]
             )
+    corrected_key = "collinear_overlap_corrected_union"
     assert [
-        {key: value for key, value in component.items() if key != "collinear_overlap_corrected_union"}
+        {key: value for key, value in component.items() if key != corrected_key}
         for component in actual
     ] == expected
     assert union["unequal_collinear_overlap_pair_count"] == _overlap_pair_count(list(edges))
