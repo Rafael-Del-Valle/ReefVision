@@ -259,3 +259,35 @@ def test_stationary_rk4_reuses_accepted_endpoint_without_resampling(monkeypatch)
         assert point.speed_m_s == math.hypot(*velocity)
     assert result.points[-1].longitude > 0
     assert result.points[-1].latitude > 0
+
+
+def test_affine_equatorial_current_matches_analytic_solution():
+    """An independent closed-form reference for stationary RK4 integration."""
+    # At the equator, east = 2 + longitude (m/s), north = 0.
+    # WGS84 gives d(longitude)/dt = (2 + longitude) / metres_per_degree.
+    field = CurrentField(
+        latitudes=(-1.0, 1.0),
+        longitudes=(-1.0, 1.0),
+        east=((1.0, 3.0), (1.0, 3.0)),
+        north=((0.0, 0.0), (0.0, 0.0)),
+    )
+    metres_per_degree = 6378137.0 * math.pi / 180
+    duration = 36000
+    expected_lon = 2 * math.expm1(duration / metres_per_degree)
+    errors = []
+    for step in (3600, 600):
+        result = integrate_streamline(
+            field, 0.0, 0.0, step_seconds=step, max_steps=duration // step
+        )
+        assert result.termination == "max_steps"
+        assert len(result.points) == duration // step + 1
+        assert all(point.latitude == 0.0 for point in result.points)
+        endpoint = result.points[-1]
+        assert endpoint.longitude == pytest.approx(expected_lon, abs=1e-7, rel=0)
+        assert endpoint.speed_m_s == pytest.approx(2 + endpoint.longitude)
+        assert result.length_m == pytest.approx(
+            endpoint.longitude * metres_per_degree, abs=1e-5, rel=0
+        )
+        errors.append(abs(endpoint.longitude - expected_lon))
+    # A smaller integration step must improve accuracy in this smooth field.
+    assert errors[1] < errors[0]
