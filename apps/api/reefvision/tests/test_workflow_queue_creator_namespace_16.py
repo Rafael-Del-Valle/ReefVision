@@ -55,8 +55,9 @@ def test_public_qc_creation_cannot_claim_internal_workflow_owner(
     assert allowed.json()["created_by"] == "marine researcher"
 
 
+@pytest.mark.parametrize("corruption", ["missing_weights", "missing_version", "missing_checksums"])
 def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
-    client: TestClient,
+    client: TestClient, corruption: str
 ) -> None:
     project = create_project(client, "Workflow QC regeneration provenance")
     project_id = project["id"]
@@ -131,9 +132,19 @@ def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
         saved_queue = session.get(ReviewQueue, original_id)
         assert saved_queue is not None
         original_config = dict(saved_queue.configuration_json)
-        saved_queue.configuration_json = {
-            key: value for key, value in original_config.items() if key != "weights"
-        }
+        original_checksums = dict(saved_queue.input_checksums_json)
+        if corruption == "missing_weights":
+            saved_queue.configuration_json = {
+                key: value for key, value in original_config.items() if key != "weights"
+            }
+        elif corruption == "missing_version":
+            saved_queue.input_checksums_json = {
+                key: value
+                for key, value in original_checksums.items()
+                if key != "integrity_schema_version"
+            }
+        else:
+            saved_queue.input_checksums_json = {}
         session.commit()
 
     refused = client.post(f"/api/v1/review-queues/{original_id}/regenerate")
@@ -145,6 +156,7 @@ def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
         saved_queue = session.get(ReviewQueue, original_id)
         assert saved_queue is not None
         saved_queue.configuration_json = original_config
+        saved_queue.input_checksums_json = original_checksums
         session.commit()
 
     regenerated = client.post(f"/api/v1/review-queues/{original_id}/regenerate")
@@ -276,9 +288,19 @@ def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
     assert annotations.status_code == 200, annotations.text
     assert annotations.json()["annotations"] == []
 
+
 @pytest.mark.parametrize(
     "corruption",
-    ["array", "missing_weights", "string_weight", "missing_threshold", "source_mismatch"],
+    [
+        "array",
+        "missing_weights",
+        "string_weight",
+        "missing_threshold",
+        "source_mismatch",
+        "missing_version",
+        "missing_version_and_weights",
+        "unversioned_bad_item_digest",
+    ],
 )
 def test_manual_qc_regeneration_refuses_invalid_saved_science(
     client: TestClient, corruption: str
@@ -296,6 +318,8 @@ def test_manual_qc_regeneration_refuses_invalid_saved_science(
         queue = session.get(ReviewQueue, queue_id)
         assert queue is not None
         configuration = dict(queue.configuration_json)
+        checksums = dict(queue.input_checksums_json)
+        altered_checksums = dict(checksums)
         altered: Any = dict(configuration)
         if corruption == "array":
             altered = []
@@ -305,9 +329,17 @@ def test_manual_qc_regeneration_refuses_invalid_saved_science(
             altered["weights"] = {**configuration["weights"], "recent_import": "2.0"}
         elif corruption == "missing_threshold":
             altered.pop("review_below_confidence")
-        else:
+        elif corruption == "source_mismatch":
             altered["source_quality_control_run_id"] = "different-source"
+        else:
+            altered_checksums.pop("integrity_schema_version")
+            if corruption == "missing_version_and_weights":
+                altered.pop("weights")
+            elif corruption == "unversioned_bad_item_digest":
+                altered_checksums.pop("scoring_provenance_sha256")
+                altered_checksums["item_evidence_sha256"] = "0" * 64
         queue.configuration_json = altered
+        queue.input_checksums_json = altered_checksums
         session.commit()
 
     refused = client.post(f"/api/v1/review-queues/{queue_id}/regenerate")
@@ -318,8 +350,10 @@ def test_manual_qc_regeneration_refuses_invalid_saved_science(
         ).all()
         assert [queue.id for queue in queues] == [queue_id]
         assert queues[0].configuration_json == altered
+        assert queues[0].input_checksums_json == altered_checksums
         assert [item.review_state for item in queues[0].items] == ["pending"]
         queues[0].configuration_json = configuration
+        queues[0].input_checksums_json = checksums
         session.commit()
 
     regenerated = client.post(f"/api/v1/review-queues/{queue_id}/regenerate")
@@ -331,3 +365,44 @@ def test_manual_qc_regeneration_refuses_invalid_saved_science(
         assert items.status_code == 200, items.text
         assert [item["review_state"] for item in items.json()["items"]] == ["pending"]
 
+
+@pytest.mark.parametrize("signed", [False, True])
+def test_manual_qc_regeneration_retains_unversioned_compatibility(
+    client: TestClient, signed: bool
+) -> None:
+    project_id = create_project(client, "Historical QC regeneration")["id"]
+    assert len(import_one(client, project_id)["successful"]) == 1
+    original = client.post(
+        f"/api/v1/projects/{project_id}/review-queues",
+        json={"signal_weights": {"recent_import": 2.0}},
+    )
+    assert original.status_code == 201, original.text
+    queue_id = original.json()["id"]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        queue = session.get(ReviewQueue, queue_id)
+        assert queue is not None
+        checksums = dict(queue.input_checksums_json)
+        checksums.pop("integrity_schema_version")
+        if signed:
+            checksums["scoring_provenance_sha256"] = canonical_json_sha256(
+                {
+                    "formula_id": queue.formula_id,
+                    "formula_version": queue.formula_version,
+                    "configuration": queue.configuration_json,
+                }
+            )
+        else:
+            checksums.pop("scoring_provenance_sha256")
+            checksums.pop("item_evidence_sha256")
+        queue.input_checksums_json = checksums
+        session.commit()
+
+    regenerated = client.post(f"/api/v1/review-queues/{queue_id}/regenerate")
+    assert regenerated.status_code == 200, regenerated.text
+    assert regenerated.json()["regenerated_from_queue_id"] == queue_id
+    assert regenerated.json()["configuration_json"]["weights"]["recent_import"] == 2.0
+    for current_id in (queue_id, regenerated.json()["id"]):
+        items = client.get(f"/api/v1/review-queues/{current_id}/items")
+        assert items.status_code == 200, items.text
+        assert [item["review_state"] for item in items.json()["items"]] == ["pending"]
