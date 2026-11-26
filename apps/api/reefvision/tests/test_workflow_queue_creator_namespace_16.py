@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
@@ -125,6 +125,27 @@ def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
         },
     )
     assert comment.status_code == 201, comment.text
+
+    # A manual regeneration must not bless corrupted workflow provenance.
+    with app.state.session_factory() as session:
+        saved_queue = session.get(ReviewQueue, original_id)
+        assert saved_queue is not None
+        original_config = dict(saved_queue.configuration_json)
+        saved_queue.configuration_json = {
+            key: value for key, value in original_config.items() if key != "weights"
+        }
+        session.commit()
+
+    refused = client.post(f"/api/v1/review-queues/{original_id}/regenerate")
+    assert refused.status_code == 422, refused.text
+    queues = client.get(f"/api/v1/projects/{project_id}/review-queues")
+    assert queues.status_code == 200, queues.text
+    assert [queue["id"] for queue in queues.json()] == [original_id]
+    with app.state.session_factory() as session:
+        saved_queue = session.get(ReviewQueue, original_id)
+        assert saved_queue is not None
+        saved_queue.configuration_json = original_config
+        session.commit()
 
     regenerated = client.post(f"/api/v1/review-queues/{original_id}/regenerate")
     assert regenerated.status_code == 200, regenerated.text
@@ -254,3 +275,59 @@ def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
     annotations = client.get(f"/api/v1/images/{imported['successful'][0]['image_id']}/annotations")
     assert annotations.status_code == 200, annotations.text
     assert annotations.json()["annotations"] == []
+
+@pytest.mark.parametrize(
+    "corruption",
+    ["array", "missing_weights", "string_weight", "missing_threshold", "source_mismatch"],
+)
+def test_manual_qc_regeneration_refuses_invalid_saved_science(
+    client: TestClient, corruption: str
+) -> None:
+    project_id = create_project(client, "Manual QC regeneration integrity")["id"]
+    assert len(import_one(client, project_id, filename="regen-coral.png")["successful"]) == 1
+    original = client.post(
+        f"/api/v1/projects/{project_id}/review-queues",
+        json={"signal_weights": {"recent_import": 2.0}},
+    )
+    assert original.status_code == 201, original.text
+    queue_id = original.json()["id"]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        queue = session.get(ReviewQueue, queue_id)
+        assert queue is not None
+        configuration = dict(queue.configuration_json)
+        altered: Any = dict(configuration)
+        if corruption == "array":
+            altered = []
+        elif corruption == "missing_weights":
+            altered.pop("weights")
+        elif corruption == "string_weight":
+            altered["weights"] = {**configuration["weights"], "recent_import": "2.0"}
+        elif corruption == "missing_threshold":
+            altered.pop("review_below_confidence")
+        else:
+            altered["source_quality_control_run_id"] = "different-source"
+        queue.configuration_json = altered
+        session.commit()
+
+    refused = client.post(f"/api/v1/review-queues/{queue_id}/regenerate")
+    assert refused.status_code == 422, refused.text
+    with app.state.session_factory() as session:
+        queues = session.scalars(
+            select(ReviewQueue).where(ReviewQueue.project_id == project_id)
+        ).all()
+        assert [queue.id for queue in queues] == [queue_id]
+        assert queues[0].configuration_json == altered
+        assert [item.review_state for item in queues[0].items] == ["pending"]
+        queues[0].configuration_json = configuration
+        session.commit()
+
+    regenerated = client.post(f"/api/v1/review-queues/{queue_id}/regenerate")
+    assert regenerated.status_code == 200, regenerated.text
+    assert regenerated.json()["regenerated_from_queue_id"] == queue_id
+    assert regenerated.json()["configuration_json"]["weights"] == configuration["weights"]
+    for current_id in (queue_id, regenerated.json()["id"]):
+        items = client.get(f"/api/v1/review-queues/{current_id}/items")
+        assert items.status_code == 200, items.text
+        assert [item["review_state"] for item in items.json()["items"]] == ["pending"]
+
