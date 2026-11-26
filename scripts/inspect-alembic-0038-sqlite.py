@@ -49,6 +49,20 @@ AFFECTED_TABLES = (
     "review_queue_bulk_requests",
 )
 
+# Exact original column sets from 1.1/0039_computed_metrics.py. Revision
+# 0041 adds columns to these tables; full-table hashes cannot compare
+# pre/post-0041 content directly even when every original value survives.
+METRIC_0039_COLUMNS = {
+    "computed_metric_definitions": (
+        "id", "project_id", "name", "expression", "formula_version",
+        "input_spec_json", "output_unit", "definition_sha256", "created_at",
+    ),
+    "computed_metric_results": (
+        "id", "project_id", "definition_id", "observed_at", "payload_json",
+        "content_sha256", "workflow_run_id", "workflow_node_run_id", "created_at",
+    ),
+}
+
 
 def _without_sql_comments(ddl: str) -> str:
     """Discard SQL comments without stripping quoted literals or identifiers."""
@@ -75,12 +89,20 @@ def _encode_sqlite_value(value: object) -> tuple[str, str | None]:
     raise ValueError(f"Unsupported SQLite value type: {type(value).__name__}")
 
 
-def _table_content_fingerprint(connection: sqlite3.Connection, table: str) -> dict[str, object]:
+def _table_content_fingerprint(
+    connection: sqlite3.Connection, table: str, *, project_columns: tuple[str, ...] | None = None
+) -> dict[str, object]:
     """Hash the row multiset, independent of insertion and column order."""
     # Caller passes only the fixed, migration-owned table names.
     cursor = connection.execute(f'SELECT * FROM "{table}"')
     columns = [entry[0] for entry in cursor.description]
-    order = sorted(range(len(columns)), key=columns.__getitem__)
+    if project_columns is not None:
+        missing = sorted(set(project_columns) - set(columns))
+        if missing:
+            return {"missing_columns": missing, "sha256": None}
+        order = sorted((columns.index(column) for column in project_columns), key=columns.__getitem__)
+    else:
+        order = sorted(range(len(columns)), key=columns.__getitem__)
     ordered_columns = [columns[index] for index in order]
     digest = hashlib.sha256()
     digest.update(b"reefvision-sqlite-row-multiset-v1\x00")
@@ -161,6 +183,17 @@ def inspect_database(path: Path, *, hash_affected_rows: bool = False) -> dict[st
             {
                 table: _table_content_fingerprint(connection, table)
                 for table in sorted(affected_table_row_counts)
+            }
+            if hash_affected_rows
+            else None
+        )
+        # Retain full hashes as well as fixed 0039 projections. A missing
+        # required column produces explicit non-comparable evidence.
+        metric_0039_content_fingerprints = (
+            {
+                table: _table_content_fingerprint(connection, table, project_columns=columns)
+                for table, columns in METRIC_0039_COLUMNS.items()
+                if table in tables
             }
             if hash_affected_rows
             else None
@@ -416,6 +449,7 @@ def inspect_database(path: Path, *, hash_affected_rows: bool = False) -> dict[st
         "affected_table_row_counts": affected_table_row_counts,
         "affected_table_content_fingerprints": affected_table_content_fingerprints,
         "affected_table_content_fingerprint_algorithm": "reefvision-sqlite-row-multiset-v1",
+        "metric_0039_content_fingerprints": metric_0039_content_fingerprints,
         "observed_later_migration_objects": sorted(later_objects),
         "review_event_check": review_check if groups["review_0038"] else None,
         "qc_event_scope_violations": qc_scope_violations,
