@@ -305,3 +305,21 @@ Original typed QC graphs, saved runs, provenance, retries, and researcher
 review gates are unchanged. Real migration reconciliation, final CI,
 representative biological saved-workflow acceptance, and installed Windows
 MSI/GUI upgrade and rollback remain required.
+
+
+## Independent copy-comparison stamp key parity (2026-11-25)
+
+The separate `scripts/inspect_sqlite_lineage_16.py` comparison tool now
+also checks the actual ascending BINARY primary-key index, not merely
+column type, nullability and primary-key position. Two copies with
+identical revision markers and identical malformed primary-key DDL
+cannot pass strict lineage-collision, integrity or canonical-stamp gates.
+Informational JSON remains available and both files remain read-only.
+
+Nine parameterized cases in the already registered stamp-type regression
+suite exercise valid and altered collation/order, with both copies,
+strict and informational CLI modes, biological-data privacy and original
+file-byte preservation. This is an offline evidence gate, not a new
+scientific operation; existing typed saved QC Workflow Builder and
+researcher approval remain unchanged. No reconciliation or upgrade is
+authorized by this evidence alone.
