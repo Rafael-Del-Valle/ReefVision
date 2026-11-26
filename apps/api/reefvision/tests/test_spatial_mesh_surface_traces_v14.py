@@ -1791,6 +1791,8 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "contact_overlap_closed_loop",
         "reverse_turn",
         "cross_trace_unequal_overlap",
+        "display_chord_rounding",
+        "finite_detour_chord_underflow",
     }
     assert union["unequal_collinear_overlap_pair_count"] == int(overlaps)
     overlap_warning = "surface_trace_unequal_collinear_edges_overlap"
