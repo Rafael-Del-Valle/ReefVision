@@ -45,6 +45,7 @@ from reefvision.services.review_queue_transaction_16 import begin_serialized_rev
 from reefvision.services.workflow_review_queue_integrity import (
     V3_SIGNAL_LABELS,
     queue_item_evidence_sha256,
+    validate_saved_queue_snapshot,
 )
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -828,14 +829,26 @@ class ReviewQueueService:
         creator = queue.created_by
         if creator.strip().lower().startswith("workflow:"):
             creator = "local_user"
-        request = ReviewQueueCreateRequest(
-            source_quality_control_run_id=queue.source_quality_control_run_id,
-            signal_weights=ReviewScoreWeights.model_validate(
-                queue.configuration_json.get("weights", {})
-            ),
-            created_by=creator,
-            review_below_confidence=queue.configuration_json.get("review_below_confidence"),
-        )
+        configuration = queue.configuration_json
+        checksums = queue.input_checksums_json
+        if not isinstance(configuration, dict) or not isinstance(checksums, dict):
+            raise ValidationError("Cannot regenerate QC queue with invalid saved configuration")
+        # A versioned snapshot must retain its original scientific contract.
+        # Regeneration creates new evidence, but must not silently inherit
+        # corrupted weights, a changed source, or an omitted threshold.
+        if "integrity_schema_version" in checksums:
+            validate_saved_queue_snapshot(queue, queue.items)
+        try:
+            request = ReviewQueueCreateRequest(
+                source_quality_control_run_id=queue.source_quality_control_run_id,
+                signal_weights=ReviewScoreWeights.model_validate(configuration.get("weights", {})),
+                created_by=creator,
+                review_below_confidence=configuration.get("review_below_confidence"),
+            )
+        except ValueError as exc:
+            raise ValidationError(
+                "Cannot regenerate QC queue with invalid saved configuration"
+            ) from exc
         if queue.dataset_version_id is not None:
             dataset_version = self.quality_control._version(queue.dataset_version_id)
         else:
