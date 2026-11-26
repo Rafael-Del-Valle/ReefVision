@@ -182,6 +182,9 @@ def _trace_endpoint_chains(
 def _trace_endpoint_components(
     adjacency: dict[_TracePoint, set[_TracePoint]],
     chains: list[dict[str, Any]],
+    edge_lengths: dict[frozenset[_TracePoint], Fraction],
+    scale: float,
+    relative_scale_uncertainty: float | None,
 ) -> list[dict[str, Any]]:
     """Inventory connected endpoint components without implying biological identity."""
     components: list[dict[str, Any]] = []
@@ -193,18 +196,37 @@ def _trace_endpoint_components(
         component_by_point[start] = index
         frontier = [start]
         vertex_count = degree_sum = terminal_count = junction_count = 0
+        source_length = Fraction(0)
         while frontier:
-            neighbors = adjacency[frontier.pop()]
+            point = frontier.pop()
+            neighbors = adjacency[point]
             degree = len(neighbors)
             vertex_count += 1
             degree_sum += degree
             terminal_count += int(degree == 1)
             junction_count += int(degree >= 3)
             for neighbor in neighbors:
+                # Count each undirected edge once, before any calibrated rounding.
+                if point < neighbor:
+                    source_length += edge_lengths[frozenset((point, neighbor))]
                 if neighbor not in component_by_point:
                     component_by_point[neighbor] = index
                     frontier.append(neighbor)
         edge_count = degree_sum // 2
+        calibrated = source_length * Fraction(scale)
+        nominal = float(calibrated)
+        warnings: list[str] = []
+        interval = None
+        if nominal == 0:
+            warnings.append("surface_trace_component_length_underflow")
+        elif relative_scale_uncertainty is not None:
+            uncertainty = Fraction(relative_scale_uncertainty)
+            lower = float(calibrated * (1 - uncertainty))
+            upper = float(calibrated * (1 + uncertainty))
+            if (uncertainty < 1 and lower == 0) or (uncertainty > 0 and lower == upper):
+                warnings.append("surface_trace_component_interval_unrepresentable")
+            else:
+                interval = [lower, upper]
         components.append(
             {
                 "source_min_vertex_mesh_units": [0.0 if value == 0 else value for value in start],
@@ -214,6 +236,10 @@ def _trace_endpoint_components(
                 "degree_three_or_more_vertex_count": junction_count,
                 "cycle_rank": edge_count - vertex_count + 1,
                 "chain_indices": [],
+                "source_length_mesh_units": float(source_length),
+                "length_m": nominal if nominal > 0 else None,
+                "length_scale_only_interval_m": interval,
+                "qc_warnings": warnings,
                 "biological_validation_status": "not_verified_anatomical_centerline",
                 "human_review_verified": False,
             }
@@ -1159,7 +1185,9 @@ def measure_mesh_preview(
             adjacency.setdefault(endpoint_a, set()).add(endpoint_b)
             adjacency.setdefault(endpoint_b, set()).add(endpoint_a)
         chains = _trace_endpoint_chains(adjacency, edge_lengths, scale, relative_scale_uncertainty)
-        components = _trace_endpoint_components(adjacency, chains)
+        components = _trace_endpoint_components(
+            adjacency, chains, edge_lengths, scale, relative_scale_uncertainty
+        )
         component_count = len(components)
         topology = {
             "method": "exact_nonzero_edge_endpoint_graph",
@@ -1233,7 +1261,12 @@ def measure_mesh_preview(
         chain_warnings = sorted({warning for chain in chains for warning in chain["qc_warnings"]})
         # A representable aggregate can conceal an unavailable individual
         # chain measurement. Surface-level QC must expose both.
-        trace_union_qc_warnings = union_warnings + corrected_union["qc_warnings"] + chain_warnings
+        component_warnings = sorted(
+            {warning for component in components for warning in component["qc_warnings"]}
+        )
+        trace_union_qc_warnings = (
+            union_warnings + corrected_union["qc_warnings"] + chain_warnings + component_warnings
+        )
         exact_edge_union = {
             "endpoint_graph_topology": topology,
             "endpoint_graph_chains": chains,
