@@ -26,6 +26,76 @@ from reefvision.services import (
 MAX_PREVIEW_TRIANGLES = 512
 
 
+_TracePoint = tuple[float, float, float]
+
+
+def _trace_endpoint_chains(
+    adjacency: dict[_TracePoint, set[_TracePoint]],
+    edge_lengths: dict[frozenset[_TracePoint], Fraction],
+    scale: float,
+    relative_scale_uncertainty: float | None,
+) -> list[dict[str, Any]]:
+    """Partition exact selected edges into geometric chains, not anatomy."""
+    remaining = set(edge_lengths)
+    chains: list[dict[str, Any]] = []
+
+    def consume(start: _TracePoint, following: _TracePoint) -> None:
+        path = [start, following]
+        remaining.remove(frozenset((start, following)))
+        while len(adjacency[path[-1]]) == 2:
+            previous, current = path[-2:]
+            next_point = next(point for point in adjacency[current] if point != previous)
+            edge = frozenset((current, next_point))
+            if edge not in remaining:
+                break
+            remaining.remove(edge)
+            path.append(next_point)
+        source_length = sum(
+            (edge_lengths[frozenset(pair)] for pair in pairwise(path)), Fraction(0)
+        )
+        calibrated = source_length * Fraction(scale)
+        nominal = float(calibrated)
+        warnings: list[str] = []
+        interval = None
+        if nominal == 0:
+            warnings.append("surface_trace_chain_length_underflow")
+        elif relative_scale_uncertainty is not None:
+            uncertainty = Fraction(relative_scale_uncertainty)
+            lower = float(calibrated * (1 - uncertainty))
+            upper = float(calibrated * (1 + uncertainty))
+            if (uncertainty < 1 and lower == 0) or (uncertainty > 0 and lower == upper):
+                warnings.append("surface_trace_chain_interval_unrepresentable")
+            else:
+                interval = [lower, upper]
+        chains.append(
+            {
+                "source_waypoints_mesh_units": [list(point) for point in path],
+                "edge_count": len(path) - 1,
+                "is_closed": path[0] == path[-1],
+                "source_length_mesh_units": float(source_length),
+                "length_m": nominal if nominal > 0 else None,
+                "length_scale_only_interval_m": interval,
+                "biological_validation_status": "not_verified_anatomical_centerline",
+                "human_review_verified": False,
+                "qc_warnings": warnings,
+            }
+        )
+
+    # Start with terminals and junctions; then consume remaining degree-two
+    # cycles. Sorted source coordinates make orientation and order independent
+    # of input trace direction, selection order and duplicate vertex IDs.
+    for start in sorted(adjacency):
+        if len(adjacency[start]) != 2:
+            for following in sorted(adjacency[start]):
+                if frozenset((start, following)) in remaining:
+                    consume(start, following)
+    for start in sorted(adjacency):
+        for following in sorted(adjacency[start]):
+            if frozenset((start, following)) in remaining:
+                consume(start, following)
+    return chains
+
+
 def _surface_volume_ratio_per_m(area_m2: float, volume_m3: float | None) -> float | None:
     """Provisional A/V in inverse meters; undefined for rejected or zero volume."""
     if volume_m3 is None or volume_m3 <= 0 or area_m2 <= 0:
@@ -979,6 +1049,9 @@ def measure_mesh_preview(
         }
         exact_edge_union = {
             "endpoint_graph_topology": topology,
+            "endpoint_graph_chains": _trace_endpoint_chains(
+                adjacency, edge_lengths, scale, relative_scale_uncertainty
+            ),
             "method": "exact_endpoint_pair_equality_only",
             "distinct_nonzero_edge_count": len(traversal_counts),
             "nonzero_edge_traversal_count": traversal_count,
