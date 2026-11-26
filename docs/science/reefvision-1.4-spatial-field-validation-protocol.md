@@ -675,3 +675,18 @@ standalone result with two executions of the same persisted typed graph. Reusing
 that asset must still withhold cross-timepoint change metrics. An integrity
 check confirms byte agreement only, not field acquisition independence,
 calibration validity or specimen identity.
+
+### Acquisition independence screening
+
+Longitudinal comparison provenance now reports `acquisition_lineage_status`
+and `independent_acquisition_verified`. Reuse of a project spatial asset
+takes precedence over byte-identical payload reuse. Different payloads
+with identical geometry are distinguished from other different payloads;
+neither establishes an independent acquisition. Missing original digests
+(including inline-only geometry and legacy previews) are explicitly
+insufficient unless known asset reuse already determines the status.
+The independent-acquisition flag always remains false: proof requires
+review of the underlying raw acquisitions, not only reconstructed meshes.
+Compare six synthetic lineage cases and confirm standalone and twice-run
+persisted typed workflow artifact parity for reused imports. Existing
+change-withholding rules and review-bundle canonical hashes are unchanged.
