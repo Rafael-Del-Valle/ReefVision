@@ -253,7 +253,9 @@ def _trace_endpoint_components(
                 "cycle_rank": edge_count - vertex_count + 1,
                 "source_endpoint_graph_landmarks": [
                     {
-                        "source_vertex_mesh_units": [0.0 if value == 0 else value for value in point],
+                        "source_vertex_mesh_units": [
+                            0.0 if value == 0 else value for value in point
+                        ],
                         "degree": degree,
                     }
                     for point, degree in sorted(landmarks)
