@@ -951,10 +951,10 @@ def measure_mesh_preview(
         # nonzero edges. Interior crossings and partial overlaps are not
         # split, and these graph degrees are not anatomical landmarks.
         adjacency: dict[tuple[float, float, float], set[tuple[float, float, float]]] = {}
-        for edge in traversal_counts:
-            first, second = min(edge), max(edge)
-            adjacency.setdefault(first, set()).add(second)
-            adjacency.setdefault(second, set()).add(first)
+        for geometric_edge in traversal_counts:
+            endpoint_a, endpoint_b = min(geometric_edge), max(geometric_edge)
+            adjacency.setdefault(endpoint_a, set()).add(endpoint_b)
+            adjacency.setdefault(endpoint_b, set()).add(endpoint_a)
         unseen_vertices = set(adjacency)
         component_count = 0
         while unseen_vertices:
