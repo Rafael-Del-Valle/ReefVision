@@ -1491,17 +1491,20 @@ def test_pose_materialization_rejects_unsafe_holdout_member_before_training_outp
 
 @pytest.mark.parametrize("contaminated_split", ("training", "validation"))
 @pytest.mark.parametrize(
-    "member",
+    ("member", "expected_error"),
     (
-        "images/val/frame_00000002.png",
-        "labels/val/frame_00000002.txt",
-        "Images/VAL/frame_00000002.png",
+        ("images/val/frame_00000002.png", "unexpected image or label split"),
+        ("labels/val/frame_00000002.txt", "unexpected image or label split"),
+        ("Images/VAL/frame_00000002.png", "unexpected image or label split"),
+        ("images/train/empty/", "unmatched image/label frame sets"),
+        ("labels/train/empty/", "unmatched image/label frame sets"),
     ),
 )
 def test_pose_materialization_rejects_unreviewed_export_splits(
     tmp_path: Path,
     contaminated_split: str,
     member: str,
+    expected_error: str,
 ) -> None:
     training = _pose_export_zip(b"reviewed-training")
     validation = _pose_export_zip(b"reviewed-validation")
@@ -1515,7 +1518,7 @@ def test_pose_materialization_rejects_unreviewed_export_splits(
         invalid_training, invalid_validation = training, contaminated.getvalue()
 
     destination = tmp_path / "pose-extra-split"
-    with pytest.raises(ValidationError, match="unexpected image or label split"):
+    with pytest.raises(ValidationError, match=expected_error):
         materialize_pose_training_exports(
             training_content=invalid_training,
             validation_content=invalid_validation,
