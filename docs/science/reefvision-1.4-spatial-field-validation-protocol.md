@@ -399,3 +399,27 @@ branches. Evaluate branch-level detection and length error separately from
 specimen-level total-length bias. A shared-edge warning is a QC aid, not an
 implemented centerline extraction algorithm or a completed anatomical
 validation gate.
+
+### Provisional selected-edge chain decomposition
+
+The exact-endpoint union additionally partitions selected nonzero edges into
+maximal geometric chains: start at vertices of degree other than two, follow
+degree-two vertices until the next terminal or junction, then consume any
+remaining closed cycles. Each exact endpoint pair belongs to one chain only.
+The source-coordinate ordering is deterministic across selection reversal,
+selection order and split vertex IDs. A loop returning to a junction remains a
+closed chain; no root, tip identity or biological branch order is inferred.
+
+Check the partition against independent open-path, Y-junction, closed-cycle,
+loop-with-tail and disconnected-crossing references. The sum of chain lengths
+must reproduce the deduplicated union within floating-point resolution, with
+no invented intersection or lost edges. Retain ordered source waypoints,
+edge counts, calibrated lengths, scale-only bounds and per-chain numerical QC.
+Missing or underflowed bounds must remain unavailable. Chain bounds share the
+same scale calibration and are not independent uncertainty estimates.
+
+The chain result is provisional selected surface geometry, not an extracted
+anatomical skeleton. It does not split unequal overlapping segments, join
+interior crossings, or resolve biological continuity across occlusions.
+Human-reviewed source geometry, anatomical reference lengths and independent
+specimen validation remain necessary before reporting total linear extension.
