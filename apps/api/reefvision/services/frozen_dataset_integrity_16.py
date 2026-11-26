@@ -115,6 +115,18 @@ def _valid_frozen_raster_mask(snapshot: dict[str, Any], width_px: Any, height_px
     )
 
 
+def _matches_count_map(saved: object, expected: Counter[str]) -> bool:
+    """Require exact integer biological counts, not equal-looking JSON flags/floats."""
+    return (
+        isinstance(saved, dict)
+        and all(
+            type(key) is str and type(count) is int and count > 0
+            for key, count in saved.items()
+        )
+        and saved == dict(expected)
+    )
+
+
 def _matches_frozen_class(snapshot: dict[str, Any], classes: dict[str, tuple[int, str]]) -> bool:
     """A saved observation must use its frozen class ID, index and name."""
     class_id = snapshot.get("label_class_id")
@@ -262,13 +274,18 @@ def validate_frozen_dataset_manifest(
     summary = manifest.get("summary")
     if (
         not isinstance(summary, dict)
+        or type(summary.get("image_count")) is not int
         or summary.get("image_count") != version.image_count
+        or type(summary.get("annotation_count")) is not int
         or summary.get("annotation_count") != version.annotation_count
         or sum(item.annotation_count for item in items) != version.annotation_count
         or sum(item.mask_annotation_count for item in items) != version.mask_annotation_count
         or (
             schema_version == "0007"
-            and summary.get("mask_annotation_count") != version.mask_annotation_count
+            and (
+                type(summary.get("mask_annotation_count")) is not int
+                or summary.get("mask_annotation_count") != version.mask_annotation_count
+            )
         )
         or (schema_version == "0006" and version.mask_annotation_count != 0)
     ):
@@ -344,8 +361,10 @@ def validate_frozen_dataset_manifest(
                     )
                     for snapshot in mask_snapshots
                 )
-                or item.per_mask_class_counts_json
-                != dict(Counter(snapshot["label_class_id"] for snapshot in mask_snapshots))
+                or not _matches_count_map(
+                    item.per_mask_class_counts_json,
+                    Counter(snapshot["label_class_id"] for snapshot in mask_snapshots),
+                )
             ):
                 raise ValidationError(message)
             # Only verified original masks of supported producer geometries
@@ -374,8 +393,10 @@ def validate_frozen_dataset_manifest(
                 or not _valid_detection_box(annotation, item.width_px, item.height_px)
                 for annotation in annotations
             )
-            or item.per_class_counts_json
-            != dict(Counter(annotation["label_class_id"] for annotation in annotations))
+            or not _matches_count_map(
+                item.per_class_counts_json,
+                Counter(annotation["label_class_id"] for annotation in annotations),
+            )
         ):
             raise ValidationError(message)
 
