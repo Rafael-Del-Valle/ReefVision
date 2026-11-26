@@ -70,3 +70,25 @@ isolated Pydantic/configuration probes reproduced the unsafe paths; full
 repository tests and exact-head CI are unverified. Integrated migration
 reconciliation, representative biological acceptance and genuine installed
 Windows MSI/GUI validation remain release blockers.
+
+## Regeneration after integrity marker loss — 2026-11-26
+
+A missing integrity version marker alone no longer opts a manual regeneration
+out of saved scientific validation: the presence of either independent digest
+also invokes the existing immutable snapshot validator. A workflow-owned queue
+must pass that validator even if its checksum map is empty, matching the
+saved-node replay gate. No source observations, priority formula, reviewer
+history or typed workflow artifacts are changed. Valid unversioned standalone
+queues with matching historical digests remain supported, as do older
+standalone queues with neither optional digest. This is an accidental
+corruption guard, not cryptographic authentication of arbitrary database
+rewrites; the latter legacy case cannot establish a missing version's origin.
+
+Three additional standalone refusal cases, two historical compatibility
+controls and two additional persisted workflow regeneration scenarios cover
+marker loss, digest corruption, missing workflow checksums, restored original
+queue replay and retained pending human review. Nineteen isolated SQLite JSON
+guard/digest probes passed; these are not full repository tests. GitHub
+checkout remains blocked by DNS and exact-head CI is unverified. The
+independent integrated migration, representative biological workflow and
+native Windows installed-GUI/MSI acceptance gates remain HOLD.
