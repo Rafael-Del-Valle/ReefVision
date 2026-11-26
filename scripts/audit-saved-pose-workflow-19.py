@@ -993,6 +993,55 @@ def inspect(
                     and _digest(seed_path) == seed.sha256,
                     "Original registered pose seed checkpoint differs from registry evidence",
                 )
+            # Persisted result and experiment rows can agree on an altered
+            # architecture or label. Reconcile those fields with the graph,
+            # using the same registered-seed fallback as production.
+            parameters = training_node.parameters_json
+            if seed_id is not None:
+                _require(
+                    seed.metadata_json is None or isinstance(seed.metadata_json, dict),
+                    "Original pose seed metadata is not a JSON object",
+                )
+                seed_metadata_json = seed.metadata_json or {}
+                if "source_architecture" in seed_metadata_json:
+                    source_architecture = seed_metadata_json["source_architecture"]
+                    _require(
+                        isinstance(source_architecture, str)
+                        and bool(source_architecture.strip())
+                        and source_architecture == source_architecture.strip(),
+                        "Original pose seed architecture metadata is invalid",
+                    )
+                default_architecture = str(
+                    seed_metadata_json.get("source_architecture") or seed.source_filename
+                ).strip()
+            else:
+                default_architecture = "yolo11n-pose.yaml"
+            requested_architecture = parameters.get("architecture", default_architecture)
+            _require(
+                isinstance(requested_architecture, str)
+                and bool(requested_architecture.strip())
+                and requested_architecture == requested_architecture.strip()
+                and requested_architecture == training.architecture
+                and (
+                    seed_id is not None
+                    or requested_architecture in {f"yolo11{scale}-pose.yaml" for scale in "nslmx"}
+                ),
+                "Effective pose architecture differs from saved workflow parameters",
+            )
+            requested_name = parameters.get("run_name")
+            if requested_name is None:
+                requested_name = "workflow-pose-retrain"
+            requested_notes = parameters.get("notes")
+            _require(
+                isinstance(requested_name, str)
+                and bool(requested_name.strip())
+                and requested_name == requested_name.strip()
+                and requested_name == training.run_name
+                and (requested_notes is None or isinstance(requested_notes, str))
+                and (requested_notes.strip() or None if requested_notes is not None else None)
+                == training.notes,
+                "Effective pose run name or notes differ from saved workflow parameters",
+            )
             expected_weights_prefix = (
                 f"{project.storage_root}/training/{training.id}/runs/pose/weights/"
             )
