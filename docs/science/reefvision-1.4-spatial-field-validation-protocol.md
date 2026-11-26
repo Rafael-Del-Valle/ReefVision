@@ -645,3 +645,14 @@ Check standalone and twice-replayed typed workflow payloads and hashes.
 Local corrected lengths must not be summed as a global corrected length
 when components overlap. Neither local nor global lengths establish
 anatomical centerlines, independent replicates or verified identities.
+
+The oblique reference maps the same three undirected edges onto direction
+(1, 2, 3), reverses their submitted directions and repeats the long edge.
+It retains two endpoint components, three distinct edges, four nonzero
+traversals, one local overlap pair and two cross-component overlap pairs.
+Local corrected lengths are 4 and 2 times sqrt(14) source units; the global
+corrected length is 4 times sqrt(14), not their sum. Scale all nominal
+lengths and scale-only limits by sqrt(14) relative to the axis-aligned
+reference. Verify standalone results and two saved typed workflow runs
+with identical artifacts and hashes. Repetition supplies no additional
+independent biological evidence and does not establish identity or anatomy.
