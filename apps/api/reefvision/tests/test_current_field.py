@@ -291,3 +291,38 @@ def test_affine_equatorial_current_matches_analytic_solution():
         errors.append(abs(endpoint.longitude - expected_lon))
     # A smaller integration step must improve accuracy in this smooth field.
     assert errors[1] < errors[0]
+
+
+@pytest.mark.parametrize("reverse_lat,reverse_lon", [(True, False), (False, True), (True, True)])
+def test_nonuniform_current_axis_order_preserves_signed_flow_and_missing_mask(
+    reverse_lat, reverse_lon
+):
+    """Provider grid storage order must not change scientific integration."""
+    latitudes = (-1.0, 0.0, 2.0)
+    longitudes = (-2.0, 0.0, 1.0)
+    east = ((-2.0, -1.0, -0.5), (-3.0, -2.0, -1.0), (-4.0, -3.0, None))
+    north = ((0.5, 1.0, 2.0), (1.0, 2.0, 3.0), (2.0, 3.0, 4.0))
+    reference = CurrentField(latitudes, longitudes, east, north)
+
+    def reorder(matrix):
+        rows = matrix[::-1] if reverse_lat else matrix
+        return tuple(row[::-1] for row in rows) if reverse_lon else rows
+
+    reordered = CurrentField(
+        latitudes[::-1] if reverse_lat else latitudes,
+        longitudes[::-1] if reverse_lon else longitudes,
+        reorder(east),
+        reorder(north),
+    )
+    # The signed vector is an independently calculated bilinear midpoint.
+    assert reordered.sample(-0.5, -1.0) == pytest.approx((-2.0, 1.125))
+    assert reordered.sample(1.0, 0.5) is None
+    assert integrate_streamline(reordered, 1.0, 0.5).termination == "missing_cell"
+
+    expected = integrate_streamline(reference, -0.5, -1.0, step_seconds=60, max_steps=10)
+    actual = integrate_streamline(reordered, -0.5, -1.0, step_seconds=60, max_steps=10)
+    assert actual == expected
+    assert actual.termination == "max_steps"
+    assert len(actual.points) == 11
+    assert actual.points[-1].longitude < -1.0
+    assert actual.points[-1].latitude > -0.5
