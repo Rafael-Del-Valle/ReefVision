@@ -1374,6 +1374,7 @@ def measure_mesh_preview(
                 for component in components
                 for warning in component["collinear_overlap_corrected_union"]["qc_warnings"]
             }
+            - set(corrected_union["qc_warnings"])
         )
         trace_union_qc_warnings = (
             union_warnings
