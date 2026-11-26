@@ -349,6 +349,20 @@ class WorkflowGraphService:
                 )
             )
 
+        try:
+            ReviewQueueCreateRequest(
+                source_quality_control_run_id=parameters.get("source_quality_control_run_id")
+            )
+        except ValueError:
+            issues.append(
+                self._issue(
+                    "error",
+                    "invalid_qc_source_run_id",
+                    "QC Review Queue source run ID must be null or a nonempty identifier",
+                    node_id=node_id,
+                )
+            )
+
     def validate(
         self,
         project_id: str,
