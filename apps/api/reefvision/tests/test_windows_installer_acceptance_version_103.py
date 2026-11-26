@@ -335,8 +335,7 @@ def test_windows_cab_preflight_requires_provenance_manifest_in_part_one() -> Non
     removed = CAB_WORKFLOW.replace(manifest_path + "\n", "", 1)
     duplicated = CAB_WORKFLOW.replace(manifest_path, manifest_path + "\n" + manifest_path, 1)
     cab_path = (
-        "            apps/web/src-tauri/target/x86_64-pc-windows-msvc/"
-        "release/bundle/msi/rv4.cab"
+        "            apps/web/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/rv4.cab"
     )
     moved = removed.replace(cab_path, cab_path + "\n" + manifest_path, 1)
     for modified in (removed, duplicated, moved):
