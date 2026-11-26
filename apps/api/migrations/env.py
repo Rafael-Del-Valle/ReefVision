@@ -61,6 +61,12 @@ def run_migrations_online() -> None:
     # Own the outer transaction so revision bookkeeping is committed only
     # after a successful migration (and rolled back on failure).
     with connectable.begin() as connection:
+        if connection.dialect.name == "sqlite":
+            # The driver's legacy transaction mode does not BEGIN for DDL or
+            # SELECT. Claim the writer lock before the lineage guard so a
+            # competing local writer cannot invalidate its schema snapshot,
+            # and roll back the first DDL if any later migration step fails.
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
         assert_compatible_revision_0038(connection)
         context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
 
