@@ -1073,7 +1073,7 @@ def measure_mesh_preview(
                 )
         trace_edge_sets.append(trace_edges)
     exact_edge_union = None
-    unequal_overlap_count = 0
+    trace_union_qc_warnings: list[str] = []
     if trace_edge_sets:
         # Count each nonzero exact endpoint-pair once, even within a trace.
         # Unequal, partially overlapping segments are NOT geometrically merged.
@@ -1134,6 +1134,12 @@ def measure_mesh_preview(
             "biological_validation_status": "not_verified_anatomical_centerline",
             "human_review_verified": False,
         }
+        corrected_union = _collinear_union_measurement(
+            collinear_source_total, scale, relative_scale_uncertainty
+        )
+        # Surface-level QC must expose unavailable union measurements even
+        # when the full mesh itself is numerically valid.
+        trace_union_qc_warnings = union_warnings + corrected_union["qc_warnings"]
         exact_edge_union = {
             "endpoint_graph_topology": topology,
             "endpoint_graph_chains": _trace_endpoint_chains(
@@ -1141,9 +1147,7 @@ def measure_mesh_preview(
             ),
             "method": "exact_endpoint_pair_equality_only",
             "unequal_collinear_overlap_pair_count": unequal_overlap_count,
-            "collinear_overlap_corrected_union": _collinear_union_measurement(
-                collinear_source_total, scale, relative_scale_uncertainty
-            ),
+            "collinear_overlap_corrected_union": corrected_union,
             "distinct_nonzero_edge_count": len(traversal_counts),
             "nonzero_edge_traversal_count": traversal_count,
             "within_trace_redundant_traversal_count": traversal_count - trace_membership_count,
@@ -1451,7 +1455,7 @@ def measure_mesh_preview(
             + (["inconsistent_face_winding"] if inconsistent_winding_edge_count else [])
             + (["unreferenced_mesh_vertices"] if unreferenced_vertex_count else [])
             + (["surface_traces_share_geometric_edges"] if shared_trace_edge_pairs else [])
-            + (["surface_trace_unequal_collinear_edges_overlap"] if unequal_overlap_count else [])
+            + trace_union_qc_warnings
             + (
                 ["preview_omits_edge_connected_mesh_patches"]
                 if preview_omitted_patch_indices
