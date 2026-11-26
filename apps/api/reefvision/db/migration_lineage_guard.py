@@ -245,6 +245,37 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
             f"{unexpected_version_columns}. Preserve the database and reconcile "
             "migration provenance without stamping or rewriting research data."
         )
+    if connection.dialect.name == "sqlite":
+        # An implicit UNIQUE index has no SQL in sqlite_master. The existing
+        # explicit-index guard cannot detect its alternate comparison rules.
+        stamp_indexes = connection.exec_driver_sql("PRAGMA index_list(alembic_version)").all()
+        if any(row[3] == "u" for row in stamp_indexes):
+            raise RuntimeError(
+                "Unsafe ReefVision Alembic version-table implicit UNIQUE index: "
+                "preserve the database and reconcile revision identity before migrating."
+            )
+        # Preserve historical keyless pre-review compatibility, but require
+        # any declared primary key to use the original BINARY/ascending semantics.
+        for index in stamp_indexes:
+            if index[3] != "pk":
+                continue
+            key_rows = [
+                row
+                for row in connection.exec_driver_sql(
+                    "SELECT * FROM pragma_index_xinfo(?)", (index[1],)
+                )
+                if row[5]
+            ]
+            if (
+                index[2] != 1
+                or index[4]
+                or len(key_rows) != 1
+                or key_rows[0][1:5] != (0, "version_num", 0, "BINARY")
+            ):
+                raise RuntimeError(
+                    "Unsafe ReefVision Alembic version-table primary key: "
+                    "preserve the database and reconcile revision identity before migrating."
+                )
     revision_rows: tuple[str, ...] = tuple(
         connection.execute(text("SELECT version_num FROM alembic_version")).scalars()
     )
