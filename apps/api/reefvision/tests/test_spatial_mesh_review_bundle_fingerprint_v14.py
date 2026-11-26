@@ -781,18 +781,20 @@ def test_reused_imported_original_qc_survives_saved_typed_workflow(
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
     provenance = expected["provenance"]
+    warnings = expected["qc_warnings"]
     if reexport:
-        assert "longitudinal_change_withheld_rescaled_reexported_geometry" in expected["qc_warnings"]
+        assert "longitudinal_change_withheld_rescaled_reexported_geometry" in warnings
         assert provenance["longitudinal_change_withheld_due_to_rescaled_reexported_geometry"]
         assert not provenance["longitudinal_change_withheld_due_to_reused_source_payload"]
+        status = "different_payloads_identical_geometry"
     else:
-        assert "longitudinal_change_withheld_reused_imported_source_payload" in expected["qc_warnings"]
+        assert "longitudinal_change_withheld_reused_imported_source_payload" in warnings
         assert provenance["longitudinal_change_withheld_due_to_reused_source_payload"]
-    assert "identical_imported_source_payload_metadata_inconsistent" not in expected["qc_warnings"]
+        status = "reused_imported_source_payload"
+    assert "identical_imported_source_payload_metadata_inconsistent" not in warnings
     assert expected["after_surface_area_m2"] == pytest.approx(
         4 * expected["before_surface_area_m2"]
     )
-    status = "different_payloads_identical_geometry" if reexport else "reused_imported_source_payload"
     assert provenance["acquisition_lineage_status"] == status
     assert provenance["independent_acquisition_verified"] is False
     assert provenance["scale_uncertainty_only"] is False
