@@ -878,7 +878,7 @@ def test_qc_migration_failure_rolls_back_ddl_and_excludes_concurrent_writer(
 
 
 @pytest.mark.parametrize("journal_mode", ["DELETE", "WAL"])
-@pytest.mark.parametrize("fault", ["index", "stamp"])
+@pytest.mark.parametrize("fault", ["index", "stamp", "orphan"])
 def test_desktop_migration_postcondition_failure_rolls_back_before_commit(
     tmp_path: Path, journal_mode: str, fault: str
 ) -> None:
@@ -898,8 +898,13 @@ def test_desktop_migration_postcondition_failure_rolls_back_before_commit(
         assert db.execute(f"PRAGMA journal_mode={journal_mode}").fetchone() == (
             journal_mode.lower(),
         )
-        db.execute("CREATE TABLE preserved_coral_observations (note TEXT NOT NULL)")
-        db.execute("INSERT INTO preserved_coral_observations VALUES ('original observation')")
+        db.execute("CREATE TABLE preserved_coral_colonies (id INTEGER PRIMARY KEY)")
+        db.execute("INSERT INTO preserved_coral_colonies VALUES (1)")
+        db.execute(
+            "CREATE TABLE preserved_coral_observations (note TEXT NOT NULL, "
+            "colony_id INTEGER NOT NULL REFERENCES preserved_coral_colonies(id))"
+        )
+        db.execute("INSERT INTO preserved_coral_observations VALUES ('original observation', 1)")
         db.commit()
 
     def snapshot() -> tuple[object, ...]:
@@ -909,7 +914,8 @@ def test_desktop_migration_postcondition_failure_rolls_back_before_commit(
                     "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
                 ).fetchall(),
                 db.execute("SELECT version_num FROM alembic_version").fetchall(),
-                db.execute("SELECT note FROM preserved_coral_observations").fetchall(),
+                db.execute("SELECT * FROM preserved_coral_observations").fetchall(),
+                db.execute("SELECT * FROM preserved_coral_colonies").fetchall(),
             )
 
     before = snapshot()
@@ -923,22 +929,25 @@ def test_desktop_migration_postcondition_failure_rolls_back_before_commit(
             connection.exec_driver_sql(
                 "CREATE INDEX unexpected_bulk_actor ON review_queue_bulk_requests(actor)"
             )
-        else:
+        elif fault == "stamp":
             connection.exec_driver_sql(
                 "CREATE TRIGGER incorrect_final_stamp AFTER UPDATE OF version_num "
                 "ON alembic_version WHEN NEW.version_num = '0041' BEGIN "
                 "UPDATE alembic_version SET version_num = '0040'; END"
             )
+        else:
+            connection.exec_driver_sql("DELETE FROM preserved_coral_colonies WHERE id = 1")
 
-    message = (
-        "noncanonical bulk request registry index"
-        if fault == "index"
-        else "did not reach the expected Alembic revision inside the migration transaction"
-    )
+    message = {
+        "index": "noncanonical bulk request registry index",
+        "stamp": "did not reach the expected Alembic revision inside the migration transaction",
+        "orphan": "found orphaned scientific or reviewer references",
+    }[fault]
     event.listen(Engine, "after_cursor_execute", corrupt_final_migration)
     try:
-        with pytest.raises(RuntimeError, match=message):
+        with pytest.raises(RuntimeError, match=message) as exc_info:
             run_pending_migrations(settings)
+        assert "original observation" not in str(exc_info.value)
     finally:
         event.remove(Engine, "after_cursor_execute", corrupt_final_migration)
 
@@ -950,6 +959,7 @@ def test_desktop_migration_postcondition_failure_rolls_back_before_commit(
             "original observation",
         )
         assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        assert db.execute("SELECT * FROM preserved_coral_colonies").fetchall() == [(1,)]
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
         assert db.execute("PRAGMA index_list(review_queue_bulk_requests)").fetchall() == [
             (0, "sqlite_autoindex_review_queue_bulk_requests_1", 1, "pk", 0)
