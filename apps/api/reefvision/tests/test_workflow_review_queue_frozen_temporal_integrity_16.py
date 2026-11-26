@@ -12,11 +12,9 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from reefvision.db.models import ReviewQueue, WorkflowArtifact, WorkflowNodeRun
 from reefvision.domain.errors import ValidationError
-from reefvision.services.workflow_review_queue import (
-    _frozen_incomplete_provenance,
-    create_review_queue_workflow_artifact,
-)
+from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
 from reefvision.services.workflow_review_queue_integrity import (
+    _frozen_incomplete_provenance,
     queue_item_evidence_sha256,
     validate_saved_queue_snapshot,
 )
