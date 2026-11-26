@@ -824,9 +824,8 @@ def test_qc_migration_failure_rolls_back_ddl_and_excludes_concurrent_writer(
     command.upgrade(config, "0037")
 
     with closing(sqlite3.connect(database)) as db:
-        assert db.execute(f"PRAGMA journal_mode={journal_mode}").fetchone() == (
-            journal_mode.lower(),
-        )
+        observed_mode = db.execute(f"PRAGMA journal_mode={journal_mode}").fetchone()
+        assert observed_mode == (journal_mode.lower(),)
         db.execute("CREATE TABLE preserved_coral_observations (note TEXT NOT NULL)")
         db.execute("INSERT INTO preserved_coral_observations VALUES ('original observation')")
         db.commit()
@@ -834,7 +833,9 @@ def test_qc_migration_failure_rolls_back_ddl_and_excludes_concurrent_writer(
     def snapshot() -> tuple[object, ...]:
         with closing(sqlite3.connect(database)) as db:
             return (
-                db.execute("SELECT type, name, sql FROM sqlite_master ORDER BY type, name").fetchall(),
+                db.execute(
+                    "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+                ).fetchall(),
                 db.execute("SELECT version_num FROM alembic_version").fetchall(),
                 db.execute("SELECT note FROM preserved_coral_observations").fetchall(),
             )
@@ -844,7 +845,8 @@ def test_qc_migration_failure_rolls_back_ddl_and_excludes_concurrent_writer(
     def interrupt_after_first_ddl(
         _connection: object, _cursor: object, statement: str, *_args: object
     ) -> None:
-        if not statement.strip().startswith("CREATE INDEX ix_review_queue_item_events_item_created"):
+        target_index = "CREATE INDEX ix_review_queue_item_events_item_created"
+        if not statement.strip().startswith(target_index):
             return
         # The first QC table has been created but the stamp has not advanced.
         # A separate local connection must be unable to edit the research data.
