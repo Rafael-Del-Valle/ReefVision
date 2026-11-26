@@ -713,6 +713,7 @@ def compare_source_manifest(
         return ["baseline JPEG manifest must contain at least one source file"]
 
     expected: dict[str, tuple[int, str]] = {}
+    expected_hashes: set[str] = set()
     # A previously decoded camera baseline must not be silently downgraded to
     # header-only verification in the post-import acceptance pass.
     expected_decoded: dict[str, dict[str, object]] = {}
@@ -730,7 +731,7 @@ def compare_source_manifest(
             or any(component in ("", ".", "..") for component in relative.split("/"))
             or Path(relative).suffix.lower() not in JPEG_SUFFIXES
             or type(size) is not int
-            or size < 0
+            or size < len(JPEG_SOI) + len(JPEG_EOI)
             or not isinstance(checksum, str)
             or re.fullmatch(r"[0-9a-f]{64}", checksum) is None
             or entry.get("jpeg_boundary_markers") is not True
@@ -738,6 +739,11 @@ def compare_source_manifest(
             return ["baseline JPEG manifest contains malformed source-file evidence"]
         if relative in expected:
             return ["baseline JPEG manifest contains duplicate source-file paths"]
+        # Replayed manifests must enforce the same duplicate-source rule as
+        # inventory(), even if distinct filenames have been fabricated.
+        if checksum in expected_hashes:
+            return ["baseline JPEG manifest contains duplicate source bytes"]
+        expected_hashes.add(checksum)
         expected[relative] = (size, checksum)
         if "jpeg_decodable" in entry:
             if entry["jpeg_decodable"] is not True:
@@ -767,7 +773,7 @@ def compare_source_manifest(
             or any(component in ("", ".", "..") for component in relative.split("/"))
             or Path(relative).suffix.lower() not in JPEG_SUFFIXES
             or type(size) is not int
-            or size < 0
+            or size < len(JPEG_SOI) + len(JPEG_EOI)
             or not isinstance(checksum, str)
             or re.fullmatch(r"[0-9a-f]{64}", checksum) is None
             or record.get("jpeg_boundary_markers") is not True
@@ -777,6 +783,14 @@ def compare_source_manifest(
             return ["current JPEG inventory contains duplicate source-file paths"]
         actual[relative] = record
     errors: list[str] = []
+    actual_hashes: dict[str, str] = {}
+    for relative, record in sorted(actual.items()):
+        checksum = str(record["sha256"])
+        previous = actual_hashes.setdefault(checksum, relative)
+        if previous != relative:
+            errors.append(
+                f"current JPEG inventory contains duplicate source bytes: {previous!r} / {relative!r}"
+            )
     for relative in sorted(expected.keys() - actual.keys()):
         errors.append(f"source JPEG missing since baseline: {relative!r}")
     for relative in sorted(actual.keys() - expected.keys()):

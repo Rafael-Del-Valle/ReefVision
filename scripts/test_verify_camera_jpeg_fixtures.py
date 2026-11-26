@@ -223,6 +223,45 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                         ["current JPEG inventory contains malformed source-file evidence"],
                     )
 
+    def test_comparator_rejects_duplicate_source_bytes_and_impossible_sizes(self) -> None:
+        """Replayed camera evidence cannot certify aliases as independent captures."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = {
+                "path": "SONY.JPG",
+                "bytes": 16,
+                "sha256": "a" * 64,
+                "jpeg_boundary_markers": True,
+            }
+            second = {**first, "path": "CANON.JPEG", "sha256": "b" * 64}
+            baseline = {"root": str(root), "errors": [], "files": [first, second]}
+            self.assertEqual(
+                MODULE.compare_source_manifest(root, [first, second], baseline), []
+            )
+            duplicate = {**second, "sha256": first["sha256"]}
+            self.assertEqual(
+                MODULE.compare_source_manifest(
+                    root, [first, duplicate], {**baseline, "files": [first, duplicate]}
+                ),
+                ["baseline JPEG manifest contains duplicate source bytes"],
+            )
+            errors = MODULE.compare_source_manifest(root, [first, duplicate], baseline)
+            self.assertTrue(any("duplicate source bytes" in error for error in errors))
+            self.assertTrue(any("bytes changed" in error for error in errors))
+            for size in range(4):
+                with self.subTest(size=size):
+                    invalid = {**first, "bytes": size}
+                    self.assertEqual(
+                        MODULE.compare_source_manifest(
+                            root, [invalid], {**baseline, "files": [invalid]}
+                        ),
+                        ["baseline JPEG manifest contains malformed source-file evidence"],
+                    )
+                    self.assertEqual(
+                        MODULE.compare_source_manifest(root, [invalid, second], baseline),
+                        ["current JPEG inventory contains malformed source-file evidence"],
+                    )
+
     def test_cli_verified_decode_baseline_cannot_be_downgraded(self) -> None:
         """A post-import run must explicitly repeat the original pixel check."""
         import hashlib
