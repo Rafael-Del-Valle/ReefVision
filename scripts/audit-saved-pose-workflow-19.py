@@ -228,17 +228,18 @@ def inspect(
         ModelRegistration,
         PoseLandmarkSchemaRevision,
         PoseModelSchemaBinding,
-        PoseTrainingDataset,
         Project,
         TrainingRun,
         VideoAsset,
         WorkflowArtifact,
+        WorkflowGraphRecord,
         WorkflowNodeRun,
         WorkflowRun,
     )
     from reefvision.jobs.pose_training import _verify_prelaunch_pose_dataset
     from reefvision.services.pose_training_datasets import PoseTrainingDatasetService
     from reefvision.services.pose_training_exports import PoseTrainingExportService
+    from reefvision.services.workflow_pose_training import _pose_dataset
     from reefvision.services.workflow_provenance import build_workflow_run_provenance
     from reefvision.storage.datasets import canonical_json_sha256
 
@@ -308,15 +309,34 @@ def inspect(
                 _require(isinstance(matches[0], dict), "Output is not a JSON object")
                 return matches[0]
 
-            frozen = one("pose_training_dataset", "pose_training_dataset")
+            # Both training and validation may use the same dataset adapter.
+            # Resolve consumed artifacts by the verified saved edge order.
+            training_nodes = [node for node in nodes if node.node_type == "pose_model_training"]
+            _require(len(training_nodes) == 1, "Saved pose training node is ambiguous")
+            training_node = training_nodes[0]
+            training_node_id = training_node.id
+            graph = session.get(WorkflowGraphRecord, run.workflow_graph_record_id)
+            _require(graph is not None, "Saved pose workflow graph is missing")
+            edges = [
+                edge
+                for edge in sorted(graph.graph_json["edges"], key=lambda edge: edge["edge_id"])
+                if edge["target_node_id"] == training_node.node_id
+            ]
+            by_id = {artifact.id: artifact for artifact in artifacts}
+            inputs: dict[str, dict[str, Any]] = {}
+            for edge, artifact_id in zip(edges, training_node.input_artifact_ids_json, strict=True):
+                port = edge["target_port_id"]
+                artifact = by_id[artifact_id]
+                _require(port not in inputs, f"Ambiguous saved pose training input: {port}")
+                _require(isinstance(artifact.payload_json, dict), "Input is not a JSON object")
+                inputs[port] = artifact.payload_json
+            _require("dataset" in inputs, "Saved pose training dataset input is missing")
+            frozen = inputs["dataset"]
             result = one("pose_model_training", "training_result")
             registered = one("register_trained_model", "model_reference")
 
-            dataset = session.get(PoseTrainingDataset, frozen.get("dataset_id"))
-            _require(dataset is not None, "Frozen pose training dataset was not found")
-            _require(
-                dataset.project_id == run.project_id,
-                "Frozen dataset belongs to another project",
+            dataset = _pose_dataset(
+                session, project_id=run.project_id, payload=frozen, role="training"
             )
             _require(
                 frozen.get("manifest_sha256") == dataset.manifest_sha256,
@@ -372,7 +392,8 @@ def inspect(
             )
             validation_id = result.get("pose_validation_dataset_id")
             _require(
-                validation_id == manifest.get("pose_validation_dataset_id"),
+                validation_id == manifest.get("pose_validation_dataset_id")
+                and ("validation_dataset" in inputs) == (validation_id is not None),
                 "Saved validation dataset differs from completed training",
             )
             # A completed pose worker runs with AMP disabled and controls
@@ -395,9 +416,16 @@ def inspect(
                 "Effective pose precision or independent validation policy changed",
             )
             if validation_id is not None:
-                validation_dataset = session.get(PoseTrainingDataset, validation_id)
+                validation_dataset = _pose_dataset(
+                    session,
+                    project_id=run.project_id,
+                    payload=inputs["validation_dataset"],
+                    role="validation",
+                )
                 _require(
-                    validation_dataset is not None
+                    validation_dataset.id == validation_id
+                    and inputs["validation_dataset"].get("manifest_sha256")
+                    == validation_dataset.manifest_sha256
                     and validation_dataset.project_id == run.project_id
                     and validation_dataset.pose_schema_id == dataset.pose_schema_id
                     and validation_dataset.pose_schema_revision == dataset.pose_schema_revision
@@ -493,9 +521,6 @@ def inspect(
             # Check the actual queued worker request independently of the
             # checksum-valid Workflow Builder artifact: a succeeded job from
             # another node or frozen dataset cannot prove this experiment.
-            training_nodes = [node for node in nodes if node.node_type == "pose_model_training"]
-            _require(len(training_nodes) == 1, "Saved pose training node is ambiguous")
-            training_node_id = training_nodes[0].id
             request = job.request_json
             _require(
                 job.project_id == run.project_id
@@ -746,15 +771,8 @@ def inspect(
             # but does not reconcile the consumed seed with the training row.
             # A different, intact registered model must not be substituted in
             # the training records while the original graph input stays fixed.
-            training_input_ids = set(training_nodes[0].input_artifact_ids_json)
-            seed_inputs = [
-                artifact.payload_json
-                for artifact in artifacts
-                if artifact.id in training_input_ids
-                and artifact.data_type == "model_reference"
-            ]
             _require(
-                len(seed_inputs) == (0 if seed_id is None else 1),
+                ("initial_model" in inputs) == (seed_id is not None),
                 "Saved pose training seed input disagrees with initialization mode",
             )
             seed_size: int | None = None
@@ -772,7 +790,7 @@ def inspect(
             else:
                 seed = session.get(ModelRegistration, seed_id)
                 seed_binding = session.get(PoseModelSchemaBinding, seed_id)
-                seed_input = seed_inputs[0]
+                seed_input = inputs["initial_model"]
                 _require(
                     isinstance(seed_input, dict)
                     and seed_input.get("model_id") == seed_id
