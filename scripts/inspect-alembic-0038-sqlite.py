@@ -60,8 +60,49 @@ def _without_sql_comments(ddl: str) -> str:
     return tokens.sub(lambda match: match.group(1) or " ", ddl)
 
 
-def inspect_database(path: Path) -> dict[str, object]:
-    """Read the schema only; never write, repair, or import Alembic migrations."""
+def _encode_sqlite_value(value: object) -> tuple[str, str | None]:
+    """Preserve SQLite storage classes without exporting raw values."""
+    if value is None:
+        return ("null", None)
+    if isinstance(value, bytes):
+        return ("blob", value.hex())
+    if isinstance(value, str):
+        return ("text", value)
+    if isinstance(value, int):
+        return ("integer", str(value))
+    if isinstance(value, float):
+        return ("real", value.hex())
+    raise ValueError(f"Unsupported SQLite value type: {type(value).__name__}")
+
+
+def _table_content_fingerprint(connection: sqlite3.Connection, table: str) -> dict[str, object]:
+    """Hash the row multiset, independent of insertion and column order."""
+    # Caller passes only the fixed, migration-owned table names.
+    cursor = connection.execute(f'SELECT * FROM "{table}"')
+    columns = [entry[0] for entry in cursor.description]
+    order = sorted(range(len(columns)), key=columns.__getitem__)
+    ordered_columns = [columns[index] for index in order]
+    digest = hashlib.sha256()
+    digest.update(b"reefvision-sqlite-row-multiset-v1\x00")
+    digest.update(json.dumps(ordered_columns, separators=(",", ":")).encode("utf-8"))
+    digest.update(b"\x00")
+    row_hashes = []
+    for row in cursor:
+        encoded = [_encode_sqlite_value(row[index]) for index in order]
+        payload = json.dumps(encoded, separators=(",", ":")).encode("utf-8")
+        row_hashes.append(hashlib.sha256(payload).digest())
+    # Fixed-width digests preserve duplicates and avoid concatenation ambiguity.
+    for row_hash in sorted(row_hashes):
+        digest.update(row_hash)
+    return {
+        "columns": ordered_columns,
+        "row_count": len(row_hashes),
+        "sha256": digest.hexdigest(),
+    }
+
+
+def inspect_database(path: Path, *, hash_affected_rows: bool = False) -> dict[str, object]:
+    """Read schema and optional row fingerprints; never modify the database."""
     database = path.resolve(strict=True)
     if not database.is_file():
         raise ValueError("Database path is not a regular file")
@@ -113,6 +154,17 @@ def inspect_database(path: Path) -> dict[str, object]:
             for table in sorted(AFFECTED_TABLES)
             if table in tables
         }
+        # Opt-in content evidence catches equal-count changes. Hash inside the
+        # same snapshot; sorting one digest per row can consume memory on large
+        # databases. Only compare digests for identical column sets.
+        affected_table_content_fingerprints = (
+            {
+                table: _table_content_fingerprint(connection, table)
+                for table in sorted(affected_table_row_counts)
+            }
+            if hash_affected_rows
+            else None
+        )
         # Later 1.1/1.6 migrations also reuse revision IDs. Record their
         # distinguishing objects even if the database carries an older stamp.
         # These are indicators for manual review, not complete schema proofs.
@@ -362,6 +414,8 @@ def inspect_database(path: Path) -> dict[str, object]:
         "observed_schema_fingerprint_algorithm": "sqlite-master-ddl-json-sha256-v1",
         "table_signatures": signatures,
         "affected_table_row_counts": affected_table_row_counts,
+        "affected_table_content_fingerprints": affected_table_content_fingerprints,
+        "affected_table_content_fingerprint_algorithm": "reefvision-sqlite-row-multiset-v1",
         "observed_later_migration_objects": sorted(later_objects),
         "review_event_check": review_check if groups["review_0038"] else None,
         "qc_event_scope_violations": qc_scope_violations,
@@ -382,9 +436,14 @@ def inspect_database(path: Path) -> dict[str, object]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("database", type=Path, help="Existing local SQLite database")
+    parser.add_argument(
+        "--hash-affected-rows",
+        action="store_true",
+        help="Hash affected table contents for preservation review (memory scales with row count)",
+    )
     args = parser.parse_args()
     try:
-        report = inspect_database(args.database)
+        report = inspect_database(args.database, hash_affected_rows=args.hash_affected_rows)
     except (OSError, ValueError, sqlite3.Error) as exc:
         print(json.dumps({"error": str(exc)}), file=sys.stderr)
         return 1
