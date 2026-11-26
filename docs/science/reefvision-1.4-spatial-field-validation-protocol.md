@@ -595,3 +595,20 @@ are in uncalibrated source units and do not establish anatomical tips,
 branch points, registration correspondences, growth direction or verified
 organism identity. They do not change geometry fingerprints, scale-only
 uncertainty, or the pending human-review requirement.
+
+Each selected endpoint component now reports source XYZ axis-aligned
+minimum/maximum coordinates (`source_axis_aligned_bounds_mesh_units`),
+physical XYZ spans (`axis_aligned_spans_m`), and per-axis scale-only bounds
+(`axis_aligned_span_scale_only_intervals_m`). Only selected nonzero edge
+endpoints contribute; other mesh vertices do not. Compute calibrated spans
+from source differences before rounding, not by subtracting rounded
+display coordinates. A genuine zero span has [0, 0] limits when scale
+uncertainty is supplied. A positive but unrepresentable span or interval
+is null with component and preview QC, never a fabricated zero.
+Compare crossing but disconnected selections, reversed/split selections,
+closed cycles, signed-zero aliases, and mixed-scale underflow using the
+standalone preview and repeated persisted typed graph. These orientation-
+dependent dimensions describe selected geometry in unregistered source
+axes, not anatomical length, colony size, or biological growth. The
+intervals quantify scale uncertainty only, not confidence or registration
+error. Human verification remains pending.
