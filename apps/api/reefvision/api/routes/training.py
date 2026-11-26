@@ -317,6 +317,13 @@ def _safe_terminal_log_text(payload: bytes) -> str:
             # Keep leading progress-bar clears but reject altered metrics.
             if value != "\x08" and before.strip():
                 return "[terminal-edited training log record omitted]"
+        # Non-CSI ESC sequences (e.g. character-set designation ESC ( B)
+        # are also stripped below. Reject them after printed content so they
+        # cannot silently join fragments of a scientific loss token.
+        legacy_escape = r"\x1b(?![\[\]PX^_])[ -/]*[0-~]"
+        for control in re.finditer(legacy_escape, record):
+            if record[: control.start()].strip():
+                return "[terminal-edited training log record omitted]"
         return record
 
     records = re.split(r"(\r\n|\r|\n)", text)
@@ -329,7 +336,7 @@ def _safe_terminal_log_text(payload: bytes) -> str:
     # or EOF. Removing only ESC[ leaves its digits appended to real losses
     # (for example 0.25 + ESC[31 becomes a fabricated 0.2531).
     text = re.sub(r"(?:\x1b\[|\x9b)[0-?]*[ -/]*(?=[\r\n]|$)", "", text)
-    text = re.sub(r"\x1b[ -/]*[@-_]", "", text)
+    text = re.sub(r"\x1b(?![\[\]PX^_])[ -/]*[0-~]", "", text)
     # Progress bars use carriage returns to overwrite the current line.
     # Show each update on a new line instead of allowing terminal rewrites.
     text = text.replace("\r\n", "\n").replace("\r", "\n")
