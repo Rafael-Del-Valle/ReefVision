@@ -217,16 +217,32 @@ def test_streamline_preview_rejects_mixed_scientific_identity_or_qc(
         json={"records": records},
     )
     assert created.status_code == 201, created.text
+    request = {
+        "scientific_record_ids": [item["id"] for item in created.json()["items"]],
+        "seeds": [{"latitude": 0, "longitude": 0}],
+        "max_steps": 2,
+    }
     response = client.post(
         f"/api/v1/projects/{project['id']}/current-field/streamlines/preview",
-        json={
-            "scientific_record_ids": [item["id"] for item in created.json()["items"]],
-            "seeds": [{"latitude": 0, "longitude": 0}],
-            "max_steps": 2,
-        },
+        json=request,
     )
     assert response.status_code == 400, response.text
     assert diagnostic.lower() in response.json()["detail"].lower()
+
+    # The persistent analysis endpoint must enforce the same QC rules as
+    # the preview and leave no definition or result for rejected evidence.
+    base = f"/api/v1/projects/{project['id']}/environment/analyses"
+    saved = client.post(
+        f"{base}/current-streamline",
+        json={**request, "name": "Invalid current slice"},
+    )
+    assert saved.status_code == 400, saved.text
+    assert diagnostic.lower() in saved.json()["detail"].lower()
+    for collection in ("definitions", "results"):
+        page = client.get(f"{base}/{collection}")
+        assert page.status_code == 200, page.text
+        assert page.json()["total"] == 0
+        assert page.json()["items"] == []
 
 
 def test_streamline_preview_rejects_incomplete_component_grid(client) -> None:
