@@ -211,6 +211,44 @@ def _verify_requested_random_seed(parameters: dict[str, Any], actual: int | None
     )
 
 
+def _verify_requested_execution_policy(
+    parameters: dict[str, Any],
+    *,
+    device: str,
+    resource_limits: dict[str, Any],
+    has_validation: bool,
+    has_seed: bool,
+) -> None:
+    """Verify the saved graph's execution policy against the persisted run."""
+    requested_device = parameters.get("device", "auto")
+    _require(
+        isinstance(requested_device, str)
+        and bool(requested_device.strip())
+        and requested_device == requested_device.strip()
+        and requested_device == device,
+        "Effective pose device differs from saved workflow parameters",
+    )
+    requested_limits = parameters.get("resource_limits", {})
+    _require(
+        isinstance(requested_limits, dict)
+        and isinstance(resource_limits, dict)
+        and json.dumps(requested_limits, sort_keys=True)
+        == json.dumps(resource_limits, sort_keys=True),
+        "Effective pose resource limits differ from saved workflow parameters",
+    )
+    require_validation = parameters.get("require_validation_dataset", False)
+    _require(
+        type(require_validation) is bool and (not require_validation or has_validation),
+        "Saved pose workflow validation requirement was not fulfilled",
+    )
+    mode = parameters.get("initialization_mode", "auto")
+    _require(
+        isinstance(mode, str)
+        and mode in ("auto", "registered_model" if has_seed else "random"),
+        "Saved pose workflow initialization policy differs from the executed run",
+    )
+
+
 def _verify_database_revision(connection: Any, api_dir: Path) -> tuple[str, int, str]:
     """Require one linear migration chain and record its exact source identity."""
     from alembic.config import Config
@@ -495,6 +533,13 @@ def inspect(
                 has_validation=validation_id is not None,
             )
             _verify_requested_random_seed(training_node.parameters_json, training.random_seed)
+            _verify_requested_execution_policy(
+                training_node.parameters_json,
+                device=training.device,
+                resource_limits=training.resource_limits_json,
+                has_validation=validation_id is not None,
+                has_seed="initial_model" in inputs,
+            )
             if validation_id is not None:
                 validation_dataset = _pose_dataset(
                     session,
