@@ -1685,6 +1685,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "geometric_nonmanifold_seam",
         "coincident_nonadjacent",
         "reverse_turn",
+        "cross_trace_unequal_overlap",
         "reused_geometric_segment",
         "display_chord_rounding",
         "display_segment_rounding",
@@ -1731,6 +1732,10 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "geometric_nonmanifold_seam": GEOMETRIC_NONMANIFOLD_SEAM_PARAMS,
         "coincident_nonadjacent": COINCIDENT_NONADJACENT_PARAMS,
         "reverse_turn": REVERSE_TURN_PARAMS,
+        "cross_trace_unequal_overlap": {
+            **REVERSE_TURN_PARAMS,
+            "surface_trace_vertex_paths": [[0, 1], [2, 1]],
+        },
         "reused_geometric_segment": REUSED_GEOMETRIC_SEGMENT_PARAMS,
         "display_chord_rounding": DISPLAY_CHORD_ROUNDING_PARAMS,
         "display_segment_rounding": DISPLAY_SEGMENT_ROUNDING_PARAMS,
@@ -1782,6 +1787,20 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert artifact["surface_edge_traces"] == standalone.json()["surface_edge_traces"]
     union = artifact["surface_trace_exact_edge_union"]
     assert union == standalone.json()["surface_trace_exact_edge_union"]
+    overlaps = case in {
+        "contact_overlap_closed_loop",
+        "reverse_turn",
+        "cross_trace_unequal_overlap",
+    }
+    assert union["unequal_collinear_overlap_pair_count"] == int(overlaps)
+    overlap_warning = "surface_trace_unequal_collinear_edges_overlap"
+    assert (overlap_warning in union["qc_warnings"]) is overlaps
+    assert (overlap_warning in artifact["qc_warnings"]) is overlaps
+    if case == "cross_trace_unequal_overlap":
+        assert union["source_length_mesh_units"] == pytest.approx(3.0)
+        assert union["length_m"] == pytest.approx(0.03)
+        assert union["length_scale_only_interval_m"] == pytest.approx([0.027, 0.033])
+        assert artifact["surface_trace_shared_geometric_edge_pairs"] == []
     topology = union["endpoint_graph_topology"]
     assert topology["human_review_verified"] is False
     assert topology["biological_validation_status"] == "not_verified_anatomical_centerline"
@@ -2233,6 +2252,7 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
     union = direct["surface_trace_exact_edge_union"]
     source_length = 9 + sqrt(13)
     assert union["distinct_nonzero_edge_count"] == 4
+    assert union["unequal_collinear_overlap_pair_count"] == 0
     chains = union["endpoint_graph_chains"]
     assert [chain["edge_count"] for chain in chains] == [3, 1]
     assert [chain["is_closed"] for chain in chains] == [True, False]
@@ -2420,3 +2440,27 @@ def test_chain_geometry_digest_is_source_bound_not_calibration_or_signed_zero() 
     params["vertices"] = [[0, 0, 0], [1, 0, 0], [0, 2, 0]]
     changed = measure_mesh_preview(**params)["surface_trace_exact_edge_union"]
     assert changed["endpoint_graph_chains"][0]["source_chain_geometry_sha256"] != expected
+
+
+def test_unequal_collinear_overlap_counts_distinct_pairs_in_three_dimensions() -> None:
+    # Along (1, 2, 3), intervals [0, 4], [1, 3], [2, 5] overlap pairwise.
+    # [5, 6] touches only the third. A parallel offset line does not overlap.
+    vertices = [[i, 2 * i, 3 * i] for i in range(7)]
+    vertices.extend([[0, 1, 0], [4, 9, 12], [0, 0, 10]])
+    paths = [[0, 4], [3, 1], [2, 5], [5, 6], [7, 8], [4, 0]]
+    faces = [[a, b, 9] for a, b in paths[:-1]]
+    params = {
+        **PARAMS,
+        "vertices": vertices,
+        "faces": faces,
+        "surface_path_vertex_pairs": None,
+        "surface_trace_vertex_paths": paths,
+    }
+    for scale in (0.01, 2.0):
+        result = measure_mesh_preview(**{**params, "meters_per_unit": scale})
+        union = result["surface_trace_exact_edge_union"]
+        assert union["unequal_collinear_overlap_pair_count"] == 3
+        assert union["distinct_nonzero_edge_count"] == 5
+        assert union["nonzero_edge_traversal_count"] == 6
+        assert union["source_length_mesh_units"] == pytest.approx(14 * sqrt(14))
+        assert union["human_review_verified"] is False
