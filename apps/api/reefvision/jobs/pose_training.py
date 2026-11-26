@@ -276,6 +276,7 @@ def _preflight_pose_zip_structure(archive: zipfile.ZipFile) -> None:
     # artifact, while case-only aliases behave differently on Windows.
     seen_paths: set[str] = set()
     file_paths: set[str] = set()
+    has_noncanonical_path = False
     windows_device_names = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
     for prefix in ("COM", "LPT"):
         for digit in "123456789¹²³":
@@ -289,7 +290,8 @@ def _preflight_pose_zip_structure(archive: zipfile.ZipFile) -> None:
             stat.S_IFDIR,
         ):
             raise ValidationError("Pose training export contains a special archive member")
-        relative = Path(item.filename.replace("\\", "/"))
+        normalized = item.filename.replace("\\", "/")
+        relative = Path(normalized)
         if relative.is_absolute() or ".." in relative.parts:
             raise ValidationError("Pose training export contains an unsafe archive path")
         # Windows ignores trailing dots and spaces in ordinary file paths.
@@ -308,8 +310,17 @@ def _preflight_pose_zip_structure(archive: zipfile.ZipFile) -> None:
         if not key or key in seen_paths:
             raise ValidationError("Pose training export contains a duplicate archive path")
         seen_paths.add(key)
+        # Path collapses dot components and repeated separators. Inventory and
+        # label preflight use raw prefixes, so accepting these aliases could
+        # hide frames until extraction, after the run directory is claimed.
+        raw_path = normalized.removesuffix("/") if item.is_dir() else normalized
+        if raw_path != "/".join(relative.parts):
+            has_noncanonical_path = True
         if not item.is_dir():
             file_paths.add(key)
+
+    if has_noncanonical_path:
+        raise ValidationError("Pose training export contains a noncanonical archive path")
 
     # A file cannot also be a parent directory, even when that directory
     # appears only implicitly in another ZIP entry. Check all paths before
