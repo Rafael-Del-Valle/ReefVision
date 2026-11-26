@@ -7,7 +7,7 @@ from typing import cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from reefvision.db.models import (
     DatasetVersion,
@@ -34,6 +34,11 @@ from reefvision.tests.test_workflow_review_queue_frozen_dataset_16 import (
         "producer_other_version",
         "producer_filtered_split",
         "producer_project_binding",
+        "consumer_nested_list",
+        "consumer_nested_object",
+        "consumer_null",
+        "consumer_boolean",
+        "consumer_duplicate",
         "producer_extra_output",
         "producer_missing_images_output",
         "producer_wrong_images_binding",
@@ -84,8 +89,8 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
     assert len(original_items) == expected_count
     assert all(item["review_state"] == "pending" for item in original_items)
 
-    if tamper == "producer_reordered_images":
-        # The two-image frozen study must produce identical standalone and
+    if tamper == "producer_reordered_images" or tamper.startswith("consumer_"):
+        # The frozen study must produce identical standalone and
         # executable saved-workflow scientific QC evidence before corruption.
         standalone = client.post(f"/api/v1/dataset-versions/{version_id}/review-queues", json={})
         assert standalone.status_code == 201, standalone.text
@@ -154,6 +159,22 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
             producer.parameters_json = {**producer.parameters_json, "split": "train"}
         elif tamper == "producer_project_binding":
             producer.input_artifact_ids_json = []
+        elif tamper.startswith("consumer_"):
+            qc_node = by_type["qc_review_queue"]
+            replacement = {
+                "consumer_nested_list": [dataset_artifact.id],
+                "consumer_nested_object": {"id": dataset_artifact.id},
+                "consumer_null": None,
+                "consumer_boolean": False,
+                "consumer_duplicate": project_artifact.id,
+            }[tamper]
+            session.execute(
+                update(WorkflowNodeRun)
+                .where(WorkflowNodeRun.id == qc_node.id)
+                .values(input_artifact_ids_json=[project_artifact.id, replacement])
+                .execution_options(synchronize_session=False)
+            )
+            session.expire(qc_node, ["input_artifact_ids_json"])
         elif tamper == "producer_extra_output":
             producer.output_artifact_ids_json = [
                 dataset_artifact.id,
@@ -271,6 +292,8 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
             if tamper in frozen_row_tampering
             else "dataset producer provenance"
         )
+        if tamper.startswith("consumer_"):
+            expected_failure = "saved input bindings are invalid"
         with pytest.raises(ValidationError, match=expected_failure):
             create_review_queue_workflow_artifact(
                 session,
