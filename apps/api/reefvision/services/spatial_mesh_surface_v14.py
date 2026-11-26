@@ -1138,19 +1138,6 @@ def measure_mesh_preview(
             collinear_source_total, scale, relative_scale_uncertainty
         )
         chains = _trace_endpoint_chains(adjacency, edge_lengths, scale, relative_scale_uncertainty)
-        # Map each canonical chain edge back to the original selections for
-        # review. Repeated traversal does not duplicate membership offsets.
-        for chain in chains:
-            chain_edges = [
-                frozenset((tuple(first), tuple(last)))
-                for first, last in pairwise(chain["source_waypoints_mesh_units"])
-            ]
-            memberships = []
-            for trace_index, trace_edges in enumerate(trace_edge_sets):
-                offsets = [index for index, edge in enumerate(chain_edges) if edge in trace_edges]
-                if offsets:
-                    memberships.append({"trace_index": trace_index, "chain_edge_offsets": offsets})
-            chain["selected_trace_memberships"] = memberships
         # Retain each original traversal, including direction and repetition.
         # The canonical chains partition the exact nonzero selected edges.
         chain_by_edge: dict[frozenset[_TracePoint], tuple[int, int, _TracePoint]] = {}
@@ -1174,6 +1161,37 @@ def measure_mesh_preview(
                         "follows_chain_orientation": start == chain_start,
                     }
                 )
+        # Derive membership and per-edge support from the indexed traversals,
+        # without rescanning every selected edge for every chain and trace.
+        for chain in chains:
+            edge_count = chain["edge_count"]
+            trace_offsets: dict[int, set[int]] = {}
+            forward_counts = [0] * edge_count
+            reverse_counts = [0] * edge_count
+            for traversal in chain["selected_trace_traversals"]:
+                offset = traversal["chain_edge_offset"]
+                trace_offsets.setdefault(traversal["trace_index"], set()).add(offset)
+                if traversal["follows_chain_orientation"]:
+                    forward_counts[offset] += 1
+                else:
+                    reverse_counts[offset] += 1
+            distinct_counts = [0] * edge_count
+            for offsets in trace_offsets.values():
+                for offset in offsets:
+                    distinct_counts[offset] += 1
+            chain["selected_trace_memberships"] = [
+                {"trace_index": trace_index, "chain_edge_offsets": sorted(offsets)}
+                for trace_index, offsets in sorted(trace_offsets.items())
+            ]
+            chain["selected_chain_edge_support"] = [
+                {
+                    "chain_edge_offset": offset,
+                    "distinct_trace_count": distinct_counts[offset],
+                    "forward_traversal_count": forward_counts[offset],
+                    "reverse_traversal_count": reverse_counts[offset],
+                }
+                for offset in range(edge_count)
+            ]
         chain_warnings = sorted({warning for chain in chains for warning in chain["qc_warnings"]})
         # A representable aggregate can conceal an unavailable individual
         # chain measurement. Surface-level QC must expose both.
