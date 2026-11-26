@@ -269,6 +269,7 @@ def create_review_queue_workflow_artifact(
     if (
         not isinstance(node.input_artifact_ids_json, list)
         or len(node.input_artifact_ids_json) != len(expected_input_ids)
+        or any(type(artifact_id) is not str for artifact_id in node.input_artifact_ids_json)
         or set(node.input_artifact_ids_json) != set(expected_input_ids)
     ):
         raise ValidationError("QC Review Queue saved input bindings are invalid")
@@ -355,9 +356,7 @@ def create_review_queue_workflow_artifact(
             "QC review-queue completed node is missing saved output binding or queue"
         )
     if saved_outputs and (
-        len(saved_outputs) != 1
-        or type(saved_outputs[0]) is not str
-        or existing is None
+        len(saved_outputs) != 1 or type(saved_outputs[0]) is not str or existing is None
     ):
         raise ValidationError("QC review-queue saved output binding is invalid")
     expected_scope_type = "dataset_version" if dataset_version_id else "project"
