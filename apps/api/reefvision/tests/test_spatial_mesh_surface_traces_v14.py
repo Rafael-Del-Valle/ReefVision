@@ -1785,7 +1785,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         if item["data_type"] == "mesh_measurement_preview"
     )
     artifact = record["payload_json"]
-    if case == "cross_trace_unequal_overlap":
+    if case in {"cross_trace_unequal_overlap", "segment_underflow"}:
         replay = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert replay.status_code == 202, replay.text
         assert process_workflow_run_job(
@@ -1816,6 +1816,9 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert (overlap_warning in union["qc_warnings"]) is overlaps
     assert (overlap_warning in artifact["qc_warnings"]) is overlaps
     corrected = union["collinear_overlap_corrected_union"]
+    assert artifact["qc_warnings"] == standalone.json()["qc_warnings"]
+    assert set(union["qc_warnings"]) <= set(artifact["qc_warnings"])
+    assert set(corrected["qc_warnings"]) <= set(artifact["qc_warnings"])
     assert corrected["human_review_verified"] is False
     assert corrected["biological_validation_status"] == "not_verified_anatomical_centerline"
     if not overlaps:
@@ -2502,3 +2505,26 @@ def test_unequal_collinear_overlap_counts_distinct_pairs_in_three_dimensions() -
         )
         assert corrected["human_review_verified"] is False
         assert union["human_review_verified"] is False
+
+
+@pytest.mark.parametrize("uncertainty", [None, 0.0, 1e-30, 0.1, 1.0])
+def test_trace_union_numeric_qc_is_visible_at_preview_level(uncertainty: float | None) -> None:
+    result = measure_mesh_preview(**{**PARAMS, "relative_scale_uncertainty": uncertainty})
+    union = result["surface_trace_exact_edge_union"]
+    corrected = union["collinear_overlap_corrected_union"]
+    assert corrected["length_m"] == pytest.approx(0.01 * (1 + sqrt(2)))
+    warnings = {
+        "surface_trace_exact_edge_union_interval_unrepresentable",
+        "surface_trace_collinear_union_interval_unrepresentable",
+    }
+    assert warnings.intersection(result["qc_warnings"]) == (
+        warnings if uncertainty == 1e-30 else set()
+    )
+    if uncertainty is None or uncertainty == 1e-30:
+        assert corrected["length_scale_only_interval_m"] is None
+    else:
+        length = corrected["length_m"]
+        assert corrected["length_scale_only_interval_m"] == pytest.approx(
+            [length * (1 - uncertainty), length * (1 + uncertainty)]
+        )
+    assert corrected["human_review_verified"] is False
