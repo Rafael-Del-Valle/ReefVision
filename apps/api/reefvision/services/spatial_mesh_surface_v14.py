@@ -923,15 +923,10 @@ def measure_mesh_preview(
     if trace_edge_sets:
         # Count each nonzero exact endpoint-pair once, even within a trace.
         # Unequal, partially overlapping segments are NOT geometrically merged.
-        edge_lengths = {
-            edge: Fraction(dist(min(edge), max(edge))) for edge in traversal_counts
-        }
+        edge_lengths = {edge: Fraction(dist(min(edge), max(edge))) for edge in traversal_counts}
         source_total = sum(edge_lengths.values(), Fraction(0))
         redundant_source_total = sum(
-            (
-                length * (traversal_counts[edge] - 1)
-                for edge, length in edge_lengths.items()
-            ),
+            (length * (traversal_counts[edge] - 1) for edge, length in edge_lengths.items()),
             Fraction(0),
         )
         traversal_count = sum(traversal_counts.values())
