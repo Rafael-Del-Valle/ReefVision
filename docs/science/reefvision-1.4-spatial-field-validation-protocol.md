@@ -632,3 +632,16 @@ weld components, interpret overlap counts as independent observations, or
 sum component lengths as an overlap-corrected biological measure. The
 global collinear union remains the overlap-corrected geometric measure;
 calibration and anatomical/identity verification remain unchanged.
+
+Each endpoint component additionally carries a nested
+`collinear_overlap_corrected_union` with its own source length, calibrated
+meters, scale-only limits and QC. In the example above, the two local
+corrected lengths are 4 and 2 source units (0.04 and 0.02 m at 0.01
+m/unit), while the global corrected length is only 4 units. At 10% scale
+uncertainty the local intervals are [0.036, 0.044] and [0.018, 0.022] m.
+A local positive length that underflows remains null and its QC is visible
+in the overall preview even when the global length is representable.
+Check standalone and twice-replayed typed workflow payloads and hashes.
+Local corrected lengths must not be summed as a global corrected length
+when components overlap. Neither local nor global lengths establish
+anatomical centerlines, independent replicates or verified identities.
