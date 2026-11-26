@@ -275,6 +275,75 @@ def test_qc_retry_rejects_equal_looking_boolean_parameters(
     assert items.json()["items"][0]["review_state"] == "pending"
 
 
+@pytest.mark.parametrize("shape", ["pairs", "duplicate_pairs", "empty_array", "null", "false"])
+def test_saved_qc_retry_rejects_nonobject_parameter_contract(
+    client: TestClient, shape: str
+) -> None:
+    project_id = create_project(client, "Malformed QC parameter contract")["id"]
+    assert len(import_one(client, project_id, filename="parameter-coral.png")["successful"]) == 1
+    payload = _payload(_execute(client, project_id, _weighted_graph(None)))
+    assert payload["priority_score_unit"] == "dimensionless"
+    assert payload["review_status"] == "requires_researcher_review"
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        node = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == payload["workflow_run_id"],
+                WorkflowNodeRun.node_type == "qc_review_queue",
+            )
+        )
+        source = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.workflow_run_id == payload["workflow_run_id"],
+                WorkflowArtifact.producer_port_id == "project",
+            )
+        )
+        assert node is not None and source is not None
+        original = dict(node.parameters_json)
+        pairs = [[key, value] for key, value in original.items()]
+        malformed: Any = {
+            "pairs": pairs,
+            "duplicate_pairs": [["signal_weights", True], *pairs],
+            "empty_array": [],
+            "null": None,
+            "false": False,
+        }[shape]
+        if shape in {"pairs", "duplicate_pairs"}:
+            assert dict(malformed) == original
+        session.execute(
+            update(WorkflowNodeRun)
+            .where(WorkflowNodeRun.id == node.id)
+            .values(parameters_json=malformed)
+            .execution_options(synchronize_session=False)
+        )
+        session.expire(node, ["parameters_json"])
+        assert type(node.parameters_json) is type(malformed)
+        parameters = {
+            **original,
+            "__workflow_run_id": payload["workflow_run_id"],
+            "__workflow_node_run_id": node.id,
+        }
+        with pytest.raises(ValidationError, match="invalid saved parameter object"):
+            create_review_queue_workflow_artifact(
+                session, app.state.settings, project_id, parameters, {"project": [source]}
+            )
+        session.rollback()
+        replay = create_review_queue_workflow_artifact(
+            session, app.state.settings, project_id, parameters, {"project": [source]}
+        )
+        assert replay[0]["payload"] == payload
+        session.rollback()
+
+    queues = client.get(f"/api/v1/projects/{project_id}/review-queues")
+    assert queues.status_code == 200, queues.text
+    assert [queue["id"] for queue in queues.json()] == [payload["queue_id"]]
+    items = client.get(f"/api/v1/review-queues/{payload['queue_id']}/items")
+    assert items.status_code == 200, items.text
+    assert len(items.json()["items"]) == 1
+    assert items.json()["items"][0]["review_state"] == "pending"
+
+
 @pytest.mark.parametrize("legacy", [True, False])
 def test_saved_qc_retry_preserves_original_weights_and_legacy_defaults(
     client: TestClient, legacy: bool
