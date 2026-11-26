@@ -2517,9 +2517,8 @@ def test_trace_union_numeric_qc_is_visible_at_preview_level(uncertainty: float |
         "surface_trace_exact_edge_union_interval_unrepresentable",
         "surface_trace_collinear_union_interval_unrepresentable",
     }
-    assert warnings.intersection(result["qc_warnings"]) == (
-        warnings if uncertainty == 1e-30 else set()
-    )
+    expected_warnings = warnings if uncertainty == 1e-30 else set()
+    assert warnings.intersection(result["qc_warnings"]) == expected_warnings
     if uncertainty is None or uncertainty == 1e-30:
         assert corrected["length_scale_only_interval_m"] is None
     else:
