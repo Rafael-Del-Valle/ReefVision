@@ -1271,6 +1271,25 @@ def measure_mesh_preview(
                 }
                 for offset in range(edge_count)
             ]
+        # Component-level provenance aggregates canonical chain support without
+        # treating overlapping selections as independent biological observations.
+        for component in components:
+            component_chains = [chains[index] for index in component["chain_indices"]]
+            component["selected_trace_indices"] = sorted(
+                {
+                    membership["trace_index"]
+                    for chain in component_chains
+                    for membership in chain["selected_trace_memberships"]
+                }
+            )
+            component["nonzero_edge_traversal_count"] = sum(
+                len(chain["selected_trace_traversals"]) for chain in component_chains
+            )
+            component["distinct_trace_edge_membership_count"] = sum(
+                len(membership["chain_edge_offsets"])
+                for chain in component_chains
+                for membership in chain["selected_trace_memberships"]
+            )
         chain_warnings = sorted({warning for chain in chains for warning in chain["qc_warnings"]})
         # A representable aggregate can conceal an unavailable individual
         # chain measurement. Surface-level QC must expose both.
