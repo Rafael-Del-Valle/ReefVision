@@ -656,3 +656,12 @@ lengths and scale-only limits by sqrt(14) relative to the axis-aligned
 reference. Verify standalone results and two saved typed workflow runs
 with identical artifacts and hashes. Repetition supplies no additional
 independent biological evidence and does not establish identity or anatomy.
+
+The exact-edge union and top-level preview QC must emit
+`surface_trace_cross_component_collinear_overlap` once when positive-length
+collinear overlaps occur between different endpoint components. The warning
+is distinct from the general overlap warning, and is absent for local-only
+overlaps, endpoint contact, and noncollinear interior crossings. Check it in
+standalone and twice-replayed typed workflow artifacts. It prohibits adding
+local corrected lengths as if they represented disjoint spatial support;
+it does not establish any biological identity or independent replicate.
