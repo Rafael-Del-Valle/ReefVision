@@ -6,6 +6,7 @@ Never infers applied migrations from alembic_version alone. Never changes a DB.
 import argparse
 import hashlib
 import json
+import re
 import sqlite3
 from pathlib import Path
 
@@ -41,6 +42,31 @@ def _canonical_stamp_primary_key(connection: sqlite3.Connection) -> bool:
         ) if row[5]
     ]
     return len(keys) == 1 and keys[0][1:5] == (0, "version_num", 0, "BINARY")
+
+
+def _sqlite_stamp_has_check(ddl: str) -> bool:
+    """Find CHECK keywords, including those missed by SQLite reflection."""
+    tokens = re.finditer(
+        r"--[^\n]*|/\*.*?\*/|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|"
+        r"\x60(?:\x60\x60|[^\x60])*\x60|\[[^\]]*\]|[A-Za-z0-9_$\u0080-\U0010ffff]+",
+        ddl,
+        re.DOTALL,
+    )
+    return any(token.group().upper() == "CHECK" for token in tokens)
+
+
+def _stamp_extra_constraints(connection: sqlite3.Connection) -> str | None:
+    ddl = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'alembic_version'"
+    ).fetchone()
+    if ddl is not None and isinstance(ddl[0], str) and _sqlite_stamp_has_check(ddl[0]):
+        return "alembic_version_checks_require_review"
+    if connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'index' "
+        "AND tbl_name = 'alembic_version' COLLATE NOCASE AND sql IS NOT NULL LIMIT 1"
+    ).fetchone() is not None:
+        return "alembic_version_indexes_require_review"
+    return None
 
 
 def inspect(path: Path) -> dict:
@@ -156,6 +182,10 @@ def inspect(path: Path) -> dict:
                     alembic_stamp_constraint_error = (
                         "alembic_version_foreign_keys_require_review"
                     )
+                # A clean current stamp can still be constrained by a CHECK
+                # or an expression/partial index that prevents the next stamp.
+                if alembic_stamp_constraint_error is None:
+                    alembic_stamp_constraint_error = _stamp_extra_constraints(connection)
                 # Do not sort SQLite mixed-type values or serialize raw BLOBs:
                 # malformed stamps must remain structured, JSON-safe evidence.
                 raw_stamps = [row[0] for row in connection.execute(
