@@ -742,10 +742,11 @@ def test_legacy_missing_import_size_does_not_invent_metadata_conflict() -> None:
     assert "identical_imported_source_payload_metadata_inconsistent" not in result["qc_warnings"]
 
 
+@pytest.mark.parametrize("reexport", [False, True])
 def test_reused_imported_original_qc_survives_saved_typed_workflow(
-    client: TestClient,
+    client: TestClient, reexport: bool
 ) -> None:
-    """Standalone and persisted graphs report identical duplicate-source QC."""
+    """Standalone and saved graphs withhold change for reused or rescaled re-export bytes."""
     project_id = str(create_project(client, "Repeated original 3D survey QC")["id"])
     base = f"/api/v1/projects/{project_id}"
     original = "# source survey\nv 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n"
@@ -763,6 +764,7 @@ def test_reused_imported_original_qc_survives_saved_typed_workflow(
     }
     late = {
         **common,
+        "obj_text": original.replace("# source survey", "# re-export") if reexport else original,
         "meters_per_unit": 2,
         "observation_id": "late",
         "observed_at_utc": "2026-10-02T12:00:00Z",
@@ -778,17 +780,22 @@ def test_reused_imported_original_qc_survives_saved_typed_workflow(
     )
     assert standalone.status_code == 200, standalone.text
     expected = standalone.json()
-    assert "identical_imported_source_payload_reused_across_observations" in expected["qc_warnings"]
+    provenance = expected["provenance"]
+    if reexport:
+        assert "longitudinal_change_withheld_rescaled_reexported_geometry" in expected["qc_warnings"]
+        assert provenance["longitudinal_change_withheld_due_to_rescaled_reexported_geometry"]
+        assert not provenance["longitudinal_change_withheld_due_to_reused_source_payload"]
+    else:
+        assert "longitudinal_change_withheld_reused_imported_source_payload" in expected["qc_warnings"]
+        assert provenance["longitudinal_change_withheld_due_to_reused_source_payload"]
     assert "identical_imported_source_payload_metadata_inconsistent" not in expected["qc_warnings"]
-    assert "longitudinal_change_withheld_reused_imported_source_payload" in expected["qc_warnings"]
-    assert (
-        expected["provenance"]["longitudinal_change_withheld_due_to_reused_source_payload"] is True
-    )
     assert expected["after_surface_area_m2"] == pytest.approx(
         4 * expected["before_surface_area_m2"]
     )
-    assert expected["provenance"]["acquisition_lineage_status"] == "reused_imported_source_payload"
-    assert expected["provenance"]["independent_acquisition_verified"] is False
+    status = "different_payloads_identical_geometry" if reexport else "reused_imported_source_payload"
+    assert provenance["acquisition_lineage_status"] == status
+    assert provenance["independent_acquisition_verified"] is False
+    assert provenance["scale_uncertainty_only"] is False
     assert expected["delta_surface_area_m2"] is None
     assert expected["average_surface_area_change_m2_per_day"] is None
     assert expected["provenance"]["specimen_identity_verified"] is False
@@ -852,6 +859,38 @@ def test_reused_imported_original_qc_survives_saved_typed_workflow(
         hashes.append(comparisons[0]["payload_sha256"])
     assert len(hashes[0]) == 64
     assert hashes[0] == hashes[1]
+
+
+@pytest.mark.parametrize(
+    ("revision", "expected_metadata_warning", "expected_geometry_warning"),
+    [
+        ({}, False, False),
+        ({"source_payload_size_bytes": 1}, True, False),
+        ({"source_format": "ply_ascii"}, True, False),
+        ({"source_payload_size_bytes": None}, False, False),
+        ({"geometry_sha256": "f" * 64}, False, True),
+    ],
+)
+def test_reused_legacy_asset_flags_known_lineage_conflicts(
+    revision: dict[str, object],
+    expected_metadata_warning: bool,
+    expected_geometry_warning: bool,
+) -> None:
+    before = _imported_observation("early", 2)
+    after = _imported_observation("late", 2)
+    for record in (before, after):
+        record["provenance"]["spatial_source_asset_id"] = "11111111-1111-4111-8111-111111111111"
+        record["provenance"].pop("source_payload_sha256")
+    after["provenance"].update(revision)
+    result = compare_mesh_observations(before, after)
+    warnings = result["qc_warnings"]
+    metadata_conflict = "reused_spatial_source_asset_metadata_inconsistent" in warnings
+    geometry_conflict = "reused_spatial_source_asset_geometry_inconsistent" in warnings
+    assert metadata_conflict == expected_metadata_warning
+    assert geometry_conflict == expected_geometry_warning
+    assert result["provenance"]["acquisition_lineage_status"] == "reused_spatial_source_asset"
+    assert result["provenance"]["independent_acquisition_verified"] is False
+    assert result["delta_surface_area_m2"] is None
 
 
 def test_project_asset_reimport_changes_versioned_review_digest_without_changing_bytes() -> None:
