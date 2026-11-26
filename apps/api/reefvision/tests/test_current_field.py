@@ -231,3 +231,31 @@ def test_reused_field_preserves_independent_seed_and_step_limits(east, north):
         else:
             assert reused.termination == "max_steps"
             assert reused.length_m <= 2 * step * math.hypot(east, north)
+
+
+def test_stationary_rk4_reuses_accepted_endpoint_without_resampling(monkeypatch):
+    """One initial sample and four per accepted step, even in a nonuniform field."""
+    field = CurrentField(
+        latitudes=(-1.0, 1.0),
+        longitudes=(-1.0, 1.0),
+        east=((0.5, 2.0), (1.0, 3.0)),
+        north=((0.2, 0.4), (0.6, 0.8)),
+    )
+    sample = CurrentField.sample
+    calls = []
+
+    def counted_sample(self, latitude, longitude):
+        calls.append((latitude, longitude))
+        return sample(self, latitude, longitude)
+
+    monkeypatch.setattr(CurrentField, "sample", counted_sample)
+    result = integrate_streamline(field, 0.0, 0.0, step_seconds=60, max_steps=10)
+    assert result.termination == "max_steps"
+    assert len(result.points) == 11
+    assert len(calls) == 41
+    for point in result.points:
+        velocity = sample(field, point.latitude, point.longitude)
+        assert velocity is not None
+        assert point.speed_m_s == math.hypot(*velocity)
+    assert result.points[-1].longitude > 0
+    assert result.points[-1].latitude > 0

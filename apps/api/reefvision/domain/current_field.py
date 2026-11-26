@@ -231,10 +231,11 @@ def integrate_streamline(
     lat, lon = latitude, longitude
     h = min(step_seconds, field._maximum_step_seconds)
     try:
-        first = _velocity(field, lat, lon)
-        points.append(StreamlinePoint(lat, lon, first[2]))
+        k1 = _velocity(field, lat, lon)
+        points.append(StreamlinePoint(lat, lon, k1[2]))
         for _ in range(max_steps):
-            k1 = _velocity(field, lat, lon)
+            # The accepted endpoint is the next step's first RK4 stage.
+            # The immutable stationary field makes resampling it redundant.
             if k1[2] <= stagnation_m_s:
                 raise _Stop("stagnation")
             if not isfinite(h) or h <= 0:
@@ -253,6 +254,7 @@ def integrate_streamline(
             lat, lon = next_lat, next_lon
             length += distance
             points.append(StreamlinePoint(lat, lon, endpoint[2]))
+            k1 = endpoint
         return Streamline(tuple(points), "max_steps", length)
     except _Stop as stop:
         return Streamline(tuple(points), stop.reason, length)
