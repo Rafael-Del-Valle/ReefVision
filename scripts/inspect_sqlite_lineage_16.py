@@ -66,6 +66,10 @@ def _stamp_extra_constraints(connection: sqlite3.Connection) -> str | None:
         "AND tbl_name = 'alembic_version' COLLATE NOCASE AND sql IS NOT NULL LIMIT 1"
     ).fetchone() is not None:
         return "alembic_version_indexes_require_review"
+    # A table-level UNIQUE with a different collation creates an implicit
+    # index whose sqlite_master.sql is NULL. It is not the Alembic PK.
+    if any(row[3] == "u" for row in connection.execute("PRAGMA index_list(alembic_version)")):
+        return "alembic_version_indexes_require_review"
     return None
 
 
