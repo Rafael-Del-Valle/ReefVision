@@ -149,6 +149,13 @@ def inspect_database(path: Path, *, hash_affected_rows: bool = False) -> dict[st
         schema_sha256 = hashlib.sha256(
             json.dumps(schema_rows, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
+        # Full integrity_check also verifies indexes against table contents;
+        # foreign_key_check and matching row fingerprints cannot detect a
+        # damaged or mismatched index. Keep diagnostics private and bounded
+        # (SQLite limits integrity_check output by default).
+        integrity_rows = connection.execute("PRAGMA integrity_check").fetchall()
+        integrity_ok = integrity_rows == [("ok",)]
+        integrity_diagnostic_count = 0 if integrity_ok else len(integrity_rows)
         # A revision marker can survive corrupted cross-table relationships.
         # Check declared FKs even if the original writer disabled enforcement.
         # Aggregate offending child/parent table pairs without exposing row IDs
@@ -389,6 +396,8 @@ def inspect_database(path: Path, *, hash_affected_rows: bool = False) -> dict[st
             "Later migration objects require manual lineage review: "
             + ", ".join(sorted(later_objects))
         )
+    if not integrity_ok:
+        issues.append("SQLite integrity_check failed; database requires manual review")
     if foreign_key_violations:
         issues.append(f"Database has {foreign_key_violations} foreign-key violations")
     if qc_event_type_violations:
@@ -458,6 +467,8 @@ def inspect_database(path: Path, *, hash_affected_rows: bool = False) -> dict[st
         "qc_required_columns_not_null": qc_required_columns_not_null,
         "qc_event_foreign_keys_valid": qc_event_foreign_keys_valid,
         "qc_event_primary_key_valid": qc_event_primary_key_valid,
+        "sqlite_integrity_check_ok": integrity_ok,
+        "sqlite_integrity_check_diagnostic_count": integrity_diagnostic_count,
         "foreign_key_violations": foreign_key_violations,
         "foreign_key_violation_sources": foreign_key_violation_sources,
         "classification": classification,
