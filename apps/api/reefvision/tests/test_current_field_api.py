@@ -115,6 +115,46 @@ def test_streamline_preview_uses_one_compatible_scientific_record_slice(
     assert incomplete.status_code == 400, incomplete.text
     assert "complete paired component grid" in incomplete.json()["detail"]
 
+    # A distinct observation ID is not sufficient to distinguish two values
+    # for the same coordinate and velocity component. Do not silently choose
+    # one or average them, even if every required grid cell is present.
+    conflicting = client.post(
+        f"/api/v1/projects/{project['id']}/scientific-records",
+        json={"records": [{**records[0], "value": 2.0}]},
+    )
+    assert conflicting.status_code == 201, conflicting.text
+    conflicting_id = conflicting.json()["items"][0]["id"]
+    assert conflicting_id not in ids
+    conflicting_ids = [*ids, conflicting_id]
+    conflict = client.post(
+        f"/api/v1/projects/{project['id']}/current-field/streamlines/preview",
+        json={**request, "scientific_record_ids": conflicting_ids},
+    )
+    assert conflict.status_code == 400, conflict.text
+    assert "duplicate component records" in conflict.json()["detail"]
+
+    base = f"/api/v1/projects/{project['id']}/environment/analyses"
+    for invalid_ids, diagnostic in (
+        ([*ids, ids[0]], "identifiers must be unique"),
+        (ids[:-1], "complete paired component grid"),
+        (conflicting_ids, "duplicate component records"),
+    ):
+        rejected = client.post(
+            f"{base}/current-streamline",
+            json={
+                **request,
+                "name": "Invalid grid",
+                "scientific_record_ids": invalid_ids,
+            },
+        )
+        assert rejected.status_code == 400, rejected.text
+        assert diagnostic in rejected.json()["detail"]
+    for collection in ("definitions", "results"):
+        page = client.get(f"{base}/{collection}")
+        assert page.status_code == 200, page.text
+        assert page.json()["total"] == 0
+        assert page.json()["items"] == []
+
     saved = client.post(
         f"/api/v1/projects/{project['id']}/environment/analyses/current-streamline",
         json={"name": "Pinned surface flow", **request},
