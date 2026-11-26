@@ -48,3 +48,25 @@ atomicity for concurrent workflow workers. The independent 1.1/1.6 Alembic
 revision-0038 conflict, exact-head CI, native Windows MSI upgrade/rollback,
 installed GUI and representative biological-data validation remain release
 blockers. No merge, tag, deployment or pretrained model download is authorized.
+
+## Manual regeneration scientific configuration gate — 2026-11-26
+
+Manual regeneration now refuses non-object configuration/checksum JSON and
+translates invalid persisted scoring parameters into a domain validation
+error rather than an uncontrolled server exception. Versioned source queues
+must pass the same immutable scientific snapshot validation as saved workflow
+replay before generating a new queue. A missing weight vector, omitted v3
+threshold, or inconsistent QC source cannot silently become a default or
+different scientific configuration. Legacy unversioned snapshots retain their
+previous default behavior when the configuration is a valid object and its
+parameters validate.
+
+Five standalone corruption/refusal/recovery cases and an additional persisted
+workflow regeneration refusal exercise preservation of the original queue,
+review state, lineage, exact replay and reviewer comments. This is an existing
+QC operation, not a new node or approval mechanism. The original scientific
+evidence and dimensionless typed workflow output remain unchanged. Local
+isolated Pydantic/configuration probes reproduced the unsafe paths; full
+repository tests and exact-head CI are unverified. Integrated migration
+reconciliation, representative biological acceptance and genuine installed
+Windows MSI/GUI validation remain release blockers.
