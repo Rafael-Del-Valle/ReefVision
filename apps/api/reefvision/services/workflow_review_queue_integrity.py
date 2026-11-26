@@ -437,7 +437,8 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
         if not isfinite(total_weight) or total_weight <= 0:
             raise invalid
     scoring_digest = checksums.get("scoring_provenance_sha256")
-    if scoring_digest is not None:
+    # Historical snapshots may omit a digest; explicit null is not a digest.
+    if "scoring_provenance_sha256" in checksums:
         scoring_payload: dict[str, Any] = {
             "formula_id": queue.formula_id,
             "formula_version": queue.formula_version,
@@ -603,7 +604,7 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
     # scientific explanations as well as score/scope; mutable review state,
     # assignments and comments are intentionally excluded.
     item_evidence_digest = checksums.get("item_evidence_sha256")
-    if item_evidence_digest is not None and (
+    if "item_evidence_sha256" in checksums and (
         not isinstance(item_evidence_digest, str)
         or len(item_evidence_digest) != 64
         or any(char not in "0123456789abcdef" for char in item_evidence_digest)
