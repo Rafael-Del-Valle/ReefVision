@@ -32,6 +32,18 @@ def _fingerprint_matches(before: object, after: object) -> bool:
     )
 
 
+def _metric_projection_matches(before: dict, after: dict, table: str, count: object) -> bool:
+    baseline = before.get("metric_0039_content_fingerprints")
+    candidate = after.get("metric_0039_content_fingerprints")
+    if not isinstance(baseline, dict) or not isinstance(candidate, dict):
+        return False
+    original = baseline.get(table)
+    return (
+        _fingerprint_matches(original, candidate.get(table))
+        and original.get("row_count") == count
+    )
+
+
 def compare_reports(before: dict, after: dict) -> dict:
     issues = []
     table_results = {}
@@ -110,6 +122,15 @@ def compare_reports(before: dict, after: dict) -> dict:
                     and _fingerprint_matches(fingerprint, projections.get(table))
                 ):
                     status = "original_metric_columns_match"
+            # Equal full hashes can describe two identically incomplete metric
+            # tables. Require the inspector's fixed 0039 projection even when
+            # no columns were added, so missing original scientific fields
+            # cannot be mistaken for preservation.
+            if table in {"computed_metric_definitions", "computed_metric_results"} and not (
+                _metric_projection_matches(before, after, table, counts[table])
+            ):
+                status = "not_preserved_or_not_comparable"
+                issues.append(f"{table}: original 0039 metric projection not established")
             table_results[table] = status
             if status == "not_preserved_or_not_comparable":
                 issues.append(f"{table}: retained content not established")
