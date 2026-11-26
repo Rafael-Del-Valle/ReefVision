@@ -166,7 +166,26 @@ function Wait-BackendPort(
         }
         Start-Sleep -Milliseconds 250
     }
-    throw "Backend did not publish its port within $Seconds seconds during $LaunchStage (desktop PID $($DesktopProcess.Id)): $Path"
+    # A live desktop can still be blocked on frozen sidecar imports or startup.
+    # Keep the deadline and failure intact; expose bounded diagnostics from the
+    # isolated acceptance logs, even when the desktop has not exited.
+    $startupLogTails = @(
+        foreach ($startupLog in @($BackendLogPath, (Join-Path (Split-Path -Parent $BackendLogPath) 'api.log'))) {
+            try {
+                if (Test-Path -LiteralPath $startupLog -PathType Leaf) {
+                    $tail = (Get-Content -LiteralPath $startupLog -Tail 20 -ErrorAction Stop | Out-String).TrimEnd()
+                    if (-not $tail) { $tail = '(empty)' }
+                } else {
+                    $tail = '(unavailable)'
+                }
+                "$(Split-Path -Leaf $startupLog):`n$tail"
+            } catch {
+                "$(Split-Path -Leaf $startupLog): (could not read diagnostic log)"
+            }
+        }
+    )
+    $startupDiagnostics = $startupLogTails -join "`n"
+    throw "Backend did not publish its port within $Seconds seconds during $LaunchStage (desktop PID $($DesktopProcess.Id)): $Path`nStartup log tails:`n$startupDiagnostics"
 }
 function Start-AcceptanceDesktop {
     $BackendPortPath = Join-Path $DataRoot 'runtime\backend-port.txt'
