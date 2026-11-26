@@ -15,7 +15,7 @@ from reefvision.db.models import (
     Project,
     VideoAsset,
 )
-from reefvision.schemas.review_queues import parse_workflow_review_weights
+from reefvision.schemas.review_queues import ReviewQueueCreateRequest, parse_workflow_review_weights
 from reefvision.schemas.workflow_graphs import (
     WorkflowEdge,
     WorkflowGraphIssue,
@@ -331,6 +331,20 @@ class WorkflowGraphService:
                     "invalid_qc_signal_weights",
                     "QC Review Queue weights must use recognized nonnegative finite "
                     "signals with a finite positive total",
+                    node_id=node_id,
+                )
+            )
+
+        try:
+            ReviewQueueCreateRequest(
+                review_below_confidence=parameters.get("review_below_confidence")
+            )
+        except ValueError:
+            issues.append(
+                self._issue(
+                    "error",
+                    "invalid_qc_confidence_threshold",
+                    "QC Review Queue confidence threshold must be a number from zero to one",
                     node_id=node_id,
                 )
             )
