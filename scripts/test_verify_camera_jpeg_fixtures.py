@@ -140,6 +140,56 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 [],
             )
 
+    def test_decoded_manifest_requires_valid_source_and_display_geometry(self) -> None:
+        """Matching malformed inventories cannot certify camera pixel geometry."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            good = {
+                "path": "portrait.JPEG",
+                "bytes": 42,
+                "sha256": "a" * 64,
+                "jpeg_boundary_markers": True,
+                "jpeg_decodable": True,
+                "jpeg_pixel_width": 12,
+                "jpeg_pixel_height": 8,
+                "jpeg_display_width": 8,
+                "jpeg_display_height": 12,
+                "jpeg_exif_orientation": 6,
+            }
+            baseline = {"root": str(root), "errors": [], "files": [good]}
+            self.assertEqual(MODULE.compare_source_manifest(root, [good], baseline), [])
+            cases = (
+                {key: value for key, value in good.items() if key != "jpeg_pixel_width"},
+                {key: value for key, value in good.items() if key != "jpeg_exif_orientation"},
+                {**good, "jpeg_pixel_width": True},
+                {**good, "jpeg_pixel_height": 0},
+                {**good, "jpeg_display_height": -1},
+                {**good, "jpeg_display_width": 12},
+                {**good, "jpeg_exif_orientation": True},
+                {**good, "jpeg_exif_orientation": 9},
+                {**good, "jpeg_exif_orientation": None},
+            )
+            for malformed in cases:
+                with self.subTest(malformed=malformed):
+                    self.assertEqual(
+                        MODULE.compare_source_manifest(
+                            root, [malformed], {**baseline, "files": [malformed]}
+                        ),
+                        ["baseline JPEG manifest contains invalid decoded geometry evidence"],
+                    )
+            neutral = {
+                **good,
+                "jpeg_exif_orientation": None,
+                "jpeg_display_width": 12,
+                "jpeg_display_height": 8,
+            }
+            self.assertEqual(
+                MODULE.compare_source_manifest(
+                    root, [neutral], {**baseline, "files": [neutral]}
+                ),
+                [],
+            )
+
     def test_comparator_rejects_untrusted_current_integrity_records(self) -> None:
         """A malformed replay cannot be accepted or crash the camera comparator."""
         with tempfile.TemporaryDirectory() as directory:

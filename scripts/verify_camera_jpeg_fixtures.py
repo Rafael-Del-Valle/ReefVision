@@ -672,6 +672,28 @@ def inventory(root: Path, *, verify_decode: bool = False) -> tuple[list[dict[str
 
 
 
+def _valid_decoded_geometry(entry: dict[str, object]) -> bool:
+    """Require actual raw/display dimensions before accepting decode evidence."""
+    width = entry.get("jpeg_pixel_width")
+    height = entry.get("jpeg_pixel_height")
+    display_width = entry.get("jpeg_display_width")
+    display_height = entry.get("jpeg_display_height")
+    if any(
+        type(value) is not int or value <= 0
+        for value in (width, height, display_width, display_height)
+    ):
+        return False
+    if "jpeg_exif_orientation" not in entry:
+        return False
+    orientation = entry["jpeg_exif_orientation"]
+    if orientation is not None and (
+        type(orientation) is not int or orientation not in range(1, 9)
+    ):
+        return False
+    expected = (height, width) if orientation in (5, 6, 7, 8) else (width, height)
+    return (display_width, display_height) == expected
+
+
 def compare_source_manifest(
     root: Path, current: list[dict[str, object]], baseline: object
 ) -> list[str]:
@@ -720,6 +742,8 @@ def compare_source_manifest(
         if "jpeg_decodable" in entry:
             if entry["jpeg_decodable"] is not True:
                 return ["baseline JPEG manifest contains unverified pixel-decode evidence"]
+            if not _valid_decoded_geometry(entry):
+                return ["baseline JPEG manifest contains invalid decoded geometry evidence"]
             expected_decoded[relative] = entry
 
     # Do not let a duplicated current path overwrite an earlier record.
