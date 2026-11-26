@@ -188,9 +188,11 @@ def _verify_database_revision(connection: Any, api_dir: Path) -> tuple[str, int,
 
 def _verify_database_integrity(connection: Any) -> None:
     """Check the actual saved database in the pinned read-only snapshot."""
+    # quick_check skips index/table consistency; scientific acceptance must
+    # reject mismatched indexes even if all declared foreign keys are valid.
     _require(
-        connection.exec_driver_sql("PRAGMA quick_check").scalars().all() == ["ok"],
-        "Saved database failed SQLite quick_check",
+        connection.exec_driver_sql("PRAGMA integrity_check").scalars().all() == ["ok"],
+        "Saved database failed SQLite integrity_check",
     )
     _require(
         connection.exec_driver_sql("PRAGMA foreign_key_check").first() is None,
@@ -1045,7 +1047,9 @@ def inspect(
                 "evidence_schema_version": "saved-pose-workflow-audit-0001",
                 "verified_database_alembic_revision": database_revision,
                 "source_migration_count": migration_count,
+                # Retain the legacy field: full integrity_check subsumes quick_check.
                 "verified_database_quick_check": "ok",
+                "verified_database_integrity_check": "ok",
                 "verified_database_foreign_key_violations": 0,
                 "source_migration_lineage_sha256": migration_sha256,
                 "audit_runtime": _audit_runtime(),
