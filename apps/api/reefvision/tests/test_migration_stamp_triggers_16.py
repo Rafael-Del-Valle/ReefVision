@@ -199,3 +199,77 @@ def test_revision_foreign_key_preservation_across_preflight_and_inspector(
             assert db.execute("SELECT revision FROM observations").fetchone() == ("0037",)
             assert db.execute("SELECT id FROM specimens").fetchone() == ("0037",)
             assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+@pytest.mark.parametrize(
+    ("declaration", "error"),
+    [
+        ("version_num TEXT", None),
+        ("version_num TEXT NOT NULL PRIMARY KEY", None),
+        ("version_num VARCHAR(32) NOT NULL PRIMARY KEY", None),
+        ("version_num TEXT COLLATE BINARY NOT NULL PRIMARY KEY", None),
+        ("version_num TEXT NOT NULL PRIMARY KEY, UNIQUE(version_num)", None),
+        ("version_num TEXT NOT NULL PRIMARY KEY, UNIQUE(version_num COLLATE BINARY)", None),
+        ("version_num TEXT COLLATE NOCASE NOT NULL PRIMARY KEY", "primary key"),
+        ("version_num TEXT COLLATE RTRIM NOT NULL PRIMARY KEY", "primary key"),
+        ("version_num TEXT NOT NULL PRIMARY KEY DESC", "primary key"),
+        ("version_num TEXT NOT NULL, PRIMARY KEY(version_num DESC)", "primary key"),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY, UNIQUE(version_num COLLATE NOCASE)",
+            "implicit UNIQUE index",
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY, UNIQUE(version_num COLLATE RTRIM)",
+            "implicit UNIQUE index",
+        ),
+        (
+            'version_num TEXT NOT NULL PRIMARY KEY, CONSTRAINT "private coral data" '
+            "UNIQUE(version_num COLLATE NOCASE)",
+            "implicit UNIQUE index",
+        ),
+    ],
+)
+def test_stamp_index_semantics_block_unsafe_desktop_startup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, declaration: str, error: str | None
+) -> None:
+    path = tmp_path / "research.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute(f"CREATE TABLE alembic_version ({declaration})")
+        db.execute("INSERT INTO alembic_version VALUES ('0037')")
+        db.execute("CREATE TABLE observations (note TEXT)")
+        db.execute("INSERT INTO observations VALUES ('private coral data')")
+        assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+
+    original = path.read_bytes()
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    try:
+        with engine.connect() as connection:
+            if error is None:
+                assert_compatible_revision_0038(connection)
+            else:
+                for _ in range(2):
+                    with pytest.raises(RuntimeError, match=f"version-table {error}") as exc:
+                        assert_compatible_revision_0038(connection)
+                    assert "private coral data" not in str(exc.value)
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0037"
+            assert connection.scalar(text("SELECT note FROM observations")) == "private coral data"
+    finally:
+        engine.dispose()
+    assert path.read_bytes() == original
+
+    if error is not None:
+        settings = Settings(data_dir=tmp_path, database_url=f"sqlite:///{path.as_posix()}")
+        settings.ensure_directories()
+
+        def unexpected_upgrade(*args: object, **kwargs: object) -> None:
+            pytest.fail("Unsafe revision index must not reach Alembic upgrade")
+
+        monkeypatch.setattr("reefvision.desktop.command.upgrade", unexpected_upgrade)
+        for _ in range(2):
+            with pytest.raises(RuntimeError, match=f"version-table {error}"):
+                run_pending_migrations(settings)
+        with sqlite3.connect(path) as db:
+            assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037",)
+            assert db.execute("SELECT note FROM observations").fetchone() == (
+                "private coral data",
+            )
