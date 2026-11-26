@@ -447,3 +447,22 @@ seams, calibration changes and a moved waypoint. Verify the same digests
 and endpoint degrees in standalone and persisted typed mesh preview
 workflow artifacts. This fingerprint is not a persistent biological ID,
 registration across acquisitions, or evidence of completed human review.
+
+
+### Unequal collinear selected-edge overlap audit
+
+The exact endpoint-pair union still sums distinct nonzero edges. Its
+`unequal_collinear_overlap_pair_count` counts unordered pairs of different
+selected geometric edges with positive-length overlap on the same exact
+3D source line. Repeated identical edges are already deduplicated and
+do not contribute. Endpoint-only contact, parallel offset lines and
+noncollinear crossings are excluded. Exact rational arithmetic on the
+binary64 source coordinates avoids an implicit spatial tolerance.
+A nonzero count triggers `surface_trace_unequal_collinear_edges_overlap`
+in both union and preview QC. The reported length and scale-only
+interval are **not corrected** for these overlaps; they can overcount
+geometry. Do not interpret this result as anatomical total linear
+extension. Near-collinear segments require separate registration and
+uncertainty review. Check within- and cross-trace overlap, reversed
+direction, containment, a disjoint or touching interval, 3D oblique
+lines, and standalone versus saved typed workflow evidence.
