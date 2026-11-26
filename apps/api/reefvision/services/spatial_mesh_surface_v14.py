@@ -1137,14 +1137,16 @@ def measure_mesh_preview(
         corrected_union = _collinear_union_measurement(
             collinear_source_total, scale, relative_scale_uncertainty
         )
-        # Surface-level QC must expose unavailable union measurements even
-        # when the full mesh itself is numerically valid.
-        trace_union_qc_warnings = union_warnings + corrected_union["qc_warnings"]
+        chains = _trace_endpoint_chains(
+            adjacency, edge_lengths, scale, relative_scale_uncertainty
+        )
+        chain_warnings = sorted({warning for chain in chains for warning in chain["qc_warnings"]})
+        # A representable aggregate can conceal an unavailable individual
+        # chain measurement. Surface-level QC must expose both.
+        trace_union_qc_warnings = union_warnings + corrected_union["qc_warnings"] + chain_warnings
         exact_edge_union = {
             "endpoint_graph_topology": topology,
-            "endpoint_graph_chains": _trace_endpoint_chains(
-                adjacency, edge_lengths, scale, relative_scale_uncertainty
-            ),
+            "endpoint_graph_chains": chains,
             "method": "exact_endpoint_pair_equality_only",
             "unequal_collinear_overlap_pair_count": unequal_overlap_count,
             "collinear_overlap_corrected_union": corrected_union,
