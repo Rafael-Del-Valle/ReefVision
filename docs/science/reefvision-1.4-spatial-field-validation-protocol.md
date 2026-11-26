@@ -477,6 +477,14 @@ chain and a representable longer chain: both aggregate union measurements
 may remain available, but the short chain length and interval must be null
 and the preview must disclose its numeric warning. This is a resolution
 qualification, not a biological branch classification.
+Each canonical endpoint chain also reports `selected_trace_memberships`:
+zero-based original trace indices and ordered, zero-based chain edge offsets.
+Check that reversing or reordering selections and split-index seams retain
+the same geometric chain fingerprint, while membership indices follow the
+submitted selection order. Repeated traversals must not duplicate offsets;
+unequal overlapping segments are not exact edge memberships. This evidence
+locates the source selections for review, not a persistent organism identity
+or verified anatomical branch assignment.
 The endpoint graph and chain fingerprints remain unchanged; their
 lengths need not sum to the corrected union. Do not interpret this result as anatomical total linear
 extension. Near-collinear segments require separate registration and
