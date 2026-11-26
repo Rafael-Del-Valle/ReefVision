@@ -198,6 +198,7 @@ def _trace_endpoint_components(
         vertex_count = degree_sum = terminal_count = junction_count = 0
         source_length = Fraction(0)
         component_edges: list[tuple[_TracePoint, _TracePoint]] = []
+        landmarks: list[tuple[_TracePoint, int]] = []
         while frontier:
             point = frontier.pop()
             neighbors = adjacency[point]
@@ -206,6 +207,8 @@ def _trace_endpoint_components(
             degree_sum += degree
             terminal_count += int(degree == 1)
             junction_count += int(degree >= 3)
+            if degree != 2:
+                landmarks.append((point, degree))
             for neighbor in neighbors:
                 # Count each undirected edge once, before any calibrated rounding.
                 if point < neighbor:
@@ -248,6 +251,13 @@ def _trace_endpoint_components(
                 "degree_one_vertex_count": terminal_count,
                 "degree_three_or_more_vertex_count": junction_count,
                 "cycle_rank": edge_count - vertex_count + 1,
+                "source_endpoint_graph_landmarks": [
+                    {
+                        "source_vertex_mesh_units": [0.0 if value == 0 else value for value in point],
+                        "degree": degree,
+                    }
+                    for point, degree in sorted(landmarks)
+                ],
                 "chain_indices": [],
                 "source_length_mesh_units": float(source_length),
                 "length_m": nominal if nominal > 0 else None,
