@@ -88,3 +88,85 @@ def test_stamp_primary_key_semantics_in_both_comparison_inputs(
         assert report["classification"] == "requires_researcher_review"
         assert "private coral data" not in result.stdout
         assert [database.read_bytes() for database in databases] == originals
+
+
+@pytest.mark.parametrize(
+    ("declaration", "index_sql", "error"),
+    [
+        ("version_num TEXT NOT NULL PRIMARY KEY", None, None),
+        (
+            'version_num VARCHAR(32) NOT NULL, CONSTRAINT "CHECK" PRIMARY KEY (version_num)',
+            None, None,
+        ),
+        ("version_num TEXT NOT NULL PRIMARY KEY /* CHECK is a comment */", None, None),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY CHECK(version_num = '0039')",
+            None, "alembic_version_checks_require_review",
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY, CHECK/* hidden */(version_num = '0039')",
+            None, "alembic_version_checks_require_review",
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY",
+            "CREATE INDEX extra ON alembic_version(version_num)",
+            "alembic_version_indexes_require_review",
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY",
+            "CREATE UNIQUE INDEX extra ON alembic_version(version_num)",
+            "alembic_version_indexes_require_review",
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY",
+            "CREATE INDEX extra ON alembic_version("
+            "abs(CASE WHEN version_num = '0040' THEN -9223372036854775808 ELSE 1 END))",
+            "alembic_version_indexes_require_review",
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY",
+            "CREATE INDEX extra ON alembic_version(version_num) WHERE "
+            "abs(CASE WHEN version_num = '0040' THEN -9223372036854775808 ELSE 1 END)>0",
+            "alembic_version_indexes_require_review",
+        ),
+    ],
+)
+def test_stamp_check_and_index_contracts_in_both_comparison_inputs(
+    tmp_path: Path, declaration: str, index_sql: str | None, error: str | None
+) -> None:
+    databases = [tmp_path / "source.sqlite", tmp_path / "copy.sqlite"]
+    for database in databases:
+        with sqlite3.connect(database) as connection:
+            connection.execute(f"CREATE TABLE alembic_version ({declaration})")
+            connection.execute("INSERT INTO alembic_version VALUES ('0039')")
+            connection.execute("CREATE TABLE observations (note TEXT)")
+            connection.execute("INSERT INTO observations VALUES ('private coral data')")
+            if index_sql is not None:
+                connection.execute(index_sql)
+            assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    originals = [database.read_bytes() for database in databases]
+    for options in [
+        [],
+        ["--fail-on-noncanonical-stamp"],
+        ["--fail-on-integrity-error"],
+        ["--fail-on-lineage-collision"],
+        ["--fail-on-revision-mismatch"],
+    ]:
+        result = subprocess.run(
+            [
+                sys.executable, str(SCRIPT), str(databases[0]),
+                "--compare-to", str(databases[1]), *options,
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode == (0 if error is None or not options else 2), result.stderr
+        report = json.loads(result.stdout)
+        assert report["alembic_stamp_constraint_error"] == error
+        comparison = report["schema_comparison"]
+        assert comparison["matches"] is True
+        assert comparison["revision_markers_match"] is (error is None)
+        assert comparison["reference_integrity"]["alembic_stamp_constraint_error"] == error
+        assert report["classification"] == "requires_researcher_review"
+        assert "private coral data" not in result.stdout + result.stderr
+        assert "9223372036854775808" not in result.stdout + result.stderr
+        assert [database.read_bytes() for database in databases] == originals
