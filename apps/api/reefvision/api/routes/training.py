@@ -258,7 +258,11 @@ def _safe_terminal_log_text(payload: bytes) -> str:
     # Treat adjacent OSC/DCS/SOS/PM/APC strings as one invisible edit.
     # Removing them separately can splice two loss fragments into a
     # fabricated measurement (e.g., "0.2" + OSC + OSC + "5" -> "0.25").
-    terminal_string = r"(?:\x1b[\]PX^_]|[\x90\x98\x9d\x9e\x9f])[\s\S]*?(?:\x07|\x9c|\x1b\\|$)"
+    # BEL terminates OSC only. DCS/SOS/PM/APC require ST; accepting BEL
+    # there would expose the remaining control payload as scientific output.
+    osc_string = r"(?:\x1b\]|\x9d)[\s\S]*?(?:\x07|\x9c|\x1b\\|$)"
+    st_string = r"(?:\x1b[PX^_]|[\x90\x98\x9e\x9f])[\s\S]*?(?:\x9c|\x1b\\|$)"
+    terminal_string = rf"(?:{osc_string}|{st_string})"
     text = re.sub(rf"(?:{terminal_string})+", strip_terminal_string, text)
 
     # Backspaces and cursor-edit/erase CSI sequences can rewrite an earlier
