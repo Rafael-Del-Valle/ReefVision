@@ -319,6 +319,49 @@ def test_longitudinal_legacy_missing_source_integrity_stays_unverified() -> None
     assert result["provenance"]["calibration_verified"] is False
 
 
+@pytest.mark.parametrize(
+    ("case", "expected_status"),
+    [
+        ("distinct", "different_payloads_unverified"),
+        ("same_bytes", "reused_imported_source_payload"),
+        ("same_asset", "reused_spatial_source_asset"),
+        ("reexport", "different_payloads_identical_geometry"),
+        ("legacy", "insufficient_original_source_lineage"),
+        ("inline", "insufficient_original_source_lineage"),
+    ],
+)
+def test_acquisition_lineage_never_certifies_independence(
+    case: str, expected_status: str
+) -> None:
+    before = _imported_observation("early", 1)
+    after = _imported_observation("late", 2)
+    if case in ("same_bytes", "same_asset", "reexport"):
+        after = _imported_observation("late", 1)
+    if case == "same_asset":
+        for record in (before, after):
+            record["provenance"]["spatial_source_asset_id"] = (
+                "11111111-1111-4111-8111-111111111111"
+            )
+    elif case == "reexport":
+        after["provenance"]["source_payload_sha256"] = "f" * 64
+    elif case == "legacy":
+        after["provenance"].pop("source_payload_sha256")
+    elif case == "inline":
+        before = _observation("early", 1)
+        after = _observation("late", 2)
+    result = compare_mesh_observations(before, after)
+    provenance = result["provenance"]
+    assert provenance["acquisition_lineage_status"] == expected_status
+    assert provenance["independent_acquisition_verified"] is False
+    assert provenance["specimen_identity_verified"] is False
+    assert provenance["review_evidence_bundle"] is None
+    assert (
+        "independent_acquisition_source_lineage_unavailable" in result["qc_warnings"]
+    ) == (case in ("legacy", "inline"))
+    if case in ("same_bytes", "same_asset"):
+        assert result["delta_surface_area_m2"] is None
+
+
 def test_checked_import_review_bundle_matches_saved_workflow(client: TestClient) -> None:
     """A real source-byte check changes review provenance without verifying biology."""
     project_id = str(create_project(client, "Bound longitudinal source review")["id"])
@@ -749,6 +792,10 @@ def test_reused_imported_original_qc_survives_saved_typed_workflow(
     assert expected["after_surface_area_m2"] == pytest.approx(
         4 * expected["before_surface_area_m2"]
     )
+    assert expected["provenance"]["acquisition_lineage_status"] == (
+        "reused_imported_source_payload"
+    )
+    assert expected["provenance"]["independent_acquisition_verified"] is False
     assert expected["delta_surface_area_m2"] is None
     assert expected["average_surface_area_change_m2_per_day"] is None
     assert expected["provenance"]["specimen_identity_verified"] is False
@@ -792,21 +839,26 @@ def test_reused_imported_original_qc_survives_saved_typed_workflow(
     assert plan.json()["executable"] is True
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
-    assert run.status_code == 202, run.text
+    hashes = []
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    )
-    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
-    assert detail.status_code == 200, detail.text
-    assert detail.json()["run"]["status"] == "succeeded"
-    comparisons = [
-        item["payload_json"]
-        for item in detail.json()["artifacts"]
-        if item["data_type"] == "mesh_longitudinal_comparison"
-    ]
-    assert comparisons == [expected]
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        comparisons = [
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_longitudinal_comparison"
+        ]
+        assert [item["payload_json"] for item in comparisons] == [expected]
+        hashes.append(comparisons[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
 
 
 def test_project_asset_reimport_changes_versioned_review_digest_without_changing_bytes() -> None:
