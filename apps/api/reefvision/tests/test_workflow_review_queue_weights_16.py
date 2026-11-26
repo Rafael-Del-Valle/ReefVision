@@ -134,6 +134,29 @@ def test_invalid_weights_fail_saved_graph_planning(
     assert queues.json() == []
 
 
+@pytest.mark.parametrize("threshold", [True, False, "0.75", -0.01, 1.01, [], {}])
+def test_invalid_confidence_threshold_refused_before_qc_execution(
+    client: TestClient, threshold: Any
+) -> None:
+    project_id, _ = _local_prediction(client)
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/review-queues",
+        json={"review_below_confidence": threshold},
+    )
+    assert standalone.status_code == 422, standalone.text
+    graph = _weighted_graph(None)
+    graph["nodes"][1]["parameters"]["review_below_confidence"] = threshold
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert not plan.json()["valid"] and not plan.json()["executable"]
+    assert any(
+        issue["code"] == "invalid_qc_confidence_threshold" for issue in plan.json()["issues"]
+    )
+    queues = client.get(f"/api/v1/projects/{project_id}/review-queues")
+    assert queues.status_code == 200, queues.text
+    assert queues.json() == []
+
+
 @pytest.mark.parametrize("legacy", [True, False])
 def test_saved_qc_retry_preserves_original_weights_and_legacy_defaults(
     client: TestClient, legacy: bool
