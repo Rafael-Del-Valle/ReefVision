@@ -45,6 +45,7 @@ from reefvision.services.review_queue_transaction_16 import begin_serialized_rev
 from reefvision.services.workflow_review_queue_integrity import (
     V3_SIGNAL_LABELS,
     queue_item_evidence_sha256,
+    validate_saved_queue_membership,
     validate_saved_queue_snapshot,
 )
 from reefvision.storage.datasets import canonical_json_sha256
@@ -862,6 +863,13 @@ class ReviewQueueService:
             dataset_version = self.quality_control._version(queue.dataset_version_id)
         else:
             dataset_version = None
+        if workflow_owned or has_scientific_evidence:
+            frozen_split_by_image_id: dict[str, str] = {}
+            if dataset_version is not None:
+                frozen_items = self.quality_control.versions.items_for_version(dataset_version.id)
+                validate_frozen_dataset_manifest(dataset_version, frozen_items)
+                frozen_split_by_image_id = {item.image_id: item.split for item in frozen_items}
+            validate_saved_queue_membership(queue, queue.items, frozen_split_by_image_id)
         regenerated = self._create_queue(
             project_id=queue.project_id,
             dataset_version=dataset_version,

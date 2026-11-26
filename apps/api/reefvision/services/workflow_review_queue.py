@@ -30,6 +30,7 @@ from reefvision.schemas.review_queues import (
 from reefvision.services.frozen_dataset_integrity_16 import validate_frozen_dataset_manifest
 from reefvision.services.review_queues import ReviewQueueService
 from reefvision.services.workflow_review_queue_integrity import (
+    validate_saved_queue_membership,
     validate_saved_queue_snapshot,
 )
 from reefvision.storage.datasets import canonical_json_sha256
@@ -379,38 +380,12 @@ def create_review_queue_workflow_artifact(
         ):
             raise ValidationError("QC review-queue retry parameters changed or queue incomplete")
         validate_saved_queue_snapshot(existing, existing.items)
-        # Project-scoped queues have no frozen split membership. Recomputed
-        # item digests and summary counts cannot turn a live image into a
-        # held-out observation. Keep historical v2 compatibility unchanged.
-        if (
-            dataset_version_id is None
-            and existing.input_checksums_json.get("integrity_schema_version")
-            == "qc-review-queue-v3"
-            and any(item.split is not None for item in existing.items)
-        ):
-            raise ValidationError("QC review-queue project scope cannot claim dataset splits")
-        # A re-signed queue digest can still relabel an image's frozen split
-        # or substitute an image absent from the original dataset version.
-        # Bind every persisted QC item to its immutable version membership.
-        # Historical confidence-filtered snapshots may contain a subset.
-        if dataset_version_id is not None and any(
-            item.image_id not in frozen_split_by_image_id
-            or item.split != frozen_split_by_image_id[item.image_id]
-            for item in existing.items
-        ):
-            raise ValidationError(
-                "QC review-queue frozen dataset item membership or split does not match"
-            )
-        # V3 frozen queues prohibit confidence selection and rank every
-        # frozen image. A self-consistent queue and output digest can otherwise
-        # hide missing biological observations, even an entirely empty queue.
+        validate_saved_queue_membership(existing, existing.items, frozen_split_by_image_id)
         if (
             dataset_version_id is not None
             and existing.input_checksums_json.get("integrity_schema_version")
             == "qc-review-queue-v3"
         ):
-            if {item.image_id for item in existing.items} != frozen_split_by_image_id.keys():
-                raise ValidationError("QC review-queue frozen dataset image coverage is incomplete")
             # The validated manifest independently authenticates the original
             # detection annotation census. Do not read live labels or include
             # mask-only observations in the existing v3 scoring formula.

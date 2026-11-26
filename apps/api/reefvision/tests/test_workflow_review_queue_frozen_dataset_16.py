@@ -450,3 +450,67 @@ def test_frozen_unannotated_study_has_no_invented_rare_class_priority(
         assert item["review_state"] == "pending"
     assert workflow_item["input_checksum"] == standalone_item["input_checksum"]
     assert workflow_item["score"] == standalone_item["score"]
+
+
+@pytest.mark.parametrize("scope", ["project", "frozen"])
+def test_manual_regeneration_refuses_resigned_false_split(
+    client: TestClient, scope: str
+) -> None:
+    """Standalone regeneration must enforce the same split contract as saved replay."""
+    project_id, image_id, version_id, _ = _study(client)
+    endpoint = (
+        f"/api/v1/dataset-versions/{version_id}/review-queues"
+        if scope == "frozen"
+        else f"/api/v1/projects/{project_id}/review-queues"
+    )
+    created = client.post(endpoint, json={})
+    assert created.status_code == 201, created.text
+    queue_id = created.json()["id"]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        queue = session.get(ReviewQueue, queue_id)
+        assert queue is not None and len(queue.items) == 1
+        item = queue.items[0]
+        assert item.image_id == image_id
+        original_split = item.split
+        original_summary = dict(queue.summary_json)
+        original_checksums = dict(queue.input_checksums_json)
+        item.split = "test" if original_split != "test" else "train"
+        queue.summary_json = {**original_summary, "counts_by_split": {item.split: 1}}
+        queue.input_checksums_json = {
+            **original_checksums,
+            "item_evidence_sha256": queue_item_evidence_sha256(queue.items),
+        }
+        # A self-consistent digest is not independent split evidence.
+        validate_saved_queue_snapshot(queue, queue.items)
+        session.commit()
+
+    regenerate = f"/api/v1/review-queues/{queue_id}/regenerate"
+    refused = client.post(regenerate)
+    assert refused.status_code == 422, refused.text
+    expected = (
+        "frozen dataset item membership or split"
+        if scope == "frozen"
+        else "project scope cannot claim dataset splits"
+    )
+    assert expected in refused.text
+    listing = client.get(endpoint)
+    assert listing.status_code == 200, listing.text
+    assert [queue["id"] for queue in listing.json()] == [queue_id]
+    assert _queue_item(client, queue_id)["review_state"] == "pending"
+
+    with app.state.session_factory() as session:
+        queue = session.get(ReviewQueue, queue_id)
+        assert queue is not None and len(queue.items) == 1
+        queue.items[0].split = original_split
+        queue.summary_json = original_summary
+        queue.input_checksums_json = original_checksums
+        session.commit()
+
+    recovered = client.post(regenerate)
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["regenerated_from_queue_id"] == queue_id
+    assert recovered.json()["id"] != queue_id
+    assert _queue_item(client, recovered.json()["id"])["split"] == original_split
+    assert _queue_item(client, recovered.json()["id"])["review_state"] == "pending"
+    assert _queue_item(client, queue_id)["review_state"] == "pending"

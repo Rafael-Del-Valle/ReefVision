@@ -7,7 +7,7 @@ validator deliberately leaves review states, comments and assignments alone.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from math import isfinite
 from statistics import mean
 from typing import Any
@@ -326,6 +326,30 @@ def queue_item_evidence_sha256(items: Sequence[Any]) -> str:
             for item in sorted(items, key=lambda row: row.image_id)
         ]
     )
+
+
+def validate_saved_queue_membership(
+    queue: Any, items: Sequence[Any], frozen_split_by_image_id: Mapping[str, str]
+) -> None:
+    """Bind saved QC membership to its independently validated frozen study."""
+    is_v3 = queue.input_checksums_json.get("integrity_schema_version") == "qc-review-queue-v3"
+    if queue.dataset_version_id is None:
+        # Historical v2 project queues retain their original compatibility.
+        if is_v3 and any(item.split is not None for item in items):
+            raise ValidationError("QC review-queue project scope cannot claim dataset splits")
+        return
+    if any(
+        item.image_id not in frozen_split_by_image_id
+        or item.split != frozen_split_by_image_id[item.image_id]
+        for item in items
+    ):
+        raise ValidationError(
+            "QC review-queue frozen dataset item membership or split does not match"
+        )
+    # V3 frozen queues prohibit confidence selection and rank every image.
+    # Historical confidence-filtered snapshots may contain a subset.
+    if is_v3 and {item.image_id for item in items} != frozen_split_by_image_id.keys():
+        raise ValidationError("QC review-queue frozen dataset image coverage is incomplete")
 
 
 def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
