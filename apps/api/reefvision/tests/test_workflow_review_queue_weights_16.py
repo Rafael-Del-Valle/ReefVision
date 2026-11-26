@@ -7,7 +7,7 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from reefvision.db.models import (
     PredictionProposal,
@@ -236,14 +236,26 @@ def test_qc_retry_rejects_equal_looking_boolean_parameters(
         # This is the original guard's blind spot, not a changed numeric value.
         assert malformed == original
         if saved_invalid:
-            node.parameters_json = malformed
-        session.flush()
+            # Bypass ORM equality-based dirty detection: the malformed JSON
+            # must actually be present in SQLite inside this transaction.
+            session.execute(
+                update(WorkflowNodeRun)
+                .where(WorkflowNodeRun.id == node.id)
+                .values(parameters_json=malformed)
+                .execution_options(synchronize_session=False)
+            )
+            session.expire(node, ["parameters_json"])
+            persisted = node.parameters_json[field]
+            if field == "signal_weights":
+                assert type(persisted[signal]) is bool
+            else:
+                assert type(persisted) is bool
         runtime = {
             "__workflow_run_id": payload["workflow_run_id"],
             "__workflow_node_run_id": node.id,
         }
         supplied = original if saved_invalid else malformed
-        with pytest.raises(ValidationError, match="invalid (signal_weights|review parameters)"):
+        with pytest.raises(ValidationError, match=r"invalid (signal_weights|review parameters)"):
             create_review_queue_workflow_artifact(
                 session, app.state.settings, project_id, {**supplied, **runtime}, {"project": [source]}
             )
