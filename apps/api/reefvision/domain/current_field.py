@@ -101,9 +101,7 @@ class CurrentField:
         """Conservative grid-wide step cap, shared by every seed in this immutable field."""
         # Bilinear component magnitudes cannot exceed their corner bounds.
         # A single scan per component suffices, including fully masked fields.
-        maximum_east = max(
-            (abs(v) for row in self.east for v in row if v is not None), default=0.0
-        )
+        maximum_east = max((abs(v) for row in self.east for v in row if v is not None), default=0.0)
         maximum_north = max(
             (abs(v) for row in self.north for v in row if v is not None), default=0.0
         )
