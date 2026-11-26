@@ -185,6 +185,8 @@ def _trace_endpoint_components(
     edge_lengths: dict[frozenset[_TracePoint], Fraction],
     scale: float,
     relative_scale_uncertainty: float | None,
+    *,
+    has_collinear_overlaps: bool,
 ) -> list[dict[str, Any]]:
     """Inventory connected endpoint components without implying biological identity."""
     components: list[dict[str, Any]] = []
@@ -266,6 +268,13 @@ def _trace_endpoint_components(
             warnings.append("surface_trace_component_axis_span_underflow")
         if span_interval_loss:
             warnings.append("surface_trace_component_axis_span_interval_unrepresentable")
+        # Localize positive-length overlap without welding endpoint components.
+        # The global overlap count also includes pairs in different components.
+        within_overlap_count = 0
+        if has_collinear_overlaps:
+            within_overlap_count, _ = _collinear_edge_union(
+                {frozenset(edge) for edge in component_edges}
+            )
         # Fingerprint the selected endpoint pairs, not the traversal order,
         # chain partition, calibration, or biological identity.
         canonical_edges = [
@@ -291,6 +300,7 @@ def _trace_endpoint_components(
                 "degree_one_vertex_count": terminal_count,
                 "degree_three_or_more_vertex_count": junction_count,
                 "cycle_rank": edge_count - vertex_count + 1,
+                "unequal_collinear_overlap_pair_count": within_overlap_count,
                 "source_endpoint_graph_landmarks": [
                     {
                         "source_vertex_mesh_units": [
@@ -1251,7 +1261,12 @@ def measure_mesh_preview(
             adjacency.setdefault(endpoint_b, set()).add(endpoint_a)
         chains = _trace_endpoint_chains(adjacency, edge_lengths, scale, relative_scale_uncertainty)
         components = _trace_endpoint_components(
-            adjacency, chains, edge_lengths, scale, relative_scale_uncertainty
+            adjacency,
+            chains,
+            edge_lengths,
+            scale,
+            relative_scale_uncertainty,
+            has_collinear_overlaps=unequal_overlap_count > 0,
         )
         component_count = len(components)
         topology = {
@@ -1357,6 +1372,10 @@ def measure_mesh_preview(
             "endpoint_graph_components": components,
             "method": "exact_endpoint_pair_equality_only",
             "unequal_collinear_overlap_pair_count": unequal_overlap_count,
+            "cross_component_unequal_collinear_overlap_pair_count": (
+                unequal_overlap_count
+                - sum(component["unequal_collinear_overlap_pair_count"] for component in components)
+            ),
             "collinear_overlap_corrected_union": corrected_union,
             "distinct_nonzero_edge_count": len(traversal_counts),
             "nonzero_edge_traversal_count": traversal_count,
