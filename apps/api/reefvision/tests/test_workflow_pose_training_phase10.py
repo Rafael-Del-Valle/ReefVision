@@ -1486,6 +1486,51 @@ def test_pose_materialization_rejects_unsafe_holdout_member_before_training_outp
     assert (destination / "images/val/frame_00000001.png").read_bytes() == b"reviewed-validation"
 
 
+@pytest.mark.parametrize("contaminated_split", ("training", "validation"))
+@pytest.mark.parametrize(
+    "member",
+    (
+        "images/val/frame_00000002.png",
+        "labels/val/frame_00000002.txt",
+        "Images/VAL/frame_00000002.png",
+    ),
+)
+def test_pose_materialization_rejects_unreviewed_export_splits(
+    tmp_path: Path,
+    contaminated_split: str,
+    member: str,
+) -> None:
+    training = _pose_export_zip(b"reviewed-training")
+    validation = _pose_export_zip(b"reviewed-validation")
+    contaminated = io.BytesIO(training if contaminated_split == "training" else validation)
+    with zipfile.ZipFile(contaminated, "a") as archive:
+        archive.writestr(member, b"unreviewed")
+
+    if contaminated_split == "training":
+        invalid_training, invalid_validation = contaminated.getvalue(), validation
+    else:
+        invalid_training, invalid_validation = training, contaminated.getvalue()
+
+    destination = tmp_path / "pose-extra-split"
+    with pytest.raises(ValidationError, match="unexpected image or label split"):
+        materialize_pose_training_exports(
+            training_content=invalid_training,
+            validation_content=invalid_validation,
+            destination=destination,
+        )
+    assert not destination.exists()
+    assert not (tmp_path / ".pose-extra-split-validation").exists()
+
+    corrected = materialize_pose_training_exports(
+        training_content=training,
+        validation_content=validation,
+        destination=destination,
+    )
+    assert corrected["validation_image_count"] == 1
+    assert {path.name for path in (destination / "images/val").iterdir()} == {"frame_00000001.png"}
+    assert {path.name for path in (destination / "labels/val").iterdir()} == {"frame_00000001.txt"}
+
+
 def test_pose_materialization_rejects_corrupt_unread_holdout_member(
     tmp_path: Path,
 ) -> None:

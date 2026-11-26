@@ -236,9 +236,21 @@ def _preflight_pose_zip_frame_inventory(archive: zipfile.ZipFile) -> None:
     images: set[str] = set()
     labels: set[str] = set()
     for member in archive.infolist():
+        name = member.filename.replace("\\", "/")
+        parts = Path(name).parts
+        # Only the reviewed train split is exported. In particular, an extra
+        # images/val or labels/val member in the training ZIP would survive
+        # the subsequent holdout copy and silently contaminate evaluation.
+        if (
+            parts
+            and parts[0].casefold() in {"images", "labels"}
+            and (parts[0] not in {"images", "labels"} or (len(parts) > 1 and parts[1] != "train"))
+        ):
+            raise ValidationError(
+                "Ultralytics pose export contains an unexpected image or label split"
+            )
         if member.is_dir():
             continue
-        name = member.filename.replace("\\", "/")
         if name.startswith("images/train/"):
             images.add(name.removeprefix("images/train/"))
         elif name.startswith("labels/train/"):
