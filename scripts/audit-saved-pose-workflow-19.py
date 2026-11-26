@@ -742,6 +742,21 @@ def inspect(
             # original local registered pose model, not only to the output
             # checkpoint. Preserve and authenticate user-trained seed weights.
             seed_id = training.initial_checkpoint_model_id
+            # Provenance verifies the saved graph edges and typed artifact IDs,
+            # but does not reconcile the consumed seed with the training row.
+            # A different, intact registered model must not be substituted in
+            # the training records while the original graph input stays fixed.
+            training_input_ids = set(training_nodes[0].input_artifact_ids_json)
+            seed_inputs = [
+                artifact.payload_json
+                for artifact in artifacts
+                if artifact.id in training_input_ids
+                and artifact.data_type == "model_reference"
+            ]
+            _require(
+                len(seed_inputs) == (0 if seed_id is None else 1),
+                "Saved pose training seed input disagrees with initialization mode",
+            )
             seed_size: int | None = None
             if seed_id is None:
                 _require(
@@ -757,6 +772,25 @@ def inspect(
             else:
                 seed = session.get(ModelRegistration, seed_id)
                 seed_binding = session.get(PoseModelSchemaBinding, seed_id)
+                seed_input = seed_inputs[0]
+                _require(
+                    isinstance(seed_input, dict)
+                    and seed_input.get("model_id") == seed_id
+                    and seed is not None
+                    and all(
+                        field not in seed_input or seed_input[field] == seed.sha256
+                        for field in ("sha256", "source_model_sha256", "model_sha256")
+                    )
+                    and all(
+                        field not in seed_input or seed_input[field] == getattr(seed, field)
+                        for field in ("purpose", "task", "provider_name", "provider_version")
+                    )
+                    and (
+                        "project_id" not in seed_input
+                        or seed_input["project_id"] == run.project_id
+                    ),
+                    "Consumed seed model artifact differs from registered initialization",
+                )
                 _require(
                     seed is not None
                     and seed.project_id == run.project_id
