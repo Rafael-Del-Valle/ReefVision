@@ -47,3 +47,16 @@ Each checks standalone scientific QC parity, refusal, rollback, exact queue
 replay and unchanged pending researcher review. Nine independent SQLite JSON
 round-trip checks confirm the guard, including valid input orderings; these
 are not a substitute for the repository CI. No new scientific node or migration.
+
+## Explicit QC source identity — 2026-11-26
+
+Only JSON null or an omitted source ID requests automatic historical QC run
+selection. Empty strings previously fell through the source selector and
+could select an unintended QC run. Shared request validation now rejects empty,
+padded, NUL-containing and non-string identifiers; graph planning uses the
+same validator, and retry validates the saved source separately. The selector
+also distinguishes None explicitly. Existing valid source IDs, automatic
+selection, score units, saved queue identity and mandatory human review remain
+unchanged. Seven API/planning cases and four saved-run refusal/recovery cases
+are added. Twelve isolated Pydantic input/control probes passed; full CI and
+installed-Windows acceptance are not verified. No migration or new node.
