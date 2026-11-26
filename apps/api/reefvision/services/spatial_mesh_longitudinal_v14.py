@@ -1466,9 +1466,7 @@ def compare_mesh_observations(
         acquisition_lineage_status = "reused_imported_source_payload"
     elif same_geometry_different_imported_source:
         acquisition_lineage_status = "different_payloads_identical_geometry"
-    elif _is_sha256_fingerprint(first_source_hash) and _is_sha256_fingerprint(
-        second_source_hash
-    ):
+    elif _is_sha256_fingerprint(first_source_hash) and _is_sha256_fingerprint(second_source_hash):
         acquisition_lineage_status = "different_payloads_unverified"
     else:
         acquisition_lineage_status = "insufficient_original_source_lineage"
