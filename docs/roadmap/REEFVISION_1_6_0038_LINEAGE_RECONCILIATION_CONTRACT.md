@@ -344,3 +344,22 @@ pytest and exact-head CI remain unverified locally. No scientific node,
 migration, review state, or saved typed Workflow Builder contract changes.
 Independent lineage reconciliation, real biological and installed Windows
 acceptance and researcher approval remain mandatory.
+
+## Independent comparison of implicit UNIQUE indexes (2026-11-25)
+
+A table-level UNIQUE constraint with a non-BINARY collation can create an
+extra automatic SQLite index with no stored SQL. The prior explicit-index
+predicate missed it even when the canonical BINARY primary key was still
+present. The comparison inspector now rejects distinct automatic UNIQUE
+indexes as well as explicit indexes, matching the existing lightweight
+lineage inventory's single-index requirement. SQLite may coalesce an
+identical redundant UNIQUE with the primary key; that is not an extra index.
+
+Five additional disposable-copy regression configurations cover NOCASE,
+RTRIM, a private constraint label, and coalesced BINARY controls across
+informational and four strict CLI modes. Eleven isolated SQLite probes
+passed, including demonstrations of alternate uniqueness semantics.
+Repository pytest and exact-head CI are not yet verified locally (GitHub
+checkout DNS failure). Both input databases remain read-only, researcher
+approval is still required, and no scientific workflow or migration is
+changed. This does not reconcile the independent 1.1/1.6 lineage.
