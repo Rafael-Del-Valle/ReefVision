@@ -827,16 +827,25 @@ class ReviewQueueService:
         # would create two queues for one run/node and poison future replays.
         # The explicit regenerated_from_queue_id retains the original lineage.
         creator = queue.created_by
-        if creator.strip().lower().startswith("workflow:"):
+        workflow_owned = creator.strip().lower().startswith("workflow:")
+        if workflow_owned:
             creator = "local_user"
         configuration = queue.configuration_json
         checksums = queue.input_checksums_json
         if not isinstance(configuration, dict) or not isinstance(checksums, dict):
             raise ValidationError("Cannot regenerate QC queue with invalid saved configuration")
-        # A versioned snapshot must retain its original scientific contract.
-        # Regeneration creates new evidence, but must not silently inherit
-        # corrupted weights, a changed source, or an omitted threshold.
-        if "integrity_schema_version" in checksums:
+        # Removing a version marker must not bypass the remaining scientific
+        # digests. Workflow-owned queues must satisfy the same integrity gate
+        # as replay even when their optional digest metadata is missing.
+        has_scientific_evidence = any(
+            key in checksums
+            for key in (
+                "integrity_schema_version",
+                "scoring_provenance_sha256",
+                "item_evidence_sha256",
+            )
+        )
+        if workflow_owned or has_scientific_evidence:
             validate_saved_queue_snapshot(queue, queue.items)
         try:
             request = ReviewQueueCreateRequest(
