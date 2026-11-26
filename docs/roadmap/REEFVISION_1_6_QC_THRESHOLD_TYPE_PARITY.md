@@ -33,3 +33,17 @@ or pair arrays now raise the same domain integrity error as direct snapshot
 validation rather than a Python conversion exception. Seven persisted
 regression configurations cover refusal, rollback and valid replay, with
 pending human review preserved. No formula, data migration or new node.
+
+## Frozen QC consumer binding shape — 2026-11-26
+
+Persisted input bindings must be a list of string artifact IDs before set
+comparison. Nested JSON arrays or objects in the dataset slot previously
+raised an unhandled TypeError instead of a QC integrity refusal. Reject
+non-string IDs before checking membership; preserve the existing exact
+membership and cardinality contract, including valid order-independent input
+bindings. Five database-backed cases exercise nested arrays, objects, null,
+Boolean and duplicate IDs against the saved project + frozen dataset QC graph.
+Each checks standalone scientific QC parity, refusal, rollback, exact queue
+replay and unchanged pending researcher review. Nine independent SQLite JSON
+round-trip checks confirm the guard, including valid input orderings; these
+are not a substitute for the repository CI. No new scientific node or migration.
