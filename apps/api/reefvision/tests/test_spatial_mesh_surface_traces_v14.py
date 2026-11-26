@@ -2300,6 +2300,29 @@ def _assert_chain_traversals(
                             }
                         )
         assert chain["selected_trace_traversals"] == expected
+        # Compare each canonical edge independently against the original
+        # directed selections, including repeated traversals in one trace.
+        for offset, (first, last) in enumerate(chain_pairs):
+            forward_count = 0
+            reverse_count = 0
+            trace_count = 0
+            for path in paths:
+                forward = sum(
+                    vertices[a] == first and vertices[b] == last for a, b in pairwise(path)
+                )
+                reverse = sum(
+                    vertices[a] == last and vertices[b] == first for a, b in pairwise(path)
+                )
+                forward_count += forward
+                reverse_count += reverse
+                trace_count += int(forward + reverse > 0)
+            assert chain["selected_chain_edge_support"][offset] == {
+                "chain_edge_offset": offset,
+                "distinct_trace_count": trace_count,
+                "forward_traversal_count": forward_count,
+                "reverse_traversal_count": reverse_count,
+            }
+        assert len(chain["selected_chain_edge_support"]) == len(chain_pairs)
     assert sum(len(chain["selected_trace_traversals"]) for chain in chains) == sum(
         vertices[a] != vertices[b] for path in paths for a, b in pairwise(path)
     )
@@ -2507,6 +2530,20 @@ def test_shared_trace_pairs_count_distinct_edges_not_repeated_traversals() -> No
         {"trace_index": 0, "chain_edge_offsets": [0, 1]},
         {"trace_index": 1, "chain_edge_offsets": [0, 1]},
         {"trace_index": 2, "chain_edge_offsets": [0]},
+    ]
+    assert chains[0]["selected_chain_edge_support"] == [
+        {
+            "chain_edge_offset": 0,
+            "distinct_trace_count": 3,
+            "forward_traversal_count": 1,
+            "reverse_traversal_count": 3,
+        },
+        {
+            "chain_edge_offset": 1,
+            "distinct_trace_count": 2,
+            "forward_traversal_count": 1,
+            "reverse_traversal_count": 2,
+        },
     ]
 
 
