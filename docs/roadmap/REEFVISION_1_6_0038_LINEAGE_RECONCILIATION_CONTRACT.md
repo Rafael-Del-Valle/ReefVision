@@ -363,3 +363,29 @@ Repository pytest and exact-head CI are not yet verified locally (GitHub
 checkout DNS failure). Both input databases remain read-only, researcher
 approval is still required, and no scientific workflow or migration is
 changed. This does not reconcile the independent 1.1/1.6 lineage.
+
+
+## Desktop startup parity for Alembic index semantics (2026-11-25)
+
+The read-only inspectors already reject alternate primary-key collations,
+descending keys and extra implicit UNIQUE indexes. The isolated 1.6 desktop
+migration guard now rejects these before Alembic can execute a schema write
+as well. SQLite automatic UNIQUE indexes have no catalog SQL, so the prior
+explicit-index check alone could not see them. A declared primary key must
+have a single ascending BINARY version_num key; an equivalent coalesced
+BINARY UNIQUE remains compatible. Existing keyless pre-review fixtures and
+historical compatibility behavior are deliberately retained; this is not
+a blanket authorization of noncanonical stamps or a new integrated migration.
+
+Thirteen disposable SQLite regression configurations exercise accepted and
+refused declarations, private research-note preservation, repeated read-only
+preflight, and two refused desktop startup attempts with Alembic upgrade
+prohibited for each unsafe case. Thirteen independent SQLite/SQLAlchemy
+predicate probes passed, each checked twice, with original schema, marker
+and sentinel preservation. These isolated probes do not substitute for
+repository pytest, lint/type/E2E or genuine installed Windows MSI acceptance.
+
+The independent 1.1/1.6 migration graph is still unresolved. Existing typed
+executable QC workflows, units, saved runs, provenance, retry and explicit
+researcher review remain unchanged; this preflight is not a scientific
+workflow operation. No database modification or release is authorized.
