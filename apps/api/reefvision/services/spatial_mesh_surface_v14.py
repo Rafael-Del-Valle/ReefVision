@@ -199,11 +199,16 @@ def _trace_endpoint_components(
         source_length = Fraction(0)
         component_edges: list[tuple[_TracePoint, _TracePoint]] = []
         landmarks: list[tuple[_TracePoint, int]] = []
+        bounds_min = list(start)
+        bounds_max = list(start)
         while frontier:
             point = frontier.pop()
             neighbors = adjacency[point]
             degree = len(neighbors)
             vertex_count += 1
+            for axis, value in enumerate(point):
+                bounds_min[axis] = min(bounds_min[axis], value)
+                bounds_max[axis] = max(bounds_max[axis], value)
             degree_sum += degree
             terminal_count += int(degree == 1)
             junction_count += int(degree >= 3)
@@ -232,6 +237,35 @@ def _trace_endpoint_components(
                 warnings.append("surface_trace_component_interval_unrepresentable")
             else:
                 interval = [lower, upper]
+        # Measure axis spans from source-coordinate differences, not from
+        # rounded calibrated positions. Zero spans are genuinely zero.
+        spans_m: list[float | None] = []
+        span_intervals_m: list[list[float] | None] = []
+        span_underflow = span_interval_loss = False
+        for minimum, maximum in zip(bounds_min, bounds_max, strict=True):
+            span = (Fraction(maximum) - Fraction(minimum)) * Fraction(scale)
+            span_m = float(span)
+            span_interval = None
+            if span > 0 and span_m == 0:
+                span_underflow = True
+                spans_m.append(None)
+            else:
+                spans_m.append(span_m)
+                if relative_scale_uncertainty is not None:
+                    uncertainty = Fraction(relative_scale_uncertainty)
+                    lower = float(span * (1 - uncertainty))
+                    upper = float(span * (1 + uncertainty))
+                    if span > 0 and (
+                        (uncertainty < 1 and lower == 0) or (uncertainty > 0 and lower == upper)
+                    ):
+                        span_interval_loss = True
+                    else:
+                        span_interval = [lower, upper]
+            span_intervals_m.append(span_interval)
+        if span_underflow:
+            warnings.append("surface_trace_component_axis_span_underflow")
+        if span_interval_loss:
+            warnings.append("surface_trace_component_axis_span_interval_unrepresentable")
         # Fingerprint the selected endpoint pairs, not the traversal order,
         # chain partition, calibration, or biological identity.
         canonical_edges = [
@@ -244,6 +278,12 @@ def _trace_endpoint_components(
         components.append(
             {
                 "source_min_vertex_mesh_units": [0.0 if value == 0 else value for value in start],
+                "source_axis_aligned_bounds_mesh_units": {
+                    "minimum": [0.0 if value == 0 else value for value in bounds_min],
+                    "maximum": [0.0 if value == 0 else value for value in bounds_max],
+                },
+                "axis_aligned_spans_m": spans_m,
+                "axis_aligned_span_scale_only_intervals_m": span_intervals_m,
                 "source_component_geometry_sha256": component_hash,
                 "source_component_geometry_canonicalization": "sorted_float64_xyz_edges_json_v1",
                 "vertex_count": vertex_count,
