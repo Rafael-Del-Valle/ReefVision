@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from fractions import Fraction
 from itertools import pairwise
 from math import dist, pi, sqrt
@@ -2335,9 +2337,18 @@ def _assert_endpoint_components(
                 warnings.append("surface_trace_component_interval_unrepresentable")
             else:
                 interval = [lower, upper]
+        canonical_edges = [
+            [[float(value) if value else 0.0 for value in point] for point in edge]
+            for edge in sorted(tuple(sorted(edge)) for edge in group_edges)
+        ]
+        digest = hashlib.sha256(
+            json.dumps(canonical_edges, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
         expected.append(
             {
                 "source_min_vertex_mesh_units": list(min(group)),
+                "source_component_geometry_sha256": digest,
+                "source_component_geometry_canonicalization": "sorted_float64_xyz_edges_json_v1",
                 "vertex_count": len(group),
                 "distinct_nonzero_edge_count": len(group_edges),
                 "degree_one_vertex_count": degrees.count(1),
@@ -2687,6 +2698,26 @@ def test_chain_geometry_digest_is_source_bound_not_calibration_or_signed_zero() 
     params["vertices"] = [[0, 0, 0], [1, 0, 0], [0, 2, 0]]
     changed = measure_mesh_preview(**params)["surface_trace_exact_edge_union"]
     assert changed["endpoint_graph_chains"][0]["source_chain_geometry_sha256"] != expected
+
+
+def test_component_geometry_digest_is_source_bound_not_calibration_or_signed_zero() -> None:
+    baseline = measure_mesh_preview(**PARAMS)["surface_trace_exact_edge_union"]
+    digest = baseline["endpoint_graph_components"][0]["source_component_geometry_sha256"]
+    assert digest == "e29615108a563192ae7a8d8f162a3548e4e684002489ccde85d757cdeb31e43f"
+    params = {
+        **PARAMS,
+        "vertices": [[-0.0, -0.0, 0.0], [1, -0.0, 0.0], [-0.0, 1, -0.0]],
+        "surface_trace_vertex_paths": [[1, 2, 0], [0, 2]],
+        "meters_per_unit": 0.5,
+        "relative_scale_uncertainty": None,
+    }
+    reversed_union = measure_mesh_preview(**params)["surface_trace_exact_edge_union"]
+    component = reversed_union["endpoint_graph_components"][0]
+    assert component["source_component_geometry_sha256"] == digest
+    assert component["length_m"] == pytest.approx(0.5 * (1 + sqrt(2)))
+    params["surface_trace_vertex_paths"] = [[0, 1, 2]]
+    changed = measure_mesh_preview(**params)["surface_trace_exact_edge_union"]
+    assert changed["endpoint_graph_components"][0]["source_component_geometry_sha256"] != digest
 
 
 def test_unequal_collinear_overlap_counts_distinct_pairs_in_three_dimensions() -> None:
