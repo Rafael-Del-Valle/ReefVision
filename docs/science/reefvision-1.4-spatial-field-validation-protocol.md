@@ -495,6 +495,19 @@ closed loops and split-index seams against a directed source-edge scan.
 Across all chains the traversal count must equal the number of submitted
 nonzero edge steps; the same records must survive saved-workflow replay.
 The orientation is a geometric convention, not evidence of growth direction.
+For every canonical chain edge, `selected_chain_edge_support` reports the
+zero-based edge offset, the number of distinct submitted traces containing
+that edge, and the forward and reverse traversal counts. Derive membership
+and support from indexed nonzero traversals, not a second geometric scan.
+For a trace that follows an edge once and reverses it twice, the directional
+counts are one and two, but the distinct-trace count is one. Across chains,
+the sum of directional counts must equal the full nonzero traversal count.
+Check these counts against an independent scan of the submitted paths,
+including reversed and repeated selections, split-index seams, closed
+loops, and zero-length steps. Verify standalone and twice-executed saved
+typed workflow artifacts and stable hashes. Counts describe selection
+support, not independent observers, biological replication, or confidence
+in an anatomical branch. No uncertainty reduction is justified by repeats.
 The endpoint graph and chain fingerprints remain unchanged; their
 lengths need not sum to the corrected union. Do not interpret this result as anatomical total linear
 extension. Near-collinear segments require separate registration and
