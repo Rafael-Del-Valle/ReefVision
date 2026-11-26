@@ -970,8 +970,13 @@ def test_qc_queue_standalone_and_saved_workflow_share_service(client: TestClient
     assert len(listing.json()) == 2
 
 
-@pytest.mark.parametrize("value", [True, False])
-def test_standalone_qc_rejects_boolean_weight(client: TestClient, value: bool) -> None:
+@pytest.mark.parametrize(
+    ("value", "numeric_value"),
+    [(True, 1), (False, 0), ("0", 0), ("1", 1), ("0.75", 0.75), ("1e2", 100)],
+)
+def test_standalone_qc_rejects_nonnumeric_weight(
+    client: TestClient, value: object, numeric_value: float
+) -> None:
     project = create_project(client, "QC weight input type")
     imported = import_one(client, project["id"], filename="qc-weight-input.png")
     assert len(imported["successful"]) == 1
@@ -999,10 +1004,10 @@ def test_standalone_qc_rejects_boolean_weight(client: TestClient, value: bool) -
     assert listing.status_code == 200, listing.text
     assert listing.json() == []
 
-    valid = client.post(url, json={"signal_weights": {"recent_import": int(value)}})
+    valid = client.post(url, json={"signal_weights": {"recent_import": numeric_value}})
     assert valid.status_code == 201, valid.text
     queue = valid.json()
-    assert queue["configuration_json"]["weights"]["recent_import"] == int(value)
+    assert queue["configuration_json"]["weights"]["recent_import"] == numeric_value
     assert queue["item_count"] == 1
     items = client.get(f"/api/v1/review-queues/{queue['id']}/items")
     assert items.status_code == 200, items.text
@@ -1013,7 +1018,7 @@ def test_standalone_qc_rejects_boolean_weight(client: TestClient, value: bool) -
         {
             "node_id": "qc",
             "node_type": "qc_review_queue",
-            "parameters": {"signal_weights": {"recent_import": int(value)}},
+            "parameters": {"signal_weights": {"recent_import": numeric_value}},
         },
     ]
     valid_plan = client.post(plan_url, json=graph)
@@ -1183,10 +1188,10 @@ def test_saved_qc_workflow_rejects_changed_priority_order(client: TestClient) ->
         assert recovered[0]["payload"]["queue_id"] == queue_id
         assert recovered[0]["payload"]["review_status"] == "requires_researcher_review"
 
-        # A saved run cannot coerce a Boolean supplied as a scoring weight,
+        # A saved run cannot coerce a Boolean or string scoring weight,
         # even if its persisted node parameters and retry input agree.
         original_parameters = dict(node.parameters_json or {})
-        for value in (True, False):
+        for value in (True, False, "0", "1", "0.75", "1e2"):
             invalid_parameters = {
                 **original_parameters,
                 "signal_weights": {"recent_import": value},
@@ -1291,6 +1296,7 @@ def test_saved_qc_workflow_rejects_changed_priority_order(client: TestClient) ->
         assert recovered[0]["payload"]["queue_id"] == queue_id
         assert recovered[0]["payload"]["review_status"] == "requires_researcher_review"
         assert recovered[0]["payload"]["priority_score_unit"] == "dimensionless"
+
 
 @pytest.mark.parametrize("value", ["", " ", " padded-id", "id\x00suffix", True, 0, []])
 def test_qc_source_run_id_type_parity(client: TestClient, value: object) -> None:
