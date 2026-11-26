@@ -1843,6 +1843,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert topology["human_review_verified"] is False
     assert topology["biological_validation_status"] == "not_verified_anatomical_centerline"
     chains = union["endpoint_graph_chains"]
+    _assert_chain_traversals(chains, params["vertices"], params["surface_trace_vertex_paths"])
     assert sum(chain["edge_count"] for chain in chains) == union["distinct_nonzero_edge_count"]
     assert all(chain["human_review_verified"] is False for chain in chains)
     assert {warning for chain in chains for warning in chain["qc_warnings"]} <= set(
@@ -2277,6 +2278,33 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         )
 
 
+def _assert_chain_traversals(
+    chains: list[dict[str, Any]], vertices: list[list[float]], paths: list[list[int]]
+) -> None:
+    # Independent directed scan, without the service's reverse edge index.
+    for chain in chains:
+        chain_pairs = list(pairwise(chain["source_waypoints_mesh_units"]))
+        expected = []
+        for trace_index, path in enumerate(paths):
+            for trace_offset, (a, b) in enumerate(pairwise(path)):
+                for chain_offset, (first, last) in enumerate(chain_pairs):
+                    forward = vertices[a] == first and vertices[b] == last
+                    reverse = vertices[b] == first and vertices[a] == last
+                    if forward or reverse:
+                        expected.append(
+                            {
+                                "trace_index": trace_index,
+                                "trace_edge_offset": trace_offset,
+                                "chain_edge_offset": chain_offset,
+                                "follows_chain_orientation": forward,
+                            }
+                        )
+        assert chain["selected_trace_traversals"] == expected
+    assert sum(len(chain["selected_trace_traversals"]) for chain in chains) == sum(
+        vertices[a] != vertices[b] for path in paths for a, b in pairwise(path)
+    )
+
+
 @pytest.mark.parametrize("shared", [True, False])
 @pytest.mark.parametrize("split_indices", [False, True])
 @pytest.mark.parametrize("reverse_order", [False, True])
@@ -2318,6 +2346,7 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
     assert union["distinct_nonzero_edge_count"] == 4
     assert union["unequal_collinear_overlap_pair_count"] == 0
     chains = union["endpoint_graph_chains"]
+    _assert_chain_traversals(chains, vertices, paths)
     assert [chain["edge_count"] for chain in chains] == [3, 1]
     first_trace, last_trace = (2, 0) if reverse_order else (0, 2)
     loop_memberships = [
@@ -2472,6 +2501,7 @@ def test_shared_trace_pairs_count_distinct_edges_not_repeated_traversals() -> No
     assert union["redundant_traversal_source_length_mesh_units"] == pytest.approx(3 + 2 * sqrt(2))
     assert union["source_length_mesh_units"] == pytest.approx(1 + sqrt(2))
     chains = union["endpoint_graph_chains"]
+    _assert_chain_traversals(chains, params["vertices"], params["surface_trace_vertex_paths"])
     assert len(chains) == 1
     assert chains[0]["selected_trace_memberships"] == [
         {"trace_index": 0, "chain_edge_offsets": [0, 1]},
