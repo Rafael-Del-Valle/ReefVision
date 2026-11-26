@@ -471,6 +471,12 @@ Both union methods also surface their numerical QC codes in the preview's
 or scale-only interval. Check positive underflow and positive uncertainty
 below binary64 resolution; missing uncertainty and an explicitly zero
 uncertainty must remain distinct from an unrepresentable interval.
+Individual chain warnings also surface once per QC code in preview-level
+`qc_warnings`. Validate a mixed network with a positive but underflowed
+chain and a representable longer chain: both aggregate union measurements
+may remain available, but the short chain length and interval must be null
+and the preview must disclose its numeric warning. This is a resolution
+qualification, not a biological branch classification.
 The endpoint graph and chain fingerprints remain unchanged; their
 lengths need not sum to the corrected union. Do not interpret this result as anatomical total linear
 extension. Near-collinear segments require separate registration and
