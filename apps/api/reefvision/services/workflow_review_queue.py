@@ -277,7 +277,11 @@ def create_review_queue_workflow_artifact(
     # retry must not silently change its source QC run or review threshold,
     # including explicit None versus an omitted value. Ignore only runtime
     # identifiers injected by WorkflowExecutionService.
-    saved_parameters = dict(node.parameters_json or {})
+    # JSON arrays of key/value pairs can be silently coerced to dictionaries,
+    # even with duplicate keys. A saved QC contract must be a JSON object.
+    if not isinstance(node.parameters_json, dict):
+        raise ValidationError("QC Review Queue has invalid saved parameter object")
+    saved_parameters = dict(node.parameters_json)
     supplied_parameters = {
         key: value
         for key, value in parameters.items()
