@@ -10,6 +10,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.orm.attributes import flag_modified
 
 from reefvision.db.models import (
     DatasetVersion,
@@ -145,6 +146,11 @@ def test_frozen_item_evidence_cannot_change_under_standalone_or_saved_qc(
     [
         "annotation_total",
         "class_census",
+        "class_census_boolean",
+        "class_census_float",
+        "summary_image_count_boolean",
+        "summary_annotation_count_float",
+        "summary_mask_count_boolean",
         "reused_identity",
         "empty_identity",
         "negative_box",
@@ -199,6 +205,15 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             version.annotation_count += 1
         elif tamper == "class_census":
             item.per_class_counts_json = {"forged_taxon": item.annotation_count}
+        elif tamper in {"class_census_boolean", "class_census_float"}:
+            class_id = str(item.annotation_snapshot_json[0]["label_class_id"])
+            item.per_class_counts_json = {
+                class_id: True if tamper == "class_census_boolean" else 1.0
+            }
+            # ORM equality also conflates bool/float with integer counts.
+            flag_modified(item, "per_class_counts_json")
+        elif tamper.startswith("summary_"):
+            pass  # The version manifest is mutated below.
         elif tamper == "source_digest_nonhex":
             item.image_sha256 = "z" * 64
         elif tamper == "source_width_zero":
@@ -253,6 +268,16 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             **version.manifest_json,
             "items": [{**payload, "snapshot_sha256": item.snapshot_sha256}],
         }
+        if tamper.startswith("summary_"):
+            summary_key, replacement = {
+                "summary_image_count_boolean": ("image_count", True),
+                "summary_annotation_count_float": ("annotation_count", 1.0),
+                "summary_mask_count_boolean": ("mask_annotation_count", False),
+            }[tamper]
+            manifest["summary"] = {
+                **version.manifest_json["summary"],
+                summary_key: replacement,
+            }
         if tamper in {"annotation_total", "reused_identity"}:
             manifest["summary"] = {
                 **version.manifest_json["summary"],
@@ -277,6 +302,7 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             else:
                 manifest["split_config"]["achieved_ratios"] = version.achieved_ratios_json
         version.manifest_json = manifest
+        flag_modified(version, "manifest_json")
         version.manifest_sha256 = canonical_json_sha256(manifest)
         session.flush()
         with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
@@ -285,6 +311,12 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             ReviewQueueService(session, app.state.settings).create_queue_for_dataset_version(
                 version_id, ReviewQueueCreateRequest()
             )
+
+        if tamper.startswith(("class_census_", "summary_")):
+            with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+                ReviewQueueService(session, app.state.settings).regenerate(
+                    standalone.json()["id"]
+                )
 
         nodes = {
             node.node_type: node
