@@ -64,6 +64,31 @@ METRIC_0039_COLUMNS = {
 }
 
 
+# Identical ModelRegistration columns in the 1.1, 1.6 and 1.9 branches.
+# Use a fixed projection to compare retained registry metadata even if a
+# future migration adds columns. This does not hash checkpoint files.
+MODEL_REGISTRATION_COLUMNS = (
+    "id",
+    "project_id",
+    "purpose",
+    "display_name",
+    "source_filename",
+    "managed_path",
+    "sha256",
+    "file_size_bytes",
+    "framework",
+    "task",
+    "provider_name",
+    "provider_version",
+    "class_map_json",
+    "input_size_json",
+    "metadata_json",
+    "notes",
+    "created_at",
+    "updated_at",
+)
+
+
 def _without_sql_comments(ddl: str) -> str:
     """Discard SQL comments without stripping quoted literals or identifiers."""
     tokens = re.compile(
@@ -203,6 +228,22 @@ def inspect_database(path: Path, *, hash_affected_rows: bool = False) -> dict[st
                 if table in tables
             }
             if hash_affected_rows
+            else None
+        )
+        # The registered-model table is shared across these branches. Report
+        # absent, empty and populated registries distinctly, without exposing
+        # paths, names or private training metadata. Use the same snapshot.
+        model_registry_present = "model_registrations" in tables
+        model_registry_row_count = (
+            connection.execute('SELECT COUNT(*) FROM "model_registrations"').fetchone()[0]
+            if model_registry_present
+            else None
+        )
+        model_registry_fingerprint = (
+            _table_content_fingerprint(
+                connection, "model_registrations", project_columns=MODEL_REGISTRATION_COLUMNS
+            )
+            if hash_affected_rows and model_registry_present
             else None
         )
         # Later 1.1/1.6 migrations also reuse revision IDs. Record their
@@ -459,6 +500,10 @@ def inspect_database(path: Path, *, hash_affected_rows: bool = False) -> dict[st
         "affected_table_content_fingerprints": affected_table_content_fingerprints,
         "affected_table_content_fingerprint_algorithm": "reefvision-sqlite-row-multiset-v1",
         "metric_0039_content_fingerprints": metric_0039_content_fingerprints,
+        "model_registry_present": model_registry_present,
+        "model_registry_row_count": model_registry_row_count,
+        "model_registry_metadata_fingerprint": model_registry_fingerprint,
+        "model_registry_checkpoint_files_verified": False,
         "observed_later_migration_objects": sorted(later_objects),
         "review_event_check": review_check if groups["review_0038"] else None,
         "qc_event_scope_violations": qc_scope_violations,
@@ -484,7 +529,7 @@ def main() -> int:
     parser.add_argument(
         "--hash-affected-rows",
         action="store_true",
-        help="Hash affected table contents for preservation review (memory scales with row count)",
+        help="Hash affected tables and model registry metadata (memory scales with row count)",
     )
     args = parser.parse_args()
     try:
