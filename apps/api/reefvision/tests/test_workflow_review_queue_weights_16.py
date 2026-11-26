@@ -107,6 +107,7 @@ def test_saved_custom_weights_match_standalone_scoring(client: TestClient) -> No
     [
         {name: 0.0 for name in ReviewScoreWeights.model_fields},
         {"not_a_qc_signal": 1.0},
+        {"recent_import": 2.0, "recent_improt": 3.0},
         {"unreviewed_state": -1.0},
         {"low_mean_confidence": 1e308, "low_min_confidence": 1e308},
     ],
@@ -115,6 +116,12 @@ def test_invalid_weights_fail_saved_graph_planning(
     client: TestClient, weights: dict[str, float]
 ) -> None:
     project_id = create_project(client, "Invalid workflow QC weights")["id"]
+    imported = import_one(client, project_id, filename="invalid-weights-coral.png")
+    assert len(imported["successful"]) == 1
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/review-queues", json={"signal_weights": weights}
+    )
+    assert standalone.status_code == 422, standalone.text
     plan = client.post(
         f"/api/v1/projects/{project_id}/workflow-graphs/plan",
         json=_weighted_graph(weights),
