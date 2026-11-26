@@ -188,6 +188,7 @@ def test_saved_event_definition_replay_preserves_historical_evidence(
     base = f"/api/v1/projects/{project['id']}/environment/events/definitions"
     assert client.get(f"{base}/{definition['id']}").json() == definition
 
+
 def test_saved_event_definition_respects_observation_context_bounds(
     client: TestClient,
 ) -> None:
@@ -264,4 +265,3 @@ def test_saved_event_definition_respects_observation_context_bounds(
     assert [match["record_id"] for match in payload["matches"]] == [accepted_id]
     assert len(artifact["payload_sha256"]) == 64
     assert client.get(records_url).json()["total"] == 9
-
