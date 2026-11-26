@@ -360,3 +360,55 @@ def test_current_streamline_rejects_obsolete_environmental_snapshot(
         request = CurrentFieldAnalysisRequest.model_validate(_parameters(record_ids))
         with pytest.raises(ValidationError, match="environmental snapshot"):
             CurrentFieldService(session).preview(project["id"], request)
+
+        source_hashes: dict[str, str] = {}
+        for record_id in record_ids:
+            source = session.get(ScientificRecord, record_id)
+            assert source is not None
+            source_hashes[record_id] = source.content_sha256
+
+    # A saved graph must enforce the same provider-snapshot policy as preview.
+    # Rejected inputs remain available for audit, but cannot yield new evidence.
+    queued = save_and_queue(client, project["id"], _graph(_parameters(record_ids)))
+    assert not process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(queued["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{queued['id']}").json()
+    assert detail["run"]["status"] == "failed"
+    assert not any(
+        item["data_type"] == "environmental_analysis_result" for item in detail["artifacts"]
+    )
+    with app.state.session_factory() as session:
+        failed_node = session.scalar(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == queued["id"],
+                WorkflowNodeRun.status == "failed",
+            )
+        )
+        assert failed_node is not None
+        assert "obsolete environmental snapshot" in (failed_node.error_message or "")
+        definition_count = session.scalar(
+            select(func.count())
+            .select_from(EnvironmentalAnalysisDefinition)
+            .where(EnvironmentalAnalysisDefinition.project_id == project["id"])
+        )
+        result_count = session.scalar(
+            select(func.count())
+            .select_from(EnvironmentalAnalysisResult)
+            .where(EnvironmentalAnalysisResult.project_id == project["id"])
+        )
+        assert definition_count == 0
+        assert result_count == 0
+        cache = session.scalar(
+            select(EnvironmentalCacheEntry).where(
+                EnvironmentalCacheEntry.project_id == project["id"],
+                EnvironmentalCacheEntry.cache_key == cache_key,
+            )
+        )
+        assert cache is not None
+        assert cache.payload_json == cache_payload
+        assert cache.content_sha256 == content_hash(cache_payload)
+        for record_id, original_hash in source_hashes.items():
+            source = session.get(ScientificRecord, record_id)
+            assert source is not None
+            assert source.content_sha256 == original_hash
