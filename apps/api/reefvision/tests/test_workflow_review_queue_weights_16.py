@@ -157,6 +157,40 @@ def test_invalid_confidence_threshold_refused_before_qc_execution(
     assert queues.json() == []
 
 
+@pytest.mark.parametrize("threshold", [0, 1])
+def test_numeric_confidence_boundary_matches_saved_qc(
+    client: TestClient, threshold: int
+) -> None:
+    project_id, prediction_id = _local_prediction(client)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        prediction = session.get(PredictionProposal, prediction_id)
+        assert prediction is not None
+        prediction.confidence = float(threshold)
+        session.commit()
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/review-queues",
+        json={"review_below_confidence": threshold},
+    )
+    assert standalone.status_code == 201, standalone.text
+    graph = _weighted_graph(None)
+    graph["nodes"][1]["parameters"]["review_below_confidence"] = threshold
+    plan = client.post(f"/api/v1/projects/{project_id}/workflow-graphs/plan", json=graph)
+    assert plan.status_code == 200, plan.text
+    assert plan.json()["valid"] and plan.json()["executable"]
+    payload = _payload(_execute(client, project_id, graph))
+    assert payload["priority_score_unit"] == "dimensionless"
+    assert payload["review_status"] == "requires_researcher_review"
+    for queue_id in (standalone.json()["id"], payload["queue_id"]):
+        queue = client.get(f"/api/v1/review-queues/{queue_id}")
+        assert queue.status_code == 200, queue.text
+        assert queue.json()["configuration_json"]["review_below_confidence"] == threshold
+        items = client.get(f"/api/v1/review-queues/{queue_id}/items")
+        assert items.status_code == 200, items.text
+        assert len(items.json()["items"]) == 1
+        assert items.json()["items"][0]["review_state"] == "pending"
+
+
 @pytest.mark.parametrize("legacy", [True, False])
 def test_saved_qc_retry_preserves_original_weights_and_legacy_defaults(
     client: TestClient, legacy: bool
