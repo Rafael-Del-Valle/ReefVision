@@ -323,3 +323,24 @@ file-byte preservation. This is an offline evidence gate, not a new
 scientific operation; existing typed saved QC Workflow Builder and
 researcher approval remain unchanged. No reconciliation or upgrade is
 authorized by this evidence alone.
+
+
+## Independent copy-comparison CHECK and index parity (2026-11-25)
+
+The independent SQLite comparison inspector now refuses an Alembic stamp
+table with an explicit CHECK or explicit index, matching the existing
+lightweight lineage inventory. Identical databases with a current valid
+stamp and clean integrity checks can otherwise conceal an expression or
+partial index that fails on the next revision, or a CHECK that pins the
+stamp to its current value. Quoted identifiers and comments containing
+CHECK are not constraints. The check and index diagnostics expose fixed
+reason codes rather than raw SQL or biological observations.
+
+Nine disposable comparison regression configurations exercise identical
+source/candidate databases, four strict modes and informational mode;
+both files must remain byte-identical to their respective originals.
+Nine isolated SQLite checks of the added predicate passed; repository
+pytest and exact-head CI remain unverified locally. No scientific node,
+migration, review state, or saved typed Workflow Builder contract changes.
+Independent lineage reconciliation, real biological and installed Windows
+acceptance and researcher approval remain mandatory.
