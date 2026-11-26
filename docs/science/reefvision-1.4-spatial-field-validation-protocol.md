@@ -423,3 +423,27 @@ anatomical skeleton. It does not split unequal overlapping segments, join
 interior crossings, or resolve biological continuity across occlusions.
 Human-reviewed source geometry, anatomical reference lengths and independent
 specimen validation remain necessary before reporting total linear extension.
+
+### Selected chain geometry fingerprints and junction context
+
+Each provisional chain exposes `source_chain_geometry_sha256` with
+canonicalization `ordered_float64_xyz_compact_json_v1`. Hash the ordered
+source XYZ waypoints (binary64 values, signed zero normalized to positive
+zero) serialized as compact UTF-8 JSON. The deterministic chain ordering
+makes this digest independent of trace selection order, reversal, split
+vertex IDs and meter calibration, provided the selected endpoint graph
+and chain partition are unchanged. A changed waypoint changes the digest.
+Retain the full reconstruction fingerprint and calibration evidence as
+separate provenance; the chain digest alone cannot authenticate either.
+
+The two `endpoint_graph_degrees` describe the graph degrees at the first
+and last waypoint. A closed cycle returning to a junction can have degree
+three or more at both ends; an isolated cycle has degree two at both ends.
+These are not root/tip identities or verified anatomical junctions.
+
+Check independent SHA-256 oracles for an open path, isolated cycle and
+loop-with-tail, including signed zero, reversed selections, split-index
+seams, calibration changes and a moved waypoint. Verify the same digests
+and endpoint degrees in standalone and persisted typed mesh preview
+workflow artifacts. This fingerprint is not a persistent biological ID,
+registration across acquisitions, or evidence of completed human review.
