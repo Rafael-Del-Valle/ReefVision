@@ -330,18 +330,14 @@ def test_longitudinal_legacy_missing_source_integrity_stays_unverified() -> None
         ("inline", "insufficient_original_source_lineage"),
     ],
 )
-def test_acquisition_lineage_never_certifies_independence(
-    case: str, expected_status: str
-) -> None:
+def test_acquisition_lineage_never_certifies_independence(case: str, expected_status: str) -> None:
     before = _imported_observation("early", 1)
     after = _imported_observation("late", 2)
     if case in ("same_bytes", "same_asset", "reexport"):
         after = _imported_observation("late", 1)
     if case == "same_asset":
         for record in (before, after):
-            record["provenance"]["spatial_source_asset_id"] = (
-                "11111111-1111-4111-8111-111111111111"
-            )
+            record["provenance"]["spatial_source_asset_id"] = "11111111-1111-4111-8111-111111111111"
     elif case == "reexport":
         after["provenance"]["source_payload_sha256"] = "f" * 64
     elif case == "legacy":
@@ -355,9 +351,8 @@ def test_acquisition_lineage_never_certifies_independence(
     assert provenance["independent_acquisition_verified"] is False
     assert provenance["specimen_identity_verified"] is False
     assert provenance["review_evidence_bundle"] is None
-    assert (
-        "independent_acquisition_source_lineage_unavailable" in result["qc_warnings"]
-    ) == (case in ("legacy", "inline"))
+    missing_lineage = "independent_acquisition_source_lineage_unavailable" in result["qc_warnings"]
+    assert missing_lineage == (case in ("legacy", "inline"))
     if case in ("same_bytes", "same_asset"):
         assert result["delta_surface_area_m2"] is None
 
@@ -792,9 +787,7 @@ def test_reused_imported_original_qc_survives_saved_typed_workflow(
     assert expected["after_surface_area_m2"] == pytest.approx(
         4 * expected["before_surface_area_m2"]
     )
-    assert expected["provenance"]["acquisition_lineage_status"] == (
-        "reused_imported_source_payload"
-    )
+    assert expected["provenance"]["acquisition_lineage_status"] == "reused_imported_source_payload"
     assert expected["provenance"]["independent_acquisition_verified"] is False
     assert expected["delta_surface_area_m2"] is None
     assert expected["average_surface_area_change_m2_per_day"] is None
