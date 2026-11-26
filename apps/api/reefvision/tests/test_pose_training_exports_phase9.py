@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -294,3 +295,39 @@ def test_training_export_fails_closed_on_source_video_checksum_mismatch(
     assert response.status_code == 409
 
     assert "source video bytes differ" in response.text.lower()
+
+def test_training_export_rejects_source_video_changed_during_decode(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dataset = _frozen_dataset(client, monkeypatch)
+    original_files: list[tuple[Path, bytes]] = []
+
+    class MutatingCapture(_FakeCapture):
+        def __init__(self, path: str) -> None:
+            super().__init__(path)
+            self.source = Path(path)
+
+        def release(self) -> None:
+            super().release()
+            original = self.source.read_bytes()
+            original_files.append((self.source, original))
+            self.source.write_bytes(original + b"changed during decode")
+
+    monkeypatch.setattr(cv2, "VideoCapture", MutatingCapture)
+    url = f"/api/v1/pose-training-datasets/{dataset['id']}/export"
+    try:
+        response = client.get(url, params={"format": "ultralytics_pose"})
+        assert original_files
+        assert response.status_code == 409, response.text
+        assert "source video bytes changed during pose export" in response.text.lower()
+    finally:
+        for source, original in reversed(original_files):
+            source.write_bytes(original)
+
+    monkeypatch.setattr(cv2, "VideoCapture", _FakeCapture)
+    retry = client.get(url, params={"format": "ultralytics_pose"})
+    assert retry.status_code == 200, retry.text
+    with zipfile.ZipFile(io.BytesIO(retry.content)) as archive:
+        manifest = json.loads(archive.read("reefvision-pose-training-export-manifest.json"))
+        assert manifest["dataset"]["dataset_manifest_sha256"] == dataset["manifest_sha256"]
