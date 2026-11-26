@@ -1785,13 +1785,33 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     topology = union["endpoint_graph_topology"]
     assert topology["human_review_verified"] is False
     assert topology["biological_validation_status"] == "not_verified_anatomical_centerline"
+    chains = union["endpoint_graph_chains"]
+    assert sum(chain["edge_count"] for chain in chains) == union["distinct_nonzero_edge_count"]
+    assert all(chain["human_review_verified"] is False for chain in chains)
     if case in {"closed_loop", "closed_loop_reverse", "closed_loop_rotated"}:
+        assert len(chains) == 1
+        assert chains[0]["is_closed"] is True
+        assert chains[0]["source_waypoints_mesh_units"] == [
+            [0, 0, 0],
+            [0, 1, 0],
+            [1, 0, 0],
+            [0, 0, 0],
+        ]
+        assert chains[0]["source_length_mesh_units"] == pytest.approx(2 + sqrt(2))
         assert topology["vertex_count"] == 3
         assert topology["connected_component_count"] == 1
         assert topology["degree_one_vertex_count"] == 0
         assert topology["degree_three_or_more_vertex_count"] == 0
         assert topology["cycle_rank"] == 1
     if case == "ordinary":
+        assert len(chains) == 1
+        assert chains[0]["is_closed"] is False
+        assert chains[0]["source_waypoints_mesh_units"] == [
+            [0, 0, 0],
+            [0, 1, 0],
+            [1, 0, 0],
+        ]
+        assert chains[0]["length_m"] == pytest.approx(0.01 * (1 + sqrt(2)))
         assert topology["vertex_count"] == 3
         assert topology["connected_component_count"] == 1
         assert topology["degree_one_vertex_count"] == 2
@@ -1803,6 +1823,9 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert union["length_m"] is None
         assert union["length_scale_only_interval_m"] is None
         assert union["qc_warnings"] == ["surface_trace_exact_edge_union_length_underflow"]
+        assert chains[0]["length_m"] is None
+        assert chains[0]["length_scale_only_interval_m"] is None
+        assert chains[0]["qc_warnings"] == ["surface_trace_chain_length_underflow"]
     if case == "reused_geometric_segment":
         assert union["nonzero_edge_traversal_count"] == 4
         assert union["distinct_nonzero_edge_count"] == 3
@@ -2202,6 +2225,22 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
     union = direct["surface_trace_exact_edge_union"]
     source_length = 9 + sqrt(13)
     assert union["distinct_nonzero_edge_count"] == 4
+    chains = union["endpoint_graph_chains"]
+    assert [chain["edge_count"] for chain in chains] == [3, 1]
+    assert [chain["is_closed"] for chain in chains] == [True, False]
+    assert [chain["source_waypoints_mesh_units"] for chain in chains] == [
+        [[2, 0, 0], [0, 0, 0], [2, 3, 0], [2, 0, 0]],
+        [[2, 0, 0], [2, 0, 4]],
+    ]
+    for chain, length in zip(chains, [5 + sqrt(13), 4], strict=True):
+        assert chain["source_length_mesh_units"] == pytest.approx(length)
+        assert chain["length_m"] == pytest.approx(length * 0.01)
+        assert chain["length_scale_only_interval_m"] == pytest.approx(
+            [length * 0.009, length * 0.011]
+        )
+        assert chain["human_review_verified"] is False
+        assert chain["biological_validation_status"] == "not_verified_anatomical_centerline"
+        assert chain["qc_warnings"] == []
     assert union["endpoint_graph_topology"] == {
         "method": "exact_nonzero_edge_endpoint_graph",
         "vertex_count": 4,
@@ -2338,4 +2377,10 @@ def test_exact_trace_endpoint_graph_does_not_connect_interior_crossings() -> Non
     assert topology["degree_three_or_more_vertex_count"] == 0
     assert topology["cycle_rank"] == 0
     assert union["source_length_mesh_units"] == pytest.approx(4.0)
+    chains = union["endpoint_graph_chains"]
+    assert [chain["source_waypoints_mesh_units"] for chain in chains] == [
+        [[-1, 0, 0], [1, 0, 0]],
+        [[0, -1, 0], [0, 1, 0]],
+    ]
+    assert [chain["length_m"] for chain in chains] == pytest.approx([0.02, 0.02])
     assert topology["human_review_verified"] is False
