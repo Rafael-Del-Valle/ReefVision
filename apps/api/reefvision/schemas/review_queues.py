@@ -16,7 +16,8 @@ from reefvision.schemas.review_queue_events import has_unsafe_reviewer_label_con
 class ReviewScoreWeights(BaseModel):
     # Reject unknown signal names instead of silently using default weights.
     # NaN/Inf cannot be scientifically interpreted as priority weights.
-    model_config = ConfigDict(allow_inf_nan=False, extra="forbid")
+    # JSON strings are not dimensionless numerical weights; retain int/float inputs.
+    model_config = ConfigDict(allow_inf_nan=False, extra="forbid", strict=True)
 
     low_mean_confidence: float = Field(default=24.0, ge=0)
     low_min_confidence: float = Field(default=12.0, ge=0)
