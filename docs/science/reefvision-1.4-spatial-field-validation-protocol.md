@@ -566,3 +566,18 @@ minimum vertex and vertex count remain unchanged. Compare independent
 edge enumeration and standalone/replayed workflow hashes. This fingerprint
 is source-coordinate dependent; it is not a persistent organism identifier,
 a registration-invariant descriptor, or evidence of completed human review.
+
+Component selection provenance now includes `selected_trace_indices`
+(sorted zero-based submitted trace indices with at least one nonzero
+edge in the component), `nonzero_edge_traversal_count` (including
+repetitions) and `distinct_trace_edge_membership_count` (one count per
+unique trace/undirected edge pair). The latter is not the number of
+independent researchers or independent biological observations. Counts
+must agree with direct enumeration of submitted source steps, even after
+reversal, repeated traversal, split-index seams or zero-length steps.
+Across components, traversal counts sum to the global nonzero traversal
+count; membership counts sum to the distinct global edge count plus
+cross-trace redundant traversals. Compare these fields in standalone
+previews and repeated executions of the saved typed graph, including
+artifact hashes. Selection provenance does not change source geometry
+fingerprints, calibration uncertainty or provisional review status.
