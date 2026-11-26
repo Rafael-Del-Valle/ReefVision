@@ -1217,6 +1217,39 @@ def test_saved_qc_workflow_rejects_changed_priority_order(client: TestClient) ->
         assert recovered[0]["payload"]["queue_id"] == queue_id
         assert recovered[0]["payload"]["review_status"] == "requires_researcher_review"
 
+        # Invalid explicit source IDs cannot request automatic selection on
+        # retry, even when saved parameters and caller agree.
+        for value in ("", " ", " padded-id", "id\x00suffix"):
+            invalid_parameters = {
+                **original_parameters,
+                "source_quality_control_run_id": value,
+            }
+            node.parameters_json = invalid_parameters
+            session.flush()
+            with pytest.raises(ValidationError, match="invalid review parameters"):
+                execute_runtime_adapter(
+                    "qc_review_queue",
+                    session=session,
+                    settings=app.state.settings,
+                    project_id=project["id"],
+                    parameters={**params, **invalid_parameters},
+                    inputs={"project": [source]},
+                )
+            assert rows[0].review_state == "in_progress"
+            assert queue.item_count == 2
+        node.parameters_json = original_parameters
+        session.flush()
+        recovered = execute_runtime_adapter(
+            "qc_review_queue",
+            session=session,
+            settings=app.state.settings,
+            project_id=project["id"],
+            parameters=params,
+            inputs={"project": [source]},
+        )
+        assert recovered[0]["payload"]["queue_id"] == queue_id
+        assert recovered[0]["payload"]["review_status"] == "requires_researcher_review"
+
         # A project-scoped queue cannot certify held-out dataset membership,
         # even if the substituted split and aggregate summary agree.
         original_summary = dict(queue.summary_json)
@@ -1258,3 +1291,42 @@ def test_saved_qc_workflow_rejects_changed_priority_order(client: TestClient) ->
         assert recovered[0]["payload"]["queue_id"] == queue_id
         assert recovered[0]["payload"]["review_status"] == "requires_researcher_review"
         assert recovered[0]["payload"]["priority_score_unit"] == "dimensionless"
+
+@pytest.mark.parametrize("value", ["", " ", " padded-id", "id\x00suffix", True, 0, []])
+def test_qc_source_run_id_type_parity(client: TestClient, value: object) -> None:
+    project = create_project(client, "QC explicit source identity")
+    imported = import_one(client, project["id"], filename="qc-source-identity.png")
+    assert len(imported["successful"]) == 1
+    url = f"/api/v1/projects/{project['id']}/review-queues"
+    plan_url = f"/api/v1/projects/{project['id']}/workflow-graphs/plan"
+    graph = _graph()
+    graph["nodes"] = [
+        {"node_id": "project", "node_type": "project_source"},
+        {
+            "node_id": "qc",
+            "node_type": "qc_review_queue",
+            "parameters": {"source_quality_control_run_id": value},
+        },
+    ]
+    refused = client.post(url, json={"source_quality_control_run_id": value})
+    assert refused.status_code == 422, refused.text
+    plan = client.post(plan_url, json=graph)
+    assert plan.status_code == 200, plan.text
+    assert not plan.json()["valid"] and not plan.json()["executable"]
+    assert any(issue["code"] == "invalid_qc_source_run_id" for issue in plan.json()["issues"])
+    listing = client.get(url)
+    assert listing.status_code == 200, listing.text
+    assert listing.json() == []
+
+    # Explicit null retains the ordinary automatic source selection contract.
+    valid = client.post(url, json={"source_quality_control_run_id": None})
+    assert valid.status_code == 201, valid.text
+    queue = valid.json()
+    assert queue["item_count"] == 1
+    assert queue["source_quality_control_run_id"] is None
+    items = client.get(f"/api/v1/review-queues/{queue['id']}/items")
+    assert items.status_code == 200, items.text
+    assert items.json()["items"][0]["review_state"] == "pending"
+    valid_plan = client.post(plan_url, json=_graph())
+    assert valid_plan.status_code == 200, valid_plan.text
+    assert valid_plan.json()["valid"] and valid_plan.json()["executable"]
