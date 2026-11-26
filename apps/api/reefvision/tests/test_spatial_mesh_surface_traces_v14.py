@@ -2413,9 +2413,8 @@ def test_chain_geometry_digest_is_source_bound_not_calibration_or_signed_zero() 
         "meters_per_unit": 0.5,
         "relative_scale_uncertainty": None,
     }
-    reversed_chain = measure_mesh_preview(**params)["surface_trace_exact_edge_union"][
-        "endpoint_graph_chains"
-    ][0]
+    reversed_union = measure_mesh_preview(**params)["surface_trace_exact_edge_union"]
+    reversed_chain = reversed_union["endpoint_graph_chains"][0]
     assert reversed_chain["source_chain_geometry_sha256"] == expected
     assert reversed_chain["length_m"] == pytest.approx(0.5 * (1 + sqrt(2)))
     params["vertices"] = [[0, 0, 0], [1, 0, 0], [0, 2, 0]]
