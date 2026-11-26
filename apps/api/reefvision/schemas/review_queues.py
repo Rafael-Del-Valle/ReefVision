@@ -67,6 +67,15 @@ class ReviewQueueCreateRequest(BaseModel):
     )
     created_by: str | None = Field(default=None, max_length=100)
 
+    @field_validator("source_quality_control_run_id")
+    @classmethod
+    def validate_source_run_id(cls, value: str | None) -> str | None:
+        # Only None requests automatic source selection. An empty explicit ID
+        # must never silently select a different historical QC run.
+        if value is not None and (not value or value != value.strip() or "\x00" in value):
+            raise ValueError("QC source run ID must be a nonempty, unpadded identifier")
+        return value
+
 
 class ReviewScoreComponentResponse(BaseModel):
     signal_id: str
