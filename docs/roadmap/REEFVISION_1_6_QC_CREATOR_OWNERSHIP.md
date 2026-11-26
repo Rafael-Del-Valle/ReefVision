@@ -92,3 +92,23 @@ guard/digest probes passed; these are not full repository tests. GitHub
 checkout remains blocked by DNS and exact-head CI is unverified. The
 independent integrated migration, representative biological workflow and
 native Windows installed-GUI/MSI acceptance gates remain HOLD.
+
+## Explicit null digest refusal — 2026-11-26
+
+Historical queues can omit optional scientific digest keys, but a present
+key with JSON null is not an unsigned historical record. The shared saved
+snapshot validator now distinguishes absence from explicit null for both
+scoring provenance and immutable item evidence. A removed integrity version
+marker no longer allows a null digest to bypass validation during manual
+regeneration or saved Workflow Builder replay. Actual historical omissions
+and matching digest values retain their compatibility behavior.
+
+Three standalone and two saved-workflow regression configurations exercise
+null digests, refusal without replacing the queue, restored exact replay,
+dimensionless priorities and pending researcher review. Existing reviewer
+comments and original queue identity remain unchanged. Twenty-one isolated
+SQLite JSON digest-presence probes passed; full repository pytest, lint,
+typing, CI and installed Windows acceptance have not been verified. This
+does not authenticate arbitrary database rewrites or retroactively infer
+missing scientific evidence from unsigned historical snapshots. Release HOLD
+remains in effect.
