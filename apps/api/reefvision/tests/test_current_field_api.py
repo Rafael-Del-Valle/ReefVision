@@ -85,6 +85,27 @@ def test_streamline_preview_uses_one_compatible_scientific_record_slice(
     assert "uncertainty is not propagated" in notes
     assert ("unassessed QC" in notes) == (qc == "unassessed")
 
+    # A caller's selection order is not part of the scientific grid identity.
+    reversed_ids = ids[::-1]
+    reordered = client.post(
+        f"/api/v1/projects/{project['id']}/current-field/streamlines/preview",
+        json={**request, "scientific_record_ids": reversed_ids},
+    )
+    assert reordered.status_code == 200, reordered.text
+    reordered_result = reordered.json()
+    assert reordered_result["source_record_ids"] == reversed_ids
+    assert reordered_result["input_sha256"] == result["input_sha256"]
+    assert reordered_result["streamlines"] == result["streamlines"]
+    assert reordered_result["methodological_notes"] == result["methodological_notes"]
+
+    # Repeating an identifier must not masquerade as independent grid evidence.
+    duplicate = client.post(
+        f"/api/v1/projects/{project['id']}/current-field/streamlines/preview",
+        json={**request, "scientific_record_ids": [*ids, ids[0]]},
+    )
+    assert duplicate.status_code == 400, duplicate.text
+    assert "identifiers must be unique" in duplicate.json()["detail"]
+
     # Both coordinate axes remain populated, but one missing vector component
     # must invalidate the grid rather than produce an interpolated velocity.
     incomplete = client.post(
