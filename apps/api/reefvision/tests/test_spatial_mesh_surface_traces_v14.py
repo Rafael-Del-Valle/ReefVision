@@ -1844,6 +1844,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert topology["biological_validation_status"] == "not_verified_anatomical_centerline"
     chains = union["endpoint_graph_chains"]
     _assert_chain_traversals(chains, params["vertices"], params["surface_trace_vertex_paths"])
+    _assert_endpoint_components(union, params["vertices"], params["surface_trace_vertex_paths"])
     assert sum(chain["edge_count"] for chain in chains) == union["distinct_nonzero_edge_count"]
     assert all(chain["human_review_verified"] is False for chain in chains)
     assert {warning for chain in chains for warning in chain["qc_warnings"]} <= set(
@@ -2278,6 +2279,54 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         )
 
 
+def _assert_endpoint_components(
+    union: dict[str, Any], vertices: list[list[float]], paths: list[list[int]]
+) -> None:
+    # Independent set-merging oracle, starting from submitted edges.
+    edges = {
+        frozenset((tuple(vertices[a]), tuple(vertices[b])))
+        for path in paths
+        for a, b in pairwise(path)
+        if vertices[a] != vertices[b]
+    }
+    groups: list[set[tuple[float, ...]]] = []
+    for edge in edges:
+        joined = set(edge)
+        separate = []
+        for group in groups:
+            if joined.intersection(group):
+                joined.update(group)
+            else:
+                separate.append(group)
+        groups = [*separate, joined]
+    expected = []
+    chains = union["endpoint_graph_chains"]
+    for group in sorted(groups, key=min):
+        group_edges = [edge for edge in edges if edge <= group]
+        degrees = [sum(point in edge for edge in group_edges) for point in group]
+        expected.append(
+            {
+                "source_min_vertex_mesh_units": list(min(group)),
+                "vertex_count": len(group),
+                "distinct_nonzero_edge_count": len(group_edges),
+                "degree_one_vertex_count": degrees.count(1),
+                "degree_three_or_more_vertex_count": sum(degree >= 3 for degree in degrees),
+                "cycle_rank": len(group_edges) - len(group) + 1,
+                "chain_indices": [
+                    index
+                    for index, chain in enumerate(chains)
+                    if all(tuple(point) in group for point in chain["source_waypoints_mesh_units"])
+                ],
+                "biological_validation_status": "not_verified_anatomical_centerline",
+                "human_review_verified": False,
+            }
+        )
+    assert union["endpoint_graph_components"] == expected
+    assert sorted(index for item in expected for index in item["chain_indices"]) == list(
+        range(len(chains))
+    )
+
+
 def _assert_chain_traversals(
     chains: list[dict[str, Any]], vertices: list[list[float]], paths: list[list[int]]
 ) -> None:
@@ -2370,6 +2419,7 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
     assert union["unequal_collinear_overlap_pair_count"] == 0
     chains = union["endpoint_graph_chains"]
     _assert_chain_traversals(chains, vertices, paths)
+    _assert_endpoint_components(union, vertices, paths)
     assert [chain["edge_count"] for chain in chains] == [3, 1]
     first_trace, last_trace = (2, 0) if reverse_order else (0, 2)
     loop_memberships = [
@@ -2564,6 +2614,7 @@ def test_exact_trace_endpoint_graph_does_not_connect_interior_crossings() -> Non
     assert topology["degree_one_vertex_count"] == 4
     assert topology["degree_three_or_more_vertex_count"] == 0
     assert topology["cycle_rank"] == 0
+    _assert_endpoint_components(union, params["vertices"], params["surface_trace_vertex_paths"])
     assert union["source_length_mesh_units"] == pytest.approx(4.0)
     chains = union["endpoint_graph_chains"]
     assert [chain["source_waypoints_mesh_units"] for chain in chains] == [
