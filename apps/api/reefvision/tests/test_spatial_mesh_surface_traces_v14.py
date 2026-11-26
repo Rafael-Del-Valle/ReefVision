@@ -2299,7 +2299,7 @@ def _assert_endpoint_components(
             else:
                 separate.append(group)
         groups = [*separate, joined]
-    expected = []
+    expected: list[dict[str, Any]] = []
     chains = union["endpoint_graph_chains"]
     for group in sorted(groups, key=min):
         group_edges = [edge for edge in edges if edge <= group]
