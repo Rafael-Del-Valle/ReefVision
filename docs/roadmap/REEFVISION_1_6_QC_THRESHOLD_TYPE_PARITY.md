@@ -20,3 +20,16 @@ existing optional-weight compatibility is unchanged. The regression writes
 malformed JSON into a disposable transaction, verifies refusal, rolls back,
 then verifies the original dimensionless, researcher-review-required queue
 is replayed without creating another queue.
+
+## Interrupted output and queue configuration shape — 2026-11-26
+
+Only an actual empty JSON list represents a saved QC node whose output has
+not yet been persisted. Null, false, zero, empty strings and empty objects
+must not authorize output regeneration. A completed node still requires its
+existing output and queue, and an interrupted node with a genuine empty list
+can replay the same immutable queue. Existing queue configuration must also
+be a JSON object before comparing weights and thresholds; malformed scalars
+or pair arrays now raise the same domain integrity error as direct snapshot
+validation rather than a Python conversion exception. Seven persisted
+regression configurations cover refusal, rollback and valid replay, with
+pending human review preserved. No formula, data migration or new node.
