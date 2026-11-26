@@ -7,6 +7,7 @@ This kernel does not infer those scientific identities or predict trajectories.
 
 from bisect import bisect_right
 from dataclasses import dataclass
+from functools import cached_property
 from itertools import pairwise
 from math import cos, hypot, isfinite, pi, radians, sin, sqrt
 from typing import Literal, cast
@@ -94,6 +95,29 @@ class CurrentField:
         object.__setattr__(self, "longitudes", tuple(sorted(lon)))
         object.__setattr__(self, "east", matrices[0])
         object.__setattr__(self, "north", matrices[1])
+
+    @cached_property
+    def _maximum_step_seconds(self) -> float:
+        """Conservative grid-wide step cap, shared by every seed in this immutable field."""
+        # Bilinear component magnitudes cannot exceed their corner bounds.
+        # A single scan per component suffices, including fully masked fields.
+        maximum_east = max(
+            (abs(v) for row in self.east for v in row if v is not None), default=0.0
+        )
+        maximum_north = max(
+            (abs(v) for row in self.north for v in row if v is not None), default=0.0
+        )
+        minimum_lat_spacing = min(b - a for a, b in pairwise(self.latitudes))
+        minimum_lon_spacing = min(b - a for a, b in pairwise(self.longitudes))
+        poleward_latitude = min(85.0, max(abs(self.latitudes[0]), abs(self.latitudes[-1])))
+        east_rate_bound = maximum_east / (6378137 * cos(radians(poleward_latitude))) * 180 / pi
+        north_rate_bound = maximum_north / 6335439.3272928195 * 180 / pi
+        cap = float("inf")
+        if east_rate_bound > 0:
+            cap = min(cap, minimum_lon_spacing / east_rate_bound / 4)
+        if north_rate_bound > 0:
+            cap = min(cap, minimum_lat_spacing / north_rate_bound / 4)
+        return cap
 
     def contains(self, latitude: float, longitude: float) -> bool:
         return (
@@ -207,28 +231,7 @@ def integrate_streamline(
     points: list[StreamlinePoint] = []
     length = 0.0
     lat, lon = latitude, longitude
-    # Conservative global angular-rate bounds, including the highest supported
-    # latitude. Bilinear component magnitudes cannot exceed their corner bounds.
-    maximum_east = (
-        max(abs(v) for row in field.east for v in row if v is not None)
-        if any(v is not None for row in field.east for v in row)
-        else 0.0
-    )
-    maximum_north = (
-        max(abs(v) for row in field.north for v in row if v is not None)
-        if any(v is not None for row in field.north for v in row)
-        else 0.0
-    )
-    minimum_lat_spacing = min(b - a for a, b in pairwise(field.latitudes))
-    minimum_lon_spacing = min(b - a for a, b in pairwise(field.longitudes))
-    poleward_latitude = min(85.0, max(abs(field.latitudes[0]), abs(field.latitudes[-1])))
-    east_rate_bound = maximum_east / (6378137 * cos(radians(poleward_latitude))) * 180 / pi
-    north_rate_bound = maximum_north / 6335439.3272928195 * 180 / pi
-    h = step_seconds
-    if east_rate_bound > 0:
-        h = min(h, minimum_lon_spacing / east_rate_bound / 4)
-    if north_rate_bound > 0:
-        h = min(h, minimum_lat_spacing / north_rate_bound / 4)
+    h = min(step_seconds, field._maximum_step_seconds)
     try:
         first = _velocity(field, lat, lon)
         points.append(StreamlinePoint(lat, lon, first[2]))

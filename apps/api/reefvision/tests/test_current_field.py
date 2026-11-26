@@ -206,3 +206,28 @@ def test_untrusted_numeric_inputs_fail_scientific_qc_without_runtime_type_errors
         integrate_streamline(uniform(), invalid, 0.0)
     with pytest.raises(ValueError, match="Integration limits must be finite"):
         integrate_streamline(uniform(), 0.0, 0.0, step_seconds=invalid)
+
+
+@pytest.mark.parametrize("east,north", [(500.0, -200.0), (0.0, 0.0), (None, None)])
+def test_reused_field_preserves_independent_seed_and_step_limits(east, north):
+    field = uniform(east, north)
+    for latitude, longitude, step in ((0.0, 0.0, 3600), (0.2, -0.3, 1), (0.0, 0.0, 60)):
+        reused = integrate_streamline(
+            field, latitude, longitude, step_seconds=step, max_steps=2, max_length_m=1e6
+        )
+        independent = integrate_streamline(
+            uniform(east, north),
+            latitude,
+            longitude,
+            step_seconds=step,
+            max_steps=2,
+            max_length_m=1e6,
+        )
+        assert reused == independent
+        if east is None:
+            assert reused.termination == "missing_cell"
+        elif east == 0.0:
+            assert reused.termination == "stagnation"
+        else:
+            assert reused.termination == "max_steps"
+            assert reused.length_m <= 2 * step * math.hypot(east, north)
