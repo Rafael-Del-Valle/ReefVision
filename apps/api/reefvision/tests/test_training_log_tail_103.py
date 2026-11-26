@@ -1470,3 +1470,29 @@ def test_log_tail_quarantines_legacy_terminal_escape_splices(
         ),
     }
     assert log.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "edited_record",
+    [
+        b"train/box_loss=0.2\xe2\x80\x8b\x1b[31m5",
+        b"train/cl\x00\x1b[0ms_loss=0.30",
+        b"train/dfl_loss=0.1\x7f\x1b[31m\x1b[0m0",
+    ],
+)
+def test_log_tail_quarantines_mixed_invisible_sgr_splices(
+    tmp_path: Path, edited_record: bytes
+) -> None:
+    """Mixed invisible controls must not conceal a loss-token splice."""
+    log = tmp_path / "training.log"
+    original = edited_record + b"\n\xe2\x80\x8b\x1b[32mtrain/box_loss=0.22\x1b[0m\n"
+    log.write_bytes(original)
+
+    assert training_routes._training_log_tail("training.log", tmp_path) == {
+        "available": True,
+        "text": (
+            "[terminal-edited training log record omitted]\n"
+            "train/box_loss=0.22\n"
+        ),
+    }
+    assert log.read_bytes() == original

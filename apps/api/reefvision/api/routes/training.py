@@ -298,11 +298,26 @@ def _safe_terminal_log_text(payload: bytes) -> str:
         # not look like the literal token "J" adjoining the colored epoch.
         # Cursor/erase edits are still rejected by their own branch below.
         csi = r"(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]"
+        # Determine token neighbors after all invisible display controls are
+        # removed, not just CSI. A zero-width or C0 byte next to SGR must not
+        # conceal a splice that becomes a fabricated loss after sanitization.
+        def sgr_context(value: str) -> str:
+            return "".join(
+                char
+                for char in value
+                if char in "\t\x1b\x9b"
+                or (
+                    ord(char) >= 32
+                    and not 127 <= ord(char) <= 159
+                    and unicodedata.category(char) not in {"Cf", "Zl", "Zp"}
+                )
+            )
+
         for control in controls:
             value = control.group()
             if value != "\x08" and value.endswith("m"):
-                before_sgr = re.sub(rf"(?:{csi})+$", "", record[: control.start()])
-                after_sgr = re.sub(rf"^(?:{csi})+", "", record[control.end() :])
+                before_sgr = re.sub(rf"(?:{csi})+$", "", sgr_context(record[: control.start()]))
+                after_sgr = re.sub(rf"^(?:{csi})+", "", sgr_context(record[control.end() :]))
                 if token_character(before_sgr[-1:]) and token_character(after_sgr[:1]):
                     return "[terminal-edited training log record omitted]"
                 continue
