@@ -62,7 +62,9 @@ def parse_workflow_review_weights(raw: Any) -> ReviewScoreWeights:
 class ReviewQueueCreateRequest(BaseModel):
     source_quality_control_run_id: str | None = None
     signal_weights: ReviewScoreWeights = Field(default_factory=ReviewScoreWeights)
-    review_below_confidence: float | None = Field(default=None, ge=0, le=1)
+    review_below_confidence: float | None = Field(
+        default=None, ge=0, le=1, strict=True, allow_inf_nan=False
+    )
     created_by: str | None = Field(default=None, max_length=100)
 
 
