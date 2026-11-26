@@ -522,3 +522,24 @@ of length 4 have corrected length 10 times sqrt(14), versus 14 times
 sqrt(14) before correction. Verify source and calibrated results,
 scale-only bounds and saved-workflow replay. This correction is not
 an anatomical centerline, biological identity, or completed human review.
+
+### Connected selected-edge component inventory
+
+The exact endpoint union also emits `endpoint_graph_components`, ordered
+by the lexicographically smallest source XYZ vertex of each component
+(`source_min_vertex_mesh_units`, signed zero normalized). Each component
+reports vertex and distinct nonzero edge counts, terminal/junction counts,
+cycle rank and zero-based indices into `endpoint_graph_chains`. Every
+chain belongs to exactly one component, and component counts sum to the
+aggregate endpoint graph. Chain indices refer to the current result only;
+the source minimum is not an organism ID or a registration landmark.
+
+Check against an independent submitted-edge partition for disconnected
+crossings, mixed-length networks, isolated cycles, junctions and reversed
+or repeated selections. Compare standalone preview and saved typed
+workflow artifacts, including the existing replay/hash checks. Exact
+endpoint connectivity does not weld interior crossings or partial
+overlaps. Components may represent disconnected selections of one coral
+or multiple corals; they do not establish biological identity, independence,
+anatomical branch counts or completed human review. Calibrated chain
+measurements remain separate from this topology inventory.
