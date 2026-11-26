@@ -483,6 +483,9 @@ def run_pending_migrations(settings: Settings) -> None:
         )
         return
 
+    # Validate the requested head and QC schema before committing any migration
+    # writes, then independently reopen the database below.
+    config.attributes["desktop_expected_revision"] = expected_revision
     command.upgrade(config, "head")
 
     # An upgrade call is not proof that the intended database was migrated.
