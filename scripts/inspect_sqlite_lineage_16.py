@@ -24,6 +24,25 @@ TABLES = (
 )
 
 
+def _canonical_stamp_primary_key(connection: sqlite3.Connection) -> bool:
+    primary_indexes = [
+        row for row in connection.execute("PRAGMA index_list(alembic_version)")
+        if row[3] == "pk"
+    ]
+    if (
+        len(primary_indexes) != 1
+        or primary_indexes[0][2] != 1
+        or primary_indexes[0][4] != 0
+    ):
+        return False
+    keys = [
+        row for row in connection.execute(
+            "SELECT * FROM pragma_index_xinfo(?)", (primary_indexes[0][1],)
+        ) if row[5]
+    ]
+    return len(keys) == 1 and keys[0][1:5] == (0, "version_num", 0, "BINARY")
+
+
 def inspect(path: Path) -> dict:
     if not path.is_file():
         raise FileNotFoundError(path)
@@ -100,6 +119,17 @@ def inspect(path: Path) -> dict:
                 ):
                     # A name-only match can conceal an unrelated table with
                     # nonunique, nullable, or non-text lineage markers. Do not trust it.
+                    alembic_stamp_constraint_error = (
+                        "invalid_alembic_version_column_constraints"
+                    )
+                # Column metadata alone hides primary-key sort and collation.
+                # The independent comparison gate must agree with the lineage
+                # inventory even when the stamp and schema hashes match.
+                if (
+                    alembic_stamp_validation_error is None
+                    and alembic_stamp_constraint_error is None
+                    and not _canonical_stamp_primary_key(connection)
+                ):
                     alembic_stamp_constraint_error = (
                         "invalid_alembic_version_column_constraints"
                     )
