@@ -91,7 +91,7 @@ class ReviewQueueService:
         dataset_version_id: str | None,
         requested_run_id: str | None,
     ) -> QualityControlRun | None:
-        if requested_run_id:
+        if requested_run_id is not None:
             run = self.quality_control._run(requested_run_id)
             if run.project_id != project_id or run.dataset_version_id != dataset_version_id:
                 raise ValidationError(
