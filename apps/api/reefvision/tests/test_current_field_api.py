@@ -85,6 +85,15 @@ def test_streamline_preview_uses_one_compatible_scientific_record_slice(
     assert "uncertainty is not propagated" in notes
     assert ("unassessed QC" in notes) == (qc == "unassessed")
 
+    # Both coordinate axes remain populated, but one missing vector component
+    # must invalidate the grid rather than produce an interpolated velocity.
+    incomplete = client.post(
+        f"/api/v1/projects/{project['id']}/current-field/streamlines/preview",
+        json={**request, "scientific_record_ids": ids[:-1]},
+    )
+    assert incomplete.status_code == 400, incomplete.text
+    assert "complete paired component grid" in incomplete.json()["detail"]
+
     saved = client.post(
         f"/api/v1/projects/{project['id']}/environment/analyses/current-streamline",
         json={"name": "Pinned surface flow", **request},
