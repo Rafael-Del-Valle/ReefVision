@@ -1252,6 +1252,9 @@ def test_pose_worker_checks_frozen_lineage_before_export(
     ("alias", "expected_error"),
     (
         ("./images/train/frame_00000001.png", "duplicate archive path"),
+        ("./images/train/frame_00000002.png", "noncanonical archive path"),
+        ("labels/./train/frame_00000002.txt", "noncanonical archive path"),
+        ("images//train/frame_00000002.png", "noncanonical archive path"),
         ("IMAGES/TRAIN/FRAME_00000001.PNG", "duplicate archive path"),
         ("images/train/frame_00000001.png.", "noncanonical archive path"),
         ("images/train/frame_00000001.png ", "noncanonical archive path"),
