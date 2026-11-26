@@ -298,6 +298,7 @@ def _safe_terminal_log_text(payload: bytes) -> str:
         # not look like the literal token "J" adjoining the colored epoch.
         # Cursor/erase edits are still rejected by their own branch below.
         csi = r"(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]"
+
         # Determine token neighbors after all invisible display controls are
         # removed, not just CSI. A zero-width or C0 byte next to SGR must not
         # conceal a splice that becomes a fabricated loss after sanitization.

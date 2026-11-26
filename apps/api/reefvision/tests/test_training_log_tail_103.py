@@ -1490,9 +1490,6 @@ def test_log_tail_quarantines_mixed_invisible_sgr_splices(
 
     assert training_routes._training_log_tail("training.log", tmp_path) == {
         "available": True,
-        "text": (
-            "[terminal-edited training log record omitted]\n"
-            "train/box_loss=0.22\n"
-        ),
+        "text": ("[terminal-edited training log record omitted]\ntrain/box_loss=0.22\n"),
     }
     assert log.read_bytes() == original
