@@ -8,6 +8,7 @@ import json
 from collections import Counter
 from datetime import UTC
 from fractions import Fraction
+from heapq import heappop, heappush
 from itertools import pairwise
 from math import dist, fsum, isfinite
 from typing import Any
@@ -26,6 +27,34 @@ from reefvision.services import (
 MAX_PREVIEW_TRIANGLES = 512
 
 _TracePoint = tuple[float, float, float]
+
+
+def _count_unequal_collinear_overlaps(edges: set[frozenset[_TracePoint]]) -> int:
+    """Count distinct edge pairs overlapping over positive source length.
+
+    Exact binary64 rational line keys avoid tolerance-dependent welding.
+    Sweep projected intervals on each line; endpoint contact is not overlap.
+    """
+    lines: dict[tuple[Fraction, ...], list[tuple[Fraction, Fraction]]] = {}
+    for edge in edges:
+        start = tuple(Fraction(value) for value in min(edge))
+        end = tuple(Fraction(value) for value in max(edge))
+        delta = tuple(b - a for a, b in zip(start, end, strict=True))
+        pivot = next(index for index, value in enumerate(delta) if value)
+        direction = tuple(value / delta[pivot] for value in delta)
+        intercept = tuple(
+            value - slope * start[pivot] for value, slope in zip(start, direction, strict=True)
+        )
+        lines.setdefault(direction + intercept, []).append((start[pivot], end[pivot]))
+    count = 0
+    for intervals in lines.values():
+        active: list[Fraction] = []
+        for lower, upper in sorted(intervals):
+            while active and active[0] <= lower:
+                heappop(active)
+            count += len(active)
+            heappush(active, upper)
+    return count
 
 
 def _trace_endpoint_chains(
@@ -996,6 +1025,7 @@ def measure_mesh_preview(
                 )
         trace_edge_sets.append(trace_edges)
     exact_edge_union = None
+    unequal_overlap_count = 0
     if trace_edge_sets:
         # Count each nonzero exact endpoint-pair once, even within a trace.
         # Unequal, partially overlapping segments are NOT geometrically merged.
@@ -1010,6 +1040,9 @@ def measure_mesh_preview(
         calibrated_total = source_total * Fraction(scale)
         length_m = float(calibrated_total)
         union_warnings: list[str] = []
+        unequal_overlap_count = _count_unequal_collinear_overlaps(set(traversal_counts))
+        if unequal_overlap_count:
+            union_warnings.append("surface_trace_unequal_collinear_edges_overlap")
         interval = None
         if calibrated_total > 0 and length_m == 0:
             union_warnings.append("surface_trace_exact_edge_union_length_underflow")
@@ -1059,6 +1092,7 @@ def measure_mesh_preview(
                 adjacency, edge_lengths, scale, relative_scale_uncertainty
             ),
             "method": "exact_endpoint_pair_equality_only",
+            "unequal_collinear_overlap_pair_count": unequal_overlap_count,
             "distinct_nonzero_edge_count": len(traversal_counts),
             "nonzero_edge_traversal_count": traversal_count,
             "within_trace_redundant_traversal_count": traversal_count - trace_membership_count,
@@ -1366,6 +1400,7 @@ def measure_mesh_preview(
             + (["inconsistent_face_winding"] if inconsistent_winding_edge_count else [])
             + (["unreferenced_mesh_vertices"] if unreferenced_vertex_count else [])
             + (["surface_traces_share_geometric_edges"] if shared_trace_edge_pairs else [])
+            + (["surface_trace_unequal_collinear_edges_overlap"] if unequal_overlap_count else [])
             + (
                 ["preview_omits_edge_connected_mesh_patches"]
                 if preview_omitted_patch_indices
