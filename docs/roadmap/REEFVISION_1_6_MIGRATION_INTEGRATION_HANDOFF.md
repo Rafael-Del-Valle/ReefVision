@@ -464,3 +464,17 @@ reconciliation of the independently published 1.1/1.6 migration histories.
 Release HOLD pending integrated reconciliation, full exact-head CI,
 representative biological/saved-workflow acceptance, genuine installed
 Windows MSI/CAB GUI upgrade/rollback, and researcher approval.
+
+
+## 2026-11-26 — Restore exact-head backend CI and strengthen refusal evidence
+
+Exact-head CI #45769534178 passed frontend and native Windows preservation but
+failed backend Ruff formatting before pytest on the long observation assertion
+in `test_migration_stamp_triggers_16.py`. Apply the exact logged Ruff diff and
+extend the existing unsafe version-table foreign-key and index tests to assert
+byte-for-byte preservation after two actual desktop startup refusals, not only
+after the direct read-only guard call. These are disposable SQLite fixtures;
+no user database is touched. No production migration or workflow behavior is
+changed. Fresh backend CI is required to verify these regressions and the
+previous atomic migration and foreign-key postcondition tests. Full release
+acceptance remains on HOLD.

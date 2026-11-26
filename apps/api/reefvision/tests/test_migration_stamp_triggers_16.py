@@ -199,6 +199,7 @@ def test_revision_foreign_key_preservation_across_preflight_and_inspector(
             assert db.execute("SELECT revision FROM observations").fetchone() == ("0037",)
             assert db.execute("SELECT id FROM specimens").fetchone() == ("0037",)
             assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert path.read_bytes() == original
 
 
 @pytest.mark.parametrize(
@@ -270,6 +271,5 @@ def test_stamp_index_semantics_block_unsafe_desktop_startup(
                 run_pending_migrations(settings)
         with sqlite3.connect(path) as db:
             assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037",)
-            assert db.execute("SELECT note FROM observations").fetchone() == (
-                "private coral data",
-            )
+            assert db.execute("SELECT note FROM observations").fetchone() == ("private coral data",)
+        assert path.read_bytes() == original
