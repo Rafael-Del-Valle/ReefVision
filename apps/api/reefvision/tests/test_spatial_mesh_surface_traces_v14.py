@@ -2344,8 +2344,20 @@ def _assert_endpoint_components(
         digest = hashlib.sha256(
             json.dumps(canonical_edges, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
+        # Independently enumerate the original submitted steps in this component.
+        selected_steps = [
+            (trace_index, frozenset((tuple(vertices[a]), tuple(vertices[b]))))
+            for trace_index, path in enumerate(paths)
+            for a, b in pairwise(path)
+            if vertices[a] != vertices[b]
+            and tuple(vertices[a]) in group
+            and tuple(vertices[b]) in group
+        ]
         expected.append(
             {
+                "selected_trace_indices": sorted({index for index, _ in selected_steps}),
+                "nonzero_edge_traversal_count": len(selected_steps),
+                "distinct_trace_edge_membership_count": len(set(selected_steps)),
                 "source_min_vertex_mesh_units": list(min(group)),
                 "source_component_geometry_sha256": digest,
                 "source_component_geometry_canonicalization": "sorted_float64_xyz_edges_json_v1",
@@ -2368,6 +2380,12 @@ def _assert_endpoint_components(
             }
         )
     assert union["endpoint_graph_components"] == expected
+    assert sum(item["nonzero_edge_traversal_count"] for item in expected) == union[
+        "nonzero_edge_traversal_count"
+    ]
+    assert sum(item["distinct_trace_edge_membership_count"] for item in expected) == (
+        union["distinct_nonzero_edge_count"] + union["cross_trace_redundant_traversal_count"]
+    )
     assert sorted(index for item in expected for index in item["chain_indices"]) == list(
         range(len(chains))
     )
