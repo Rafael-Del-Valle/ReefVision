@@ -1457,6 +1457,22 @@ def compare_mesh_observations(
         and after_scale is not None
         and before_scale != after_scale
     )
+    # Classify original-source lineage separately from registration and identity.
+    # Different file bytes (even with different geometry) cannot prove that
+    # the underlying photographs or field acquisition were independent.
+    if reused_spatial_source_asset:
+        acquisition_lineage_status = "reused_spatial_source_asset"
+    elif reused_imported_source_payload:
+        acquisition_lineage_status = "reused_imported_source_payload"
+    elif same_geometry_different_imported_source:
+        acquisition_lineage_status = "different_payloads_identical_geometry"
+    elif _is_sha256_fingerprint(first_source_hash) and _is_sha256_fingerprint(
+        second_source_hash
+    ):
+        acquisition_lineage_status = "different_payloads_unverified"
+    else:
+        acquisition_lineage_status = "insufficient_original_source_lineage"
+        warnings.append("independent_acquisition_source_lineage_unavailable")
     if same_geometry_different_imported_source:
         warnings.append("identical_geometry_different_imported_source_payload")
     if rescaled_reexported_geometry:
@@ -1715,6 +1731,8 @@ def compare_mesh_observations(
             "before_geometry_sha256": first.get("geometry_sha256"),
             "after_geometry_sha256": second.get("geometry_sha256"),
             # Preserve original lineage even without a pairwise review bundle.
+            "acquisition_lineage_status": acquisition_lineage_status,
+            "independent_acquisition_verified": False,
             "before_source_payload_sha256": first_source_hash,
             "after_source_payload_sha256": second_source_hash,
             "before_spatial_source_asset_id": first_asset_id,
