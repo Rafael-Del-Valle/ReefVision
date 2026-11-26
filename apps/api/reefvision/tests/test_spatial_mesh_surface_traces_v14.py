@@ -1859,9 +1859,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert [item["source_length_mesh_units"] for item in local] == pytest.approx(
             [4 * factor, 2 * factor]
         )
-        assert [item["length_m"] for item in local] == pytest.approx(
-            [0.04 * factor, 0.02 * factor]
-        )
+        assert [item["length_m"] for item in local] == pytest.approx([0.04 * factor, 0.02 * factor])
         assert local[0]["length_scale_only_interval_m"] == pytest.approx(
             [0.036 * factor, 0.044 * factor]
         )
