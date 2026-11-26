@@ -30,6 +30,7 @@ from reefvision.schemas.review_queues import (
 from reefvision.services.frozen_dataset_integrity_16 import validate_frozen_dataset_manifest
 from reefvision.services.review_queues import ReviewQueueService
 from reefvision.services.workflow_review_queue_integrity import (
+    validate_frozen_queue_annotation_evidence,
     validate_saved_queue_membership,
     validate_saved_queue_snapshot,
 )
@@ -58,20 +59,6 @@ def _is_sqlite_queue_identity_collision(exc: IntegrityError) -> bool:
     return (
         getattr(exc.orig, "sqlite_errorcode", None) == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY
         and str(exc.orig) == "UNIQUE constraint failed: review_queues.id"
-    )
-
-
-def _frozen_incomplete_provenance(annotations: list[dict[str, Any]]) -> float:
-    """Reproduce the v3 missing-provenance ratio from frozen detections only."""
-    assisted = [
-        annotation
-        for annotation in annotations
-        if str(annotation.get("source_type") or "human") in {"accepted_prediction", "assist_mask"}
-    ]
-    return (
-        sum(not annotation.get("provenance_json") for annotation in assisted) / len(assisted)
-        if assisted
-        else 0.0
     )
 
 
@@ -381,41 +368,9 @@ def create_review_queue_workflow_artifact(
             raise ValidationError("QC review-queue retry parameters changed or queue incomplete")
         validate_saved_queue_snapshot(existing, existing.items)
         validate_saved_queue_membership(existing, existing.items, frozen_split_by_image_id)
-        if (
-            dataset_version_id is not None
-            and existing.input_checksums_json.get("integrity_schema_version")
-            == "qc-review-queue-v3"
-        ):
-            # The validated manifest independently authenticates the original
-            # detection annotation census. Do not read live labels or include
-            # mask-only observations in the existing v3 scoring formula.
-            class_counts: Counter[str] = Counter()
-            for frozen_item in frozen_items_by_image_id.values():
-                class_counts.update(frozen_item.per_class_counts_json)
-            max_class_count = max(class_counts.values(), default=1)
-            for item in existing.items:
-                frozen_item = frozen_items_by_image_id[item.image_id]
-                class_ids = sorted(frozen_item.per_class_counts_json)
-                group_key = frozen_item.group_key
-                rare_class_presence = max(
-                    (1.0 - class_counts[class_id] / max_class_count for class_id in class_ids),
-                    default=0.0,
-                )
-                if (
-                    item.label_class_ids_json != class_ids
-                    or item.signal_values_json["rare_class_presence"] != rare_class_presence
-                    or item.signal_values_json["count_disagreement"]
-                    != float(frozen_item.annotation_count > 0)
-                    or item.signal_values_json["unreviewed_state"]
-                    != float(frozen_item.image_annotation_status != "reviewed")
-                    or item.signal_values_json["missing_group_metadata"]
-                    != float(not (group_key and group_key.strip()))
-                    or item.signal_values_json["incomplete_provenance"]
-                    != _frozen_incomplete_provenance(frozen_item.annotation_snapshot_json)
-                ):
-                    raise ValidationError(
-                        "QC review-queue frozen annotation evidence does not match manifest"
-                    )
+        validate_frozen_queue_annotation_evidence(
+            existing, existing.items, frozen_items_by_image_id
+        )
         queue = service.get_queue(existing.id)
     else:
         try:
