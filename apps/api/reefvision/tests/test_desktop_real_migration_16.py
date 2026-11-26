@@ -12,7 +12,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, event, inspect, text
+from sqlalchemy import Connection, Engine, event, inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from reefvision.config import Settings
@@ -875,3 +875,82 @@ def test_qc_migration_failure_rolls_back_ddl_and_excludes_concurrent_writer(
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
         assert db.execute("SELECT COUNT(*) FROM review_queue_item_events").fetchone() == (0,)
         assert db.execute("SELECT COUNT(*) FROM review_queue_bulk_requests").fetchone() == (0,)
+
+
+@pytest.mark.parametrize("journal_mode", ["DELETE", "WAL"])
+@pytest.mark.parametrize("fault", ["index", "stamp"])
+def test_desktop_migration_postcondition_failure_rolls_back_before_commit(
+    tmp_path: Path, journal_mode: str, fault: str
+) -> None:
+    """A defective final migration must not commit an unusable QC schema."""
+    database = tmp_path / "migration-postcondition.sqlite"
+    settings = Settings(data_dir=tmp_path, database_url=f"sqlite:///{database.as_posix()}")
+    settings.ensure_directories()
+    alembic_ini, migrations_dir = resolve_alembic_paths()
+    config = Config(str(alembic_ini))
+    config.attributes["configure_logger"] = False
+    config.attributes["desktop_database_url"] = settings.resolved_database_url
+    config.set_main_option("script_location", str(migrations_dir))
+    config.set_main_option("sqlalchemy.url", settings.resolved_database_url)
+    command.upgrade(config, "0037")
+
+    with closing(sqlite3.connect(database)) as db:
+        assert db.execute(f"PRAGMA journal_mode={journal_mode}").fetchone() == (
+            journal_mode.lower(),
+        )
+        db.execute("CREATE TABLE preserved_coral_observations (note TEXT NOT NULL)")
+        db.execute("INSERT INTO preserved_coral_observations VALUES ('original observation')")
+        db.commit()
+
+    def snapshot() -> tuple[object, ...]:
+        with closing(sqlite3.connect(database)) as db:
+            return (
+                db.execute(
+                    "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+                ).fetchall(),
+                db.execute("SELECT version_num FROM alembic_version").fetchall(),
+                db.execute("SELECT note FROM preserved_coral_observations").fetchall(),
+            )
+
+    before = snapshot()
+
+    def corrupt_final_migration(
+        connection: Connection, _cursor: object, statement: str, *_args: object
+    ) -> None:
+        if not statement.lstrip().startswith("CREATE TABLE review_queue_bulk_requests"):
+            return
+        if fault == "index":
+            connection.exec_driver_sql(
+                "CREATE INDEX unexpected_bulk_actor ON review_queue_bulk_requests(actor)"
+            )
+        else:
+            connection.exec_driver_sql(
+                "CREATE TRIGGER incorrect_final_stamp AFTER UPDATE OF version_num "
+                "ON alembic_version WHEN NEW.version_num = '0041' BEGIN "
+                "UPDATE alembic_version SET version_num = '0040'; END"
+            )
+
+    message = (
+        "noncanonical bulk request registry index"
+        if fault == "index"
+        else "did not reach the expected Alembic revision inside the migration transaction"
+    )
+    event.listen(Engine, "after_cursor_execute", corrupt_final_migration)
+    try:
+        with pytest.raises(RuntimeError, match=message):
+            run_pending_migrations(settings)
+    finally:
+        event.remove(Engine, "after_cursor_execute", corrupt_final_migration)
+
+    assert snapshot() == before
+    run_pending_migrations(settings)
+    with closing(sqlite3.connect(database)) as db:
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0041",)
+        assert db.execute("SELECT note FROM preserved_coral_observations").fetchone() == (
+            "original observation",
+        )
+        assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert db.execute("PRAGMA index_list(review_queue_bulk_requests)").fetchall() == [
+            (0, "sqlite_autoindex_review_queue_bulk_requests_1", 1, "pk", 0)
+        ]
