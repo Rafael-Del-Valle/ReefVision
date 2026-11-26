@@ -296,6 +296,7 @@ def test_training_export_fails_closed_on_source_video_checksum_mismatch(
 
     assert "source video bytes differ" in response.text.lower()
 
+
 def test_training_export_rejects_source_video_changed_during_decode(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
