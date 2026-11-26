@@ -2366,6 +2366,11 @@ def _assert_endpoint_components(
                 "degree_one_vertex_count": degrees.count(1),
                 "degree_three_or_more_vertex_count": sum(degree >= 3 for degree in degrees),
                 "cycle_rank": len(group_edges) - len(group) + 1,
+                "source_endpoint_graph_landmarks": [
+                    {"source_vertex_mesh_units": list(point), "degree": degree}
+                    for point in sorted(group)
+                    if (degree := sum(point in edge for edge in group_edges)) != 2
+                ],
                 "source_length_mesh_units": float(source_length),
                 "length_m": nominal if nominal > 0 else None,
                 "length_scale_only_interval_m": interval,
@@ -2380,9 +2385,10 @@ def _assert_endpoint_components(
             }
         )
     assert union["endpoint_graph_components"] == expected
-    assert sum(item["nonzero_edge_traversal_count"] for item in expected) == union[
-        "nonzero_edge_traversal_count"
-    ]
+    assert (
+        sum(item["nonzero_edge_traversal_count"] for item in expected)
+        == union["nonzero_edge_traversal_count"]
+    )
     assert sum(item["distinct_trace_edge_membership_count"] for item in expected) == (
         union["distinct_nonzero_edge_count"] + union["cross_trace_redundant_traversal_count"]
     )
@@ -2500,6 +2506,10 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
     ]
     assert [chain["is_closed"] for chain in chains] == [True, False]
     assert [chain["endpoint_graph_degrees"] for chain in chains] == [[3, 3], [3, 1]]
+    assert union["endpoint_graph_components"][0]["source_endpoint_graph_landmarks"] == [
+        {"source_vertex_mesh_units": [2, 0, 0], "degree": 3},
+        {"source_vertex_mesh_units": [2, 0, 4], "degree": 1},
+    ]
     assert [chain["source_chain_geometry_sha256"] for chain in chains] == [
         "68f72cd19b70a9ad34a3f467194d6819d00d427a1fac1616ffe93f987af30469",
         "445e311472282eff7992e2124f223b752110241a2d68897ec0bd7a9d9726b1d0",
@@ -2732,6 +2742,14 @@ def test_component_geometry_digest_is_source_bound_not_calibration_or_signed_zer
     reversed_union = measure_mesh_preview(**params)["surface_trace_exact_edge_union"]
     component = reversed_union["endpoint_graph_components"][0]
     assert component["source_component_geometry_sha256"] == digest
+    assert component["source_endpoint_graph_landmarks"] == [
+        {"source_vertex_mesh_units": [0.0, 0.0, 0.0], "degree": 1},
+        {"source_vertex_mesh_units": [1.0, 0.0, 0.0], "degree": 1},
+    ]
+    assert all(
+        json.dumps(item["source_vertex_mesh_units"]).find("-0.0") == -1
+        for item in component["source_endpoint_graph_landmarks"]
+    )
     assert component["length_m"] == pytest.approx(0.5 * (1 + sqrt(2)))
     params["surface_trace_vertex_paths"] = [[0, 1, 2]]
     changed = measure_mesh_preview(**params)["surface_trace_exact_edge_union"]
