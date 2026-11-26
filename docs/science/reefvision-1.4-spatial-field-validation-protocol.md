@@ -612,3 +612,23 @@ dependent dimensions describe selected geometry in unregistered source
 axes, not anatomical length, colony size, or biological growth. The
 intervals quantify scale uncertainty only, not confidence or registration
 error. Human verification remains pending.
+
+### Localizing unequal collinear overlaps
+
+Each selected endpoint component reports its own
+`unequal_collinear_overlap_pair_count`. The global union also reports
+`cross_component_unequal_collinear_overlap_pair_count`: global distinct
+positive-length overlap pairs minus those within components. Endpoint-only
+contact, noncollinear intersections and repeated identical undirected edges
+are excluded. A disconnected endpoint graph may still contain overlapping
+geometry; this is not evidence for independent coral structures.
+
+For collinear selections [0, 4], [4, 2], and [1, 3] along one axis, expect
+two endpoint components, one within-component overlap pair and two
+cross-component overlap pairs. Compare an independent exact-coordinate
+pairwise projection oracle, standalone preview and two executions of the
+persisted typed mesh-preview workflow, including artifact hashes. Do not
+weld components, interpret overlap counts as independent observations, or
+sum component lengths as an overlap-corrected biological measure. The
+global collinear union remains the overlap-corrected geometric measure;
+calibration and anatomical/identity verification remain unchanged.
