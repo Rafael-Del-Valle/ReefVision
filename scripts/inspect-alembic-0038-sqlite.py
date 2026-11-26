@@ -94,6 +94,24 @@ def inspect_database(path: Path) -> dict[str, object]:
                 "SELECT name, sql FROM sqlite_master WHERE type='table'"
             )
         }
+        # Later 1.1/1.6 migrations also reuse revision IDs. Record their
+        # distinguishing objects even if the database carries an older stamp.
+        # These are indicators for manual review, not complete schema proofs.
+        later_objects = sorted(
+            {
+                "environmental_event_definitions",
+                "environmental_analysis_definitions",
+                "environmental_analysis_results",
+                "review_queue_bulk_requests",
+            } & tables.keys()
+        )
+        for table, candidates in (
+            ("computed_metric_definitions", {"definition_kind", "configuration_json"}),
+            ("computed_metric_results", {"result_kind"}),
+        ):
+            if table in tables:
+                columns = {row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')}
+                later_objects.extend(f"{table}.{column}" for column in sorted(columns & candidates))
         signatures: dict[str, bool] = {}
         incomplete: list[str] = []
         for table, required in TABLE_COLUMNS.items():
@@ -246,7 +264,10 @@ def inspect_database(path: Path) -> dict[str, object]:
             allowed = {token[1:-1] for token in tokens}
     coordination = {"comment", "assign", "unassign"}
     triage = {"triage_start", "triage_skip", "triage_return"}
-    if allowed == coordination | triage:
+    if allowed == coordination | triage | {"triage_complete"}:
+        review_check = "triage_complete"
+        later_objects.append("review_queue_item_events.triage_complete")
+    elif allowed == coordination | triage:
         review_check = "triage"
     elif allowed == coordination:
         review_check = "coordination"
@@ -259,6 +280,11 @@ def inspect_database(path: Path) -> dict[str, object]:
         count for event_type, count in qc_event_type_counts if event_type not in allowed
     )
     issues = []
+    if later_objects:
+        issues.append(
+            "Later migration objects require manual lineage review: "
+            + ", ".join(sorted(later_objects))
+        )
     if foreign_key_violations:
         issues.append(f"Database has {foreign_key_violations} foreign-key violations")
     if qc_event_type_violations:
@@ -316,6 +342,7 @@ def inspect_database(path: Path) -> dict[str, object]:
         "observed_schema_sha256": schema_sha256,
         "observed_schema_fingerprint_algorithm": "sqlite-master-ddl-json-sha256-v1",
         "table_signatures": signatures,
+        "observed_later_migration_objects": sorted(later_objects),
         "review_event_check": review_check if groups["review_0038"] else None,
         "qc_event_scope_violations": qc_scope_violations,
         "qc_event_type_violations": qc_event_type_violations,
