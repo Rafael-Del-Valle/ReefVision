@@ -161,7 +161,7 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
             producer.input_artifact_ids_json = []
         elif tamper.startswith("consumer_"):
             qc_node = by_type["qc_review_queue"]
-            replacement = {
+            binding_value = {
                 "consumer_nested_list": [dataset_artifact.id],
                 "consumer_nested_object": {"id": dataset_artifact.id},
                 "consumer_null": None,
@@ -171,7 +171,7 @@ def test_saved_frozen_qc_rejects_dataset_producer_mismatch(client: TestClient, t
             session.execute(
                 update(WorkflowNodeRun)
                 .where(WorkflowNodeRun.id == qc_node.id)
-                .values(input_artifact_ids_json=[project_artifact.id, replacement])
+                .values(input_artifact_ids_json=[project_artifact.id, binding_value])
                 .execution_options(synchronize_session=False)
             )
             session.expire(qc_node, ["input_artifact_ids_json"])
