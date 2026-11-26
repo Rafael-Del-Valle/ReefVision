@@ -14,6 +14,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import stat
 import sys
 from collections import Counter
 from contextlib import closing
@@ -148,8 +149,90 @@ def _table_content_fingerprint(
     }
 
 
-def inspect_database(path: Path, *, hash_affected_rows: bool = False) -> dict[str, object]:
+def _verify_registry_checkpoint(root: Path, value: object, checksum: object, size: object) -> str:
+    """Read bytes only; never deserialize or execute registered weights."""
+    if (
+        not isinstance(value, str)
+        or not value
+        or not isinstance(checksum, str)
+        or re.fullmatch(r"[0-9a-f]{64}", checksum) is None
+        or type(size) is not int
+        or size <= 0
+    ):
+        return "invalid_metadata"
+    candidate = Path(value)
+    if ".." in candidate.parts or (candidate.anchor and not candidate.is_absolute()):
+        return "unsafe_path"
+    unresolved = candidate if candidate.is_absolute() else root / candidate
+    if not unresolved.is_relative_to(root):
+        return "unsafe_path"
+    try:
+        current = root
+        for part in unresolved.relative_to(root).parts:
+            current = current / part
+            metadata = current.lstat()
+            if current.is_symlink() or getattr(metadata, "st_file_attributes", 0) & 0x400:
+                return "unsafe_path"
+        resolved = unresolved.resolve(strict=True)
+        if not resolved.is_relative_to(root):
+            return "unsafe_path"
+        before = resolved.stat()
+        if not stat.S_ISREG(before.st_mode):
+            return "unsafe_path"
+        if before.st_size != size:
+            return "size_mismatch"
+        digest = hashlib.sha256()
+        with resolved.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        after = resolved.stat()
+        # Reading can legitimately change atime. Check identity, size and
+        # write timestamps instead; use an offline copy for acceptance.
+        if (
+            before.st_dev != after.st_dev
+            or before.st_ino != after.st_ino
+            or before.st_size != after.st_size
+            or before.st_mtime_ns != after.st_mtime_ns
+            or before.st_ctime_ns != after.st_ctime_ns
+        ):
+            return "changed_during_read"
+        return "verified" if digest.hexdigest() == checksum else "sha256_mismatch"
+    except FileNotFoundError:
+        return "missing_file"
+    except (OSError, ValueError, RuntimeError):
+        return "unreadable_file"
+
+
+def _registry_checkpoint_evidence(
+    connection: sqlite3.Connection, root: Path, present: bool
+) -> dict[str, object]:
+    """Return aggregate results without publishing private paths or model IDs."""
+    if not present:
+        return {"status": "registry_absent", "verified": False, "counts": {}}
+    columns = {row[1] for row in connection.execute('PRAGMA table_info("model_registrations")')}
+    if not {"managed_path", "sha256", "file_size_bytes"} <= columns:
+        return {"status": "missing_columns", "verified": False, "counts": {}}
+    counts = Counter(
+        _verify_registry_checkpoint(root, path, digest, size)
+        for path, digest, size in connection.execute(
+            "SELECT managed_path, sha256, file_size_bytes FROM model_registrations"
+        )
+    )
+    verified = bool(counts) and set(counts) == {"verified"}
+    return {
+        "status": "verified" if verified else ("failed" if counts else "registry_empty"),
+        "verified": verified,
+        "counts": dict(counts),
+    }
+
+
+def inspect_database(
+    path: Path, *, hash_affected_rows: bool = False, model_data_root: Path | None = None
+) -> dict[str, object]:
     """Read schema and optional row fingerprints; never modify the database."""
+    root = model_data_root.resolve(strict=True) if model_data_root is not None else None
+    if root is not None and not root.is_dir():
+        raise ValueError("Model data root is not a directory")
     database = path.resolve(strict=True)
     if not database.is_file():
         raise ValueError("Database path is not a regular file")
@@ -245,6 +328,11 @@ def inspect_database(path: Path, *, hash_affected_rows: bool = False) -> dict[st
             )
             if hash_affected_rows and model_registry_present
             else None
+        )
+        checkpoint_evidence = (
+            _registry_checkpoint_evidence(connection, root, model_registry_present)
+            if root is not None
+            else {"status": "not_requested", "verified": False, "counts": {}}
         )
         # Later 1.1/1.6 migrations also reuse revision IDs. Record their
         # distinguishing objects even if the database carries an older stamp.
@@ -503,7 +591,8 @@ def inspect_database(path: Path, *, hash_affected_rows: bool = False) -> dict[st
         "model_registry_present": model_registry_present,
         "model_registry_row_count": model_registry_row_count,
         "model_registry_metadata_fingerprint": model_registry_fingerprint,
-        "model_registry_checkpoint_files_verified": False,
+        "model_registry_checkpoint_files_verified": checkpoint_evidence["verified"],
+        "model_registry_checkpoint_evidence": checkpoint_evidence,
         "observed_later_migration_objects": sorted(later_objects),
         "review_event_check": review_check if groups["review_0038"] else None,
         "qc_event_scope_violations": qc_scope_violations,
@@ -531,13 +620,24 @@ def main() -> int:
         action="store_true",
         help="Hash affected tables and model registry metadata (memory scales with row count)",
     )
+    parser.add_argument(
+        "--model-data-root",
+        type=Path,
+        help="Verify registered model file sizes and hashes under an existing offline data root",
+    )
     args = parser.parse_args()
     try:
-        report = inspect_database(args.database, hash_affected_rows=args.hash_affected_rows)
+        report = inspect_database(
+            args.database,
+            hash_affected_rows=args.hash_affected_rows,
+            model_data_root=args.model_data_root,
+        )
     except (OSError, ValueError, sqlite3.Error) as exc:
         print(json.dumps({"error": str(exc)}), file=sys.stderr)
         return 1
     print(json.dumps(report, indent=2, sort_keys=True))
+    if args.model_data_root is not None and not report["model_registry_checkpoint_files_verified"]:
+        return 2
     return 2 if report["classification"] == "ambiguous" else 0
 
 
