@@ -1219,10 +1219,10 @@ def test_saved_qc_workflow_rejects_changed_priority_order(client: TestClient) ->
 
         # Invalid explicit source IDs cannot request automatic selection on
         # retry, even when saved parameters and caller agree.
-        for value in ("", " ", " padded-id", "id\x00suffix"):
+        for source_id in ("", " ", " padded-id", "id\x00suffix"):
             invalid_parameters = {
                 **original_parameters,
-                "source_quality_control_run_id": value,
+                "source_quality_control_run_id": source_id,
             }
             node.parameters_json = invalid_parameters
             session.flush()
