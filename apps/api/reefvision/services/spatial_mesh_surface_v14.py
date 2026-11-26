@@ -197,6 +197,7 @@ def _trace_endpoint_components(
         frontier = [start]
         vertex_count = degree_sum = terminal_count = junction_count = 0
         source_length = Fraction(0)
+        component_edges: list[tuple[_TracePoint, _TracePoint]] = []
         while frontier:
             point = frontier.pop()
             neighbors = adjacency[point]
@@ -209,6 +210,7 @@ def _trace_endpoint_components(
                 # Count each undirected edge once, before any calibrated rounding.
                 if point < neighbor:
                     source_length += edge_lengths[frozenset((point, neighbor))]
+                    component_edges.append((point, neighbor))
                 if neighbor not in component_by_point:
                     component_by_point[neighbor] = index
                     frontier.append(neighbor)
@@ -227,9 +229,20 @@ def _trace_endpoint_components(
                 warnings.append("surface_trace_component_interval_unrepresentable")
             else:
                 interval = [lower, upper]
+        # Fingerprint the selected endpoint pairs, not the traversal order,
+        # chain partition, calibration, or biological identity.
+        canonical_edges = [
+            [[0.0 if value == 0 else value for value in point] for point in edge]
+            for edge in sorted(component_edges)
+        ]
+        component_hash = hashlib.sha256(
+            json.dumps(canonical_edges, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
         components.append(
             {
                 "source_min_vertex_mesh_units": [0.0 if value == 0 else value for value in start],
+                "source_component_geometry_sha256": component_hash,
+                "source_component_geometry_canonicalization": "sorted_float64_xyz_edges_json_v1",
                 "vertex_count": vertex_count,
                 "distinct_nonzero_edge_count": edge_count,
                 "degree_one_vertex_count": terminal_count,
