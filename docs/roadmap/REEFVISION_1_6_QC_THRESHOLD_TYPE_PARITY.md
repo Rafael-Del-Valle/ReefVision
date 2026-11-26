@@ -60,3 +60,18 @@ selection, score units, saved queue identity and mandatory human review remain
 unchanged. Seven API/planning cases and four saved-run refusal/recovery cases
 are added. Twelve isolated Pydantic input/control probes passed; full CI and
 installed-Windows acceptance are not verified. No migration or new node.
+
+## Strict numeric QC scoring weights — 2026-11-26
+
+The shared weight model now requires JSON numbers instead of silently coercing
+numeric strings (including exponent notation) to dimensionless ranking weights.
+Standalone queue creation, saved graph planning and saved-node retry all use
+this model. Explicit numerical zero, positive integers and fractional weights
+remain valid; defaults, finite-positive-total checks and the existing Boolean
+refusal are unchanged. The dashboard already sends parsed numeric weights.
+Four additional API/planning cases and four persisted retry refusal cases check
+that no alternative queue is created and researcher review remains pending or
+in progress. Malformed historical string-valued graph parameters require
+explicit researcher correction; no historical evidence is rewritten. No new
+node or migration. Isolated Pydantic probes reproduced four previous coercions
+and passed 38 validation/control checks; full repository CI remains unverified.
