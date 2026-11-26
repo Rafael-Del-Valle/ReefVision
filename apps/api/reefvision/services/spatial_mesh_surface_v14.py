@@ -25,7 +25,6 @@ from reefvision.services import (
 
 MAX_PREVIEW_TRIANGLES = 512
 
-
 _TracePoint = tuple[float, float, float]
 
 
@@ -50,9 +49,7 @@ def _trace_endpoint_chains(
                 break
             remaining.remove(edge)
             path.append(next_point)
-        source_length = sum(
-            (edge_lengths[frozenset(pair)] for pair in pairwise(path)), Fraction(0)
-        )
+        source_length = sum((edge_lengths[frozenset(pair)] for pair in pairwise(path)), Fraction(0))
         calibrated = source_length * Fraction(scale)
         nominal = float(calibrated)
         warnings: list[str] = []
