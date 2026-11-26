@@ -240,6 +240,8 @@ def test_saved_frozen_qc_rejects_resigned_dataset_manifest(
         ("wrong_item_version", "snapshot failed integrity"),
         ("resigned_wrong_item_split", "frozen dataset item membership or split"),
         ("resigned_missing_item", "frozen dataset image coverage is incomplete"),
+        ("resigned_substitute_class", "frozen annotation evidence does not match manifest"),
+        ("resigned_missing_class", "frozen annotation evidence does not match manifest"),
         ("resigned_boolean_count", "saved output no longer matches its queue"),
         ("resigned_float_count", "saved output no longer matches its queue"),
         ("resigned_nested_boolean_count", "saved output no longer matches its queue"),
@@ -331,6 +333,22 @@ def test_saved_frozen_qc_replay_enforces_dataset_scope(
             session.flush()
             session.refresh(saved_output)
             assert saved_output.payload_sha256 == canonical_json_sha256(saved_output.payload_json)
+        elif tamper in {"resigned_substitute_class", "resigned_missing_class"}:
+            queue.items[0].label_class_ids_json = (
+                ["invented-taxon"] if tamper == "resigned_substitute_class" else []
+            )
+            queue.input_checksums_json = {
+                **queue.input_checksums_json,
+                "item_evidence_sha256": queue_item_evidence_sha256(queue.items),
+            }
+            validate_saved_queue_snapshot(queue, queue.items)
+            saved_output = session.get(WorkflowArtifact, qc_node.output_artifact_ids_json[0])
+            assert saved_output is not None
+            saved_output.payload_json = {
+                **saved_output.payload_json,
+                "input_checksums": queue.input_checksums_json,
+            }
+            saved_output.payload_sha256 = canonical_json_sha256(saved_output.payload_json)
         elif tamper == "resigned_missing_item":
             # Disposable transaction: omit the only frozen image and re-sign
             # every affected count, checksum and saved output. Internal queue
@@ -394,7 +412,12 @@ def test_saved_frozen_qc_replay_enforces_dataset_scope(
             create_review_queue_workflow_artifact(
                 session, app.state.settings, project_id, parameters, inputs
             )
-        if tamper in {"resigned_wrong_item_split", "resigned_missing_item"}:
+        if tamper in {
+            "resigned_wrong_item_split",
+            "resigned_missing_item",
+            "resigned_substitute_class",
+            "resigned_missing_class",
+        }:
             # The same corrupt saved queue must not authorize manual regeneration.
             with pytest.raises(ValidationError, match=expected_error):
                 ReviewQueueService(session, app.state.settings).regenerate(queue.id)
@@ -516,4 +539,55 @@ def test_manual_regeneration_refuses_resigned_false_split(client: TestClient, sc
     assert recovered.json()["id"] != queue_id
     assert _queue_item(client, recovered.json()["id"])["split"] == original_split
     assert _queue_item(client, recovered.json()["id"])["review_state"] == "pending"
+    assert _queue_item(client, queue_id)["review_state"] == "pending"
+
+
+@pytest.mark.parametrize("replacement", [["invented-taxon"], []])
+def test_manual_regeneration_refuses_resigned_frozen_class_evidence(
+    client: TestClient, replacement: list[str]
+) -> None:
+    """Manual regeneration must independently authenticate the original taxa."""
+    _, _, version_id, annotation = _study(client)
+    endpoint = f"/api/v1/dataset-versions/{version_id}/review-queues"
+    created = client.post(endpoint, json={})
+    assert created.status_code == 201, created.text
+    queue_id = created.json()["id"]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        queue = session.get(ReviewQueue, queue_id)
+        assert queue is not None and len(queue.items) == 1
+        item = queue.items[0]
+        assert item.label_class_ids_json == [annotation["label_class_id"]]
+        original_checksums = dict(queue.input_checksums_json)
+        item.label_class_ids_json = replacement
+        queue.input_checksums_json = {
+            **original_checksums,
+            "item_evidence_sha256": queue_item_evidence_sha256(queue.items),
+        }
+        validate_saved_queue_snapshot(queue, queue.items)
+        session.commit()
+
+    regenerate = f"/api/v1/review-queues/{queue_id}/regenerate"
+    refused = client.post(regenerate)
+    assert refused.status_code == 422, refused.text
+    assert "frozen annotation evidence does not match manifest" in refused.text
+    listing = client.get(endpoint)
+    assert listing.status_code == 200, listing.text
+    assert [queue["id"] for queue in listing.json()] == [queue_id]
+    assert _queue_item(client, queue_id)["review_state"] == "pending"
+
+    with app.state.session_factory() as session:
+        queue = session.get(ReviewQueue, queue_id)
+        assert queue is not None and len(queue.items) == 1
+        queue.items[0].label_class_ids_json = [annotation["label_class_id"]]
+        queue.input_checksums_json = original_checksums
+        session.commit()
+
+    recovered = client.post(regenerate)
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["regenerated_from_queue_id"] == queue_id
+    assert recovered.json()["id"] != queue_id
+    item = _queue_item(client, recovered.json()["id"])
+    assert item["label_class_ids_json"] == [annotation["label_class_id"]]
+    assert item["review_state"] == "pending"
     assert _queue_item(client, queue_id)["review_state"] == "pending"
