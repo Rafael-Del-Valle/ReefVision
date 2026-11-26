@@ -55,7 +55,16 @@ def test_public_qc_creation_cannot_claim_internal_workflow_owner(
     assert allowed.json()["created_by"] == "marine researcher"
 
 
-@pytest.mark.parametrize("corruption", ["missing_weights", "missing_version", "missing_checksums"])
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "missing_weights",
+        "missing_version",
+        "missing_checksums",
+        "null_scoring_digest",
+        "null_item_digest",
+    ],
+)
 def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
     client: TestClient, corruption: str
 ) -> None:
@@ -133,6 +142,7 @@ def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
         assert saved_queue is not None
         original_config = dict(saved_queue.configuration_json)
         original_checksums = dict(saved_queue.input_checksums_json)
+        altered_checksums = dict(original_checksums)
         if corruption == "missing_weights":
             saved_queue.configuration_json = {
                 key: value for key, value in original_config.items() if key != "weights"
@@ -143,8 +153,21 @@ def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
                 for key, value in original_checksums.items()
                 if key != "integrity_schema_version"
             }
-        else:
+        elif corruption == "missing_checksums":
             saved_queue.input_checksums_json = {}
+        else:
+            # Removing the marker and nulling an optional digest must not
+            # masquerade as a genuinely older unsigned queue.
+            altered_checksums.pop("integrity_schema_version")
+            altered_checksums.pop("scoring_provenance_sha256")
+            altered_checksums.pop("item_evidence_sha256")
+            digest_field = (
+                "scoring_provenance_sha256"
+                if corruption == "null_scoring_digest"
+                else "item_evidence_sha256"
+            )
+            altered_checksums[digest_field] = None
+            saved_queue.input_checksums_json = altered_checksums
         session.commit()
 
     refused = client.post(f"/api/v1/review-queues/{original_id}/regenerate")
@@ -193,6 +216,26 @@ def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
             )
         )
         assert source is not None and node is not None
+        if corruption in {"null_scoring_digest", "null_item_digest"}:
+            saved_queue = session.get(ReviewQueue, original_id)
+            assert saved_queue is not None
+            saved_queue.input_checksums_json = altered_checksums
+            session.commit()
+            with pytest.raises(ValidationError, match="snapshot failed integrity validation"):
+                create_review_queue_workflow_artifact(
+                    session=session,
+                    settings=app.state.settings,
+                    project_id=project_id,
+                    parameters={
+                        **dict(node.parameters_json or {}),
+                        "__workflow_run_id": run_id,
+                        "__workflow_node_run_id": node.id,
+                    },
+                    inputs={"project": [source]},
+                )
+            session.rollback()
+            saved_queue.input_checksums_json = original_checksums
+            session.commit()
         replay = create_review_queue_workflow_artifact(
             session=session,
             settings=app.state.settings,
@@ -300,6 +343,9 @@ def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
         "missing_version",
         "missing_version_and_weights",
         "unversioned_bad_item_digest",
+        "unversioned_null_scoring_digest",
+        "unversioned_null_item_digest",
+        "unversioned_null_both_digests",
     ],
 )
 def test_manual_qc_regeneration_refuses_invalid_saved_science(
@@ -338,6 +384,13 @@ def test_manual_qc_regeneration_refuses_invalid_saved_science(
             elif corruption == "unversioned_bad_item_digest":
                 altered_checksums.pop("scoring_provenance_sha256")
                 altered_checksums["item_evidence_sha256"] = "0" * 64
+            elif corruption.startswith("unversioned_null_"):
+                altered_checksums.pop("scoring_provenance_sha256")
+                altered_checksums.pop("item_evidence_sha256")
+                if corruption != "unversioned_null_item_digest":
+                    altered_checksums["scoring_provenance_sha256"] = None
+                if corruption != "unversioned_null_scoring_digest":
+                    altered_checksums["item_evidence_sha256"] = None
         queue.configuration_json = altered
         queue.input_checksums_json = altered_checksums
         session.commit()
