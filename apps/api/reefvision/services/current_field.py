@@ -98,13 +98,11 @@ class CurrentFieldService:
             if key in indexed:
                 raise ValidationError("Current grid contains duplicate component records")
             indexed[key] = record
-        required = {
-            (latitude, longitude, variable)
-            for latitude in latitudes
-            for longitude in longitudes
-            for variable in (EAST, NORTH)
-        }
-        if set(indexed) != required:
+        # Each unique indexed key already belongs to the Cartesian grid:
+        # axes come from these records and both component names were validated.
+        # Equal cardinality therefore proves completeness without allocating
+        # a potentially quadratic set for sparse or malformed inputs.
+        if len(indexed) != len(latitudes) * len(longitudes) * 2:
             raise ValidationError("Current field requires a complete paired component grid")
         east = tuple(
             tuple(indexed[(latitude, longitude, EAST)].normalized_value for longitude in longitudes)
