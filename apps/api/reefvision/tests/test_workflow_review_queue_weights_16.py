@@ -158,9 +158,7 @@ def test_invalid_confidence_threshold_refused_before_qc_execution(
 
 
 @pytest.mark.parametrize("threshold", [0, 1])
-def test_numeric_confidence_boundary_matches_saved_qc(
-    client: TestClient, threshold: int
-) -> None:
+def test_numeric_confidence_boundary_matches_saved_qc(client: TestClient, threshold: int) -> None:
     project_id, prediction_id = _local_prediction(client)
     app = cast(FastAPI, client.app)
     with app.state.session_factory() as session:
@@ -189,6 +187,80 @@ def test_numeric_confidence_boundary_matches_saved_qc(
         assert items.status_code == 200, items.text
         assert len(items.json()["items"]) == 1
         assert items.json()["items"][0]["review_state"] == "pending"
+
+
+@pytest.mark.parametrize("number", [0, 1])
+@pytest.mark.parametrize("saved_invalid", [True, False])
+@pytest.mark.parametrize("field", ["review_below_confidence", "signal_weights"])
+def test_qc_retry_rejects_equal_looking_boolean_parameters(
+    client: TestClient, number: int, saved_invalid: bool, field: str
+) -> None:
+    project_id, prediction_id = _local_prediction(client)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        prediction = session.get(PredictionProposal, prediction_id)
+        assert prediction is not None
+        prediction.confidence = float(number)
+        session.commit()
+    weights = {name: 0.0 for name in ReviewScoreWeights.model_fields}
+    weights["unreviewed_state"] = 1.0
+    graph = _weighted_graph(weights)
+    graph["nodes"][1]["parameters"]["review_below_confidence"] = number
+    payload = _payload(_execute(client, project_id, graph))
+    assert payload["priority_score_unit"] == "dimensionless"
+    assert payload["review_status"] == "requires_researcher_review"
+
+    with app.state.session_factory() as session:
+        nodes = session.scalars(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == payload["workflow_run_id"]
+            )
+        ).all()
+        node = next(row for row in nodes if row.node_type == "qc_review_queue")
+        source = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.workflow_run_id == payload["workflow_run_id"],
+                WorkflowArtifact.producer_port_id == "project",
+            )
+        )
+        assert source is not None
+        original = dict(node.parameters_json)
+        if field == "signal_weights":
+            signal = "unreviewed_state" if number else "recent_import"
+            malformed = {
+                **original,
+                field: {**original[field], signal: bool(number)},
+            }
+        else:
+            malformed = {**original, field: bool(number)}
+        # This is the original guard's blind spot, not a changed numeric value.
+        assert malformed == original
+        if saved_invalid:
+            node.parameters_json = malformed
+        session.flush()
+        runtime = {
+            "__workflow_run_id": payload["workflow_run_id"],
+            "__workflow_node_run_id": node.id,
+        }
+        supplied = original if saved_invalid else malformed
+        with pytest.raises(ValidationError, match="invalid (signal_weights|review parameters)"):
+            create_review_queue_workflow_artifact(
+                session, app.state.settings, project_id, {**supplied, **runtime}, {"project": [source]}
+            )
+        session.rollback()
+        replay = create_review_queue_workflow_artifact(
+            session, app.state.settings, project_id, {**original, **runtime}, {"project": [source]}
+        )
+        assert replay[0]["payload"] == payload
+        session.rollback()
+
+    queues = client.get(f"/api/v1/projects/{project_id}/review-queues")
+    assert queues.status_code == 200, queues.text
+    assert [queue["id"] for queue in queues.json()] == [payload["queue_id"]]
+    items = client.get(f"/api/v1/review-queues/{payload['queue_id']}/items")
+    assert items.status_code == 200, items.text
+    assert len(items.json()["items"]) == 1
+    assert items.json()["items"][0]["review_state"] == "pending"
 
 
 @pytest.mark.parametrize("legacy", [True, False])

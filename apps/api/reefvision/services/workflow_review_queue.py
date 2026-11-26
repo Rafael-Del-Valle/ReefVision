@@ -293,16 +293,26 @@ def create_review_queue_workflow_artifact(
     if supplied_parameters != saved_parameters:
         raise ValidationError("QC review-queue retry parameters changed from saved node")
     try:
+        # Python dictionary equality treats True == 1 and False == 0.
+        # Validate the authoritative saved weights independently so a caller
+        # cannot substitute an equal-looking number for a malformed flag.
+        parse_workflow_review_weights(saved_parameters.get("signal_weights"))
         weights = parse_workflow_review_weights(parameters.get("signal_weights"))
     except ValueError as exc:
         raise ValidationError("QC Review Queue has invalid signal_weights") from exc
 
-    request = ReviewQueueCreateRequest(
-        source_quality_control_run_id=parameters.get("source_quality_control_run_id"),
-        review_below_confidence=parameters.get("review_below_confidence"),
-        signal_weights=weights,
-        created_by=f"workflow:{run_id}:{node_run_id}",
-    )
+    try:
+        ReviewQueueCreateRequest(
+            review_below_confidence=saved_parameters.get("review_below_confidence"),
+        )
+        request = ReviewQueueCreateRequest(
+            source_quality_control_run_id=parameters.get("source_quality_control_run_id"),
+            review_below_confidence=parameters.get("review_below_confidence"),
+            signal_weights=weights,
+            created_by=f"workflow:{run_id}:{node_run_id}",
+        )
+    except ValueError as exc:
+        raise ValidationError("QC Review Queue has invalid review parameters") from exc
     service = ReviewQueueService(session, settings)
     # A saved node owns at most one immutable QC evidence snapshot. A
     # corrupted or previously raced database may contain two queues with the
