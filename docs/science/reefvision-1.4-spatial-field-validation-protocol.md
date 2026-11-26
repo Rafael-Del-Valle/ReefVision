@@ -554,3 +554,15 @@ component and bounds [0.018, 0.022] m. Compare against direct edge enumeration,
 including missing and full scale uncertainty and a component whose positive
 calibrated length rounds to zero. Such a length and its interval must be null,
 with component QC surfaced in the standalone and replayed workflow artifact.
+
+Component review can also bind to `source_component_geometry_sha256`.
+The versioned `sorted_float64_xyz_edges_json_v1` encoding hashes compact
+UTF-8 JSON containing lexicographically sorted undirected endpoint pairs,
+each pair ordered by XYZ, with binary64 coordinates and normalized signed
+zero. Reversing or repeating a trace, changing its index aliases or
+recalibrating the same source selection must preserve the digest. Changing
+the selected endpoint pairs must change it, even when the component's
+minimum vertex and vertex count remain unchanged. Compare independent
+edge enumeration and standalone/replayed workflow hashes. This fingerprint
+is source-coordinate dependent; it is not a persistent organism identifier,
+a registration-invariant descriptor, or evidence of completed human review.
