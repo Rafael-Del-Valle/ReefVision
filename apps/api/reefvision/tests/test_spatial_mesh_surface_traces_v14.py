@@ -1852,8 +1852,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             for item in union["endpoint_graph_components"]
         ] == [1, 0]
         local = [
-            item["collinear_overlap_corrected_union"]
-            for item in union["endpoint_graph_components"]
+            item["collinear_overlap_corrected_union"] for item in union["endpoint_graph_components"]
         ]
         factor = sqrt(14) if case == "oblique_component_overlap" else 1.0
         assert [item["source_length_mesh_units"] for item in local] == pytest.approx(
@@ -1877,6 +1876,10 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     overlap_warning = "surface_trace_unequal_collinear_edges_overlap"
     assert (overlap_warning in union["qc_warnings"]) is overlaps
     assert (overlap_warning in artifact["qc_warnings"]) is overlaps
+    cross_warning = "surface_trace_cross_component_collinear_overlap"
+    cross_overlap = union["cross_component_unequal_collinear_overlap_pair_count"] > 0
+    assert (cross_warning in union["qc_warnings"]) is cross_overlap
+    assert artifact["qc_warnings"].count(cross_warning) == int(cross_overlap)
     corrected = union["collinear_overlap_corrected_union"]
     assert artifact["qc_warnings"] == standalone.json()["qc_warnings"]
     assert set(union["qc_warnings"]) <= set(artifact["qc_warnings"])
@@ -2846,6 +2849,7 @@ def test_exact_trace_endpoint_graph_does_not_connect_interior_crossings() -> Non
     for component in components:
         assert component["length_scale_only_interval_m"] == pytest.approx([0.018, 0.022])
     assert topology["human_review_verified"] is False
+    assert "surface_trace_cross_component_collinear_overlap" not in union["qc_warnings"]
 
 
 def test_chain_geometry_digest_is_source_bound_not_calibration_or_signed_zero() -> None:
@@ -2917,6 +2921,9 @@ def test_unequal_collinear_overlap_counts_distinct_pairs_in_three_dimensions() -
         union = result["surface_trace_exact_edge_union"]
         assert union["unequal_collinear_overlap_pair_count"] == 3
         assert union["cross_component_unequal_collinear_overlap_pair_count"] == 3
+        warning = "surface_trace_cross_component_collinear_overlap"
+        assert union["qc_warnings"].count(warning) == 1
+        assert result["qc_warnings"].count(warning) == 1
         assert union["distinct_nonzero_edge_count"] == 5
         assert union["nonzero_edge_traversal_count"] == 6
         assert union["source_length_mesh_units"] == pytest.approx(14 * sqrt(14))
