@@ -186,6 +186,18 @@ def _verify_database_revision(connection: Any, api_dir: Path) -> tuple[str, int,
     return actual[0], len(lineage), digest
 
 
+def _verify_database_integrity(connection: Any) -> None:
+    """Check the actual saved database in the pinned read-only snapshot."""
+    _require(
+        connection.exec_driver_sql("PRAGMA quick_check").scalars().all() == ["ok"],
+        "Saved database failed SQLite quick_check",
+    )
+    _require(
+        connection.exec_driver_sql("PRAGMA foreign_key_check").first() is None,
+        "Saved database contains foreign-key violations",
+    )
+
+
 def inspect(
     db: Path,
     run_id: str,
@@ -254,6 +266,7 @@ def inspect(
             database_revision, migration_count, migration_sha256 = _verify_database_revision(
                 session.connection(), api_dir
             )
+            _verify_database_integrity(session.connection())
             run = session.get(WorkflowRun, run_id)
             _require(run is not None and run.status == "succeeded", "Saved run did not succeed")
             # The durable parent job proves that this saved graph was executed
@@ -1032,6 +1045,8 @@ def inspect(
                 "evidence_schema_version": "saved-pose-workflow-audit-0001",
                 "verified_database_alembic_revision": database_revision,
                 "source_migration_count": migration_count,
+                "verified_database_quick_check": "ok",
+                "verified_database_foreign_key_violations": 0,
                 "source_migration_lineage_sha256": migration_sha256,
                 "audit_runtime": _audit_runtime(),
                 "project_id": run.project_id,
