@@ -100,6 +100,27 @@ def test_stamp_primary_key_semantics_in_both_comparison_inputs(
         ),
         ("version_num TEXT NOT NULL PRIMARY KEY /* CHECK is a comment */", None, None),
         (
+            "version_num TEXT NOT NULL PRIMARY KEY, UNIQUE(version_num COLLATE NOCASE)",
+            None, "alembic_version_indexes_require_review",
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY, UNIQUE(version_num COLLATE RTRIM)",
+            None, "alembic_version_indexes_require_review",
+        ),
+        (
+            'version_num TEXT NOT NULL PRIMARY KEY, CONSTRAINT "private coral data" '
+            "UNIQUE(version_num COLLATE NOCASE)",
+            None, "alembic_version_indexes_require_review",
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY, UNIQUE(version_num)",
+            None, None,
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY, UNIQUE(version_num COLLATE BINARY)",
+            None, None,
+        ),
+        (
             "version_num TEXT NOT NULL PRIMARY KEY CHECK(version_num = '0039')",
             None, "alembic_version_checks_require_review",
         ),
