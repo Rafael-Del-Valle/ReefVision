@@ -1842,6 +1842,16 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             item["unequal_collinear_overlap_pair_count"]
             for item in union["endpoint_graph_components"]
         ] == [1, 0]
+        local = [
+            item["collinear_overlap_corrected_union"]
+            for item in union["endpoint_graph_components"]
+        ]
+        assert [item["source_length_mesh_units"] for item in local] == [4.0, 2.0]
+        assert [item["length_m"] for item in local] == pytest.approx([0.04, 0.02])
+        assert local[0]["length_scale_only_interval_m"] == pytest.approx([0.036, 0.044])
+        assert local[1]["length_scale_only_interval_m"] == pytest.approx([0.018, 0.022])
+        # Overlap between components is corrected only in the global union.
+        assert union["collinear_overlap_corrected_union"]["length_m"] == pytest.approx(0.04)
     overlap_warning = "surface_trace_unequal_collinear_edges_overlap"
     assert (overlap_warning in union["qc_warnings"]) is overlaps
     assert (overlap_warning in artifact["qc_warnings"]) is overlaps
@@ -1905,6 +1915,12 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert components[0]["length_m"] is None
         span_warning = "surface_trace_component_axis_span_underflow"
         assert components[0]["qc_warnings"] == [component_warning, span_warning]
+        local_corrected = components[0]["collinear_overlap_corrected_union"]
+        assert local_corrected["length_m"] is None
+        assert local_corrected["length_scale_only_interval_m"] is None
+        local_warning = "surface_trace_collinear_union_length_underflow"
+        assert local_corrected["qc_warnings"] == [local_warning]
+        assert local_warning in artifact["qc_warnings"]
         assert None in components[0]["axis_aligned_spans_m"]
         assert artifact["qc_warnings"].count(span_warning) == 1
         assert components[1]["length_m"] == union["length_m"]
@@ -2329,8 +2345,7 @@ def _overlap_pair_count(edges: list[frozenset[tuple[float, ...]]]) -> int:
         c, d = [tuple(map(Fraction, point)) for point in sorted(second)]
         axis = next(i for i in range(3) if a[i] != b[i])
         if all(
-            (point[i] - a[i]) * (b[axis] - a[axis])
-            == (point[axis] - a[axis]) * (b[i] - a[i])
+            (point[i] - a[i]) * (b[axis] - a[axis]) == (point[axis] - a[axis]) * (b[i] - a[i])
             for point in (c, d)
             for i in range(3)
         ) and max(a[axis], c[axis]) < min(b[axis], d[axis]):
@@ -2456,7 +2471,23 @@ def _assert_endpoint_components(
                 "human_review_verified": False,
             }
         )
-    assert union["endpoint_graph_components"] == expected
+    actual = union["endpoint_graph_components"]
+    for component, reference in zip(actual, expected, strict=True):
+        corrected = component["collinear_overlap_corrected_union"]
+        assert corrected["human_review_verified"] is False
+        assert corrected["biological_validation_status"] == "not_verified_anatomical_centerline"
+        assert corrected["method"] == "exact_source_line_positive_overlap_union"
+        if not reference["unequal_collinear_overlap_pair_count"]:
+            assert corrected["source_length_mesh_units"] == reference["source_length_mesh_units"]
+            assert corrected["length_m"] == reference["length_m"]
+            assert (
+                corrected["length_scale_only_interval_m"]
+                == reference["length_scale_only_interval_m"]
+            )
+    assert [
+        {key: value for key, value in component.items() if key != "collinear_overlap_corrected_union"}
+        for component in actual
+    ] == expected
     assert union["unequal_collinear_overlap_pair_count"] == _overlap_pair_count(list(edges))
     assert union["cross_component_unequal_collinear_overlap_pair_count"] == (
         _overlap_pair_count(list(edges))
