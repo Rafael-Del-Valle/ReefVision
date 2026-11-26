@@ -187,3 +187,81 @@ def test_saved_event_definition_replay_preserves_historical_evidence(
     assert original["payload_json"] == historical["payload_json"]
     base = f"/api/v1/projects/{project['id']}/environment/events/definitions"
     assert client.get(f"{base}/{definition['id']}").json() == definition
+
+def test_saved_event_definition_respects_observation_context_bounds(
+    client: TestClient,
+) -> None:
+    """A threshold crossing is evidence only within the saved sampling context."""
+    project = create_project(client, "Bounded environmental event")
+    base = f"/api/v1/projects/{project['id']}/environment/events/definitions"
+    query = {
+        **threshold_query(),
+        "depth_m": 10,
+        "depth_reference": "sea_surface",
+        "max_depth_delta_m": 2,
+    }
+    response = client.post(base, json={"name": "Depth-bounded warm water", "query": query})
+    assert response.status_code == 201, response.text
+    definition = response.json()
+    run = save_and_queue(
+        client, project["id"], threshold_graph({"definition_id": definition["id"]})
+    )
+
+    def sample(**overrides) -> dict:
+        return observation(
+            **{
+                "value": 22,
+                "unit": "degC",
+                "qc": "accepted",
+                "depth_m": 12,
+                "depth_reference": "sea_surface",
+                **overrides,
+            }
+        )
+
+    records_url = f"/api/v1/projects/{project['id']}/scientific-records"
+    saved = client.post(
+        records_url,
+        json={
+            "records": [
+                sample(observed_at="2026-04-03T13:01:00Z"),
+                sample(observed_at="2026-04-03T13:01:01Z"),
+                sample(depth_m=12.1),
+                sample(depth_reference="chart_datum"),
+                sample(depth_m=None, depth_reference=None),
+                sample(location={"latitude": 33.0, "longitude": -79.93}),
+                sample(location=None),
+                sample(source_kind="modeled"),
+                sample(qc="rejected"),
+            ]
+        },
+    )
+    assert saved.status_code == 201, saved.text
+    accepted_id = saved.json()["items"][0]["id"]
+    direct = client.post(f"{base}/{definition['id']}/evaluate")
+    assert direct.status_code == 200, direct.text
+    matches = direct.json()["result"]["matches"]
+    assert [match["record"]["id"] for match in matches] == [accepted_id]
+    assert matches[0]["time_delta_s"] == 60
+    assert matches[0]["depth_delta_m"] == 2
+
+    app = cast(FastAPI, client.app)
+    assert process_workflow_run_job(
+        app.state.settings, app.state.session_factory, str(run["job_id"])
+    )
+    detail = client.get(f"/api/v1/workflow-runs/{run['id']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["run"]["status"] == "succeeded"
+    artifact = next(
+        item
+        for item in detail.json()["artifacts"]
+        if item["data_type"] == "environmental_threshold_samples"
+    )
+    payload = artifact["payload_json"]
+    assert payload["definition_sha256"] == definition["definition_sha256"]
+    assert payload["query"] == definition["query"]
+    assert payload["sample_count"] == 1
+    assert [match["record_id"] for match in payload["matches"]] == [accepted_id]
+    assert len(artifact["payload_sha256"]) == 64
+    assert client.get(records_url).json()["total"] == 9
+
