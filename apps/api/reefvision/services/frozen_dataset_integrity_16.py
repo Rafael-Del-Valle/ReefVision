@@ -101,6 +101,13 @@ def _valid_frozen_raster_mask(snapshot: dict[str, Any], width_px: Any, height_px
     """
     if not _valid_detection_box(snapshot, width_px, height_px):
         return False
+    # Pillow's original PNG producer returns integer pixel edges (stored
+    # as floats) and counts nonzero pixels inside that exact bounding box.
+    coordinates = [snapshot[key] for key in ("x_min", "y_min", "x_max", "y_max")]
+    if any(value != int(value) for value in coordinates):
+        return False
+    x_min, y_min, x_max, y_max = (int(value) for value in coordinates)
+    bounding_area = (x_max - x_min) * (y_max - y_min)
     path = snapshot.get("mask_path")
     digest = snapshot.get("mask_content_sha256")
     area = snapshot.get("area_pixels")
@@ -111,7 +118,7 @@ def _valid_frozen_raster_mask(snapshot: dict[str, Any], width_px: Any, height_px
         and len(digest) == 64
         and all(character in "0123456789abcdef" for character in digest)
         and type(area) is int
-        and 0 < area <= width_px * height_px
+        and 0 < area <= bounding_area
     )
 
 
