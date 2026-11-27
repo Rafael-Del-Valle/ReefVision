@@ -417,6 +417,15 @@ def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
                 raise ValueError(f"Migration file is a symbolic link: {path}")
             if path.name == "__init__.py":
                 continue
+            # Match the packaged Alembic configuration: nonrecursive source
+            # discovery, with editor-lock and __init__ prefixes excluded.
+            # Keep the legacy recursive inventory available for diagnostics.
+            if verify_parent_graph and (
+                path.parent != root or path.name.startswith((".#", "__init__"))
+            ):
+                raise ValueError(
+                    f"{path}: unsupported strict graph migration source location or name"
+                )
             migration_files += 1
             source = path.read_bytes()
             revision = revision_from_source(path, source)
