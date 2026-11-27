@@ -1147,6 +1147,8 @@ def test_pose_materialization_rejects_overridden_frozen_dataset_paths(
         ("snapshot_schema", "frozen schema lineage changed"),
         ("resolved_asset", "frozen initialization lineage changed"),
         ("architecture", "frozen architecture changed"),
+        ("training_config", "frozen execution parameters changed"),
+        ("random_seed", "frozen execution parameters changed"),
         ("snapshot_seed", "frozen initialization lineage changed"),
     ),
 )
@@ -1201,6 +1203,10 @@ def test_pose_worker_checks_frozen_lineage_before_export(
                     run.dataset_manifest_sha256 = "0" * 64
                 elif tampered_field == "resolved_asset":
                     run.resolved_model_asset_id = "registered_model:unrelated-model"
+                elif tampered_field == "training_config":
+                    run.training_config_json = {**run.training_config_json, "epochs": 2}
+                elif tampered_field == "random_seed":
+                    run.random_seed = 123
                 elif tampered_field == "architecture":
                     original = request["pose_training_architecture"]
                     run.architecture = (
