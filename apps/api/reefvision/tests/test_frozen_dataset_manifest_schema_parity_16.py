@@ -719,3 +719,31 @@ def test_resigned_split_protocol_and_group_census_are_reconciled(
     version.manifest_sha256 = canonical_json_sha256(manifest)
     with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
         validate_frozen_dataset_manifest(version, [item])
+
+@pytest.mark.parametrize("schema_version", ["0006", "0007"])
+@pytest.mark.parametrize(
+    "tamper", ["reuse_flag", "class_index", "item_count", "class_count"]
+)
+def test_manifest_copy_preserves_json_types(schema_version: str, tamper: str) -> None:
+    version, item = _saved_snapshot(schema_version, with_mask=False)
+    validate_frozen_dataset_manifest(version, [item])
+    original = version.manifest_json
+    manifest = deepcopy(original)
+    if tamper == "reuse_flag":
+        manifest["split_config"]["reuse_parent_assignments"] = 0
+    elif tamper == "class_index":
+        manifest["class_map"][0]["class_index"] = False
+    elif tamper == "item_count":
+        manifest["items"][0]["annotation_count"] = True
+    else:
+        manifest["items"][0]["per_class_counts"]["swiftia"] = 1.0
+
+    assert manifest == original
+    assert canonical_json_sha256(manifest) != version.manifest_sha256
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+    with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        validate_frozen_dataset_manifest(version, [item])
+    version.manifest_json = original
+    version.manifest_sha256 = canonical_json_sha256(original)
+    validate_frozen_dataset_manifest(version, [item])
