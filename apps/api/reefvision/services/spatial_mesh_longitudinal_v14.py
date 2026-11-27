@@ -1673,6 +1673,36 @@ def compare_mesh_observations(
         ):
             contradictory_calibrated_dimensions = True
             warnings.append("identical_geometry_shape_ratio_inconsistent")
+        # An unchanged indexed mesh also retains its source-axis aspect
+        # ratios. A diagonal alone cannot distinguish exchanged axes.
+        # Normalize by the largest dimension rather than squaring lengths
+        # or using calibration metadata, which legacy records may omit.
+        axis_profiles = []
+        for record in (before, after):
+            dimensions = record.get("axis_aligned_dimensions_m")
+            if dimensions is None:
+                axis_profiles.append(None)
+                continue
+            if (
+                not isinstance(dimensions, list)
+                or len(dimensions) != 3
+                or any(
+                    type(value) not in (int, float) or not isfinite(value) or value < 0
+                    for value in dimensions
+                )
+            ):
+                raise ValueError("Axis-aligned dimensions must be three finite nonnegative values")
+            largest = max(dimensions)
+            axis_profiles.append(
+                [value / largest for value in dimensions] if largest > 0 else None
+            )
+        early_axes, late_axes = axis_profiles
+        if early_axes is not None and late_axes is not None and any(
+            not isclose(early, late, rel_tol=1e-8, abs_tol=1e-12)
+            for early, late in zip(early_axes, late_axes, strict=True)
+        ):
+            contradictory_calibrated_dimensions = True
+            warnings.append("identical_geometry_axis_aspect_ratios_inconsistent")
         # Relative patch areas are also invariant to a common calibration scale.
         # Compare the complete ranked profiles, not only their concentration,
         # which can be identical for distinct area distributions.
