@@ -244,6 +244,12 @@ def _literal_revision_links(
             and id(node) not in permitted_targets
         ):
             raise ValueError(f"{path}: dynamic {field} rebinding")
+        # A literal list can still change through a method call, an alias,
+        # or a subscript without rebinding the metadata name itself. Strict
+        # graph metadata is declarative; even a benign read is outside this
+        # static contract. Never execute the migration to infer its outcome.
+        if isinstance(node, ast.Name) and node.id == field and isinstance(node.ctx, ast.Load):
+            raise ValueError(f"{path}: executable reference to {field} is unsupported")
         if isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name == field:
             raise ValueError(f"{path}: pattern rebinds {field}")
         if isinstance(node, ast.MatchMapping) and node.rest == field:
