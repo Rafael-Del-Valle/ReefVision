@@ -641,9 +641,8 @@ def test_patch_concentration_saved_workflow_matches_standalone(
         assert (
             "identical_geometry_patch_area_distribution_inconsistent" not in artifact["qc_warnings"]
         )
-        assert artifact["provenance"][
-            "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
-        ]
+        flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+        assert artifact["provenance"][flag] is True
         assert artifact["provenance"]["specimen_identity_verified"] is False
         assert artifact["delta_surface_area_m2"] is None
         assert artifact["delta_surface_area_scale_interval_m2"] is None
