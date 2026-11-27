@@ -348,6 +348,8 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
     assert (patch_warning in warnings) is reindexed
     assert expected["provenance"][patch_flag] is reindexed
     assert expected["provenance"]["surface_patch_fingerprint_comparison"] == "matching"
+    missing_warning = "matching_surface_patches_primary_geometry_fingerprint_unavailable"
+    assert missing_warning not in warnings
     match_warning = "matching_surface_patches_different_geometry_fingerprints"
     assert (match_warning in warnings) is reindexed
     assert (
@@ -581,3 +583,64 @@ def test_rescaled_patch_match_requires_complete_equal_fingerprints(patch_metadat
     assert "matching_surface_patches_different_geometry_fingerprints" not in result["qc_warnings"]
     assert result["provenance"]["independent_acquisition_verified"] is False
     assert result["provenance"]["specimen_identity_verified"] is False
+
+
+@pytest.mark.parametrize("missing_side", ["before", "after", "both"])
+@pytest.mark.parametrize("invalid_digest", [False, True], ids=["missing", "malformed"])
+@pytest.mark.parametrize("rescaled", [False, True], ids=["same-scale", "rescaled"])
+def test_matching_legacy_patches_with_unavailable_primary_digest(
+    missing_side: str, invalid_digest: bool, rescaled: bool
+) -> None:
+    before = preview_from_request(
+        MeshPreviewRequest(
+            **COMMON,
+            obj_text=OBJ,
+            specimen_id="colony:16",
+            observation_id="survey-1",
+            observed_at_utc="2026-10-01T12:00:00Z",
+        )
+    )
+    scale = COMMON["meters_per_unit"] * (2 if rescaled else 1)
+    after = preview_from_request(
+        MeshPreviewRequest(
+            **{**COMMON, "meters_per_unit": scale},
+            vertices=[[0, 3, 0], [0, 0, 0], [2, 0, 0]],
+            faces=[[1, 0, 2]],
+            specimen_id="colony:16",
+            observation_id="survey-2",
+            observed_at_utc="2026-10-02T12:00:00Z",
+        )
+    )
+    for side, preview in (("before", before), ("after", after)):
+        preview["project_id"] = "project-1"
+        if missing_side in (side, "both"):
+            if invalid_digest:
+                preview["provenance"]["geometry_sha256"] = "invalid"
+            else:
+                preview["provenance"].pop("geometry_sha256")
+    result = compare_mesh_observations(before, after)
+    provenance = result["provenance"]
+    warnings = result["qc_warnings"]
+    assert provenance["surface_patch_fingerprint_comparison"] == "matching"
+    assert "matching_surface_patches_primary_geometry_fingerprint_unavailable" in warnings
+    assert "matching_surface_patches_different_geometry_fingerprints" not in warnings
+    flag = "longitudinal_change_withheld_due_to_rescaled_matching_surface_patches"
+    assert provenance[flag] is rescaled
+    assert provenance["independent_acquisition_verified"] is False
+    assert provenance["specimen_identity_verified"] is False
+    if rescaled:
+        assert result["delta_surface_area_m2"] is None
+        assert result["delta_axis_aligned_bounding_box_diagonal_m"] is None
+        assert result["average_surface_area_change_m2_per_day"] is None
+    else:
+        assert result["delta_surface_area_m2"] == pytest.approx(0)
+
+    # Missing primary provenance alone cannot establish a surface match.
+    after.pop("edge_connected_patch_geometry_sha256")
+    control = compare_mesh_observations(before, after)
+    assert control["provenance"]["surface_patch_fingerprint_comparison"] == "unavailable"
+    assert control["provenance"][flag] is False
+    assert (
+        "matching_surface_patches_primary_geometry_fingerprint_unavailable"
+        not in control["qc_warnings"]
+    )
