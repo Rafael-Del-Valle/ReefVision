@@ -484,6 +484,7 @@ def test_disputed_identity_withholds_patch_change_but_preserves_observations() -
         "topology_conflict",
         "hash_area_conflict",
         "hash_topology_conflict",
+        "axis_aspect_conflict",
     ],
 )
 def test_patch_concentration_saved_workflow_matches_standalone(
@@ -562,6 +563,20 @@ def test_patch_concentration_saved_workflow_matches_standalone(
         monkeypatch.setattr(
             "reefvision.services.spatial_source_assets_v14.preview_from_request",
             legacy_hash_topology_preview,
+        )
+    if mode == "axis_aspect_conflict":
+        before, after = _topology_meshes()
+
+        def legacy_axis_preview(request: MeshPreviewRequest) -> dict:
+            record = preview_from_request(request)
+            if request.observation_id == "survey-2":
+                x, y, z = record["axis_aligned_dimensions_m"]
+                record["axis_aligned_dimensions_m"] = [y, x, z]
+            return record
+
+        monkeypatch.setattr(
+            "reefvision.services.spatial_source_assets_v14.preview_from_request",
+            legacy_axis_preview,
         )
     standalone = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
@@ -662,6 +677,15 @@ def test_patch_concentration_saved_workflow_matches_standalone(
         assert artifact["delta_surface_area_m2"] is None
         assert artifact["delta_surface_area_scale_interval_m2"] is None
         assert artifact["ranked_patch_area_profile_distance"] is None
+    elif mode == "axis_aspect_conflict":
+        assert "identical_geometry_axis_aspect_ratios_inconsistent" in artifact["qc_warnings"]
+        assert "identical_geometry_shape_ratio_inconsistent" not in artifact["qc_warnings"]
+        flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+        assert artifact["provenance"][flag] is True
+        assert artifact["provenance"]["specimen_identity_verified"] is False
+        assert artifact["delta_surface_area_m2"] is None
+        assert artifact["delta_axis_aligned_bounding_box_diagonal_m"] is None
+        assert artifact["delta_surface_area_scale_interval_m2"] is None
     elif mode == "hash_topology_conflict":
         warning = "identical_geometry_hash_bound_patch_topology_inconsistent"
         assert warning in artifact["qc_warnings"]
@@ -879,6 +903,38 @@ def test_identical_geometry_hash_bound_patch_topology(mode: str, withheld: bool)
     assert "identical_geometry_hash_bound_patch_area_inconsistent" not in result["qc_warnings"]
     assert result["provenance"][flag] is withheld
     assert result["reconstruction_topology_changed_fields"] == []
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert (result["delta_surface_area_m2"] is None) is withheld
+
+
+@pytest.mark.parametrize(
+    ("mode", "withheld"),
+    [
+        ("swapped_axes", True),
+        ("missing_scale", True),
+        ("missing_dimensions", False),
+        ("different_primary", False),
+        ("unchanged", False),
+    ],
+)
+def test_identical_geometry_axis_aspect_consistency(mode: str, withheld: bool) -> None:
+    before, after = (_preview(payload) for payload in _topology_meshes())
+    key = "axis_aligned_dimensions_m"
+    if mode in ("swapped_axes", "missing_scale", "different_primary"):
+        x, y, z = after[key]
+        assert x != y
+        after[key] = [y, x, z]
+    if mode == "missing_scale":
+        after["provenance"].pop("meters_per_mesh_unit", None)
+    if mode == "missing_dimensions":
+        after.pop(key)
+    if mode == "different_primary":
+        after["provenance"]["geometry_sha256"] = "b" * 64
+    result = compare_mesh_observations(before, after)
+    warning = "identical_geometry_axis_aspect_ratios_inconsistent"
+    flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+    assert (warning in result["qc_warnings"]) is withheld
+    assert result["provenance"][flag] is withheld
     assert result["provenance"]["specimen_identity_verified"] is False
     assert (result["delta_surface_area_m2"] is None) is withheld
 
