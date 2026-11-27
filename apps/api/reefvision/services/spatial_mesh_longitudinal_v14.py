@@ -1696,12 +1696,46 @@ def compare_mesh_observations(
             profile = [value / largest for value in dimensions] if largest > 0 else None
             axis_profiles.append(profile)
         early_axes, late_axes = axis_profiles
-        if early_axes is not None and late_axes is not None and any(
-            not isclose(early, late, rel_tol=1e-8, abs_tol=1e-12)
-            for early, late in zip(early_axes, late_axes, strict=True)
+        if (
+            early_axes is not None
+            and late_axes is not None
+            and any(
+                not isclose(early, late, rel_tol=1e-8, abs_tol=1e-12)
+                for early, late in zip(early_axes, late_axes, strict=True)
+            )
         ):
             contradictory_calibrated_dimensions = True
             warnings.append("identical_geometry_axis_aspect_ratios_inconsistent")
+        # The indexed geometry also fixes its area-weighted centroid relative
+        # to the source origin. Normalize by the positive calibrated diagonal
+        # to compare independently of the scale, even for legacy records.
+        centroid_profiles: list[list[float] | None] = []
+        for record, extent in zip((before, after), (early_extent, late_extent), strict=True):
+            centroid = record.get("area_weighted_surface_centroid_m")
+            if centroid is None or extent is None or extent <= 0:
+                centroid_profiles.append(None)
+                continue
+            if (
+                not isinstance(centroid, list)
+                or len(centroid) != 3
+                or any(
+                    type(value) not in (int, float) or not isfinite(value) for value in centroid
+                )
+            ):
+                raise ValueError("Surface centroid must be three finite coordinates")
+            normalized = [value / extent for value in centroid]
+            centroid_profiles.append(normalized if all(map(isfinite, normalized)) else None)
+        early_centroid, late_centroid = centroid_profiles
+        if (
+            early_centroid is not None
+            and late_centroid is not None
+            and any(
+                not isclose(early, late, rel_tol=1e-8, abs_tol=1e-12)
+                for early, late in zip(early_centroid, late_centroid, strict=True)
+            )
+        ):
+            contradictory_calibrated_dimensions = True
+            warnings.append("identical_geometry_source_centroid_inconsistent")
         # Relative patch areas are also invariant to a common calibration scale.
         # Compare the complete ranked profiles, not only their concentration,
         # which can be identical for distinct area distributions.
