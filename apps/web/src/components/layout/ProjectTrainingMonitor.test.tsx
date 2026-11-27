@@ -437,6 +437,44 @@ describe("ProjectTrainingMonitor", () => {
     expect(api.cancelTrainingRun).not.toHaveBeenCalled();
   });
 
+  it("distinguishes authoritative summary metrics from missing history", async () => {
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([
+      {
+        ...activeRun,
+        metrics: {
+          "metrics/mAP50(B)": 0.81,
+          "metrics/precision(B)": 0.92,
+          "metrics/recall(B)": 0.73,
+        },
+        metrics_history: {
+          "metrics/mAP50(B)": [0.6, 0.7, null],
+          "metrics/precision(B)": [null, Number.NaN],
+        },
+      },
+    ]);
+
+    renderMonitor();
+    await screen.findByText("Swiftia detector");
+
+    const mapRow = screen.getByText("metrics mAP50(B)").closest("div");
+    expect(mapRow).toHaveTextContent("0.81");
+    expect(mapRow).toHaveTextContent(
+      "summary; history also available; epoch association unverified",
+    );
+    expect(mapRow).not.toHaveTextContent("history unavailable");
+
+    const precisionRow = screen.getByText("metrics precision(B)").closest("div");
+    expect(precisionRow).toHaveTextContent("0.92");
+    expect(precisionRow).toHaveTextContent(
+      "summary fallback; history unavailable; epoch association unverified",
+    );
+
+    const recallRow = screen.getByText("metrics recall(B)").closest("div");
+    expect(recallRow).toHaveTextContent("0.73");
+    expect(recallRow).toHaveTextContent("summary; epoch association unverified");
+    expect(api.cancelTrainingRun).not.toHaveBeenCalled();
+  });
+
   it("cancels through the existing training-run API and updates the shared cache", async () => {
     vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
     vi.mocked(api.cancelTrainingRun).mockResolvedValue({

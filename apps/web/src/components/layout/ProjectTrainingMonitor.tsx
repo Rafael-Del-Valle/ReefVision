@@ -78,9 +78,11 @@ function metricEntries(run: TrainingRun): Array<[string, number, string]> {
         latest.set(canonicalKey, {
           value,
           provenance:
-            Array.isArray(history) && history.length > 0
-              ? "summary fallback; history unavailable; epoch association unverified"
-              : "summary; epoch association unverified",
+            latest.has(canonicalKey)
+              ? "summary; history also available; epoch association unverified"
+              : Array.isArray(history) && history.length > 0
+                ? "summary fallback; history unavailable; epoch association unverified"
+                : "summary; epoch association unverified",
         });
       }
     }
