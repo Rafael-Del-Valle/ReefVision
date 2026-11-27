@@ -43,6 +43,17 @@ def _validate_source_import_provenance(metadata: dict[str, Any]) -> None:
     if checked is not None and type(checked) is not bool:
         raise ValueError("Source payload integrity check must be boolean")
     source_format = metadata.get("source_format")
+    asset_id = metadata.get("spatial_source_asset_id")
+    if asset_id is not None and (
+        type(asset_id) is not str
+        or fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", asset_id)
+        is None
+    ):
+        raise ValueError("Spatial source asset ID must be a canonical lowercase UUID")
+    # A project-owned original is an imported file, never inline triangles.
+    # Legacy records can omit the format, but cannot claim both identities.
+    if asset_id is not None and source_format == "indexed_triangles":
+        raise ValueError("Inline indexed triangles cannot carry a spatial source asset ID")
     if source_format is not None and source_format not in (
         "indexed_triangles",
         "obj",
