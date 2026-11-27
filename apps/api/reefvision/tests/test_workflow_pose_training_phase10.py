@@ -436,6 +436,8 @@ def test_pose_workflow_replay_checks_secondary_checkpoint_bytes(
 
 def _pose_export_zip(
     marker: bytes,
+    *,
+    independent_header: bool = False,
 ) -> bytes:
     stream = io.BytesIO()
 
@@ -457,8 +459,13 @@ def _pose_export_zip(
             (
                 "path: .\n"
                 "train: images/train\n"
-                "val: images/train\n"
-                "kpt_shape: [1, 3]\n"
+                + (
+                    "# Supply independent reviewed validation images and labels before training.\n"
+                    "val: images/val\n"
+                    if independent_header
+                    else "val: images/train\n"
+                )
+                + "kpt_shape: [1, 3]\n"
                 "names:\n"
                 '  0: "animal"\n'
                 "reefvision_keypoint_names:\n"
@@ -469,12 +476,14 @@ def _pose_export_zip(
     return stream.getvalue()
 
 
+@pytest.mark.parametrize("independent_header", [False, True])
 def test_pose_materialization_never_silently_reuses_training_for_validation(
     tmp_path: Path,
+    independent_header: bool,
 ) -> None:
-    training = _pose_export_zip(b"train")
+    training = _pose_export_zip(b"train", independent_header=independent_header)
 
-    validation = _pose_export_zip(b"validation")
+    validation = _pose_export_zip(b"validation", independent_header=independent_header)
 
     destination = tmp_path / "pose-dataset"
 
