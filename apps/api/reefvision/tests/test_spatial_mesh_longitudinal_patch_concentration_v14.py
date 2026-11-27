@@ -485,6 +485,7 @@ def test_disputed_identity_withholds_patch_change_but_preserves_observations() -
         "hash_area_conflict",
         "hash_topology_conflict",
         "centroid_conflict",
+        "far_origin_centroid_conflict",
         "axis_aspect_conflict",
     ],
 )
@@ -579,13 +580,19 @@ def test_patch_concentration_saved_workflow_matches_standalone(
             "reefvision.services.spatial_source_assets_v14.preview_from_request",
             legacy_axis_preview,
         )
-    if mode == "centroid_conflict":
+    if mode in ("centroid_conflict", "far_origin_centroid_conflict"):
         before, after = _topology_meshes()
 
         def legacy_centroid_preview(request: MeshPreviewRequest) -> dict:
             record = preview_from_request(request)
-            if request.observation_id == "survey-2":
-                record["area_weighted_surface_centroid_m"][0] += 1.0
+            centroid = record["area_weighted_surface_centroid_m"]
+            if mode == "far_origin_centroid_conflict":
+                extent = record["axis_aligned_bounding_box_diagonal_m"]
+                centroid[0] = 1e9 * extent
+                if request.observation_id == "survey-2":
+                    centroid[0] += 0.1 * extent
+            elif request.observation_id == "survey-2":
+                centroid[0] += 1.0
             return record
 
         monkeypatch.setattr(
@@ -691,7 +698,7 @@ def test_patch_concentration_saved_workflow_matches_standalone(
         assert artifact["delta_surface_area_m2"] is None
         assert artifact["delta_surface_area_scale_interval_m2"] is None
         assert artifact["ranked_patch_area_profile_distance"] is None
-    elif mode == "centroid_conflict":
+    elif mode in ("centroid_conflict", "far_origin_centroid_conflict"):
         assert "identical_geometry_source_centroid_inconsistent" in artifact["qc_warnings"]
         flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
         assert artifact["provenance"][flag] is True
@@ -990,6 +997,27 @@ def test_identical_geometry_source_centroid_consistency(mode: str, withheld: boo
     assert result["provenance"]["specimen_identity_verified"] is False
     assert result["before_surface_area_m2"] == before["surface_area_m2"]
     assert result["after_surface_area_m2"] == after["surface_area_m2"]
+    assert (result["delta_surface_area_m2"] is None) is withheld
+
+
+@pytest.mark.parametrize(
+    ("offset_in_diagonals", "withheld"),
+    [(0.0, False), (1e-7, False), (0.1, True), (-0.1, True), (2.0, True)],
+)
+def test_identical_geometry_far_origin_centroid_consistency(
+    offset_in_diagonals: float, withheld: bool
+) -> None:
+    before, after = (_preview(payload) for payload in _topology_meshes())
+    key = "area_weighted_surface_centroid_m"
+    for record, offset in ((before, 0.0), (after, offset_in_diagonals)):
+        extent = record["axis_aligned_bounding_box_diagonal_m"]
+        record[key][0] = (1e9 + offset) * extent
+    result = compare_mesh_observations(before, after)
+    warning = "identical_geometry_source_centroid_inconsistent"
+    flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+    assert (warning in result["qc_warnings"]) is withheld
+    assert result["provenance"][flag] is withheld
+    assert result["provenance"]["specimen_identity_verified"] is False
     assert (result["delta_surface_area_m2"] is None) is withheld
 
 
