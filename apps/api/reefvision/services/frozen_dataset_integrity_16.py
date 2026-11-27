@@ -16,7 +16,7 @@ from typing import Any, cast
 from reefvision.db.models import DatasetVersion, DatasetVersionItem
 from reefvision.domain.enums import ANNOTATION_STATUSES
 from reefvision.domain.errors import ValidationError
-from reefvision.storage.datasets import canonical_json_sha256
+from reefvision.storage.datasets import canonical_json_bytes, canonical_json_sha256
 
 # The API currently writes mask/measurement-aware 0007 manifests, including
 # when there are no masks. Historical detection-only 0006 snapshots also exist.
@@ -228,7 +228,8 @@ def validate_frozen_dataset_manifest(
     if (
         not items
         or any(
-            key not in split_config or split_config[key] != recorded
+            key not in split_config
+            or canonical_json_bytes(split_config[key]) != canonical_json_bytes(recorded)
             for key, recorded in split_contract.items()
         )
         or type(version.missing_group_key_count) is not int
@@ -240,7 +241,9 @@ def validate_frozen_dataset_manifest(
     # project's potentially renamed live classes. Require both the version
     # record and every observation to agree with that immutable dictionary.
     class_map = version.class_map_json
-    if not isinstance(class_map, list) or manifest.get("class_map") != class_map:
+    if not isinstance(class_map, list) or canonical_json_bytes(
+        manifest.get("class_map")
+    ) != canonical_json_bytes(class_map):
         raise ValidationError(message)
     classes: dict[str, tuple[int, str]] = {}
     class_indices: set[int] = set()
@@ -415,10 +418,14 @@ def validate_frozen_dataset_manifest(
             seen_annotation_ids.add(annotation_id)
 
         payload = _item_payload(item, schema_version=schema_version)
-        if canonical_json_sha256(payload) != item.snapshot_sha256 or entries.get(item.image_id) != {
-            **payload,
-            "snapshot_sha256": item.snapshot_sha256,
-        }:
+        # Python equality treats JSON flags, integers and integral floats as
+        # interchangeable. The manifest copy must preserve the exact typed
+        # payload, even if its outer checksum was recomputed independently.
+        if (
+            canonical_json_sha256(payload) != item.snapshot_sha256
+            or canonical_json_bytes(entries.get(item.image_id))
+            != canonical_json_bytes({**payload, "snapshot_sha256": item.snapshot_sha256})
+        ):
             raise ValidationError(message)
 
     # The source producer calculates achieved ratios from *image* membership,
