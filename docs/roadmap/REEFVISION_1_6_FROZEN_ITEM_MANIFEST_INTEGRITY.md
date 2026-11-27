@@ -355,3 +355,22 @@ No data repair, split reassignment or researcher approval is inferred.
 Exact-head repository CI, independent migration reconciliation, representative
 biology and actual installed-Windows MSI/GUI qualification remain release
 HOLD gates.
+
+
+## 2026-11-26 — Parent reuse provenance
+
+The original dataset producer requires a selected parent before inheriting
+split assignments. Re-signed version and manifest flags alone cannot establish
+that provenance: frozen QC now rejects a missing, blank, self-referencing or
+manifest-disagreeing parent ID whenever parent assignments were reused.
+This check does not independently authenticate the entire ancestry or prove
+that the inherited assignments match the parent; the existing producer lineage
+validation remains separate. Independent datasets retain their original
+behavior.
+
+Fourteen original-schema cases and one database-backed standalone,
+regeneration and saved-workflow corruption/recovery case extend the existing
+typed QC gate without altering original observations or researcher decisions.
+Twelve isolated SQLite JSON/row parent-reuse probes passed. Repository tests
+and exact-head CI are unconfirmed; full biological, migration and installed
+Windows GUI qualification remain release HOLD.
