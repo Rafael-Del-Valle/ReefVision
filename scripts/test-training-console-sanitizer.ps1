@@ -683,4 +683,39 @@ if ($latestMetrics['train/dfl_loss'] -ne 0.1 -or
   throw 'Valid one-entry arrays or reserved null samples lost their provenance.'
 }
 
+# Real JSON decoding: malformed top-level maps must not turn array/string
+# metadata (Length, Count, Rank) into scientific measurements or history.
+$run = ConvertFrom-Json '{"metrics":[0.2,0.3],"metrics_history":"not a map"}'
+Invoke-Expression $selectionCode
+if (-not $malformedSummaryMap -or -not $malformedHistoryMap -or
+    $latestMetrics.Count -ne 0 -or $metricSourceNotes.Count -ne 0 -or
+    $staleMetricSamples.Count -ne 0 -or $unmeasuredLosses.Count -ne 0) {
+  throw 'Malformed top-level metric maps fabricated scientific evidence.'
+}
+$run = ConvertFrom-Json '{"metrics":{"train/box_loss":0.5},"metrics_history":[0.1]}'
+Invoke-Expression $selectionCode
+if ($malformedSummaryMap -or -not $malformedHistoryMap -or
+    $latestMetrics.Count -ne 1 -or $latestMetrics['train/box_loss'] -ne 0.5 -or
+    $metricSourceNotes['train/box_loss'] -notmatch 'summary metric') {
+  throw 'Malformed history map displaced a genuine summary metric.'
+}
+$run = ConvertFrom-Json '{"metrics":17,"metrics_history":{"train/cls_loss":[0.25]}}'
+Invoke-Expression $selectionCode
+if (-not $malformedSummaryMap -or $malformedHistoryMap -or
+    $latestMetrics.Count -ne 1 -or $latestMetrics['train/cls_loss'] -ne 0.25 -or
+    $metricSourceNotes['train/cls_loss'] -notmatch 'history entry 1/1') {
+  throw 'Malformed summary map displaced a genuine history measurement.'
+}
+$run = ConvertFrom-Json '{"metrics":null,"metrics_history":null}'
+Invoke-Expression $selectionCode
+if ($malformedSummaryMap -or $malformedHistoryMap -or $latestMetrics.Count -ne 0) {
+  throw 'Absent metric maps were mistaken for corrupt data.'
+}
+foreach ($warning in @('Summary metrics unavailable: expected a JSON object.',
+                       'Metric history unavailable: expected a JSON object.')) {
+  if (-not $monitorScript.Contains($warning)) {
+    throw 'Malformed metric map must be disclosed to the observer.'
+  }
+}
+
 Write-Host 'PowerShell training console sanitizer regression passed.'

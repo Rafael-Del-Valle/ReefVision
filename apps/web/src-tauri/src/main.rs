@@ -327,7 +327,11 @@ while ($true) {
     # A completely unmeasured history must be visible without inventing a
     # zero or misclassifying reserved null epochs as corrupt observations.
     $unmeasuredLosses = @{}
-    if ($null -ne $run.metrics) {
+    # JSON metric maps must be objects. Arrays and strings expose synthetic
+    # PowerShell properties (Count, Length, Rank) that are not measurements.
+    $malformedSummaryMap = $null -ne $run.metrics -and $run.metrics -isnot [pscustomobject]
+    $malformedHistoryMap = $null -ne $run.metrics_history -and $run.metrics_history -isnot [pscustomobject]
+    if ($run.metrics -is [pscustomobject]) {
       foreach ($metric in $run.metrics.PSObject.Properties) {
         if (Test-ValidScientificMetricValue -Name $metric.Name -Value $metric.Value) {
           $latestMetrics[$metric.Name] = $metric.Value
@@ -335,7 +339,7 @@ while ($true) {
         }
       }
     }
-    if ($null -ne $run.metrics_history) {
+    if ($run.metrics_history -is [pscustomobject]) {
       foreach ($series in $run.metrics_history.PSObject.Properties) {
         # A persisted epoch series must be an array, even when it has just
         # one entry. PowerShell's @() would silently turn a malformed scalar
@@ -378,6 +382,12 @@ while ($true) {
     }
     $trainingLosses = @('train/box_loss', 'train/cls_loss', 'train/dfl_loss', 'train/seg_loss', 'train/mask_loss', 'train/loss')
     $validationLosses = @('val/box_loss', 'val/cls_loss', 'val/dfl_loss', 'val/seg_loss', 'val/mask_loss', 'val/loss')
+    if ($malformedSummaryMap) {
+      Write-Host 'Summary metrics unavailable: expected a JSON object.'
+    }
+    if ($malformedHistoryMap) {
+      Write-Host 'Metric history unavailable: expected a JSON object.'
+    }
     # Display missing numeric measurements explicitly. Plain worker-log text
     # may mention box/cls/dfl losses, but it is never a verified metrics source.
     $hasTrainingLoss = @($trainingLosses | Where-Object { $latestMetrics.ContainsKey($_) -or $unmeasuredLosses.ContainsKey($_) }).Count -gt 0
