@@ -386,3 +386,84 @@ def test_invalid_revision_marker_is_redacted_on_either_side(
         assert private_marker not in result.stdout + result.stderr
         assert "private observation" not in result.stdout + result.stderr
         assert [database.read_bytes() for database in databases] == originals
+
+
+@pytest.mark.parametrize("invalid_index", [0, 1])
+@pytest.mark.parametrize("raw_hex", ["70726976617465ff", "ff", "3030333980", "eda080", "c080"])
+def test_undecodable_revision_text_preserves_redacted_row(
+    tmp_path: Path, invalid_index: int, raw_hex: str
+) -> None:
+    databases = [tmp_path / "source.sqlite", tmp_path / "copy.sqlite"]
+    for index, database in enumerate(databases):
+        with sqlite3.connect(database) as connection:
+            connection.execute(
+                "CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)"
+            )
+            if index == invalid_index:
+                connection.execute(
+                    f"INSERT INTO alembic_version VALUES (CAST(X'{raw_hex}' AS TEXT))"
+                )
+            else:
+                connection.execute("INSERT INTO alembic_version VALUES ('0039')")
+            assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    originals = [database.read_bytes() for database in databases]
+    for options in [
+        [],
+        ["--fail-on-noncanonical-stamp"],
+        ["--fail-on-integrity-error"],
+        ["--fail-on-lineage-collision"],
+        ["--fail-on-revision-mismatch"],
+    ]:
+        result = subprocess.run(
+            [
+                sys.executable, str(SCRIPT), str(databases[0]),
+                "--compare-to", str(databases[1]), *options,
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode == (2 if options else 0), result.stderr
+        report = json.loads(result.stdout)
+        comparison = report["schema_comparison"]
+        assert report["alembic_stamps"] == [None if invalid_index == 0 else "0039"]
+        assert comparison["reference_alembic_stamps"] == [
+            None if invalid_index == 1 else "0039"
+        ]
+        assert report["alembic_stamp_error"] is None
+        assert comparison["reference_integrity"]["alembic_stamp_error"] is None
+        expected = "invalid_revision_marker_type_or_value"
+        assert report["alembic_stamp_validation_error"] == (
+            expected if invalid_index == 0 else None
+        )
+        assert comparison["reference_integrity"]["alembic_stamp_validation_error"] == (
+            expected if invalid_index == 1 else None
+        )
+        assert comparison["matches"] is True
+        assert comparison["revision_markers_match"] is False
+        assert report["classification"] == "requires_researcher_review"
+        assert "private" not in result.stdout + result.stderr
+        assert [database.read_bytes() for database in databases] == originals
+
+
+@pytest.mark.parametrize("encoding", ["UTF-8", "UTF-16le", "UTF-16be"])
+def test_valid_revision_text_in_supported_sqlite_encodings(
+    tmp_path: Path, encoding: str
+) -> None:
+    database = tmp_path / "science.sqlite"
+    with sqlite3.connect(database) as connection:
+        connection.execute(f"PRAGMA encoding='{encoding}'")
+        connection.execute(
+            "CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)"
+        )
+        connection.execute("INSERT INTO alembic_version VALUES ('0039')")
+    original = database.read_bytes()
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), str(database), "--fail-on-integrity-error"],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["alembic_stamps"] == ["0039"]
+    assert report["alembic_stamp_error"] is None
+    assert report["alembic_stamp_validation_error"] is None
+    assert report["classification"] == "requires_researcher_review"
+    assert database.read_bytes() == original
