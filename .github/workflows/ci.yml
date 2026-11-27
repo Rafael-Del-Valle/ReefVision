@@ -122,6 +122,32 @@ jobs:
           print(f"Verified scratch database at {expected}: {revisions}")
           PY
           }
+          # Fail before touching even the scratch database if revision IDs
+          # collide (Alembic otherwise warns and can overwrite a map entry).
+          python - <<'PY'
+          import warnings
+
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
+
+          with warnings.catch_warnings():
+              warnings.filterwarnings(
+                  "error", message=r"Revision .* is present more than once"
+              )
+              scripts = ScriptDirectory.from_config(Config("apps/api/alembic.ini"))
+              heads = scripts.get_heads()
+              bases = scripts.get_bases()
+              assert len(heads) == len(bases) == 1, (heads, bases)
+              revisions = list(scripts.walk_revisions())
+              assert revisions and revisions[0].revision == heads[0], heads
+              assert revisions[-1].revision == bases[0], bases
+              for current, parent in zip(revisions, revisions[1:]):
+                  assert current.down_revision == parent.revision, (
+                      current.revision, current.down_revision, parent.revision
+                  )
+              assert revisions[-1].down_revision is None, bases
+          print(f"Verified linear migration graph: {len(revisions)} revisions, head {heads[0]}")
+          PY
           alembic -c apps/api/alembic.ini upgrade head
           verify_revision head
           alembic -c apps/api/alembic.ini downgrade base
