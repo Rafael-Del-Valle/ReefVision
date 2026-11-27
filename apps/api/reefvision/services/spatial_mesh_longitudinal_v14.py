@@ -1622,6 +1622,15 @@ def compare_mesh_observations(
         if contradictory_topology:
             warnings.append("identical_geometry_topology_metadata_inconsistent")
             warnings.append("longitudinal_change_withheld_inconsistent_topology")
+        # The source-space area/diagonal-squared descriptor is invariant to
+        # calibration, even when historical records omit one or both scales.
+        if (
+            before_shape_ratio is not None
+            and after_shape_ratio is not None
+            and not isclose(before_shape_ratio, after_shape_ratio, rel_tol=1e-8, abs_tol=0.0)
+        ):
+            contradictory_calibrated_dimensions = True
+            warnings.append("identical_geometry_shape_ratio_inconsistent")
         if before_scale is not None and after_scale is not None:
             if before_scale != after_scale:
                 warnings.append("identical_geometry_rescaled_not_biological_growth")
