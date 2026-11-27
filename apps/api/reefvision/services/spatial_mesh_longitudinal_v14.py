@@ -1613,6 +1613,7 @@ def compare_mesh_observations(
         and first_geometry_hash == second_geometry_hash
         and bool(topology_changed_fields)
     )
+    contradictory_calibrated_dimensions = False
     if first_hash_valid and second_hash_valid and first_geometry_hash == second_geometry_hash:
         warnings.append("identical_geometry_fingerprint")
         # A fingerprint covers the original triangles; calibration cannot alter
@@ -1637,6 +1638,7 @@ def compare_mesh_observations(
                     abs_tol=1e-8,
                 )
             ):
+                contradictory_calibrated_dimensions = True
                 warnings.append("identical_geometry_area_inconsistent_with_calibration_scale")
             # An unchanged source mesh must also retain its uncalibrated
             # bounding-box diagonal. Missing extents cannot be validated.
@@ -1657,7 +1659,10 @@ def compare_mesh_observations(
                     )
                 )
             ):
+                contradictory_calibrated_dimensions = True
                 warnings.append("identical_geometry_extent_inconsistent_with_calibration_scale")
+    if contradictory_calibrated_dimensions:
+        warnings.append("longitudinal_change_withheld_inconsistent_calibrated_dimensions")
     # A nominal before/after area difference is not necessarily distinguishable
     # from independent calibration-scale uncertainty. Classify the sign of the
     # propagated *scale-only* interval, not biological growth or significance.
@@ -1905,6 +1910,7 @@ def compare_mesh_observations(
                 and not rescaled_matching_surface_patches
                 and not contradictory_patch_fingerprints
                 and not contradictory_topology
+                and not contradictory_calibrated_dimensions
             ),
             "longitudinal_change_withheld_due_to_rescaled_reexported_geometry": (
                 rescaled_reexported_geometry
@@ -1913,6 +1919,9 @@ def compare_mesh_observations(
                 rescaled_geometry_incomplete_import_lineage
             ),
             "longitudinal_change_withheld_due_to_inconsistent_topology": contradictory_topology,
+            "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions": (
+                contradictory_calibrated_dimensions
+            ),
             "longitudinal_change_withheld_due_to_inconsistent_surface_patch_fingerprints": (
                 contradictory_patch_fingerprints
             ),
@@ -1941,11 +1950,13 @@ def compare_mesh_observations(
         or rescaled_matching_surface_patches
         or contradictory_patch_fingerprints
         or contradictory_topology
+        or contradictory_calibrated_dimensions
     ):
         # Keep original measurements and reconstruction QC intact. Disputed
         # identity, reused project-owned assets, byte-identical originals,
         # rescaled copies with incomplete lineage, or contradictory patch
-        # fingerprints or topology cannot establish biological change.
+        # fingerprints, topology or calibrated dimensions cannot establish
+        # biological change.
         for key in (
             "delta_surface_area_to_bounding_diagonal_squared_ratio",
             "delta_patch_area_concentration_index",
