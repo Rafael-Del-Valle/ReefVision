@@ -960,3 +960,15 @@ withheld area changes/scale intervals, provisional identity and identical
 standalone and twice-executed saved typed graph artifacts and hashes.
 This regression preserves fail-closed scientific QC rather than weakening
 it to satisfy the earlier patch-only expectation.
+
+The axis-length versus diagonal check is an individual observation invariant,
+not a match-dependent comparison. Test inflated axis lengths with genuinely
+different geometries and with missing primary geometry fingerprints at
+both timepoints. A contradiction must emit
+`mesh_axis_lengths_diagonal_inconsistent` and withhold area and extent
+changes and scale-only intervals, while preserving nominal observations.
+Missing historical dimensions remain unknown; valid differences between
+independent reconstructions are still descriptive. Exercise the standalone
+API and two persisted typed Workflow Builder executions using the same
+corrupted preview; the artifacts and hashes must agree and identity must
+remain unverified. This check does not establish anatomical branch length.
