@@ -4553,6 +4553,36 @@ def test_pose_workflow_first_completion_rejects_substituted_child_job_lineage(
             processor=substituted_configuration_processor,
         )
 
+    # Direct invocations do not have saved workflow IDs to drive recovery.
+    # The sealed child request must still bind the published execution settings.
+    def substituted_execution_processor(
+        settings: Settings,
+        factory: sessionmaker[Session],
+        job_id: str,
+    ) -> bool:
+        assert _fake_pose_processor(settings, factory, job_id)
+        with factory() as child_session:
+            job = child_session.get(Job, job_id)
+            assert job is not None
+            run = child_session.get(TrainingRun, str(job.request_json["training_run_id"]))
+            assert run is not None
+            run.training_config_json = {**run.training_config_json, "epochs": 2}
+            child_session.commit()
+        return True
+
+    with (
+        app.state.session_factory() as session,
+        pytest.raises(ValidationError, match="frozen execution parameters changed"),
+    ):
+        create_pose_workflow_training_result(
+            session,
+            test_settings,
+            project_id=project_id,
+            dataset_payload=payload,
+            parameters={"training_config": {"epochs": 1}},
+            processor=substituted_execution_processor,
+        )
+
     # Frozen review evidence can be changed by a worker after preflight.
     # First completion must recheck the persisted items before publishing
     # the checkpoint, even when the dataset manifest itself was not changed.
