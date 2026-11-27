@@ -4,16 +4,20 @@ import io
 import json
 import zipfile
 from pathlib import Path
+from typing import cast
 
 import cv2
 import numpy as np
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from reefvision.db.models import PoseTrainingDataset, PoseTrainingDatasetItem
 from reefvision.services import pose_training_exports as export_module
 from reefvision.services.pose_interoperability import (
     PoseInteroperabilityService,
 )
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.tests.test_pose_interoperability import (
     _FakeSio,
 )
@@ -332,3 +336,49 @@ def test_training_export_rejects_source_video_changed_during_decode(
     with zipfile.ZipFile(io.BytesIO(retry.content)) as archive:
         manifest = json.loads(archive.read("reefvision-pose-training-export-manifest.json"))
         assert manifest["dataset"]["dataset_manifest_sha256"] == dataset["manifest_sha256"]
+
+
+@pytest.mark.parametrize("corruption", ["truth_policy", "review_actor"])
+def test_external_export_rejects_corrupt_frozen_lineage_before_decode(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    corruption: str,
+) -> None:
+    dataset_id = str(_frozen_dataset(client, monkeypatch)["id"])
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        dataset = session.get(PoseTrainingDataset, dataset_id)
+        assert dataset is not None
+        item = session.query(PoseTrainingDatasetItem).filter_by(dataset_id=dataset_id).one()
+        original_manifest = dict(dataset.manifest_json)
+        original_sha = dataset.manifest_sha256
+        original_review = dict(item.review_provenance_json)
+        if corruption == "truth_policy":
+            dataset.manifest_json = {**original_manifest, "truth_policy": "unreviewed"}
+            dataset.manifest_sha256 = canonical_json_sha256(dataset.manifest_json)
+        else:
+            item.review_provenance_json = {**original_review, "actor": ""}
+        session.commit()
+
+    def unexpected_decode(_path: str) -> object:
+        raise AssertionError("Corrupt frozen evidence must be rejected before decoding")
+
+    monkeypatch.setattr(cv2, "VideoCapture", unexpected_decode)
+    url = f"/api/v1/pose-training-datasets/{dataset_id}/export"
+    response = client.get(url, params={"format": "ultralytics_pose"})
+    assert response.status_code == 409, response.text
+    expected = "scientist-verified items" if corruption == "truth_policy" else "item lineage"
+    assert expected in response.text
+
+    with app.state.session_factory() as session:
+        dataset = session.get(PoseTrainingDataset, dataset_id)
+        assert dataset is not None
+        item = session.query(PoseTrainingDatasetItem).filter_by(dataset_id=dataset_id).one()
+        dataset.manifest_json = original_manifest
+        dataset.manifest_sha256 = original_sha
+        item.review_provenance_json = original_review
+        session.commit()
+
+    monkeypatch.setattr(cv2, "VideoCapture", _FakeCapture)
+    retry = client.get(url, params={"format": "ultralytics_pose"})
+    assert retry.status_code == 200, retry.text
