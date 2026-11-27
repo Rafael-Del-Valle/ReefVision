@@ -157,6 +157,7 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
     queryFn: ({ signal }) => getTrainingRuns(projectId, signal),
     refetchOnMount: "always",
     refetchInterval: (query) =>
+      query.state.status === "error" ||
       trainingRunsContainActive(query.state.data as TrainingRun[] | undefined)
         ? 2000
         : false,

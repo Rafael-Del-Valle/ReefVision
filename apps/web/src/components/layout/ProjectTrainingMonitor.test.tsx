@@ -574,6 +574,22 @@ describe("ProjectTrainingMonitor", () => {
     expect(api.cancelTrainingRun).not.toHaveBeenCalled();
   });
 
+  it("automatically recovers from an initial status failure without cached runs", async () => {
+    vi.mocked(api.getTrainingRuns)
+      .mockRejectedValueOnce(new Error("Offline"))
+      .mockResolvedValue([activeRun]);
+
+    renderMonitor();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Offline");
+    expect(screen.queryByText("No active runs")).not.toBeInTheDocument();
+
+    expect(
+      await screen.findByText("1 active", {}, { timeout: 4000 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(api.cancelTrainingRun).not.toHaveBeenCalled();
+  });
+
   it("shows an explicit empty state before the first training run", async () => {
     renderMonitor();
 
