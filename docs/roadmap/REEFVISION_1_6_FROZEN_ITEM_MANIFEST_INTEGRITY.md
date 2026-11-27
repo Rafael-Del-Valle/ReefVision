@@ -333,3 +333,25 @@ repository tests and exact-head CI remain unconfirmed, as local GitHub
 checkout cannot resolve github.com and Ruff is unavailable. Independent
 Alembic lineage reconciliation, representative scientific acceptance, genuine
 installed Windows MSI/GUI validation and researcher approval remain HOLD.
+
+
+## 2026-11-26 — Requested split protocol semantics
+
+The original split producer normalizes explicitly requested train/validation/test
+weights to a unit sum and resolves random splitting to group_random whenever
+at least one eligible image has a biological group. The frozen QC validator
+now checks these semantics independently of the manifest/row copy comparison.
+Unknown methods, impossible requested/resolved pairs, missing ratio keys,
+non-numeric or out-of-range weights and non-unit sums are rejected. Null
+requested ratios retain the original implicit/default protocol. The achieved
+ratio census remains separate: an exact requested allocation is not promised
+when groups, explicit assignments or inherited assignments constrain splitting.
+
+The shared read-only validator is used by standalone QC, regeneration and
+saved typed QC Workflow Builder execution. Added 32 original-schema cases
+and two database-backed corruption/recovery configurations. Thirteen isolated
+SQLite JSON round-trip ratio probes passed; these are not repository tests.
+No data repair, split reassignment or researcher approval is inferred.
+Exact-head repository CI, independent migration reconciliation, representative
+biology and actual installed-Windows MSI/GUI qualification remain release
+HOLD gates.
