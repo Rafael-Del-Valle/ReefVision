@@ -141,6 +141,16 @@ def _trace_endpoint_chains(
                 warnings.append("surface_trace_chain_interval_unrepresentable")
             else:
                 interval = [lower, upper]
+        # Straightness belongs to this canonical geometric chain, not the
+        # original trace or an anatomical branch. A closed chain has no
+        # distinct endpoints. Compute before calibration to avoid scale loss.
+        straightness = None
+        if path[0] != path[-1]:
+            chord = Fraction(dist(path[0], path[-1]))
+            straightness = float(min(Fraction(1), chord / source_length))
+            if straightness == 0:
+                straightness = None
+                warnings.append("surface_trace_chain_straightness_underflow")
         # Bind review evidence to the ordered source geometry, not calibration,
         # vertex IDs or selection order. Normalize signed zero for the digest.
         source_waypoints = [[0.0 if value == 0 else value for value in point] for point in path]
@@ -155,6 +165,7 @@ def _trace_endpoint_chains(
                 "endpoint_graph_degrees": [len(adjacency[path[0]]), len(adjacency[path[-1]])],
                 "edge_count": len(path) - 1,
                 "is_closed": path[0] == path[-1],
+                "endpoint_straightness_ratio": straightness,
                 "source_length_mesh_units": float(source_length),
                 "length_m": nominal if nominal > 0 else None,
                 "length_scale_only_interval_m": interval,
