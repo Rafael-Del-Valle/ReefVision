@@ -308,3 +308,56 @@ def test_cli_parent_graph_accepts_dependency_free_sources(tmp_path: Path) -> Non
         assert report["parent_graph_consistent"] is True
         assert report["safe_to_reconcile_automatically"] is False
         assert child.read_bytes() == before
+
+
+def test_cli_parent_graph_refuses_unverified_branch_labels(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    root.mkdir()
+    parent = root / "0037.py"
+    parent.write_text("revision = '0037'\ndown_revision = None\n", encoding="utf-8")
+    child = root / "0038.py"
+    base = "revision = '0038'\ndown_revision = '0037'\n"
+    invalid = (
+        "branch_labels = 'qc'\n",
+        "branch_labels = '0037'\n",
+        "branch_labels = ('qc', 'science')\n",
+        "branch_labels = ['qc']\n",
+        "branch_labels = compute_labels()\n",
+        "branch_labels = None\nbranch_labels = 'qc'\n",
+        "branch_labels = None\nif True:\n    branch_labels = 'qc'\n",
+        "branch_labels = None\ndel branch_labels\n",
+        "from somewhere import labels as branch_labels\n",
+        "branch_labels = ('qc', 4)\n",
+    )
+    parent_before = parent.read_bytes()
+    for suffix in invalid:
+        child.write_text(base + suffix, encoding="utf-8")
+        before = child.read_bytes()
+        default = _run(root)
+        assert default.returncode == 0, default.stderr
+        assert "parent_graph_consistent" not in json.loads(default.stdout)
+
+        strict = _run(root, verify_parent_graph=True)
+        assert strict.returncode == 2
+        assert "branch_labels" in strict.stderr
+        assert not strict.stdout
+        assert child.read_bytes() == before
+        assert parent.read_bytes() == parent_before
+
+
+def test_cli_parent_graph_accepts_unlabeled_sources(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    root.mkdir()
+    parent = root / "0037.py"
+    parent.write_text("revision = '0037'\ndown_revision = None\n", encoding="utf-8")
+    child = root / "0038.py"
+    base = "revision = '0038'\ndown_revision = '0037'\ndepends_on = None\n"
+    for suffix in ("", "branch_labels = None\n", "branch_labels: str | None = None\n"):
+        child.write_text(base + suffix, encoding="utf-8")
+        before = child.read_bytes()
+        strict = _run(root, verify_parent_graph=True)
+        assert strict.returncode == 0, strict.stderr
+        report = json.loads(strict.stdout)
+        assert report["parent_graph_consistent"] is True
+        assert report["safe_to_reconcile_automatically"] is False
+        assert child.read_bytes() == before
