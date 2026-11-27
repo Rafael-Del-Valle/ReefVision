@@ -576,7 +576,7 @@ def test_rescaled_patch_match_requires_complete_equal_fingerprints(patch_metadat
         after[key] = ["f" * 64]
     result = compare_mesh_observations(before, after)
     assert result["provenance"][flag] is False
-    comparison = "different" if patch_metadata == "unequal" else "unavailable"
+    comparison = "different" if patch_metadata == "different" else "unavailable"
     assert result["provenance"]["surface_patch_fingerprint_comparison"] == comparison
     assert "matching_surface_patches_different_geometry_fingerprints" not in result["qc_warnings"]
     assert result["provenance"]["independent_acquisition_verified"] is False
