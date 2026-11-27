@@ -325,12 +325,43 @@ def audit_parent_graph(entries: list[tuple[str, tuple[str, ...]]]) -> dict:
     }
 
 
+def ancestry_fingerprints(
+    entries: list[tuple[str, tuple[str, ...]]], source_hashes: dict[str, str]
+) -> dict[str, str]:
+    """Fingerprint each source and its complete ancestry in a validated DAG."""
+    parents = dict(entries)
+    fingerprints: dict[str, str] = {}
+
+    def visit(revision: str) -> str:
+        if revision not in fingerprints:
+            payload = [
+                revision,
+                source_hashes[revision],
+                [[parent, visit(parent)] for parent in sorted(parents[revision])],
+            ]
+            fingerprints[revision] = hashlib.sha256(
+                json.dumps(payload, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+        return fingerprints[revision]
+
+    for revision in sorted(parents):
+        visit(revision)
+    return fingerprints
+
+
+def classify_ancestry(values: list[str | None]) -> str:
+    if None in values:
+        return "unverified_graph"
+    return "identical_history" if len(set(values)) == 1 else "divergent_history"
+
+
 def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
     by_revision: dict[str, list[str]] = defaultdict(list)
     source_sha256: dict[str, str] = {}
     migration_files = 0
     seen_roots: set[Path] = set()
     parent_graphs: dict[str, dict] = {}
+    ancestry_by_path: dict[str, str] = {}
     for root in roots:
         # A repeated directory must not manufacture a revision collision.
         # Check each path component before resolving so symlinked ancestors
@@ -356,6 +387,7 @@ def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
             if entry.is_symlink():
                 raise ValueError(f"Migration tree contains a symbolic link: {entry}")
         root_entries: list[tuple[str, tuple[str, ...]]] = []
+        root_paths: dict[str, str] = {}
         for path in sorted(root.rglob("*.py")):
             if path.is_symlink():
                 raise ValueError(f"Migration file is a symbolic link: {path}")
@@ -370,10 +402,20 @@ def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
                 raise ValueError(f"{path}: noncanonical revision")
             if verify_parent_graph:
                 root_entries.append((revision, parent_revisions_from_source(path, source)))
+                root_paths[revision] = str(path)
             by_revision[revision].append(str(path))
             source_sha256[str(path)] = hashlib.sha256(source).hexdigest()
         if verify_parent_graph:
-            parent_graphs[str(root)] = audit_parent_graph(root_entries)
+            graph = audit_parent_graph(root_entries)
+            parent_graphs[str(root)] = graph
+            if graph["consistent"]:
+                fingerprints = ancestry_fingerprints(
+                    root_entries,
+                    {revision: source_sha256[path] for revision, path in root_paths.items()},
+                )
+                ancestry_by_path.update(
+                    {path: fingerprints[revision] for revision, path in root_paths.items()}
+                )
     if migration_files == 0:
         raise ValueError("No migration revision files found")
     collisions = {
@@ -401,6 +443,16 @@ def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
         "collision_free": not bool(collisions),
     }
     if verify_parent_graph:
+        # Identical descendant source does not establish shared ancestry after
+        # an earlier collision. Invalid graphs provide no ancestry evidence.
+        report["collision_ancestry_sha256"] = {
+            revision: {path: ancestry_by_path.get(path) for path in paths}
+            for revision, paths in collisions.items()
+        }
+        report["collision_ancestry_relationship"] = {
+            revision: classify_ancestry([ancestry_by_path.get(path) for path in paths])
+            for revision, paths in collisions.items()
+        }
         report["parent_graphs"] = parent_graphs
         report["parent_graph_consistent"] = all(
             graph["consistent"] for graph in parent_graphs.values()
