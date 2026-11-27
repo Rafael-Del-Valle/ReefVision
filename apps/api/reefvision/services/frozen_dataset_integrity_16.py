@@ -324,7 +324,10 @@ def validate_frozen_dataset_manifest(
         if (
             type(item.split) is not str
             or item.split not in {"train", "validation", "test", "unassigned"}
-            or (item.group_key is not None and type(item.group_key) is not str)
+            or (
+                item.group_key is not None
+                and (type(item.group_key) is not str or not item.group_key.strip())
+            )
         ):
             raise ValidationError(message)
         split_census[item.split] += 1
@@ -437,6 +440,7 @@ def validate_frozen_dataset_manifest(
         or set(achieved) != expected_splits
         or any(
             type(achieved[split]) not in (int, float)
+            or not 0 <= achieved[split] <= 1
             or not isfinite(achieved[split])
             or abs(achieved[split] - split_census[split] / len(items)) > 1e-12
             for split in expected_splits
