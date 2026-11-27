@@ -489,3 +489,24 @@ an executable scientific analysis node or migration authorization.
 Release HOLD remains for cross-version reconciliation, representative
 biology and saved-workflow acceptance, genuine Windows MSI/CAB and
 installed-GUI upgrade/rollback, full exact-head CI and researcher approval.
+
+
+## Malformed revision-marker diagnostic privacy (2026-11-27)
+
+The independent read-only SQLite comparison now applies the same bounded
+visible-token predicate to validation and diagnostic serialization. Previously,
+a rejected TEXT revision could still be printed verbatim in the source or
+reference JSON, potentially exposing misplaced study notes or control
+characters. Invalid values now appear as JSON null while the list preserves
+row cardinality. Valid historical and foreign revision tokens remain visible;
+an invalid marker still fails all existing strict revision/integrity gates.
+This does not authorize an upgrade or change any database.
+
+Extended paired-copy regressions verify null redaction for malformed values,
+valid marker preservation, and either-sided refusal despite identical DDL.
+Independent disposable SQLite probes exercised 22 values, including valid
+historical tokens, malformed text, BLOBs, NULL and numeric values, with
+unchanged bytes. Full exact-head CI, reviewed cross-version reconciliation,
+representative biological saved workflows and installed Windows acceptance
+remain separate gates. No new scientific workflow node is needed for this
+offline diagnostic; existing typed saved QC execution and review remain intact.
