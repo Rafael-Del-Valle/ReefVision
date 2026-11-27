@@ -1532,10 +1532,18 @@ def compare_mesh_observations(
     )
     if reordered_matching_surface_patches:
         warnings.append("matching_surface_patches_different_geometry_fingerprints")
+    # Historical artifacts can retain complete patch hashes while losing the
+    # primary digest. Missing primary provenance must not defeat this guard.
+    matching_patches_without_primary_fingerprints = (
+        not (first_hash_valid and second_hash_valid)
+        and surface_patch_fingerprint_comparison == "matching"
+    )
+    if matching_patches_without_primary_fingerprints:
+        warnings.append("matching_surface_patches_primary_geometry_fingerprint_unavailable")
     rescaled_matching_surface_patches = (
         not reused_imported_source_payload
         and not reused_spatial_source_asset
-        and reordered_matching_surface_patches
+        and (reordered_matching_surface_patches or matching_patches_without_primary_fingerprints)
         and any(
             metadata.get("source_format") in ("obj", "ply_ascii", "glb_2_0")
             or metadata.get("spatial_source_asset_id") is not None
