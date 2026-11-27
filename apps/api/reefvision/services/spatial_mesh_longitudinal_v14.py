@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from itertools import zip_longest
 from json import dumps
-from math import atan2, degrees, exp, fsum, hypot, isclose, isfinite, log, log2
+from math import atan2, degrees, exp, fsum, hypot, isclose, isfinite, log, log2, ulp
 from re import fullmatch
 from typing import Any
 
@@ -1709,6 +1709,8 @@ def compare_mesh_observations(
         # The indexed geometry also fixes its area-weighted centroid relative
         # to the source origin. Normalize by the positive calibrated diagonal
         # to compare independently of the scale, even for legacy records.
+        # Tolerance is in mesh diagonals, not distance from the source origin.
+        # Allow a few floating-point steps for independently calibrated values.
         centroid_profiles: list[list[float] | None] = []
         for record, extent in zip((before, after), (early_extent, late_extent), strict=True):
             centroid = record.get("area_weighted_surface_centroid_m")
@@ -1718,9 +1720,7 @@ def compare_mesh_observations(
             if (
                 not isinstance(centroid, list)
                 or len(centroid) != 3
-                or any(
-                    type(value) not in (int, float) or not isfinite(value) for value in centroid
-                )
+                or any(type(value) not in (int, float) or not isfinite(value) for value in centroid)
             ):
                 raise ValueError("Surface centroid must be three finite coordinates")
             normalized = [value / extent for value in centroid]
@@ -1730,7 +1730,7 @@ def compare_mesh_observations(
             early_centroid is not None
             and late_centroid is not None
             and any(
-                not isclose(early, late, rel_tol=1e-8, abs_tol=1e-12)
+                not isclose(early, late, rel_tol=0, abs_tol=max(1e-8, 8 * ulp(early), 8 * ulp(late)))
                 for early, late in zip(early_centroid, late_centroid, strict=True)
             )
         ):
