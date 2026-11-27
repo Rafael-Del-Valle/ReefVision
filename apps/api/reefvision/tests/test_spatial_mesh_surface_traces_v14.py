@@ -1697,6 +1697,7 @@ def test_trace_scale_boundary_is_explicit_and_not_a_confidence_interval(
         "uncertainty_missing",
         "uncertainty_max",
         "finite_detour_chord_underflow",
+        "chain_chord_interval_underflow",
         "segment_underflow",
         "mixed_chain_underflow",
     ],
@@ -1762,6 +1763,11 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "uncertainty_missing": {**PARAMS, "relative_scale_uncertainty": None},
         "uncertainty_max": {**PARAMS, "relative_scale_uncertainty": 1.0},
         "finite_detour_chord_underflow": FINITE_DETOUR_CHORD_UNDERFLOW_PARAMS,
+        "chain_chord_interval_underflow": {
+            **FINITE_DETOUR_CHORD_UNDERFLOW_PARAMS,
+            "vertices": [[0, 0, 0], [1, 0, 0], [5e-224, 0, 0], [0, 1, 0]],
+            "relative_scale_uncertainty": 0.9,
+        },
         "segment_underflow": SEGMENT_UNDERFLOW_PREVIEW_PARAMS,
         "mixed_chain_underflow": {
             **SEGMENT_UNDERFLOW_PREVIEW_PARAMS,
@@ -1813,6 +1819,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "ordinary",
         "closed_loop",
         "finite_detour_chord_underflow",
+        "chain_chord_interval_underflow",
         "cross_trace_unequal_overlap",
         "mixed_component_overlap",
         "oblique_component_overlap",
@@ -1845,6 +1852,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         "cross_trace_unequal_overlap",
         "display_chord_rounding",
         "finite_detour_chord_underflow",
+        "chain_chord_interval_underflow",
     }
     mixed_overlap = case in {"mixed_component_overlap", "oblique_component_overlap"}
     assert union["unequal_collinear_overlap_pair_count"] == (3 if mixed_overlap else int(overlaps))
@@ -1917,25 +1925,46 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     assert sum(chain["edge_count"] for chain in chains) == union["distinct_nonzero_edge_count"]
     assert all(chain["human_review_verified"] is False for chain in chains)
     for chain in chains:
-        chord = chain["source_endpoint_chord_mesh_units"]
-        nominal_chord = chord * params["meters_per_unit"]
+        # Compute from source waypoints and round each final bound only once.
+        # A rounded nominal meter chord is not an exact uncertainty oracle.
+        waypoints = chain["source_waypoints_mesh_units"]
+        chord = Fraction(dist(waypoints[0], waypoints[-1]))
+        calibrated_chord = chord * Fraction(params["meters_per_unit"])
+        nominal_chord = float(calibrated_chord)
         if chord > 0 and nominal_chord == 0:
             assert chain["endpoint_chord_length_m"] is None
             assert chain["endpoint_chord_length_scale_only_interval_m"] is None
             assert "surface_trace_chain_chord_underflow" in chain["qc_warnings"]
         else:
-            assert chain["endpoint_chord_length_m"] == pytest.approx(nominal_chord, abs=0)
+            assert chain["endpoint_chord_length_m"] == nominal_chord
             uncertainty = params["relative_scale_uncertainty"]
             if uncertainty is None:
                 assert chain["endpoint_chord_length_scale_only_interval_m"] is None
             else:
-                assert chain["endpoint_chord_length_scale_only_interval_m"] == pytest.approx(
-                    [nominal_chord * (1 - uncertainty), nominal_chord * (1 + uncertainty)],
-                    abs=0,
-                )
+                relative = Fraction(uncertainty)
+                lower = float(calibrated_chord * (1 - relative))
+                upper = float(calibrated_chord * (1 + relative))
+                if chord > 0 and (
+                    (relative < 1 and lower == 0) or (relative > 0 and lower == upper)
+                ):
+                    assert chain["endpoint_chord_length_scale_only_interval_m"] is None
+                    warning = "surface_trace_chain_chord_interval_unrepresentable"
+                    assert warning in chain["qc_warnings"]
+                else:
+                    assert chain["endpoint_chord_length_scale_only_interval_m"] == [lower, upper]
     assert {warning for chain in chains for warning in chain["qc_warnings"]} <= set(
         artifact["qc_warnings"]
     )
+    if case == "chain_chord_interval_underflow":
+        # A positive subnormal nominal chord survives, but the nonzero
+        # lower bound rounds to zero. This is not a true zero chord.
+        assert len(chains) == 1
+        assert chains[0]["endpoint_chord_length_m"] == 5e-324
+        assert chains[0]["endpoint_chord_length_scale_only_interval_m"] is None
+        warning = "surface_trace_chain_chord_interval_unrepresentable"
+        assert warning in chains[0]["qc_warnings"]
+        assert warning in artifact["qc_warnings"]
+        assert "surface_trace_chain_chord_underflow" not in chains[0]["qc_warnings"]
     if case == "mixed_chain_underflow":
         warning = "surface_trace_chain_length_underflow"
         assert union["qc_warnings"] == corrected["qc_warnings"] == []
