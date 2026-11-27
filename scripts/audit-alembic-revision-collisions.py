@@ -5,6 +5,7 @@ import argparse
 import ast
 import hashlib
 import json
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -370,6 +371,14 @@ def classify_ancestry(values: list[str | None]) -> str:
     return "identical_history" if len(set(values)) == 1 else "divergent_history"
 
 
+def _canonical_graph_revision(value: str) -> bool:
+    """Limit strict ancestry evidence to ReefVision's durable revision tokens."""
+    return (
+        re.fullmatch(r"[A-Za-z0-9_]{1,32}", value) is not None
+        and value not in {"base", "head", "heads"}
+    )
+
+
 def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
     by_revision: dict[str, list[str]] = defaultdict(list)
     source_sha256: dict[str, str] = {}
@@ -416,7 +425,12 @@ def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
             if not revision.strip() or revision != revision.strip():
                 raise ValueError(f"{path}: noncanonical revision")
             if verify_parent_graph:
-                root_entries.append((revision, parent_revisions_from_source(path, source)))
+                if not _canonical_graph_revision(revision):
+                    raise ValueError(f"{path}: unsupported strict graph revision identifier")
+                parents = parent_revisions_from_source(path, source)
+                if any(not _canonical_graph_revision(parent) for parent in parents):
+                    raise ValueError(f"{path}: unsupported strict graph parent identifier")
+                root_entries.append((revision, parents))
                 root_paths[revision] = str(path)
             by_revision[revision].append(str(path))
             source_sha256[str(path)] = hashlib.sha256(source).hexdigest()
