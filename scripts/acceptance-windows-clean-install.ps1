@@ -493,6 +493,10 @@ try {
     Stop-AcceptanceDesktop $desktop
 
     if (-not $SkipUninstall) {
+        # Capture the final database after the desktop and sidecar have stopped.
+        # A retained directory alone does not prove that project data survived.
+        $retainedDatabase = Join-Path $DataRoot 'reefvision.db'
+        $beforeUninstallHash = (Get-FileHash -LiteralPath $retainedDatabase -Algorithm SHA256).Hash
         $installer = New-Object -ComObject WindowsInstaller.Installer
         $database = $installer.OpenDatabase($InstallerPath, 0); $view = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductCode'"); $view.Execute(); $productCode = $view.Fetch().StringData(1)
         Run-Msi -Action Uninstall -PackageOrProduct $productCode -LogName 'uninstall.log' | Out-Null
@@ -500,8 +504,10 @@ try {
         if (@($shortcutCandidates | Where-Object { Test-Path -LiteralPath $_ }).Count -gt 0) { throw 'A ReefVision shortcut remains after uninstall.' }
         if (@(Get-ReefVisionInstalledRegistrations).Count -gt 0) { throw 'ReefVision uninstall registration remains after uninstall.' }
         $report.uninstall = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Program binaries removed.'
-        if (-not (Test-Path $DataRoot)) { throw 'Isolated user data was removed by uninstall.' }
-        $report.data_retention = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Isolated project data remained after uninstall.'
+        if (-not (Test-Path -LiteralPath $retainedDatabase -PathType Leaf)) { throw 'Isolated project database was removed by uninstall.' }
+        $afterUninstallHash = (Get-FileHash -LiteralPath $retainedDatabase -Algorithm SHA256).Hash
+        if ($afterUninstallHash -ne $beforeUninstallHash) { throw 'Isolated project database bytes changed during uninstall.' }
+        $report.data_retention = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Isolated project database retained byte-for-byte; SHA-256 $afterUninstallHash"
     } else {
         $report.data_retention = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'Uninstall was skipped.'
     }
