@@ -780,3 +780,16 @@ controls. Current producer artifacts retain valid primary digests; verify
 the existing standalone and twice-replayed typed graph still distinguishes
 reindexed geometry from missing primary provenance. No authentication of
 legacy hashes, biological identity, or acquisition independence is implied.
+
+If two valid primary indexed-geometry digests match but their complete
+surface-patch digest multisets differ, report
+`identical_geometry_surface_patch_fingerprints_inconsistent` and withhold
+derived longitudinal changes, including scale-only change intervals.
+Preserve nominal measurements and the conflicting provenance for review.
+Missing or malformed patch metadata remains unavailable rather than
+contradictory; different primary digests do not by themselves establish
+this inconsistency. Check all eight primary/patch-state combinations
+against the shared comparison engine. Confirm that consistent OBJ, PLY
+and inline previews continue to agree across standalone and twice-executed
+persisted typed workflow artifacts. A discrepancy is a reason to check
+source and producer versions, not proof of corruption or biological change.
