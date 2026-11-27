@@ -463,15 +463,17 @@ describe("ProjectTrainingMonitor", () => {
     );
     expect(mapRow).not.toHaveTextContent("history unavailable");
 
-    const precisionRow = screen.getByText("metrics precision(B)").closest("div");
-    expect(precisionRow).toHaveTextContent("0.92");
-    expect(precisionRow).toHaveTextContent(
+    const precRow = screen.getByText("metrics precision(B)").closest("div");
+    expect(precRow).toHaveTextContent("0.92");
+    expect(precRow).toHaveTextContent(
       "summary fallback; history unavailable; epoch association unverified",
     );
 
     const recallRow = screen.getByText("metrics recall(B)").closest("div");
     expect(recallRow).toHaveTextContent("0.73");
-    expect(recallRow).toHaveTextContent("summary; epoch association unverified");
+    expect(recallRow).toHaveTextContent(
+      "summary; epoch association unverified",
+    );
     expect(api.cancelTrainingRun).not.toHaveBeenCalled();
   });
 

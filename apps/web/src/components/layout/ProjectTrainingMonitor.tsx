@@ -75,14 +75,15 @@ function metricEntries(run: TrainingRun): Array<[string, number, string]> {
       const canonicalKey = canonicalTrainingLossKey(key);
       if (!canonicalKey.startsWith("train/") || !latest.has(canonicalKey)) {
         const history = histories.get(canonicalKey);
+        let source = "summary";
+        if (latest.has(canonicalKey)) {
+          source = "summary; history also available";
+        } else if (Array.isArray(history) && history.length > 0) {
+          source = "summary fallback; history unavailable";
+        }
         latest.set(canonicalKey, {
           value,
-          provenance:
-            latest.has(canonicalKey)
-              ? "summary; history also available; epoch association unverified"
-              : Array.isArray(history) && history.length > 0
-                ? "summary fallback; history unavailable; epoch association unverified"
-                : "summary; epoch association unverified",
+          provenance: `${source}; epoch association unverified`,
         });
       }
     }
