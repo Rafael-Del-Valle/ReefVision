@@ -1677,8 +1677,8 @@ def compare_mesh_observations(
         # ratios. A diagonal alone cannot distinguish exchanged axes.
         # Normalize by the largest dimension rather than squaring lengths
         # or using calibration metadata, which legacy records may omit.
-        axis_profiles = []
-        for record in (before, after):
+        axis_profiles: list[list[float] | None] = []
+        for record, extent in zip((before, after), extents, strict=True):
             dimensions = record.get("axis_aligned_dimensions_m")
             if dimensions is None:
                 axis_profiles.append(None)
@@ -1692,6 +1692,14 @@ def compare_mesh_observations(
                 )
             ):
                 raise ValueError("Axis-aligned dimensions must be three finite nonnegative values")
+            # Aspect ratios cannot detect uniformly inflated axis lengths.
+            # The calibrated diagonal must also agree with the axis lengths
+            # within each record; missing historical fields remain unknown.
+            if extent is not None and not isclose(
+                hypot(*dimensions), extent, rel_tol=1e-8, abs_tol=0.0
+            ):
+                contradictory_calibrated_dimensions = True
+                warnings.append("identical_geometry_axis_lengths_diagonal_inconsistent")
             largest = max(dimensions)
             profile = [value / largest for value in dimensions] if largest > 0 else None
             axis_profiles.append(profile)
