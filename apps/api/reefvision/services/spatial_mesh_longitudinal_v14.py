@@ -1518,14 +1518,24 @@ def compare_mesh_observations(
     # vertices, connectivity within patches and biological identity may differ.
     first_patches = _complete_patch_fingerprints(before)
     second_patches = _complete_patch_fingerprints(after)
+    if first_patches is None or second_patches is None:
+        surface_patch_fingerprint_comparison = "unavailable"
+    elif first_patches == second_patches:
+        surface_patch_fingerprint_comparison = "matching"
+    else:
+        surface_patch_fingerprint_comparison = "different"
+    reordered_matching_surface_patches = (
+        first_hash_valid
+        and second_hash_valid
+        and first_geometry_hash != second_geometry_hash
+        and surface_patch_fingerprint_comparison == "matching"
+    )
+    if reordered_matching_surface_patches:
+        warnings.append("matching_surface_patches_different_geometry_fingerprints")
     rescaled_matching_surface_patches = (
         not reused_imported_source_payload
         and not reused_spatial_source_asset
-        and first_hash_valid
-        and second_hash_valid
-        and first_geometry_hash != second_geometry_hash
-        and first_patches is not None
-        and first_patches == second_patches
+        and reordered_matching_surface_patches
         and any(
             metadata.get("source_format") in ("obj", "ply_ascii", "glb_2_0")
             or metadata.get("spatial_source_asset_id") is not None
@@ -1812,6 +1822,7 @@ def compare_mesh_observations(
             "after_geometry_sha256": second.get("geometry_sha256"),
             # Preserve original lineage even without a pairwise review bundle.
             "acquisition_lineage_status": acquisition_lineage_status,
+            "surface_patch_fingerprint_comparison": surface_patch_fingerprint_comparison,
             "independent_acquisition_verified": False,
             "before_source_payload_sha256": first_source_hash,
             "after_source_payload_sha256": second_source_hash,
