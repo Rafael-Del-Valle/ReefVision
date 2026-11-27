@@ -90,6 +90,20 @@ def compare_reports(before: dict, after: dict) -> dict:
         ):
             issues.append(f"{label}: populated registry checkpoint evidence missing")
 
+    # The real 1.6 migrations 0039 and 0040 expand the permitted audit
+    # vocabulary. Identical historical rows cannot prove that a candidate
+    # retains that vocabulary: all retained events may happen to be comments.
+    # A reconciliation may widen the CHECK but must never narrow it.
+    event_check_order = ("coordination", "triage", "triage_complete")
+    original_check = before.get("review_event_check")
+    current_check = after.get("review_event_check")
+    if (
+        original_check in event_check_order
+        and current_check in event_check_order
+        and event_check_order.index(current_check) < event_check_order.index(original_check)
+    ):
+        issues.append("QC event CHECK narrows the baseline audit vocabulary")
+
     baseline = before.get("affected_table_content_fingerprints")
     candidate = after.get("affected_table_content_fingerprints")
     counts = before.get("affected_table_row_counts")
