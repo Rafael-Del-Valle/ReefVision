@@ -696,6 +696,11 @@ class PoseTrainingExportService:
         if export_format == "ultralytics_pose":
             return {
                 "lossy_native_artifact": True,
+                "validation_split": {
+                    "included": False,
+                    "required_path": "images/val",
+                    "independent_validation_required": True,
+                },
                 "preserved_natively": [
                     "source image",
                     "normalized bounding box",
@@ -706,6 +711,7 @@ class PoseTrainingExportService:
                 "transformed": [
                     ("uncertain visibility is represented as visible"),
                     ("repeated semantic landmarks are represented by fixed keypoint order"),
+                    "independent validation split must be supplied before training",
                 ],
                 "manifest_only": [
                     *common_manifest_only,
@@ -1135,7 +1141,8 @@ class PoseTrainingExportService:
         yaml_lines = [
             "path: .",
             "train: images/train",
-            "val: images/train",
+            "# Supply independent reviewed validation images and labels before training.",
+            "val: images/val",
             (f"kpt_shape: [{len(schema.external_node_names)}, 3]"),
             "names:",
         ]
@@ -1539,6 +1546,14 @@ class PoseTrainingExportService:
             b"source video after validating its SHA-256 against the frozen\n"
             b"training dataset.\n"
         )
+
+        if export_format == "ultralytics_pose":
+            files["README.txt"] += (
+                b"\nThis bundle contains training data only. Before training, add an\n"
+                b"independently reviewed, non-overlapping validation dataset in\n"
+                b"images/val and labels/val with matching class and keypoint order.\n"
+                b"Never point val at images/train; metrics would not be held-out.\n"
+            )
 
         bundle = self._write_zip(files)
 
