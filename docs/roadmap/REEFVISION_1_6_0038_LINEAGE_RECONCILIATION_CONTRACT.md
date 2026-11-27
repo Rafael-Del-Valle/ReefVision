@@ -605,3 +605,32 @@ saved QC Workflow Builder execution, units, provenance, retry and mandatory
 researcher review are unchanged. Release remains HOLD for reviewed
 cross-version reconciliation, populated biological/workflow validation,
 real MSI/CAB installed-GUI clean/upgrade/rollback and explicit approval.
+
+
+## Transitive source ancestry evidence (2026-11-27)
+
+Byte-identical successor files can inherit incompatible earlier revisions.
+With `--verify-parent-graph`, the collision audit now fingerprints each
+revision's source hash and the complete validated parent ancestry, using
+deterministic sorted parent links. The report adds
+`collision_ancestry_sha256` and `collision_ancestry_relationship`:
+`identical_history`, `divergent_history`, or `unverified_graph` when any
+participating directory has an inconsistent parent graph. No fingerprint
+is supplied for an invalid graph. These are source ancestry fingerprints,
+not proof of applied database history or equivalent migration behavior.
+
+Run on separately checked-out, complete migration directories only. The
+default invocation retains its prior report and collision exit behavior.
+Both identical and divergent collisions still fail strict CLI execution;
+no automatic reconciliation or migration is authorized.
+
+Two CLI regressions cover identical descendants of divergent parents,
+reverse input order, invalid-graph evidence withholding, default-mode
+compatibility and original source preservation. Ten isolated Python
+fingerprint/classification assertions passed, including multi-parent DAG
+propagation; the repository CLI tests and exact-head CI remain unverified
+locally because github.com DNS prevents checkout. This is offline
+migration evidence, not a new scientific Workflow Builder operation.
+Existing saved QC runs, units, provenance, retry and human review are
+unchanged. Cross-version reconciliation, populated biological acceptance,
+installed Windows MSI/GUI and researcher approval remain release gates.
