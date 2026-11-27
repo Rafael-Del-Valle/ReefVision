@@ -172,6 +172,9 @@ def test_frozen_item_evidence_cannot_change_under_standalone_or_saved_qc(
         "split_seed_row_drift",
         "missing_group_count_forged",
         "achieved_ratios_forged",
+        "achieved_ratios_negative",
+        "achieved_ratios_huge",
+        "blank_biological_group",
     ],
 )
 def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
@@ -232,11 +235,18 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             version.split_seed = 42 if version.split_seed is None else version.split_seed + 1
         elif tamper == "missing_group_count_forged":
             version.missing_group_key_count += 1
-        elif tamper == "achieved_ratios_forged":
-            version.achieved_ratios_json = {
-                **version.achieved_ratios_json,
-                "train": 0.123456,
-            }
+        elif tamper.startswith("achieved_ratios_"):
+            value: int | float
+            if tamper == "achieved_ratios_negative":
+                key, value = "test", -1e-15
+            elif tamper == "achieved_ratios_huge":
+                key, value = "train", 10**400
+            else:
+                key, value = "train", 0.123456
+            version.achieved_ratios_json = {**version.achieved_ratios_json, key: value}
+        elif tamper == "blank_biological_group":
+            item.group_key = "\u2003"
+            version.missing_group_key_count = 0
         else:
             annotations = [dict(annotation) for annotation in item.annotation_snapshot_json]
             if tamper == "reused_identity":
@@ -309,6 +319,9 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             "unknown_eligible_status",
             "missing_group_count_forged",
             "achieved_ratios_forged",
+            "achieved_ratios_negative",
+            "achieved_ratios_huge",
+            "blank_biological_group",
         }:
             manifest["split_config"] = {
                 **version.manifest_json["split_config"],
@@ -317,7 +330,7 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
                 manifest["split_config"]["eligible_annotation_statuses"] = list(
                     version.eligible_annotation_statuses_json
                 )
-            elif tamper == "missing_group_count_forged":
+            elif tamper in {"missing_group_count_forged", "blank_biological_group"}:
                 manifest["split_config"]["missing_group_key_count"] = (
                     version.missing_group_key_count
                 )
@@ -334,7 +347,9 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
                 version_id, ReviewQueueCreateRequest()
             )
 
-        if tamper.startswith(("class_census_", "summary_", "manifest_")):
+        if tamper.startswith(("class_census_", "summary_", "manifest_", "achieved_ratios_")) or (
+            tamper == "blank_biological_group"
+        ):
             with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
                 ReviewQueueService(session, app.state.settings).regenerate(standalone.json()["id"])
 
