@@ -477,13 +477,15 @@ def _pose_export_zip(
 
 
 @pytest.mark.parametrize("independent_header", [False, True])
+@pytest.mark.parametrize("validation_independent_header", [False, True])
 def test_pose_materialization_never_silently_reuses_training_for_validation(
     tmp_path: Path,
     independent_header: bool,
+    validation_independent_header: bool,
 ) -> None:
     training = _pose_export_zip(b"train", independent_header=independent_header)
 
-    validation = _pose_export_zip(b"validation", independent_header=independent_header)
+    validation = _pose_export_zip(b"validation", independent_header=validation_independent_header)
 
     destination = tmp_path / "pose-dataset"
 
