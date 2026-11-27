@@ -57,6 +57,19 @@ from reefvision.storage.projects import (
 )
 
 
+def _pose_training_execution_sha256(run: TrainingRun) -> str:
+    """Seal the scientific execution parameters independently of frozen frames."""
+
+    return canonical_json_sha256(
+        {
+            "training_config": run.training_config_json,
+            "device": run.device,
+            "precision": run.precision,
+            "random_seed": run.random_seed,
+        }
+    )
+
+
 def _resolve_unlinked_pose_run_path(settings: Settings, relative_path: str) -> Path:
     """Resolve training outputs without following in-root links to another run.
 
@@ -1072,6 +1085,12 @@ def process_pose_training_job(
                 or sealed_digest != canonical_json_sha256(request)
             ):
                 raise ValidationError("Queued pose training child job request checksum changed")
+            execution_digest = _pose_training_execution_sha256(run)
+            if (
+                "pose_training_execution_sha256" in request
+                and request["pose_training_execution_sha256"] != execution_digest
+            ):
+                raise ValidationError("Queued pose training frozen execution parameters changed")
             expected_lineage = {
                 "pose_training_dataset_id": training_dataset.id,
                 "pose_training_dataset_manifest_sha256": training_dataset.manifest_sha256,
@@ -1445,6 +1464,9 @@ def process_pose_training_job(
             ):
                 raise ValidationError("Pose training materialization changed before launch")
             _verify_prelaunch_pose_dataset(dataset_root, materialized)
+
+            if _pose_training_execution_sha256(run) != execution_digest:
+                raise ValidationError("Pose training execution parameters changed before launch")
 
             train_args = dict(run.training_config_json or {})
 
