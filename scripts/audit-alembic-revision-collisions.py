@@ -282,12 +282,16 @@ def _literal_revision_links(
 
 
 def parent_revisions_from_source(path: Path, source: bytes) -> tuple[str, ...]:
-    """Read parent links for the supported dependency-free lineage."""
+    """Read parent links for the supported dependency-free, unlabeled lineage."""
     parents = _literal_revision_links(path, source, field="down_revision")
     # Alembic also orders revisions by depends_on. A parent-only graph cannot
     # establish complete ancestry if those independent edges are present.
     if _literal_revision_links(path, source, field="depends_on", allow_missing=True):
         raise ValueError(f"{path}: depends_on links are unsupported by parent-only verification")
+    # Alembic branch labels share a namespace with revision IDs and can
+    # collide with each other. This parent-only audit does not verify labels.
+    if _literal_revision_links(path, source, field="branch_labels", allow_missing=True):
+        raise ValueError(f"{path}: branch_labels are unsupported by parent-only verification")
     return parents
 
 
