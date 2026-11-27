@@ -2950,7 +2950,6 @@ def test_typed_mesh_replay_withholds_inconsistent_calibrated_dimensions(
         assert result["delta_axis_aligned_bounding_box_diagonal_m"] == extent - 1.0
 
 
-
 def test_inconsistent_calibrated_dimensions_standalone_and_saved_graph(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
