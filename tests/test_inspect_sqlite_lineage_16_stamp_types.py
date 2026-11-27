@@ -274,3 +274,65 @@ def test_stamp_write_storage_options_in_both_comparison_inputs(
         assert "private coral data" not in result.stdout + result.stderr
         assert "private stamp default" not in result.stdout + result.stderr
         assert [database.read_bytes() for database in databases] == originals
+
+
+@pytest.mark.parametrize(
+    ("marker", "valid"),
+    [
+        ("0038", True),
+        ("0041", True),
+        ("legacy_revision", True),
+        ("a" * 32, True),
+        ("abc-123", True),
+        ("00 38", False),
+        ("0038\u200b", False),
+        ("0038\u202e", False),
+        ("0038\u0085", False),
+        ("\uff10\uff10\uff13\uff18", False),
+        ("a" * 33, False),
+        ("00\t38", False),
+        ("00\\38", False),
+        (" 0038", False),
+        ("0038 ", False),
+        ("", False),
+    ],
+)
+def test_revision_marker_token_contract_in_either_copy(
+    tmp_path: Path, marker: str, valid: bool
+) -> None:
+    databases = [tmp_path / "source.sqlite", tmp_path / "copy.sqlite"]
+    for database in databases:
+        with sqlite3.connect(database) as connection:
+            connection.execute(
+                "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
+            )
+            connection.execute("INSERT INTO alembic_version VALUES (?)", (marker,))
+            connection.execute("CREATE TABLE observations (note TEXT)")
+            connection.execute("INSERT INTO observations VALUES ('private coral data')")
+            assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    originals = [database.read_bytes() for database in databases]
+    for options in [
+        [],
+        ["--fail-on-noncanonical-stamp"],
+        ["--fail-on-integrity-error"],
+        ["--fail-on-lineage-collision"],
+        ["--fail-on-revision-mismatch"],
+    ]:
+        result = subprocess.run(
+            [
+                sys.executable, str(SCRIPT), str(databases[0]),
+                "--compare-to", str(databases[1]), *options,
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode == (0 if valid or not options else 2), result.stderr
+        report = json.loads(result.stdout)
+        expected = None if valid else "invalid_revision_marker_type_or_value"
+        assert report["alembic_stamp_validation_error"] == expected
+        comparison = report["schema_comparison"]
+        assert comparison["matches"] is True
+        assert comparison["revision_markers_match"] is valid
+        assert comparison["reference_integrity"]["alembic_stamp_validation_error"] == expected
+        assert report["classification"] == "requires_researcher_review"
+        assert "private coral data" not in result.stdout + result.stderr
+        assert [database.read_bytes() for database in databases] == originals
