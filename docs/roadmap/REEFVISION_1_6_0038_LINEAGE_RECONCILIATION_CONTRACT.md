@@ -439,3 +439,31 @@ existing typed QC workflows, provenance, retries and human review remain
 unchanged. Release HOLD pending cross-track reconciliation, representative
 biological and saved-workflow acceptance, physical installed Windows
 MSI/CAB/GUI upgrade/rollback, and researcher approval.
+
+
+## Independent copy comparison parity (2026-11-27)
+
+The separate `scripts/inspect_sqlite_lineage_16.py` comparison CLI still
+accepted stamp defaults, explicit ON CONFLICT clauses, and WITHOUT ROWID
+tables that the primary inspector and desktop startup already refuse.
+Matching DDL hashes and valid current revision strings do not authenticate
+these write/storage contracts. The comparison CLI now records stable,
+redacted constraint diagnostics and refuses all four existing strict
+stamp/integrity/collision/revision gates if either input is unsafe, while
+retaining read-only diagnostic mode and ordinary quoted/comment controls.
+
+Twelve independent SQLite probes passed: eight previously accepted
+noncanonical configurations and four valid controls. Twelve new paired
+source/copy CLI fixtures exercise the default diagnostic mode, four strict
+gates, unchanged database bytes and sentinel redaction. Repository-level
+regressions and exact-head CI are not yet verified; the local checkout
+is blocked by GitHub DNS. Earlier CI #45984652401 completed backend,
+frontend and native Windows preservation successfully, but that evidence
+does not qualify this new head.
+
+No migration or scientific workflow node was added. Existing typed QC
+graphs, saved runs, provenance, retries and mandatory investigator review
+are unchanged. Release HOLD remains for cross-version 0038 reconciliation,
+representative biology and saved-workflow validation, real installed
+Windows MSI/CAB/GUI clean installation, upgrade/rollback, and researcher
+approval. No changes to 1.7 or revised 1.8.
