@@ -984,3 +984,15 @@ independent reconstructions are still descriptive. Exercise the standalone
 API and two persisted typed Workflow Builder executions using the same
 corrupted preview; the artifacts and hashes must agree and identity must
 remain unverified. This check does not establish anatomical branch length.
+
+### Canonical selected-chain endpoint distances (provisional)
+
+Report the Euclidean endpoint chord in source units and calibrated meters,
+with scale-only bounds when supplied. For the selected right-triangle chain
+of length 1 + sqrt(2), the chord is 1 source unit in either direction.
+A closed chain has an exactly zero endpoint chord, not an anatomical diameter;
+its straightness remains undefined. A positive chord that rounds to zero after
+calibration is unavailable, not a measured zero, and collapsed nonzero scale
+intervals receive explicit QC. Verify independently through the standalone
+preview and twice-replayed saved typed mesh preview. Neither chord nor selected
+chain length establishes anatomical centerline length or biological identity.
