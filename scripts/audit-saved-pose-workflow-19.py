@@ -1461,7 +1461,7 @@ def main() -> int:
     parser.add_argument(
         "--require-independent-evidence",
         action="store_true",
-        help="Require independently recorded graph, training, holdout and seed digests",
+        help="Require independent graph, training, holdout and seed digests plus sealed execution",
     )
     args = parser.parse_args()
     try:
@@ -1511,6 +1511,13 @@ def main() -> int:
             _require(
                 bool(evidence["seed_model_id"]),
                 "Verified registered seed is missing",
+            )
+        if args.require_independent_evidence:
+            # Legacy jobs can be inspected, but current release acceptance must
+            # demonstrate that the actual scientific execution settings were sealed.
+            _require(
+                bool(evidence["pose_training_execution_sha256"]),
+                "Independent acceptance requires frozen training execution parameters",
             )
         if args.require_registered_seed or args.require_independent_evidence:
             _require(
