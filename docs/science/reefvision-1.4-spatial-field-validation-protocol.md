@@ -704,3 +704,14 @@ but a changed OBJ comment and doubled calibration scale: the fourfold
 nominal area remains visible, while the biological change and rate are
 withheld. The lineage status distinguishes rescaled re-export from exact
 byte reuse, and both retain unverified identity and acquisition status.
+
+For replayed longitudinal measurement provenance, require a canonical
+lowercase hyphenated UUID for a non-null project source asset ID, consistent
+with the pairwise review evidence schema. Reject whitespace, non-string
+values, uppercase or compact UUID spellings and an asset ID attached to
+inline indexed triangles. This is a syntax and consistency guard, not
+authentication of asset ownership. Preserve historical records with missing
+source format and digest: reuse of a valid asset ID still withholds change.
+Exercise malformed and legacy artifacts directly, and compare standalone
+and twice-executed saved typed graph results for a real imported project
+asset, including identical artifact digests and unverified acquisition status.
