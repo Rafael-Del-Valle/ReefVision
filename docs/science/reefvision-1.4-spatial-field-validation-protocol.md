@@ -793,3 +793,15 @@ against the shared comparison engine. Confirm that consistent OBJ, PLY
 and inline previews continue to agree across standalone and twice-executed
 persisted typed workflow artifacts. A discrepancy is a reason to check
 source and producer versions, not proof of corruption or biological change.
+
+Equal valid primary indexed-geometry digests with contradictory known
+topology counts also withhold derived longitudinal changes. Report
+`longitudinal_change_withheld_inconsistent_topology` and preserve each
+observation's original topology and nominal measurements. Check face,
+edge-connected patch, boundary edge, nonmanifold edge and degenerate face
+counts independently. Missing legacy counts remain unknown, not
+contradictory; differing valid primary digests retain descriptive
+reconstruction QC. Exercise sparse legacy artifacts and verify consistent
+standalone and persisted typed Workflow Builder results. These are
+provenance discrepancies requiring human review, not proof of biological
+change or source authenticity.
