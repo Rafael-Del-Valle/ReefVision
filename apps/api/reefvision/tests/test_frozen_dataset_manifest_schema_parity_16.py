@@ -89,7 +89,13 @@ def _saved_snapshot(
     }
     manifest = {
         "schema_version": schema_version,
-        "dataset_version": {"parent_version_id": None},
+        "project": {"id": "project"},
+        "dataset_version": {
+            "id": "child",
+            "version_number": 1,
+            "status": "complete",
+            "parent_version_id": None,
+        },
         "class_map": class_map,
         "split_config": split_config,
         "summary": summary,
@@ -99,6 +105,8 @@ def _saved_snapshot(
         DatasetVersion,
         SimpleNamespace(
             id="child",
+            project_id="project",
+            version_number=1,
             parent_version_id=None,
             schema_version=schema_version,
             class_map_json=class_map,
@@ -877,7 +885,7 @@ def test_resigned_parent_reuse_requires_matching_distinct_parent(
     version.reuse_parent_assignments = True
     manifest = deepcopy(version.manifest_json)
     manifest["split_config"]["reuse_parent_assignments"] = True
-    manifest["dataset_version"] = {"parent_version_id": manifest_parent_id}
+    manifest["dataset_version"]["parent_version_id"] = manifest_parent_id
     version.manifest_json = manifest
     version.manifest_sha256 = canonical_json_sha256(manifest)
     if valid:
@@ -907,7 +915,11 @@ def test_resigned_parent_metadata_is_bound_without_reuse(
     version, item = _saved_snapshot(schema_version, with_mask=False)
     version.parent_version_id = parent_id
     manifest = deepcopy(version.manifest_json)
-    manifest["dataset_version"] = metadata
+    manifest["dataset_version"].pop("parent_version_id")
+    if metadata is None:
+        manifest["dataset_version"] = None
+    else:
+        manifest["dataset_version"].update(metadata)
     version.manifest_json = manifest
     version.manifest_sha256 = canonical_json_sha256(manifest)
     if valid:
@@ -915,3 +927,30 @@ def test_resigned_parent_metadata_is_bound_without_reuse(
     else:
         with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
             validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize("schema_version", ["0006", "0007"])
+@pytest.mark.parametrize(
+    ("section", "key", "replacement"),
+    [
+        ("project", "id", "foreign-project"),
+        ("project", "id", None),
+        ("dataset_version", "id", "other-version"),
+        ("dataset_version", "id", None),
+        ("dataset_version", "version_number", True),
+        ("dataset_version", "version_number", 1.0),
+        ("dataset_version", "version_number", 2),
+        ("dataset_version", "status", "failed"),
+        ("dataset_version", "status", None),
+    ],
+)
+def test_resigned_manifest_cannot_claim_another_study_or_version(
+    schema_version: str, section: str, key: str, replacement: object
+) -> None:
+    version, item = _saved_snapshot(schema_version, with_mask=False)
+    manifest = deepcopy(version.manifest_json)
+    manifest[section][key] = replacement
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+    with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        validate_frozen_dataset_manifest(version, [item])

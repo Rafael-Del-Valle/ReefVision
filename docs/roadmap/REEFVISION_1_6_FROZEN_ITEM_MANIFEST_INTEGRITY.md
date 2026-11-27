@@ -390,3 +390,7 @@ regeneration and persisted workflow regression extend the previous gate.
 Twelve isolated SQLite JSON parent-metadata probes passed; full repository
 tests and exact-head CI remain unverified. No research data or decisions are
 rewritten; existing typed QC outputs and human review gates remain intact.
+
+## Frozen study identity binding (November 26, 2026)
+
+The original 0006 detection and 0007 mask-aware producers record the project ID, dataset version ID, integer version number and completed status in their manifest. The shared validator now binds these fields to the actual dataset row before standalone QC, regeneration and saved typed Workflow Builder retries. Recomputing a checksum cannot turn another project's metadata or a failed snapshot into valid frozen evidence. Project display names are intentionally not compared with mutable live names. Both historical schema fixtures retain producer identity fields; new synthetic and real-database regressions cover mismatched project/version IDs, floating-point and Boolean version numbers, and false completion metadata. No new node, migration, asset mutation or automatic review approval. Independent SQLite probes are not full repository CI. Release HOLD remains.

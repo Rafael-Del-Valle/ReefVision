@@ -179,6 +179,10 @@ def test_frozen_item_evidence_cannot_change_under_standalone_or_saved_qc(
         "resolved_method_inconsistent",
         "parent_reuse_without_parent",
         "parent_metadata_drift",
+        "identity_project",
+        "identity_version",
+        "identity_number",
+        "identity_status",
     ],
 )
 def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
@@ -223,7 +227,10 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             }
             # ORM equality also conflates bool/float with integer counts.
             flag_modified(item, "per_class_counts_json")
-        elif tamper.startswith(("summary_", "manifest_")) or tamper == "parent_metadata_drift":
+        elif (
+            tamper.startswith(("summary_", "manifest_", "identity_"))
+            or tamper == "parent_metadata_drift"
+        ):
             pass  # The version manifest is mutated below.
         elif tamper == "source_digest_nonhex":
             item.image_sha256 = "z" * 64
@@ -301,6 +308,16 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
                 **manifest["dataset_version"],
                 "parent_version_id": "invented-parent",
             }
+        if tamper.startswith("identity_"):
+            manifest = deepcopy(manifest)
+            if tamper == "identity_project":
+                manifest["project"]["id"] = "foreign-project"
+            elif tamper == "identity_version":
+                manifest["dataset_version"]["id"] = "other-version"
+            elif tamper == "identity_number":
+                manifest["dataset_version"]["version_number"] = float(version.version_number)
+            else:
+                manifest["dataset_version"]["status"] = "failed"
         if tamper.startswith("manifest_"):
             manifest = deepcopy(manifest)
             if tamper == "manifest_reuse_flag_integer":
@@ -376,7 +393,9 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
                 version_id, ReviewQueueCreateRequest()
             )
 
-        if tamper.startswith(("class_census_", "summary_", "manifest_", "achieved_ratios_")) or (
+        if tamper.startswith(
+            ("class_census_", "summary_", "manifest_", "achieved_ratios_", "identity_")
+        ) or (
             tamper
             in {"blank_biological_group", "parent_reuse_without_parent", "parent_metadata_drift"}
         ):

@@ -269,9 +269,21 @@ def validate_frozen_dataset_manifest(
     # independent datasets. Do not let a disabled reuse flag hide lineage drift.
     parent_id = version.parent_version_id
     version_metadata = manifest.get("dataset_version")
+    project_metadata = manifest.get("project")
+    # A complete manifest belongs to one specific study and version.
+    # Project display names may change; the immutable identifiers may not.
     if (
-        not isinstance(version_metadata, dict)
-        or "parent_version_id" not in version_metadata
+        not isinstance(project_metadata, dict)
+        or project_metadata.get("id") != version.project_id
+        or not isinstance(version_metadata, dict)
+        or version_metadata.get("id") != version.id
+        or type(version_metadata.get("version_number")) is not int
+        or version_metadata["version_number"] != version.version_number
+        or version_metadata.get("status") != "complete"
+    ):
+        raise ValidationError(message)
+    if (
+        "parent_version_id" not in version_metadata
         or version_metadata["parent_version_id"] != parent_id
         or (
             parent_id is not None
