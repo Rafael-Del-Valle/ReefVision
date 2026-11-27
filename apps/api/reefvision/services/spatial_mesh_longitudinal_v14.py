@@ -1730,7 +1730,9 @@ def compare_mesh_observations(
             early_centroid is not None
             and late_centroid is not None
             and any(
-                not isclose(early, late, rel_tol=0, abs_tol=max(1e-8, 8 * ulp(early), 8 * ulp(late)))
+                not isclose(
+                    early, late, rel_tol=0, abs_tol=max(1e-8, 8 * ulp(early), 8 * ulp(late))
+                )
                 for early, late in zip(early_centroid, late_centroid, strict=True)
             )
         ):
