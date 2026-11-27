@@ -13,11 +13,12 @@ migration IDs refer to different schemas:
 | --- | --- | --- |
 | 0038 | `0038_scientific_data.py`: `scientific_records`, `environmental_cache_entries` | `0038_review_queue_item_events.py`: append-only QC events |
 | 0039 | `0039_computed_metrics.py`: metric definitions and results | `0039_review_queue_triage_event_types.py`: review-event CHECK expansion |
-| 0040 | not audited as present on 1.1 at this inspection | `0040_review_queue_complete_event.py`: completion event |
-| 0041 | not audited as present on 1.1 at this inspection | `0041_review_queue_bulk_request_registry.py`: global bulk request identity |
+| 0040 | `0040_environmental_event_definitions.py`: immutable threshold definitions | `0040_review_queue_complete_event.py`: completion event |
+| 0041 | `0041_computed_annotation_aggregates.py`: metric kinds/configuration | `0041_review_queue_bulk_request_registry.py`: global bulk request identity |
+| 0042 | `0042_environmental_analysis_records.py`: composite analysis definitions/results | not present in isolated 1.6 |
 
 An Alembic revision string does not prove which branch's DDL ran. A database
-stamped 0038 or 0039 can therefore be mistaken for the other branch's
+stamped 0038–0041 can therefore be mistaken for the other branch's
 schema. A direct merge of these migration files cannot be accepted.
 The 1.6 `migration_lineage_guard` deliberately rejects ambiguous
 scientific/review schemas before desktop writes; it does **not** solve
@@ -29,11 +30,11 @@ cross-version compatibility.
    actual `alembic_version` rows, table columns, constraints, indexes,
    foreign keys, review events, and scientific records **read-only**.
 2. Choose a reviewed unified Alembic DAG with globally unique revision
-   identifiers and an explicit mapping for both historical 0038/0039
+   identifiers and an explicit mapping for both historical 0038–0041
    lineages. Never rewrite applied migration files in an installed
    release or blindly use `alembic stamp`.
 3. Implement and test data-preserving upgrades from fresh 0037,
-   1.1 scientific 0038/0039, and 1.6 QC 0038–0041. Test ambiguous,
+   1.1 scientific 0038–0042, and 1.6 QC 0038–0041. Test ambiguous,
    partially applied, duplicate-head, orphaned and corrupted schemas
    fail closed without mutating research data.
 4. Verify original scientific records, calibration/units, project/user
@@ -478,3 +479,33 @@ no user database is touched. No production migration or workflow behavior is
 changed. Fresh backend CI is required to verify these regressions and the
 previous atomic migration and foreign-key postcondition tests. Full release
 acceptance remains on HOLD.
+
+## 2026-11-27 — exact-source reconciliation inventory and metadata mutation
+
+The opening table now covers all four collisions, with the 1.1-only successor
+0042. Reviewed nine actual migration sources at 1.1 head
+`a3ea9c7827c748a671bce7103d2f11b0af3a6c9a` and 1.6 head
+`56f565a8af7f773fb3f169a650dfac9579bb5a30`. The scientific branch creates
+scientific/cache, metric, threshold and composite-analysis tables and adds
+metric discriminator/configuration columns. The QC branch creates the event
+and global request tables and expands the event CHECK twice. Their direct
+upgrade table targets are disjoint; this is not proof that a combined runtime
+or shared parent schema is compatible. The 1.4/1.5 changed-file inventories
+also include integrated scientific, identity, ReefPose and spatial migration
+families, which must be accounted for before approving a unified DAG.
+
+The strict source graph auditor previously accepted a literal parent list that
+was subsequently mutated in place, e.g. `down_revision.append("missing")`.
+An actual Alembic 1.18.4 loader reproduced the missing-parent failure. Strict
+metadata is now declarative: executable references to `down_revision`,
+`depends_on` and `branch_labels` are rejected even if the name is not rebound.
+Unmodified literal lists/tuples and the legacy diagnostic mode remain supported.
+Eight negative CLI cases and one positive control preserve migration source bytes
+and refuse automatic reconciliation. Thirteen isolated pytest probes of the
+modified parser and loader passed; full repository tests and exact-head CI are
+still required. This is a restricted static source contract, not a sandbox or
+a proof of arbitrary Python execution behavior.
+
+No migration files, data, or saved Workflow Builder behavior changed. HOLD for
+reviewed cross-version migration integration, representative biology, exact-head
+CI, installed Windows GUI/MSI upgrade and rollback, and researcher approval.
