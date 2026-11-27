@@ -22,27 +22,76 @@ SPEC.loader.exec_module(MODULE)
 
 
 class CameraFixtureInventoryTests(unittest.TestCase):
-    def test_owner_camera_manifest_recipes_cover_all_jpeg_suffixes(self) -> None:
-        """Owner-hardware evidence must not silently skip .jfi/.jif originals."""
-        import re
-
+    def test_owner_camera_manifest_recipes_use_pinned_read_only_scanner(self) -> None:
+        """Both owner-hardware recipes must decode and pin the pre-import evidence."""
         guide = (
             Path(__file__).resolve().parents[1]
             / "docs"
             / "acceptance"
             / "REEFVISION_103_WINDOWS_RELEASE_EVIDENCE.md"
         ).read_text(encoding="utf-8")
-        all_patterns = re.findall(r"\$_\.Extension -match '([^']+)'", guide)
-        jpeg_patterns = [pattern for pattern in all_patterns if "jpg" in pattern.lower()]
-        self.assertEqual(len(jpeg_patterns), 2, "Both pre/post camera manifest recipes are required")
-        for pattern in jpeg_patterns:
-            for suffix in MODULE.JPEG_SUFFIXES:
-                with self.subTest(pattern=pattern, suffix=suffix):
-                    self.assertIsNotNone(re.fullmatch(pattern, suffix))
-                    self.assertIsNotNone(re.fullmatch(pattern, suffix.upper()))
-            for unsupported in (".png", ".tif", ".arw", ".heic"):
-                with self.subTest(pattern=pattern, unsupported=unsupported):
-                    self.assertIsNone(re.fullmatch(pattern, unsupported))
+        commands = [
+            line.split()
+            for line in guide.splitlines()
+            if line.startswith("python scripts/verify_camera_jpeg_fixtures.py ")
+        ]
+        common = ["python", "scripts/verify_camera_jpeg_fixtures.py",
+                  "$cameraRoot", "--verify-decode"]
+        self.assertEqual(commands, [
+            common + [">", "$before"],
+            common + ["--compare-manifest", "$before",
+                      "--expected-manifest-sha256", "$beforeSha256", ">", "$after"],
+        ])
+        digest_command = '$beforeSha256 = (Get-FileHash -LiteralPath $before -Algorithm SHA256).Hash'
+        self.assertLess(guide.index(" ".join(commands[0])), guide.index(digest_command))
+        self.assertLess(guide.index(digest_command), guide.index(" ".join(commands[1])))
+        routing_row = next(line for line in guide.splitlines()
+                           if line.startswith("| Extension routing |"))
+        for suffix in ("JPG", "JPEG", "JPE", "JFIF", "JFI", "JIF"):
+            with self.subTest(suffix=suffix):
+                self.assertIn(suffix, routing_row.replace("/", " ").split())
+
+    def test_owner_camera_scanner_decodes_and_replays_every_jpeg_suffix(self) -> None:
+        """Exercise the shared scanner, not a second documentation-only suffix filter."""
+        import hashlib
+
+        expected = {".jpg", ".jpeg", ".jpe", ".jfif", ".jfi", ".jif"}
+        self.assertEqual(MODULE.JPEG_SUFFIXES, expected)
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow unavailable; camera decode replay unverified")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "camera"
+            root.mkdir()
+            originals = {}
+            for index, suffix in enumerate(sorted(expected)):
+                for case_index, extension in enumerate((suffix, suffix.upper())):
+                    photo = root / f"capture_{index}_{case_index}{extension}"
+                    Image.new("RGB", (8 + index, 8 + case_index)).save(photo, format="JPEG")
+                    originals[photo.name] = photo.read_bytes()
+            for suffix in (".png", ".tif", ".arw", ".heic"):
+                (root / f"ignored{suffix}").write_bytes(b"not a JPEG")
+            before_output = io.StringIO()
+            common = [str(SCRIPT), str(root), "--verify-decode"]
+            with mock.patch("sys.argv", common), contextlib.redirect_stdout(before_output):
+                self.assertEqual(MODULE.main(), 0)
+            before = json.loads(before_output.getvalue())
+            self.assertEqual({record["path"] for record in before["files"]}, set(originals))
+            self.assertTrue(all(record["jpeg_decodable"] is True for record in before["files"]))
+            self.assertEqual(len({record["sha256"] for record in before["files"]}), 12)
+            baseline = Path(directory) / "before.json"
+            baseline.write_bytes(before_output.getvalue().encode("utf-8"))
+            digest = hashlib.sha256(baseline.read_bytes()).hexdigest()
+            after_output = io.StringIO()
+            replay = common + [
+                "--compare-manifest", str(baseline), "--expected-manifest-sha256", digest,
+            ]
+            with mock.patch("sys.argv", replay), contextlib.redirect_stdout(after_output):
+                self.assertEqual(MODULE.main(), 0)
+            self.assertEqual(json.loads(after_output.getvalue()), before)
+            for name, original in originals.items():
+                self.assertEqual((root / name).read_bytes(), original)
 
     def test_windows_file_identity_ignores_inconsistent_ctime_only(self) -> None:
         """Windows path stat and handle fstat can disagree on creation/change time."""
