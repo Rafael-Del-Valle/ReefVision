@@ -404,6 +404,32 @@ def test_pose_workflow_replay_checks_secondary_checkpoint_bytes(
             == result["training_run_id"]
         )
 
+    # Removing both fields must not make a retained alternate checkpoint
+    # invisible to the scientific inventory.
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, result["training_run_id"])
+        assert run is not None
+        original_manifest = dict(run.artifact_manifest_json or {})
+        tampered_manifest = dict(original_manifest)
+        tampered_manifest.pop("last_checkpoint_path")
+        tampered_manifest.pop("last_checkpoint_sha256")
+        run.artifact_manifest_json = tampered_manifest
+        session.commit()
+
+    with pytest.raises(ValidationError, match="unrecorded checkpoint"):
+        execute(processor_with_secondary_checkpoint)
+
+    with app.state.session_factory() as session:
+        run = session.get(TrainingRun, result["training_run_id"])
+        assert run is not None
+        run.artifact_manifest_json = original_manifest
+        session.commit()
+
+    assert last_checkpoint.read_bytes() == secondary_bytes
+    assert execute(processor_with_secondary_checkpoint)["training_run_id"] == result[
+        "training_run_id"
+    ]
+
     # A persisted digest without its corresponding checkpoint path is not
     # verifiable lineage. Removing the path must not downgrade replay checks.
     for path_field in ("best_checkpoint_path", "last_checkpoint_path"):
