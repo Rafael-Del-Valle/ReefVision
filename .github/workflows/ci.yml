@@ -59,7 +59,7 @@ jobs:
                   return sql
               start = len(lines) - 1
               while start > 0 and re.match(
-                  r"\t(?:CONSTRAINT \S+ (?:CHECK|UNIQUE|FOREIGN KEY)\b|FOREIGN KEY\()",
+                  r"\t(?:CONSTRAINT \S+ (?:CHECK|UNIQUE|FOREIGN KEY)\b|FOREIGN KEY\(|UNIQUE \()",
                   lines[start - 1],
               ):
                   start -= 1
