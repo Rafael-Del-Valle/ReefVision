@@ -590,6 +590,22 @@ describe("ProjectTrainingMonitor", () => {
     expect(api.cancelTrainingRun).not.toHaveBeenCalled();
   });
 
+  it("discovers a newly started run after an idle status", async () => {
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([]);
+
+    renderMonitor();
+    await screen.findByText("No training runs yet");
+    expect(screen.getByText("No active runs")).toBeInTheDocument();
+
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
+
+    expect(
+      await screen.findByText("1 active", {}, { timeout: 8000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Swiftia detector")).toBeInTheDocument();
+    expect(api.cancelTrainingRun).not.toHaveBeenCalled();
+  }, 10000);
+
   it("shows an explicit empty state before the first training run", async () => {
     renderMonitor();
 

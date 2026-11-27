@@ -160,7 +160,7 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
       query.state.status === "error" ||
       trainingRunsContainActive(query.state.data as TrainingRun[] | undefined)
         ? 2000
-        : false,
+        : 5000, // Discover runs started in another window while idle.
   });
 
   const cancelMutation = useMutation({
