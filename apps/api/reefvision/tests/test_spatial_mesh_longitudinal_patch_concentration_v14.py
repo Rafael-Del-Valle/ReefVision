@@ -475,7 +475,9 @@ def test_disputed_identity_withholds_patch_change_but_preserves_observations() -
     assert result["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"] is True
 
 
-@pytest.mark.parametrize("mode", ["normal", "degenerate", "profile_conflict", "topology_conflict"])
+@pytest.mark.parametrize(
+    "mode", ["normal", "degenerate", "profile_conflict", "topology_conflict", "hash_area_conflict"]
+)
 def test_patch_concentration_saved_workflow_matches_standalone(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, mode: str
 ) -> None:
@@ -520,6 +522,20 @@ def test_patch_concentration_saved_workflow_matches_standalone(
         monkeypatch.setattr(
             "reefvision.services.spatial_source_assets_v14.preview_from_request",
             legacy_topology_preview,
+        )
+    if mode == "hash_area_conflict":
+        before, after = _topology_meshes()
+
+        def legacy_hash_preview(request: MeshPreviewRequest) -> dict:
+            record = preview_from_request(request)
+            if request.observation_id == "survey-2":
+                key = "edge_connected_patch_geometry_sha256"
+                record[key] = list(reversed(record[key]))
+            return record
+
+        monkeypatch.setattr(
+            "reefvision.services.spatial_source_assets_v14.preview_from_request",
+            legacy_hash_preview,
         )
     standalone = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
@@ -616,6 +632,18 @@ def test_patch_concentration_saved_workflow_matches_standalone(
         assert warning in artifact["qc_warnings"]
         assert artifact["reconstruction_topology_changed_fields"] == []
         assert artifact["provenance"]["longitudinal_change_withheld_due_to_inconsistent_topology"]
+        assert artifact["provenance"]["specimen_identity_verified"] is False
+        assert artifact["delta_surface_area_m2"] is None
+        assert artifact["delta_surface_area_scale_interval_m2"] is None
+        assert artifact["ranked_patch_area_profile_distance"] is None
+    elif mode == "hash_area_conflict":
+        assert "identical_geometry_hash_bound_patch_area_inconsistent" in artifact["qc_warnings"]
+        assert (
+            "identical_geometry_patch_area_distribution_inconsistent" not in artifact["qc_warnings"]
+        )
+        assert artifact["provenance"][
+            "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+        ]
         assert artifact["provenance"]["specimen_identity_verified"] is False
         assert artifact["delta_surface_area_m2"] is None
         assert artifact["delta_surface_area_scale_interval_m2"] is None
@@ -717,6 +745,49 @@ def test_identical_geometry_patch_topology_distribution(mode: str, withheld: boo
     assert result["reconstruction_topology_changed_fields"] == []
     assert result["provenance"]["specimen_identity_verified"] is False
     assert (result["delta_surface_area_m2"] is None) is withheld
+
+
+@pytest.mark.parametrize(
+    ("mode", "withheld"),
+    [
+        ("swapped_hashes", True),
+        ("reordered_rows", False),
+        ("missing_hashes", False),
+        ("different_primary", False),
+        ("unchanged", False),
+    ],
+)
+def test_identical_geometry_hash_bound_patch_areas(mode: str, withheld: bool) -> None:
+    before, after = (_preview(payload) for payload in _topology_meshes())
+    key = "edge_connected_patch_geometry_sha256"
+    assert len(set(before[key])) == 2
+    assert sorted(before["edge_connected_patch_surface_area_fractions"]) == pytest.approx(
+        [0.25, 0.75]
+    )
+    if mode in ("swapped_hashes", "different_primary", "reordered_rows"):
+        after[key] = list(reversed(after[key]))
+    if mode == "reordered_rows":
+        for field in (
+            "edge_connected_patch_surface_area_fractions",
+            "edge_connected_patch_surface_areas_m2",
+            "edge_connected_patch_face_counts",
+            "edge_connected_patch_boundary_edge_counts",
+            "edge_connected_patch_nonmanifold_edge_counts",
+        ):
+            after[field] = list(reversed(after[field]))
+    if mode == "missing_hashes":
+        after.pop(key)
+    if mode == "different_primary":
+        after["provenance"]["geometry_sha256"] = "b" * 64
+    result = compare_mesh_observations(before, after)
+    warning = "identical_geometry_hash_bound_patch_area_inconsistent"
+    flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+    assert (warning in result["qc_warnings"]) is withheld
+    assert result["provenance"][flag] is withheld
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert (result["delta_surface_area_m2"] is None) is withheld
+    if not withheld:
+        assert result["ranked_patch_area_profile_distance"] == pytest.approx(0)
 
 
 def test_ranked_patch_divergence_zero_for_identical_area_profiles() -> None:
