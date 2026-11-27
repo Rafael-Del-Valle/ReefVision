@@ -328,6 +328,7 @@ def compare_mesh_observations(
         "degenerate_face_count",
     )
     topology_counts: list[dict[str, int | None]] = []
+    topology_patch_arrays: list[dict[str, list[int]]] = []
     for record in (before, after):
         counts: dict[str, int | None] = {}
         for field in topology_fields:
@@ -466,6 +467,7 @@ def compare_mesh_observations(
             ):
                 raise ValueError("Mesh topology patch shared edge links insufficient")
         topology_counts.append(counts)
+        topology_patch_arrays.append(patch_arrays)
     a0 = before.get("surface_area_m2")
     a1 = after.get("surface_area_m2")
     # Narrow each value before arithmetic; a missing area must not reach isfinite.
@@ -1607,11 +1609,20 @@ def compare_mesh_observations(
             warnings.append("identical_imported_source_payload_metadata_inconsistent")
         if first_hash_valid and second_hash_valid and first_geometry_hash != second_geometry_hash:
             warnings.append("identical_imported_source_payload_geometry_inconsistent")
+    # Compare only mutually available per-patch counts. A multiset of joint
+    # tuples preserves the association of face and edge counts within patches
+    # without assuming that different producer versions use the same ordering.
+    first_patch_arrays, second_patch_arrays = topology_patch_arrays
+    shared_patch_fields = sorted(first_patch_arrays.keys() & second_patch_arrays.keys())
+    patch_topology_changed = bool(shared_patch_fields) and (
+        sorted(zip(*(first_patch_arrays[field] for field in shared_patch_fields), strict=True))
+        != sorted(zip(*(second_patch_arrays[field] for field in shared_patch_fields), strict=True))
+    )
     contradictory_topology = (
         first_hash_valid
         and second_hash_valid
         and first_geometry_hash == second_geometry_hash
-        and bool(topology_changed_fields)
+        and (bool(topology_changed_fields) or patch_topology_changed)
     )
     contradictory_calibrated_dimensions = False
     if first_hash_valid and second_hash_valid and first_geometry_hash == second_geometry_hash:
@@ -1619,6 +1630,8 @@ def compare_mesh_observations(
         # A fingerprint covers the original triangles; calibration cannot alter
         # triangle counts or mesh connectivity. Conflicting topology metadata
         # indicates a provenance/serialization discrepancy, not biological change.
+        if patch_topology_changed:
+            warnings.append("identical_geometry_patch_topology_distribution_inconsistent")
         if contradictory_topology:
             warnings.append("identical_geometry_topology_metadata_inconsistent")
             warnings.append("longitudinal_change_withheld_inconsistent_topology")
