@@ -8,9 +8,12 @@ from pathlib import Path
 SCRIPT = Path(__file__).resolve().parents[1] / "audit-alembic-revision-collisions.py"
 
 
-def _run(*roots: Path) -> subprocess.CompletedProcess[str]:
+def _run(
+    *roots: Path, verify_parent_graph: bool = False
+) -> subprocess.CompletedProcess[str]:
+    flags = ["--verify-parent-graph"] if verify_parent_graph else []
     return subprocess.run(
-        [sys.executable, str(SCRIPT), *(str(root) for root in roots)],
+        [sys.executable, str(SCRIPT), *flags, *(str(root) for root in roots)],
         capture_output=True,
         text=True,
         check=False,
@@ -177,3 +180,77 @@ def test_cli_identical_duplicate_within_one_lineage_remains_a_collision(
     assert report["collision_source_relationship"] == {"0038": "byte_identical"}
     assert report["collision_free"] is False
     assert report["safe_to_reconcile_automatically"] is False
+
+
+def test_cli_identical_descendants_do_not_hide_divergent_ancestry(tmp_path: Path) -> None:
+    roots = [tmp_path / name for name in ("science", "review")]
+    files = {}
+    for root in roots:
+        root.mkdir()
+        for revision, parent in (
+            ("0037", None),
+            ("0038", "0037"),
+            ("0039", "0038"),
+            ("0040", "0039"),
+        ):
+            source = root / f"{revision}.py"
+            body = f"revision = {revision!r}\ndown_revision = {parent!r}\n"
+            if revision == "0038":
+                body += f"# {root.name}\n"
+            source.write_text(body, encoding="utf-8")
+            files[source] = source.read_bytes()
+
+    expected = {
+        "0037": "identical_history",
+        "0038": "divergent_history",
+        "0039": "divergent_history",
+        "0040": "divergent_history",
+    }
+    for order in (roots, list(reversed(roots))):
+        result = _run(*order, verify_parent_graph=True)
+        assert result.returncode == 2
+        report = json.loads(result.stdout)
+        assert report["parent_graph_consistent"] is True
+        assert report["collision_source_relationship"]["0039"] == "byte_identical"
+        assert report["collision_source_relationship"]["0040"] == "byte_identical"
+        assert report["collision_ancestry_relationship"] == expected
+        for revision, relationship in expected.items():
+            hashes = report["collision_ancestry_sha256"][revision].values()
+            assert all(len(digest) == 64 for digest in hashes)
+            assert len(set(hashes)) == (1 if relationship == "identical_history" else 2)
+        assert report["safe_to_reconcile_automatically"] is False
+        assert {path: path.read_bytes() for path in files} == files
+
+    default = json.loads(_run(*roots).stdout)
+    assert "collision_ancestry_relationship" not in default
+
+
+def test_cli_invalid_parent_graph_withholds_ancestry_evidence(tmp_path: Path) -> None:
+    roots = [tmp_path / name for name in ("valid", "invalid")]
+    files = {}
+    for root in roots:
+        root.mkdir()
+        source = root / "0037.py"
+        source.write_text("revision = '0037'\ndown_revision = None\n", encoding="utf-8")
+        files[source] = source.read_bytes()
+        source = root / "0038.py"
+        parent = "0037" if root == roots[0] else "missing"
+        source.write_text(
+            f"revision = '0038'\ndown_revision = {parent!r}\n", encoding="utf-8"
+        )
+        files[source] = source.read_bytes()
+
+    result = _run(*roots, verify_parent_graph=True)
+    assert result.returncode == 2
+    report = json.loads(result.stdout)
+    assert report["parent_graph_consistent"] is False
+    assert report["collision_source_relationship"]["0037"] == "byte_identical"
+    assert report["collision_ancestry_relationship"] == {
+        "0037": "unverified_graph",
+        "0038": "unverified_graph",
+    }
+    for revision, hashes in report["collision_ancestry_sha256"].items():
+        assert hashes[str(roots[1] / f"{revision}.py")] is None
+        assert len(hashes[str(roots[0] / f"{revision}.py")]) == 64
+    assert report["safe_to_reconcile_automatically"] is False
+    assert {path: path.read_bytes() for path in files} == files
