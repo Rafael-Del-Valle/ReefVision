@@ -596,7 +596,8 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["reconstruction_topology_changed_fields"] == []
     assert "reconstruction_topology_changed_requires_review" not in expected["qc_warnings"]
     assert "identical_geometry_topology_metadata_inconsistent" not in expected["qc_warnings"]
-    assert expected["provenance"]["longitudinal_change_withheld_due_to_inconsistent_topology"] is False
+    topology_flag = "longitudinal_change_withheld_due_to_inconsistent_topology"
+    assert expected["provenance"][topology_flag] is False
 
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     mesh_node = next(
