@@ -229,3 +229,54 @@ def test_strict_flat_graph_permits_package_marker_and_bytecode_cache(tmp_path: P
     assert report["parent_graphs"][str(root)]["head_revisions"] == ["0038"]
     assert report["safe_to_reconcile_automatically"] is False
     assert {path: path.read_bytes() for path in before} == before
+
+
+@pytest.mark.parametrize(
+    ("field", "literal", "extra"),
+    [
+        ("down_revision", '["0037"]', 'down_revision.append("missing")'),
+        ("down_revision", '["0037"]', 'down_revision[0] = "missing"'),
+        ("down_revision", '["0037"]', "del down_revision[0]"),
+        ("down_revision", '["0037"]', 'alias = down_revision\nalias[:] = ["missing"]'),
+        (
+            "down_revision",
+            '["0037"]',
+            'def mutate(links):\n    links.append("missing")\nmutate(down_revision)',
+        ),
+        ("down_revision", '["0037"]', 'down_revision.extend(["missing"])'),
+        ("depends_on", "None", "alias = depends_on"),
+        ("branch_labels", "None", "alias = branch_labels"),
+    ],
+)
+def test_strict_graph_refuses_executable_metadata_references(
+    tmp_path: Path, field: str, literal: str, extra: str
+) -> None:
+    root = tmp_path / "versions"
+    parent = _migration(root, "0037.py", "0037", "None")
+    parent_literal = literal if field == "down_revision" else '"0037"'
+    child = _migration(root, "0038.py", "0038", parent_literal)
+    declaration = "" if field == "down_revision" else f"{field} = {literal}\n"
+    child.write_text(
+        child.read_text(encoding="utf-8") + declaration + extra + "\n", encoding="utf-8"
+    )
+    before = {path: path.read_bytes() for path in (parent, child)}
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--verify-parent-graph", str(root)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert field in result.stderr
+    assert not result.stdout
+    assert _module().audit([root])["collision_free"] is True
+    assert {path: path.read_bytes() for path in before} == before
+
+
+def test_strict_graph_accepts_unmodified_literal_parent_list(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    _migration(root, "0037.py", "0037", "None")
+    _migration(root, "0038.py", "0038", '["0037"]')
+    report = _module().audit([root], verify_parent_graph=True)
+    assert report["parent_graph_consistent"] is True
+    assert report["safe_to_reconcile_automatically"] is False
