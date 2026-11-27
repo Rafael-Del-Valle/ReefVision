@@ -892,3 +892,19 @@ reordered rows, missing hashes, different primary geometry and unchanged
 records; replay the swapped-count conflict via standalone API and two
 executions of one persisted typed graph with equal artifacts and hashes.
 These checks do not establish biological identity or anatomical branch length.
+
+Equal valid indexed-geometry digests also require consistent source-axis
+aspect ratios. Exchanging two unequal calibrated axis lengths can preserve
+the full bounding-box diagonal and surface-area shape ratio while
+contradicting the unchanged indexed geometry. Normalize each axis length
+by the largest dimension, compare in source-axis order (relative tolerance
+1e-8, absolute tolerance 1e-12), and report
+`identical_geometry_axis_aspect_ratios_inconsistent` when the profiles
+disagree. Use the existing inconsistent-calibrated-dimensions withholding
+gate; preserve nominal area and extent measurements. Missing historical
+axis vectors or all-zero extents remain unknown. This is an internal
+reconstruction QC check, not evidence of rotation or anatomical growth.
+Test swapped unequal axes with unchanged diagonal, missing calibration,
+missing axis vectors, different geometry digest and consistent rescaling.
+Replay the swapped-axis conflict through the standalone API and twice
+through one persisted typed graph with identical artifacts and hashes.
