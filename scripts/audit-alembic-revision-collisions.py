@@ -192,8 +192,10 @@ def revision_from_source(path: Path, source: bytes | None = None) -> str | None:
     return revisions[0] if revisions else None
 
 
-def parent_revisions_from_source(path: Path, source: bytes) -> tuple[str, ...]:
-    """Read literal Alembic parent links without importing executable migrations."""
+def _literal_revision_links(
+    path: Path, source: bytes, *, field: str, allow_missing: bool = False
+) -> tuple[str, ...]:
+    """Read literal Alembic links without importing executable migrations."""
     tree = ast.parse(source, filename=str(path))
     assignments: list[tuple[str, ...]] = []
     permitted_targets: set[int] = set()
@@ -204,19 +206,12 @@ def parent_revisions_from_source(path: Path, source: bytes) -> tuple[str, ...]:
         matching = [
             target
             for target in targets
-            if any(
-                isinstance(node, ast.Name) and node.id == "down_revision"
-                for node in ast.walk(target)
-            )
+            if any(isinstance(node, ast.Name) and node.id == field for node in ast.walk(target))
         ]
         if not matching:
             continue
-        if (
-            len(targets) != 1
-            or not isinstance(targets[0], ast.Name)
-            or targets[0].id != "down_revision"
-        ):
-            raise ValueError(f"{path}: down_revision must use a direct literal assignment")
+        if len(targets) != 1 or not isinstance(targets[0], ast.Name) or targets[0].id != field:
+            raise ValueError(f"{path}: {field} must use a direct literal assignment")
         permitted_targets.add(id(targets[0]))
         value = statement.value
         if isinstance(value, ast.Constant) and value.value is None:
@@ -228,14 +223,14 @@ def parent_revisions_from_source(path: Path, source: bytes) -> tuple[str, ...]:
                 isinstance(element, ast.Constant) and isinstance(element.value, str)
                 for element in value.elts
             ):
-                raise ValueError(f"{path}: parent revisions must be literal strings")
+                raise ValueError(f"{path}: {field} revisions must be literal strings")
             parents = tuple(element.value for element in value.elts)
         else:
-            raise ValueError(f"{path}: down_revision must be a literal parent or None")
+            raise ValueError(f"{path}: {field} must be a literal parent or None")
         if any(not parent or parent != parent.strip() for parent in parents):
-            raise ValueError(f"{path}: noncanonical down_revision")
+            raise ValueError(f"{path}: noncanonical {field}")
         if len(parents) != len(set(parents)):
-            raise ValueError(f"{path}: duplicate down_revision parent")
+            raise ValueError(f"{path}: duplicate {field} parent")
         assignments.append(parents)
 
     # A nested assignment, loop target, deletion or walrus expression can
@@ -243,26 +238,26 @@ def parent_revisions_from_source(path: Path, source: bytes) -> tuple[str, ...]:
     for node in ast.walk(tree):
         if (
             isinstance(node, ast.Name)
-            and node.id == "down_revision"
+            and node.id == field
             and isinstance(node.ctx, (ast.Store, ast.Del))
             and id(node) not in permitted_targets
         ):
-            raise ValueError(f"{path}: dynamic down_revision rebinding")
-        if isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name == "down_revision":
-            raise ValueError(f"{path}: pattern rebinds down_revision")
-        if isinstance(node, ast.MatchMapping) and node.rest == "down_revision":
-            raise ValueError(f"{path}: pattern rebinds down_revision")
-        if isinstance(node, ast.ExceptHandler) and node.name == "down_revision":
-            raise ValueError(f"{path}: exception rebinds down_revision")
+            raise ValueError(f"{path}: dynamic {field} rebinding")
+        if isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name == field:
+            raise ValueError(f"{path}: pattern rebinds {field}")
+        if isinstance(node, ast.MatchMapping) and node.rest == field:
+            raise ValueError(f"{path}: pattern rebinds {field}")
+        if isinstance(node, ast.ExceptHandler) and node.name == field:
+            raise ValueError(f"{path}: exception rebinds {field}")
         if (
             isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-            and node.name == "down_revision"
+            and node.name == field
         ):
-            raise ValueError(f"{path}: declaration rebinds down_revision")
+            raise ValueError(f"{path}: declaration rebinds {field}")
         if isinstance(node, (ast.Import, ast.ImportFrom)) and any(
-            (alias.asname or alias.name.split(".")[0]) == "down_revision" for alias in node.names
+            (alias.asname or alias.name.split(".")[0]) == field for alias in node.names
         ):
-            raise ValueError(f"{path}: import rebinds down_revision")
+            raise ValueError(f"{path}: import rebinds {field}")
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
             parameters = node.args
             named = [
@@ -270,14 +265,30 @@ def parent_revisions_from_source(path: Path, source: bytes) -> tuple[str, ...]:
                 *parameters.args,
                 *parameters.kwonlyargs,
             ]
-            if any(arg.arg == "down_revision" for arg in named) or any(
-                arg is not None and arg.arg == "down_revision"
+            if any(arg.arg == field for arg in named) or any(
+                arg is not None and arg.arg == field
                 for arg in (parameters.vararg, parameters.kwarg)
             ):
-                raise ValueError(f"{path}: parameter shadows down_revision")
+                raise ValueError(f"{path}: parameter shadows {field}")
+        if isinstance(node, getattr(ast, "TypeAlias", ())) and any(
+            isinstance(name, ast.Name) and name.id == field for name in ast.walk(node.name)
+        ):
+            raise ValueError(f"{path}: type alias rebinds {field}")
+    if allow_missing and not assignments:
+        return ()
     if len(assignments) != 1:
-        raise ValueError(f"{path}: exactly one literal down_revision is required")
+        raise ValueError(f"{path}: exactly one literal {field} is required")
     return assignments[0]
+
+
+def parent_revisions_from_source(path: Path, source: bytes) -> tuple[str, ...]:
+    """Read parent links for the supported dependency-free lineage."""
+    parents = _literal_revision_links(path, source, field="down_revision")
+    # Alembic also orders revisions by depends_on. A parent-only graph cannot
+    # establish complete ancestry if those independent edges are present.
+    if _literal_revision_links(path, source, field="depends_on", allow_missing=True):
+        raise ValueError(f"{path}: depends_on links are unsupported by parent-only verification")
+    return parents
 
 
 def audit_parent_graph(entries: list[tuple[str, tuple[str, ...]]]) -> dict:
