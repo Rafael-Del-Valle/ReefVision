@@ -1009,3 +1009,17 @@ and emits `surface_trace_chain_chord_interval_unrepresentable`, while the
 nominal chord remains positive. Repeat through the standalone preview and
 twice through the same persisted graph. These are numerical controls, not
 biological validation or confidence intervals.
+
+For each canonical selected chain, report the source-coordinate arc midpoint
+and its zero-based canonical chain edge offset. Locate half the sum of
+binary64 source edge lengths using rational accumulation and interpolate
+within that edge before rounding source XYZ. At a shared vertex, associate
+the midpoint with the earlier edge. This locator is independent of
+calibration and input trace direction; for a closed chain its origin is the
+canonical start rather than a biological landmark. It is neither a
+surface centroid nor an anatomical centerline midpoint. Verify an unequal
+right-triangle chain, a closed triangle, an exact shared-vertex midpoint,
+and a tiny source segment whose calibrated length underflows. Exercise the
+standalone API and two saved typed workflow executions with artifact/hash
+parity; retain provisional review status and do not infer position
+uncertainty or biological identity from the rounded locator.
