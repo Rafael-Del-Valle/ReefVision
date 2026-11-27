@@ -690,3 +690,33 @@ typed saved QC workflows, provenance, retries and researcher review are
 unchanged. Release HOLD remains for cross-version reconciliation,
 representative biological and workflow checks, installed Windows MSI/CAB
 GUI qualification, full CI and explicit researcher approval.
+
+
+## Durable graph identifier contract (2026-11-27)
+
+Strict source ancestry now limits revision and parent identifiers to 1–32
+ASCII letters, digits or underscores, excluding Alembic's reserved base,
+head and heads selectors. The 32-character limit matches the persisted
+version table; the conservative alphabet matches the inspected numeric and
+namespaced ReefVision revision families. Alembic rejects @, + and - during
+revision construction, and a revision literally named base resolves to no
+revision. The previous parent graph accepted those values as ordinary
+vertices. Unsupported identifiers fail before any ancestry report, without
+printing the token. Default collision-only reporting remains unchanged.
+
+Rechecked changed migration inventories in 1.1, 1.2, 1.4, 1.5 and 1.6;
+1.4/1.5 already contain integrated scientific, identity, pose and spatial
+families, so a future reviewed reconciliation must account for their merge
+parents as well as the four conflicting numeric QC revisions. This is a
+partial source audit, not full integrated compatibility evidence. No
+migration from another branch has been copied.
+
+Twenty-six independent Python/pytest probes passed, including actual
+Alembic 1.18.4 revision construction/resolution checks. Two new CLI
+regressions exercise 26 invalid revision/parent configurations and a
+five-revision numeric/namespaced chain, retaining original source bytes and
+default-mode compatibility. Full repository tests and exact-head CI are
+unverified; Git checkout remains DNS-blocked. Existing saved typed QC
+workflows and investigator review gates are unchanged. Release HOLD remains
+for reviewed reconciliation, representative biological and workflow replay,
+real installed Windows MSI/CAB/GUI clean/upgrade/rollback and approval.
