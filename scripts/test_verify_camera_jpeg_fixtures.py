@@ -338,6 +338,43 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                         ["current JPEG inventory contains malformed source-file evidence"],
                     )
 
+    def test_comparator_rejects_windows_path_collisions_in_replayed_manifests(self) -> None:
+        """A matching manifest must still describe distinct addressable Windows paths."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = {
+                "path": "Sony/DSC_0001.JPG",
+                "bytes": 42,
+                "sha256": "a" * 64,
+                "jpeg_boundary_markers": True,
+            }
+            second = {**first, "path": "Sony/DSC_0002.JPG", "sha256": "b" * 64}
+            baseline = {"root": str(root), "errors": [], "files": [first, second]}
+            self.assertEqual(
+                MODULE.compare_source_manifest(root, [first, second], baseline), []
+            )
+            for path in (
+                "Sony/dsc_0001.jpg",
+                "sony/DSC_0002.JPG",
+                "Sony/DSC_0001.JPG/other.jpg",
+                "sony/dsc_0001.jpg/other.jpg",
+            ):
+                for reverse in (False, True):
+                    with self.subTest(path=path, reverse=reverse):
+                        records = [first, {**second, "path": path}]
+                        if reverse:
+                            records.reverse()
+                        self.assertEqual(
+                            MODULE.compare_source_manifest(
+                                root, records, {**baseline, "files": records}
+                            ),
+                            ["baseline JPEG manifest contains Windows path collisions"],
+                        )
+                        self.assertEqual(
+                            MODULE.compare_source_manifest(root, records, baseline),
+                            ["current JPEG inventory contains Windows path collisions"],
+                        )
+
     def test_comparator_rejects_duplicate_source_bytes_and_impossible_sizes(self) -> None:
         """Replayed camera evidence cannot certify aliases as independent captures."""
         with tempfile.TemporaryDirectory() as directory:

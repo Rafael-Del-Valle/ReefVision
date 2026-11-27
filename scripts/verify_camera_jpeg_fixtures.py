@@ -714,6 +714,21 @@ def _valid_windows_manifest_path(relative: str) -> bool:
     return True
 
 
+def _windows_manifest_paths_collide(paths: list[str]) -> bool:
+    """Detect case-folded aliases and file/directory conflicts in replayed evidence."""
+    seen: dict[tuple[str, ...], tuple[tuple[str, ...], bool]] = {}
+    for relative in paths:
+        parts = tuple(relative.split("/"))
+        for depth in range(1, len(parts) + 1):
+            prefix = parts[:depth]
+            key = tuple(component.casefold() for component in prefix)
+            is_file = depth == len(parts)
+            prior = seen.setdefault(key, (prefix, is_file))
+            if prior != (prefix, is_file):
+                return True
+    return False
+
+
 def compare_source_manifest(
     root: Path, current: list[dict[str, object]], baseline: object
 ) -> list[str]:
@@ -773,6 +788,9 @@ def compare_source_manifest(
                 return ["baseline JPEG manifest contains invalid decoded geometry evidence"]
             expected_decoded[relative] = entry
 
+    if _windows_manifest_paths_collide(list(expected)):
+        return ["baseline JPEG manifest contains Windows path collisions"]
+
     # Do not let a duplicated current path overwrite an earlier record.
     # A dict comprehension would silently discard one source observation and
     # could certify a malformed inventory against a valid saved baseline.
@@ -804,6 +822,8 @@ def compare_source_manifest(
         if relative in actual:
             return ["current JPEG inventory contains duplicate source-file paths"]
         actual[relative] = record
+    if _windows_manifest_paths_collide(list(actual)):
+        return ["current JPEG inventory contains Windows path collisions"]
     errors: list[str] = []
     actual_hashes: dict[str, str] = {}
     for relative, record in sorted(actual.items()):
