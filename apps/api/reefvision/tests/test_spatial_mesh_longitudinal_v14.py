@@ -2950,8 +2950,42 @@ def test_typed_mesh_replay_withholds_inconsistent_calibrated_dimensions(
         assert result["delta_axis_aligned_bounding_box_diagonal_m"] == extent - 1.0
 
 
+@pytest.mark.parametrize(
+    ("late_ratio", "fingerprint", "withheld"),
+    [
+        (0.5, "a" * 64, True),
+        (0.25, "a" * 64, False),
+        (0.25000000001, "a" * 64, False),
+        (0.0, "a" * 64, True),
+        (None, "a" * 64, False),
+        (0.5, "b" * 64, False),
+        (0.5, None, False),
+    ],
+)
+def test_identical_geometry_shape_ratio_without_legacy_scale(
+    late_ratio: float | None, fingerprint: str | None, withheld: bool
+) -> None:
+    before, after = _minimal_topology_pair()
+    field = "surface_area_to_bounding_diagonal_squared_ratio"
+    before[field] = 0.25
+    after[field] = late_ratio
+    before["provenance"]["geometry_sha256"] = "a" * 64
+    after["provenance"]["geometry_sha256"] = fingerprint
+    result = compare_mesh_observations(before, after)
+    flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+    assert result["provenance"][flag] is withheld
+    assert ("identical_geometry_shape_ratio_inconsistent" in result["qc_warnings"]) is withheld
+    assert result["before_surface_area_to_bounding_diagonal_squared_ratio"] == 0.25
+    assert result["after_surface_area_to_bounding_diagonal_squared_ratio"] == late_ratio
+    assert result["delta_surface_area_m2"] == (None if withheld else 0.0)
+    if withheld:
+        assert result["delta_surface_area_to_bounding_diagonal_squared_ratio"] is None
+    assert result["provenance"]["specimen_identity_verified"] is False
+
+
+@pytest.mark.parametrize("legacy_scale_missing", [False, True])
 def test_inconsistent_calibrated_dimensions_standalone_and_saved_graph(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, legacy_scale_missing: bool
 ) -> None:
     """Simulate a legacy producer binding different geometry to one digest."""
     project_id = str(create_project(client, "Legacy dimension conflict")["id"])
@@ -2963,6 +2997,8 @@ def test_inconsistent_calibrated_dimensions_standalone_and_saved_graph(
         record = preview_from_request(request)
         record["provenance"]["geometry_sha256"] = "a" * 64
         record.pop("edge_connected_patch_geometry_sha256", None)
+        if legacy_scale_missing:
+            record["provenance"].pop("meters_per_mesh_unit", None)
         return record
 
     monkeypatch.setattr(
@@ -2976,6 +3012,8 @@ def test_inconsistent_calibrated_dimensions_standalone_and_saved_graph(
     expected = response.json()
     flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
     assert expected["provenance"][flag] is True
+    assert "identical_geometry_shape_ratio_inconsistent" in expected["qc_warnings"]
+    assert expected["delta_surface_area_to_bounding_diagonal_squared_ratio"] is None
     topology_flag = "longitudinal_change_withheld_due_to_inconsistent_topology"
     assert expected["provenance"][topology_flag] is False
     patch_flag = "longitudinal_change_withheld_due_to_inconsistent_surface_patch_fingerprints"
