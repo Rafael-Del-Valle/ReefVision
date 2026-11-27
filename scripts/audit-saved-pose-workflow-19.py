@@ -349,7 +349,10 @@ def inspect(
         WorkflowNodeRun,
         WorkflowRun,
     )
-    from reefvision.jobs.pose_training import _verify_prelaunch_pose_dataset
+    from reefvision.jobs.pose_training import (
+        _pose_export_header_lines,
+        _verify_prelaunch_pose_dataset,
+    )
     from reefvision.services.pose_training_datasets import PoseTrainingDatasetService
     from reefvision.services.pose_training_exports import PoseTrainingExportService
     from reefvision.services.workflow_pose_training import (
@@ -845,7 +848,7 @@ def inspect(
             verified_label_count = 0
             verified_image_count = 0
             training_pixel_digests: set[str] = set()
-            training_yaml: str | None = None
+            training_schema: list[str] | None = None
             materialized_yaml = root / dataset_path / "data.yaml"
             for split, frozen_dataset in (
                 ("train", dataset),
@@ -874,24 +877,26 @@ def inspect(
                     video=video,
                     class_mapping=exporter._class_mapping(items),
                 )
-                # The worker requires identical export headers before splitting
-                # held-out data and changes only the validation directory.
-                # Read text to allow the worker's native Windows line endings.
-                exported_yaml = expected_labels["data.yaml"].decode("utf-8")
+                # Match the worker's canonical materialization: remove only the
+                # known export guidance, then select the actual validation path.
+                # Retain the ordered class and landmark definitions exactly.
+                yaml_lines = _pose_export_header_lines(
+                    expected_labels["data.yaml"].decode("utf-8")
+                )
                 if split == "train":
-                    training_yaml = exported_yaml
-                    expected_yaml = (
-                        exported_yaml.replace("val: images/train", "val: images/val", 1)
-                        if validation_id is not None
-                        else exported_yaml
+                    training_schema = yaml_lines[3:]
+                    yaml_lines[2] = (
+                        "val: images/val" if validation_id is not None else "val: images/train"
                     )
+                    expected_yaml = "\n".join(yaml_lines) + "\n"
+                    # Read text to allow the worker's native Windows line endings.
                     _require(
                         materialized_yaml.read_text(encoding="utf-8") == expected_yaml,
                         "Materialized pose YAML differs from frozen class or landmark schema",
                     )
                 else:
                     _require(
-                        exported_yaml == training_yaml,
+                        yaml_lines[3:] == training_schema,
                         "Frozen validation export header differs from training schema",
                     )
                 for relative, expected in expected_labels.items():
