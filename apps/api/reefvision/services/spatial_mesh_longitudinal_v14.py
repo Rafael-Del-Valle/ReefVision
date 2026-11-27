@@ -1673,8 +1673,7 @@ def compare_mesh_observations(
                 for record in (before, after)
             ]
             bound_profile_distance = 0.5 * fsum(
-                abs(early[1] - late[1])
-                for early, late in zip(*patch_profiles, strict=True)
+                abs(early[1] - late[1]) for early, late in zip(*patch_profiles, strict=True)
             )
             if bound_profile_distance > 1e-8:
                 contradictory_calibrated_dimensions = True
