@@ -5,6 +5,7 @@ Never infers applied migrations from alembic_version alone. Never changes a DB.
 """
 import argparse
 import hashlib
+import itertools
 import json
 import re
 import sqlite3
@@ -55,12 +56,35 @@ def _sqlite_stamp_has_check(ddl: str) -> bool:
     return any(token.group().upper() == "CHECK" for token in tokens)
 
 
+def _stamp_has_noncanonical_options(ddl: str) -> bool:
+    """Detect altered write/storage options, ignoring quoted names and comments."""
+    matches = re.finditer(
+        r"--[^\n]*|/\*.*?\*/|'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|"
+        r"\x60(?:\x60\x60|[^\x60])*\x60|\[[^\]]*\]|[A-Za-z0-9_$\u0080-\U0010ffff]+|[^\s]",
+        ddl,
+        re.DOTALL,
+    )
+    tokens = [
+        match.group().upper()
+        for match in matches
+        if not match.group().startswith(("--", "/*"))
+    ]
+    return any(
+        pair in {("ON", "CONFLICT"), ("WITHOUT", "ROWID")}
+        for pair in itertools.pairwise(tokens)
+    )
+
+
 def _stamp_extra_constraints(connection: sqlite3.Connection) -> str | None:
     ddl = connection.execute(
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'alembic_version'"
     ).fetchone()
     if ddl is not None and isinstance(ddl[0], str) and _sqlite_stamp_has_check(ddl[0]):
         return "alembic_version_checks_require_review"
+    if ddl is None or not isinstance(ddl[0], str) or _stamp_has_noncanonical_options(ddl[0]):
+        return "alembic_version_write_storage_options_require_review"
+    if any(row[4] is not None for row in connection.execute("PRAGMA table_xinfo(alembic_version)")):
+        return "alembic_version_default_requires_review"
     if connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type = 'index' "
         "AND tbl_name = 'alembic_version' COLLATE NOCASE AND sql IS NOT NULL LIMIT 1"
