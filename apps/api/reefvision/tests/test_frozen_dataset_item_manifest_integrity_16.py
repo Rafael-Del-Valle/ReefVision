@@ -377,7 +377,8 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             )
 
         if tamper.startswith(("class_census_", "summary_", "manifest_", "achieved_ratios_")) or (
-            tamper in {"blank_biological_group", "parent_reuse_without_parent", "parent_metadata_drift"}
+            tamper
+            in {"blank_biological_group", "parent_reuse_without_parent", "parent_metadata_drift"}
         ):
             with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
                 ReviewQueueService(session, app.state.settings).regenerate(standalone.json()["id"])
