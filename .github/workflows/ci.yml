@@ -39,6 +39,7 @@ jobs:
           export REEFVISION_DATABASE_URL="sqlite:///$REEFVISION_DATA_DIR/reefvision.db"
           verify_revision() {
             python - "$1" <<'PY'
+          import json
           import os
           import sqlite3
           import sys
@@ -51,9 +52,13 @@ jobs:
           database = Path(os.environ["REEFVISION_DATA_DIR"]) / "reefvision.db"
           with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True) as conn:
               revisions = conn.execute("SELECT version_num FROM alembic_version").fetchall()
-              integrity = conn.execute("PRAGMA quick_check").fetchall()
+              integrity = conn.execute("PRAGMA integrity_check").fetchall()
+              schema = conn.execute(
+                  "SELECT type, name, tbl_name, sql FROM sqlite_schema "
+                  "ORDER BY type, name"
+              ).fetchall()
               violations = conn.execute("PRAGMA foreign_key_check").fetchall()
-          if expected == "head":
+          if expected in ("head", "reupgraded"):
               head = ScriptDirectory.from_config(
                   Config("apps/api/alembic.ini")
               ).get_current_head()
@@ -63,6 +68,14 @@ jobs:
               assert expected == "base" and not revisions, revisions
           assert integrity == [("ok",)], integrity
           assert not violations, violations
+          # Compare the real migrated schema before and after the full roundtrip.
+          snapshot = database.parent / "initial-schema.json"
+          if expected == "head":
+              snapshot.write_text(json.dumps(schema), encoding="utf-8")
+          elif expected == "reupgraded":
+              assert json.loads(snapshot.read_text(encoding="utf-8")) == [
+                  list(row) for row in schema
+              ], "Re-upgraded schema differs from the initial head"
           print(f"Verified scratch database at {expected}: {revisions}")
           PY
           }
@@ -70,6 +83,8 @@ jobs:
           verify_revision head
           alembic -c apps/api/alembic.ini downgrade base
           verify_revision base
+          alembic -c apps/api/alembic.ini upgrade head
+          verify_revision reupgraded
 
   frontend:
     runs-on: ubuntu-latest
