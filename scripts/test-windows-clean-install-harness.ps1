@@ -795,4 +795,29 @@ Assert-True (Test-Path $foreign) 'Cleanup crossed the owned-run boundary.'
 if (-not (Test-ReefVisionPathWithin -Path $cleanupRoot -Parent (Join-Path $Root '.artifacts'))) { throw 'Unsafe harness test cleanup root.' }
 Remove-Item -LiteralPath $cleanupRoot -Recurse -Force
 
+# Identical MSI bytes under different names must be rejected before COM
+# metadata access or any installation. These are deliberately not valid MSIs.
+$duplicateMsiRoot = Join-Path $env:TEMP ('reefvision-duplicate-msi-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $duplicateMsiRoot | Out-Null
+try {
+    $candidateMsi = Join-Path $duplicateMsiRoot 'candidate.msi'
+    $previousMsi = Join-Path $duplicateMsiRoot 'previous.msi'
+    [System.IO.File]::WriteAllText($candidateMsi, 'Synthetic identical installer bytes')
+    Copy-Item -LiteralPath $candidateMsi -Destination $previousMsi
+    $duplicateError = ''
+    try {
+        & (Join-Path $PSScriptRoot 'acceptance-windows-clean-install.ps1') -InstallerPath $candidateMsi -PreviousInstallerPath $previousMsi -PreviousInstallerSupportsIsolatedAcceptance -AcceptanceRoot $safeRoot -PlanOnly
+    } catch {
+        $duplicateError = $_.Exception.Message
+    }
+    Assert-True ($duplicateError -ceq 'Upgrade acceptance requires distinct installer bytes; the previous and candidate MSI SHA-256 are identical.') 'Renamed identical MSI must fail before metadata access or installation.'
+} finally {
+    [System.IO.Directory]::Delete($duplicateMsiRoot, $true)
+}
+
+Assert-True ($acceptanceScript.Contains('previous_installer_sha256 = $PreviousInstallerHash')) 'Upgrade evidence must preserve the previous MSI fingerprint.'
+Assert-True ($acceptanceScript.Contains('previous_installer_version = $PreviousProductVersion')) 'Upgrade evidence must preserve the previous MSI version.'
+Assert-True ($acceptanceScript.Contains('Assert-InstallerUnchanged -Path $initialInstaller -ExpectedHash $initialHash')) 'Initial MSI must be rehashed immediately before installation.'
+Assert-True ($acceptanceScript.Contains('Assert-InstallerUnchanged -Path $InstallerPath -ExpectedHash $InstallerHash')) 'Candidate MSI must be rehashed before upgrade or uninstall metadata access.'
+
 Write-Host "Windows clean-install harness unit tests passed: $passed assertions." -ForegroundColor Green

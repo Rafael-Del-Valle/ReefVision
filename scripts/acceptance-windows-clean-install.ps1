@@ -49,6 +49,16 @@ $DataRoot = Join-Path $RunRoot 'data'
 $EvidenceRoot = Join-Path $RepositoryRoot ".artifacts\windows-clean-acceptance-$Token"
 $ReportPath = Join-Path $EvidenceRoot 'report.json'
 $InstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
+$PreviousInstallerHash = if ($PreviousInstallerPath) { (Get-FileHash -LiteralPath $PreviousInstallerPath -Algorithm SHA256).Hash } else { $null }
+if ($PreviousInstallerPath -and -not $SkipUpgrade -and $PreviousInstallerHash -eq $InstallerHash) {
+    throw 'Upgrade acceptance requires distinct installer bytes; the previous and candidate MSI SHA-256 are identical.'
+}
+
+function Assert-InstallerUnchanged([string]$Path, [string]$ExpectedHash) {
+    if ((Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash -cne $ExpectedHash) {
+        throw "MSI bytes changed after acceptance preflight: $Path"
+    }
+}
 
 function Get-MsiProductVersion([string]$Path) {
     $database = (New-Object -ComObject WindowsInstaller.Installer).OpenDatabase($Path, 0)
@@ -75,6 +85,8 @@ $report = [ordered]@{
     installer_path = $InstallerPath
     installer_sha256 = $InstallerHash
     previous_installer_path = if ($PreviousInstallerPath) { $PreviousInstallerPath } else { $null }
+    previous_installer_sha256 = $PreviousInstallerHash
+    previous_installer_version = $PreviousProductVersion
     windows_version = [Environment]::OSVersion.VersionString
     # Registry evidence is informational and never completes the interactive GUI gate.
     webview2_runtime = Get-ReefVisionWebView2RuntimeInfo
@@ -324,6 +336,8 @@ try {
     Set-Content -LiteralPath (Join-Path $DataRoot '.reefvision-clean-install-acceptance') -Value $Token
 
     $initialInstaller = if ($PreviousInstallerPath -and -not $SkipUpgrade) { $PreviousInstallerPath } else { $InstallerPath }
+    $initialHash = if ($PreviousInstallerPath -and -not $SkipUpgrade) { $PreviousInstallerHash } else { $InstallerHash }
+    Assert-InstallerUnchanged -Path $initialInstaller -ExpectedHash $initialHash
     $exitCode = Run-Msi -Action Install -PackageOrProduct $initialInstaller -LogName 'install.log' -TargetRoot $InstallRoot
     if (-not (Test-Path (Join-Path $InstallRoot 'ReefVision.exe'))) { throw 'Installed ReefVision.exe is missing.' }
     if (-not (Test-Path (Join-Path $InstallRoot 'backend\reefvision-api\reefvision-api.exe'))) { throw 'Installed reefvision-api.exe is missing.' }
@@ -607,6 +621,7 @@ try {
     $projectChecksum = (Get-FileHash -LiteralPath (Join-Path $DataRoot 'reefvision.db') -Algorithm SHA256).Hash
 
     if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+        Assert-InstallerUnchanged -Path $InstallerPath -ExpectedHash $InstallerHash
         Run-Msi -Action Install -PackageOrProduct $InstallerPath -LogName 'upgrade.log' -TargetRoot $InstallRoot | Out-Null
     }
 
@@ -685,6 +700,7 @@ try {
     Stop-AcceptanceDesktop $desktop
 
     if (-not $SkipUninstall) {
+        Assert-InstallerUnchanged -Path $InstallerPath -ExpectedHash $InstallerHash
         $installer = New-Object -ComObject WindowsInstaller.Installer
         $database = $installer.OpenDatabase($InstallerPath, 0); $view = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductCode'"); $view.Execute(); $productCode = $view.Fetch().StringData(1)
         Run-Msi -Action Uninstall -PackageOrProduct $productCode -LogName 'uninstall.log' | Out-Null
