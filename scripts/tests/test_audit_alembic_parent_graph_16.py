@@ -179,3 +179,53 @@ def test_cli_exits_nonzero_on_disconnected_parent_graph(tmp_path: Path) -> None:
     assert report["parent_graph_consistent"] is False
     assert report["parent_graphs"][str(root)]["missing_parent_revisions"] == ["missing"]
     assert file.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "hidden_source",
+    ["nested/0037.py", "nested/deeper/0037.py", ".#0037.py", "__init__0037.py"],
+)
+def test_strict_graph_refuses_sources_not_discovered_by_packaged_alembic(
+    tmp_path: Path, hidden_source: str
+) -> None:
+    root = tmp_path / "versions"
+    parent = _migration(root / Path(hidden_source).parent, Path(hidden_source).name, "0037", "None")
+    child = _migration(root, "0038.py", "0038", '"0037"')
+    before = {path: path.read_bytes() for path in (parent, child)}
+
+    legacy = _module().audit([root])
+    assert legacy["revision_count"] == 2
+    assert legacy["collision_free"] is True
+    assert legacy["safe_to_reconcile_automatically"] is False
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--verify-parent-graph", str(root)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "unsupported strict graph migration source location or name" in result.stderr
+    assert not result.stdout
+    assert {path: path.read_bytes() for path in before} == before
+
+
+def test_strict_flat_graph_permits_package_marker_and_bytecode_cache(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    paths = [
+        _migration(root, "0037.py", "0037", "None"),
+        _migration(root, "0038.py", "0038", '"0037"'),
+    ]
+    marker = root / "__init__.py"
+    marker.write_bytes(b"")
+    cache = root / "__pycache__"
+    cache.mkdir()
+    bytecode = cache / "0037.pyc"
+    bytecode.write_bytes(b"ignored cache")
+    before = {path: path.read_bytes() for path in [*paths, marker, bytecode]}
+    report = _module().audit([root], verify_parent_graph=True)
+    assert report["revision_count"] == 2
+    assert report["parent_graph_consistent"] is True
+    assert report["parent_graphs"][str(root)]["head_revisions"] == ["0038"]
+    assert report["safe_to_reconcile_automatically"] is False
+    assert {path: path.read_bytes() for path in before} == before
