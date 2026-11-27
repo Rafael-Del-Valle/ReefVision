@@ -241,9 +241,9 @@ def validate_frozen_dataset_manifest(
     # project's potentially renamed live classes. Require both the version
     # record and every observation to agree with that immutable dictionary.
     class_map = version.class_map_json
-    if not isinstance(class_map, list) or canonical_json_bytes(
-        manifest.get("class_map")
-    ) != canonical_json_bytes(class_map):
+    if not isinstance(class_map, list) or (
+        canonical_json_bytes(manifest.get("class_map")) != canonical_json_bytes(class_map)
+    ):
         raise ValidationError(message)
     classes: dict[str, tuple[int, str]] = {}
     class_indices: set[int] = set()
