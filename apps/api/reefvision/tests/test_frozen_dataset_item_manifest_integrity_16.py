@@ -488,6 +488,8 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
         "raster_missing_digest",
         "raster_outside_box",
         "raster_impossible_area",
+        "raster_area_exceeds_bbox",
+        "raster_fractional_bounds",
         "mask_class_name_drift",
         "mask_class_index_drift",
         "mask_unknown_class_id",
@@ -569,6 +571,10 @@ def test_resigned_mask_review_provenance_fails_standalone_and_saved_qc(
                 masks[0]["mask_content_sha256"] = None
             elif tamper == "raster_outside_box":
                 masks[0]["x_max"] = item.width_px + 1
+            elif tamper == "raster_area_exceeds_bbox":
+                masks[0]["area_pixels"] = 401  # The original box is 20 x 20 pixels.
+            elif tamper == "raster_fractional_bounds":
+                masks[0]["x_min"] = 8.5
             else:
                 masks[0]["area_pixels"] = item.width_px * item.height_px + 1
         item.mask_annotation_snapshot_json = masks
@@ -589,6 +595,9 @@ def test_resigned_mask_review_provenance_fails_standalone_and_saved_qc(
             ReviewQueueService(session, app.state.settings).create_queue_for_dataset_version(
                 version_id, ReviewQueueCreateRequest()
             )
+        if tamper in {"raster_area_exceeds_bbox", "raster_fractional_bounds"}:
+            with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+                ReviewQueueService(session, app.state.settings).regenerate(standalone.json()["id"])
         nodes = {
             node.node_type: node
             for node in session.scalars(
