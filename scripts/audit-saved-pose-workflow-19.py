@@ -700,6 +700,9 @@ def inspect(
             # Use the same execution seal as the worker and completed-node replay.
             # Legacy requests without a seal remain auditable but cannot claim it.
             _check_frozen_pose_job_request(training, request)
+            check_expected(
+                "pose_training_execution_sha256", request.get("pose_training_execution_sha256")
+            )
             # Reconcile the architecture independently of the persisted request hash.
             # Earlier saved requests did not record an architecture pin.
             _require(
@@ -1459,6 +1462,10 @@ def main() -> int:
         help="Expected saved graph digest recorded before executing the workflow",
     )
     parser.add_argument(
+        "--expected-training-execution-sha256",
+        help="Expected sealed execution digest recorded from the queued training job",
+    )
+    parser.add_argument(
         "--require-independent-evidence",
         action="store_true",
         help="Require independent graph, training, holdout and seed digests plus sealed execution",
@@ -1484,6 +1491,7 @@ def main() -> int:
             ("dataset_manifest_sha256", args.expected_dataset_manifest_sha256),
             ("validation_dataset_manifest_sha256", args.expected_validation_manifest_sha256),
             ("seed_model_sha256", args.expected_seed_model_sha256),
+            ("pose_training_execution_sha256", args.expected_training_execution_sha256),
         ):
             if value is not None:
                 _require(
@@ -1507,6 +1515,9 @@ def main() -> int:
             "validation": expected_digests.get("validation_dataset_manifest_sha256"),
         }
         evidence["expected_seed_model_sha256"] = expected_digests.get("seed_model_sha256")
+        evidence["expected_training_execution_sha256"] = expected_digests.get(
+            "pose_training_execution_sha256"
+        )
         if "seed_model_sha256" in expected_digests:
             _require(
                 bool(evidence["seed_model_id"]),
