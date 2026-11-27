@@ -331,6 +331,10 @@ def test_standalone_longitudinal_comparison_resolves_project_assets(client: Test
     assert provenance["review_evidence_bundle"] is None
     assert provenance["review_evidence_bundle_sha256"] is None
     assert provenance["longitudinal_change_withheld_due_to_reused_spatial_source_asset"] is True
+    assert provenance["acquisition_lineage_status"] == "reused_spatial_source_asset"
+    assert provenance["independent_acquisition_verified"] is False
+    assert "reused_spatial_source_asset_metadata_inconsistent" not in expected["qc_warnings"]
+    assert "reused_spatial_source_asset_geometry_inconsistent" not in expected["qc_warnings"]
     for side in ("before", "after"):
         assert provenance[f"{side}_spatial_source_asset_id"] == asset_id
         assert provenance[f"{side}_source_payload_sha256"] == imported.json()["sha256"]
@@ -394,6 +398,7 @@ def test_standalone_longitudinal_comparison_resolves_project_assets(client: Test
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
     app = cast(FastAPI, client.app)
+    hashes = []
     for _ in range(2):
         run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
         assert run.status_code == 202, run.text
@@ -404,11 +409,14 @@ def test_standalone_longitudinal_comparison_resolves_project_assets(client: Test
         assert detail.status_code == 200, detail.text
         assert detail.json()["run"]["status"] == "succeeded"
         comparisons = [
-            item["payload_json"]
+            item
             for item in detail.json()["artifacts"]
             if item["data_type"] == "mesh_longitudinal_comparison"
         ]
-        assert comparisons == [expected]
+        assert [item["payload_json"] for item in comparisons] == [expected]
+        hashes.append(comparisons[0]["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
 
 
 @pytest.mark.parametrize(
