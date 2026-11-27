@@ -57,6 +57,23 @@ def _meshes() -> tuple[dict, dict]:
     return before, after
 
 
+def _topology_meshes() -> tuple[dict, dict]:
+    before, after = _meshes()
+    for payload in (before, after):
+        payload["vertices"] = [
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 1, 0],
+            [1, 1, 0],
+            [0, 2, 0],
+            [10, 0, 0],
+            [11, 0, 0],
+            [10, 1, 0],
+        ]
+        payload["faces"] = [[0, 1, 2], [1, 3, 2], [2, 3, 4], [5, 6, 7]]
+    return before, after
+
+
 def _preview(payload: dict) -> dict:
     result = preview_from_request(MeshPreviewRequest.model_validate(payload))
     result["project_id"] = "project-1"
@@ -458,7 +475,7 @@ def test_disputed_identity_withholds_patch_change_but_preserves_observations() -
     assert result["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"] is True
 
 
-@pytest.mark.parametrize("mode", ["normal", "degenerate", "profile_conflict"])
+@pytest.mark.parametrize("mode", ["normal", "degenerate", "profile_conflict", "topology_conflict"])
 def test_patch_concentration_saved_workflow_matches_standalone(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, mode: str
 ) -> None:
@@ -489,6 +506,20 @@ def test_patch_concentration_saved_workflow_matches_standalone(
 
         monkeypatch.setattr(
             "reefvision.services.spatial_source_assets_v14.preview_from_request", legacy_preview
+        )
+    if mode == "topology_conflict":
+        before, after = _topology_meshes()
+
+        def legacy_topology_preview(request: MeshPreviewRequest) -> dict:
+            record = preview_from_request(request)
+            if request.observation_id == "survey-2":
+                record["edge_connected_patch_face_counts"] = [2, 2]
+                record["edge_connected_patch_boundary_edge_counts"] = [4, 4]
+            return record
+
+        monkeypatch.setattr(
+            "reefvision.services.spatial_source_assets_v14.preview_from_request",
+            legacy_topology_preview,
         )
     standalone = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
@@ -580,6 +611,15 @@ def test_patch_concentration_saved_workflow_matches_standalone(
         assert artifact["delta_surface_area_scale_interval_m2"] is None
         assert artifact["ranked_patch_area_profile_distance"] is None
         assert artifact["ranked_patch_area_jensen_shannon_divergence_bits"] is None
+    elif mode == "topology_conflict":
+        warning = "identical_geometry_patch_topology_distribution_inconsistent"
+        assert warning in artifact["qc_warnings"]
+        assert artifact["reconstruction_topology_changed_fields"] == []
+        assert artifact["provenance"]["longitudinal_change_withheld_due_to_inconsistent_topology"]
+        assert artifact["provenance"]["specimen_identity_verified"] is False
+        assert artifact["delta_surface_area_m2"] is None
+        assert artifact["delta_surface_area_scale_interval_m2"] is None
+        assert artifact["ranked_patch_area_profile_distance"] is None
     elif degenerate:
         assert artifact["before_patch_area_concentration_index"] is None
         assert artifact["after_patch_area_concentration_index"] is None
@@ -638,6 +678,45 @@ def test_equal_geometry_digest_requires_consistent_patch_area_profile(
         assert result["ranked_patch_area_profile_distance"] is None
     else:
         assert result["delta_surface_area_m2"] is not None
+
+
+@pytest.mark.parametrize(
+    ("mode", "withheld"),
+    [
+        ("conflict", True),
+        ("reordered", False),
+        ("missing", False),
+        ("different_digest", False),
+    ],
+)
+def test_identical_geometry_patch_topology_distribution(mode: str, withheld: bool) -> None:
+    before, after = (_preview(payload) for payload in _topology_meshes())
+    fields = (
+        "edge_connected_patch_face_counts",
+        "edge_connected_patch_boundary_edge_counts",
+        "edge_connected_patch_nonmanifold_edge_counts",
+    )
+    assert sorted(before[fields[0]]) == [1, 3]
+    assert sorted(before[fields[1]]) == [3, 5]
+    if mode in ("conflict", "different_digest", "missing"):
+        after[fields[0]] = [2, 2]
+        after[fields[1]] = [4, 4]
+    if mode == "reordered":
+        for field in fields:
+            after[field] = list(reversed(after[field]))
+    if mode == "missing":
+        for field in fields[:2]:
+            after.pop(field)
+    if mode == "different_digest":
+        after["provenance"]["geometry_sha256"] = "b" * 64
+    result = compare_mesh_observations(before, after)
+    warning = "identical_geometry_patch_topology_distribution_inconsistent"
+    flag = "longitudinal_change_withheld_due_to_inconsistent_topology"
+    assert (warning in result["qc_warnings"]) is withheld
+    assert result["provenance"][flag] is withheld
+    assert result["reconstruction_topology_changed_fields"] == []
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert (result["delta_surface_area_m2"] is None) is withheld
 
 
 def test_ranked_patch_divergence_zero_for_identical_area_profiles() -> None:
