@@ -339,9 +339,8 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
     exact_reexport = not inline_after and not reindexed
     incomplete = inline_after and not reindexed
     assert ("identical_geometry_different_imported_source_payload" in warnings) is exact_reexport
-    assert (
-        "longitudinal_change_withheld_rescaled_reexported_geometry" in warnings
-    ) is exact_reexport
+    reexport_warning = "longitudinal_change_withheld_rescaled_reexported_geometry"
+    assert (reexport_warning in warnings) is exact_reexport
     incomplete_warning = "longitudinal_change_withheld_rescaled_geometry_incomplete_import_lineage"
     assert (incomplete_warning in warnings) is incomplete
     patch_warning = "longitudinal_change_withheld_rescaled_matching_surface_patches"
@@ -532,3 +531,43 @@ def test_rescaled_legacy_asset_without_format_or_digest_withholds_change(asset_s
     assert result["delta_surface_area_m2"] is None
     assert result["delta_axis_aligned_bounding_box_diagonal_m"] is None
     assert result["after_surface_area_m2"] == pytest.approx(4 * result["before_surface_area_m2"])
+
+
+@pytest.mark.parametrize("patch_metadata", ["missing", "invalid", "partial", "different"])
+def test_rescaled_patch_match_requires_complete_equal_fingerprints(patch_metadata: str) -> None:
+    before = preview_from_request(
+        MeshPreviewRequest(
+            **COMMON,
+            obj_text=OBJ,
+            specimen_id="colony:16",
+            observation_id="survey-1",
+            observed_at_utc="2026-10-01T12:00:00Z",
+        )
+    )
+    after = preview_from_request(
+        MeshPreviewRequest(
+            **{**COMMON, "meters_per_unit": COMMON["meters_per_unit"] * 2},
+            vertices=[[0, 3, 0], [0, 0, 0], [2, 0, 0]],
+            faces=[[1, 0, 2]],
+            specimen_id="colony:16",
+            observation_id="survey-2",
+            observed_at_utc="2026-10-02T12:00:00Z",
+        )
+    )
+    for preview in (before, after):
+        preview["project_id"] = "project-1"
+    flag = "longitudinal_change_withheld_due_to_rescaled_matching_surface_patches"
+    assert compare_mesh_observations(before, after)["provenance"][flag] is True
+    key = "edge_connected_patch_geometry_sha256"
+    if patch_metadata == "missing":
+        after.pop(key)
+    elif patch_metadata == "invalid":
+        after[key] = ["not-a-digest"]
+    elif patch_metadata == "partial":
+        after[key] = []
+    else:
+        after[key] = ["f" * 64]
+    result = compare_mesh_observations(before, after)
+    assert result["provenance"][flag] is False
+    assert result["provenance"]["independent_acquisition_verified"] is False
+    assert result["provenance"]["specimen_identity_verified"] is False
