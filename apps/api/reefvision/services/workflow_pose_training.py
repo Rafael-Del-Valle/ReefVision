@@ -24,6 +24,7 @@ from reefvision.db.models import (
 )
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.pose_training import (
+    _pose_training_execution_sha256,
     process_pose_training_job,
 )
 from reefvision.ml.dependencies import provider_spec
@@ -1721,6 +1722,7 @@ def create_pose_workflow_training_result(
             ),
             "pose_split_manifest_sha256": split_manifest_sha256,
             "pose_training_architecture": architecture,
+            "pose_training_execution_sha256": _pose_training_execution_sha256(run),
             "created_by_workflow": True,
             "workflow_run_id": (workflow_run_id),
             "workflow_node_run_id": (workflow_node_run_id),
