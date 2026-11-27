@@ -337,6 +337,17 @@ while ($true) {
     }
     if ($null -ne $run.metrics_history) {
       foreach ($series in $run.metrics_history.PSObject.Properties) {
+        # A persisted epoch series must be an array, even when it has just
+        # one entry. PowerShell's @() would silently turn a malformed scalar
+        # into a one-entry history and give it invented epoch provenance.
+        if ($series.Value -isnot [System.Array]) {
+          if ($latestMetrics.ContainsKey($series.Name)) {
+            $staleMetricSamples[$series.Name] = ' [summary fallback; malformed history is not an array]'
+          } else {
+            $unmeasuredLosses[$series.Name] = ' [unavailable; malformed history is not an array]'
+          }
+          continue
+        }
         $values = @($series.Value)
         $foundFiniteSample = $false
         for ($index = $values.Count - 1; $index -ge 0; $index -= 1) {

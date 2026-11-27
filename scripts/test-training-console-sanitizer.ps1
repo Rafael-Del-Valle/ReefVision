@@ -647,4 +647,40 @@ if ($monitorScript -notmatch '\$trainingLosses = @\([^\r\n]*''train/mask_loss'''
   throw 'Mask loss must be included in the corresponding loss table.'
 }
 
+# Malformed scalar histories must not gain an invented entry index or
+# displace a genuine summary. A real one-entry array is still a measurement.
+$run = [pscustomobject]@{
+  metrics = [pscustomobject]@{
+    'train/box_loss' = 0.6
+    'train/seg_loss' = 0.8
+  }
+  metrics_history = [pscustomobject]@{
+    'train/box_loss' = 0.2
+    'train/cls_loss' = 0.3
+    'train/dfl_loss' = @(0.1)
+    'train/seg_loss' = $null
+    'val/box_loss' = [pscustomobject]@{ value = 0.4 }
+    'val/cls_loss' = @($null)
+  }
+}
+Invoke-Expression $selectionCode
+if ($latestMetrics['train/box_loss'] -ne 0.6 -or
+    $latestMetrics['train/seg_loss'] -ne 0.8 -or
+    $metricSourceNotes['train/box_loss'] -notmatch 'summary metric' -or
+    $staleMetricSamples['train/box_loss'] -notmatch 'malformed history' -or
+    $staleMetricSamples['train/seg_loss'] -notmatch 'malformed history') {
+  throw 'Malformed history displaced a measured summary or fabricated history provenance.'
+}
+foreach ($key in @('train/cls_loss', 'val/box_loss')) {
+  if ($latestMetrics.ContainsKey($key) -or
+      $unmeasuredLosses[$key] -notmatch 'malformed history') {
+    throw ('Malformed scalar/object was accepted as an epoch measurement: {0}' -f $key)
+  }
+}
+if ($latestMetrics['train/dfl_loss'] -ne 0.1 -or
+    $metricSourceNotes['train/dfl_loss'] -notmatch 'history entry 1/1' -or
+    $unmeasuredLosses['val/cls_loss'] -notmatch 'null history placeholders') {
+  throw 'Valid one-entry arrays or reserved null samples lost their provenance.'
+}
+
 Write-Host 'PowerShell training console sanitizer regression passed.'
