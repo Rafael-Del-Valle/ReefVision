@@ -28,3 +28,15 @@ DNS. No new workflow node or migration is needed.
 Release HOLD: independent 1.1/1.6 Alembic lineage reconciliation, full CI,
 representative biological workflows, physical installed Windows MSI/CAB
 clean install/upgrade/rollback and GUI qualification, researcher approval.
+
+## Exact-head CI correction (2026-11-27)
+
+Actions run 45966890248 passed frontend and native Windows preservation;
+backend pytest reported 3,017 passed, 32 skipped, and one failed positive
+raster fixture. Its box (2, 3, 6, 7) is 4 x 4, not 4 x 5; 20 nonzero
+pixels cannot fit. Correct the valid full-box case to 16 and the invalid
+boundary case to 17. Independent Pillow checks generated sparse 12-pixel
+and full 16-pixel masks with exactly these bounds and verified their
+histogram counts. Production QC, saved Workflow Builder regression paths,
+review requirements and source data are unchanged. Replacement exact-head
+CI and installed Windows qualification remain required.

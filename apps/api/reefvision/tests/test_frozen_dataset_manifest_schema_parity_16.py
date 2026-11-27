@@ -170,7 +170,7 @@ def test_original_0007_raster_snapshot_retains_traced_content() -> None:
     validate_frozen_dataset_manifest(version, [item])
 
 
-@pytest.mark.parametrize("area", [12, 20])
+@pytest.mark.parametrize("area", [12, 16])
 def test_original_raster_float_pixel_edges_remain_valid(area: int) -> None:
     version, item = _saved_raster_snapshot()
     mask = deepcopy(item.mask_annotation_snapshot_json[0])
@@ -223,7 +223,7 @@ def test_resigned_raster_metadata_cannot_create_untraceable_observations(tamper:
     elif tamper == "zero_area":
         mask["area_pixels"] = 0
     elif tamper == "area_exceeds_bbox":
-        mask["area_pixels"] = 21  # Source box contains only 4 x 5 pixels.
+        mask["area_pixels"] = 17  # Source box contains only 4 x 4 pixels.
     elif tamper.startswith("fractional_"):
         mask[tamper.removeprefix("fractional_")] += 0.5
     else:
