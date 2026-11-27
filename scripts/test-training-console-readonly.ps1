@@ -34,6 +34,7 @@ $script:active = @'
     "train/cls_loss": [0.60, 0.30, null],
     "train/dfl_loss": [0.20, 0.10, null],
     "train/seg_loss": [null, null, null],
+    "train/mask_loss": [null, null],
     "val/box_loss": [null, "not measured", null]
   }
 }
@@ -220,13 +221,15 @@ foreach ($expected in @(
 if ($output -match 'train/box_loss\s+0\.99') {
   throw 'Stale summary loss overrode the latest persisted epoch history.'
 }
-# Reserved epochs and malformed observations are different evidence states:
-# show both, without silently hiding the loss or fabricating a zero value.
-if ($output -notmatch 'train/seg_loss\s+unavailable \[awaiting first measurement; null history placeholders\]' -or
+# Reserved epochs and malformed observations are different evidence states.
+# A negative summary is corrupt even when every history slot is reserved.
+# Contrast that case with a null-only history without an invalid summary.
+if ($output -notmatch 'train/seg_loss\s+unavailable \[unavailable; invalid summary measurement; null history placeholders\]' -or
+    $output -notmatch 'train/mask_loss\s+unavailable \[awaiting first measurement; null history placeholders\]' -or
     $output -notmatch 'val/box_loss\s+unavailable \[unavailable; recorded history contains no finite numeric measurement\]') {
   throw 'Unmeasured training losses concealed pending or malformed history provenance.'
 }
-if ($output -match 'train/seg_loss\s+0(?:\.0+)?\s' -or $output -match 'val/box_loss\s+0(?:\.0+)?\s') {
+if ($output -match '(?m)^\s*(?:train/(?:seg|mask)_loss|val/box_loss)\s+[-+]?\d') {
   throw 'Read-only monitor fabricated numeric losses for unmeasured histories.'
 }
 # Negative YOLO segmentation component losses cannot be claimed as valid
