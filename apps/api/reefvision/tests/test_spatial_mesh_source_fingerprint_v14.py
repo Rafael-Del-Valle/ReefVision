@@ -348,6 +348,10 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
     assert (patch_warning in warnings) is reindexed
     assert expected["provenance"][patch_flag] is reindexed
     assert expected["provenance"]["surface_patch_fingerprint_comparison"] == "matching"
+    contradiction_flag = (
+        "longitudinal_change_withheld_due_to_inconsistent_surface_patch_fingerprints"
+    )
+    assert expected["provenance"][contradiction_flag] is False
     missing_warning = "matching_surface_patches_primary_geometry_fingerprint_unavailable"
     assert missing_warning not in warnings
     match_warning = "matching_surface_patches_different_geometry_fingerprints"
@@ -644,3 +648,61 @@ def test_matching_legacy_patches_with_unavailable_primary_digest(
         "matching_surface_patches_primary_geometry_fingerprint_unavailable"
         not in control["qc_warnings"]
     )
+
+
+@pytest.mark.parametrize("patch_state", ["matching", "different", "missing", "malformed"])
+@pytest.mark.parametrize("same_primary", [True, False], ids=["same-primary", "different-primary"])
+def test_contradictory_complete_patch_fingerprints_withhold_change(
+    patch_state: str, same_primary: bool
+) -> None:
+    """Equal primary geometry with conflicting complete patch digests is not growth."""
+    before = preview_from_request(
+        MeshPreviewRequest(
+            **COMMON,
+            obj_text=OBJ,
+            specimen_id="colony:16",
+            observation_id="survey-1",
+            observed_at_utc="2026-10-01T12:00:00Z",
+        )
+    )
+    after = preview_from_request(
+        MeshPreviewRequest(
+            **COMMON,
+            ply_text=PLY,
+            specimen_id="colony:16",
+            observation_id="survey-2",
+            observed_at_utc="2026-10-02T12:00:00Z",
+        )
+    )
+    for preview in (before, after):
+        preview["project_id"] = "project-1"
+    key = "edge_connected_patch_geometry_sha256"
+    assert before[key] == after[key]
+    assert before["provenance"]["geometry_sha256"] == after["provenance"]["geometry_sha256"]
+    if not same_primary:
+        after["provenance"]["geometry_sha256"] = "f" * 64
+    if patch_state == "different":
+        after[key] = ["f" * 64]
+    elif patch_state == "missing":
+        after.pop(key)
+    elif patch_state == "malformed":
+        after[key] = ["invalid"]
+    result = compare_mesh_observations(before, after)
+    provenance = result["provenance"]
+    withheld = same_primary and patch_state == "different"
+    flag = "longitudinal_change_withheld_due_to_inconsistent_surface_patch_fingerprints"
+    warning = "identical_geometry_surface_patch_fingerprints_inconsistent"
+    assert provenance[flag] is withheld
+    assert (warning in result["qc_warnings"]) is withheld
+    expected_comparison = patch_state if patch_state in ("matching", "different") else "unavailable"
+    assert provenance["surface_patch_fingerprint_comparison"] == expected_comparison
+    assert provenance["specimen_identity_verified"] is False
+    assert provenance["independent_acquisition_verified"] is False
+    assert result["before_surface_area_m2"] == result["after_surface_area_m2"]
+    if withheld:
+        assert provenance["scale_uncertainty_only"] is False
+        assert result["delta_surface_area_m2"] is None
+        assert result["average_surface_area_change_m2_per_day"] is None
+        assert result["delta_axis_aligned_bounding_box_diagonal_m"] is None
+    else:
+        assert result["delta_surface_area_m2"] == pytest.approx(0)
