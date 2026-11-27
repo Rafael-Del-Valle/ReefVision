@@ -120,8 +120,7 @@ def _matches_count_map(saved: object, expected: Counter[str]) -> bool:
     return (
         isinstance(saved, dict)
         and all(
-            type(key) is str and type(count) is int and count > 0
-            for key, count in saved.items()
+            type(key) is str and type(count) is int and count > 0 for key, count in saved.items()
         )
         and saved == dict(expected)
     )
