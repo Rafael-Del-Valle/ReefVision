@@ -662,3 +662,31 @@ provenance, retries and investigator review remain intact. Release HOLD
 still requires reviewed cross-version reconciliation, populated scientific
 and saved-workflow validation, installed Windows MSI/CAB/GUI acceptance
 and explicit researcher approval.
+
+## Unlabeled ancestry boundary (2026-11-27)
+
+Alembic branch labels share a namespace with revision identifiers and with
+other branch labels. A graph with valid literal parent edges can therefore
+still fail Alembic's revision loader when two labels collide or a label
+matches an existing revision ID. The opt-in parent-graph audit now refuses
+nonempty, dynamic or ambiguous branch_labels declarations instead of
+reporting unverifiable ancestry. Missing or one literal None remains
+supported. Default collision-only reporting is unchanged. This deliberately
+limits strict evidence to the existing unlabeled, dependency-free families;
+it does not claim support for arbitrary labeled migration graphs.
+
+Rechecked the four 1.6 and five 1.1 divergent/successor migrations at the
+pinned heads: every file declares branch_labels = None (typed in 1.6).
+Twenty-two independent local Python/pytest probes passed: ten parser
+refusals, nine valid parent/label controls, and three actual Alembic 1.18.4
+revision-map namespace-collision reproductions. Two new CLI regressions
+cover ten refused declarations, three compatible controls, source bytes
+and default-mode compatibility. Full repository CLI tests and exact-head
+CI remain unverified (local GitHub checkout DNS failure).
+
+No migration or database is executed or modified. This remains a source
+preflight, not a new scientific node or migration authorization. Existing
+typed saved QC workflows, provenance, retries and researcher review are
+unchanged. Release HOLD remains for cross-version reconciliation,
+representative biological and workflow checks, installed Windows MSI/CAB
+GUI qualification, full CI and explicit researcher approval.
