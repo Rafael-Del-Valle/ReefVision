@@ -596,6 +596,7 @@ def test_mesh_comparison_standalone_and_persisted_workflow(client: TestClient) -
     assert expected["reconstruction_topology_changed_fields"] == []
     assert "reconstruction_topology_changed_requires_review" not in expected["qc_warnings"]
     assert "identical_geometry_topology_metadata_inconsistent" not in expected["qc_warnings"]
+    assert expected["provenance"]["longitudinal_change_withheld_due_to_inconsistent_topology"] is False
 
     registry = client.get("/api/v1/workflow-graphs/node-registry")
     mesh_node = next(
@@ -2491,8 +2492,54 @@ def test_matching_geometry_fingerprint_requires_consistent_topology_metadata(
     assert (
         "reconstruction_topology_changed_requires_review" in result["qc_warnings"]
     ) is topology_changed
+    assert (
+        result["provenance"]["longitudinal_change_withheld_due_to_inconsistent_topology"]
+        is inconsistent
+    )
+    assert (
+        "longitudinal_change_withheld_inconsistent_topology" in result["qc_warnings"]
+    ) is inconsistent
+    assert result["before_surface_area_m2"] == result["after_surface_area_m2"] == 1.0
+    if inconsistent:
+        assert result["delta_surface_area_m2"] is None
+        assert result["average_surface_area_change_m2_per_day"] is None
+        assert result["delta_surface_area_scale_interval_m2"] is None
+        assert result["provenance"]["scale_uncertainty_only"] is False
+    else:
+        assert result["delta_surface_area_m2"] == 0.0
     assert result["provenance"]["specimen_identity_verified"] is False
     assert result["provenance"]["coordinate_registration_verified"] is False
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "face_count",
+        "edge_connected_patch_count",
+        "boundary_edge_count",
+        "nonmanifold_edge_count",
+        "degenerate_face_count",
+    ],
+)
+def test_identical_mesh_topology_conflict_distinguishes_missing_metadata(field: str) -> None:
+    before, after = _minimal_topology_pair()
+    for record in (before, after):
+        record["provenance"]["geometry_sha256"] = "a" * 64
+        record["face_count"] = 4
+    before[field] = 1
+    after[field] = 2
+    # These sparse legacy counts are individually plausible. Their disagreement
+    # under one primary geometry digest is not a biological change.
+    result = compare_mesh_observations(before, after)
+    flag = "longitudinal_change_withheld_due_to_inconsistent_topology"
+    assert result["provenance"][flag] is True
+    assert result["delta_surface_area_m2"] is None
+    assert result["reconstruction_topology_changed_fields"] == [field]
+    after.pop(field)
+    control = compare_mesh_observations(before, after)
+    assert control["provenance"][flag] is False
+    assert control["delta_surface_area_m2"] == 0.0
+    assert "reconstruction_topology_comparison_incomplete" in control["qc_warnings"]
 
 
 @pytest.mark.parametrize(
