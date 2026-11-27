@@ -821,3 +821,16 @@ with a conflicting digest through the standalone endpoint and two executions
 of one persisted typed graph, requiring identical comparison artifact hashes.
 The dimensional check detects contradictory records; it does not establish
 authenticity, anatomical branch length, or verified biological identity.
+
+The dimensionless source-space surface-area/diagonal-squared descriptor
+is independent of calibration. Equal valid primary geometry digests with
+inconsistent known descriptors therefore also trigger
+`identical_geometry_shape_ratio_inconsistent` and the calibrated-dimension
+withholding flag, including when either historical scale is missing.
+Retain the nominal descriptors; suppress derived comparisons rather than
+assuming the same mesh changed shape. Allow relative rounding tolerance
+(1e-8), keep missing descriptors unknown, and do not apply this equality
+constraint to different or invalid digests. Test legacy records with
+missing scales and both matching and conflicting descriptors; exercise
+standalone and twice-executed persisted typed graphs with and without
+scale metadata. This check is reconstruction QC, not biological identity.
