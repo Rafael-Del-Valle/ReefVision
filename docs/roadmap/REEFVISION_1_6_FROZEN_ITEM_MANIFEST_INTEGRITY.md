@@ -374,3 +374,19 @@ typed QC gate without altering original observations or researcher decisions.
 Twelve isolated SQLite JSON/row parent-reuse probes passed. Repository tests
 and exact-head CI are unconfirmed; full biological, migration and installed
 Windows GUI qualification remain release HOLD.
+
+
+## 2026-11-26 — Parent identity without inherited splits
+
+Both original 0006/0007 producers explicitly record the selected parent ID
+(or null for an independent dataset). Frozen QC now binds that field to the
+version record even if split reuse is disabled. Missing metadata, divergent
+parent IDs and blank or self-referencing parents fail closed rather than
+letting a locally rehashed snapshot fabricate independent study provenance.
+This does not authenticate the whole ancestry or prove that a parent exists.
+
+Sixteen historical-schema cases and one database-backed standalone,
+regeneration and persisted workflow regression extend the previous gate.
+Twelve isolated SQLite JSON parent-metadata probes passed; full repository
+tests and exact-head CI remain unverified. No research data or decisions are
+rewritten; existing typed QC outputs and human review gates remain intact.
