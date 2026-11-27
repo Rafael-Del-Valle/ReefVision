@@ -488,15 +488,21 @@ def inspect_database(
     matches = [
         candidate
         for candidate in re.finditer(
-            r"""CHECK\s*\(\s*"?event_type"?\s+IN\s*\(([^)]*)\)\s*\)""",
+            r"""\bCHECK\s*\(\s*"?event_type"?\s+IN\s*\(([^)]*)\)\s*\)""",
             review_ddl,
             flags=re.IGNORECASE,
         )
         if not any(start <= candidate.start() < end for start, end in quoted_spans)
     ]
-    # Multiple independent constraints may be narrower than either one.
-    # Conservatively refuse lineage certification unless the CHECK is unique.
-    match = matches[0] if len(matches) == 1 else None
+    # An additional CHECK of a different shape (e.g. event_type !=
+    # 'assign') can narrow the vocabulary even if the IN list is intact.
+    # The historical QC migrations use exactly one CHECK on this table;
+    # any additional expression requires manual review, not certification.
+    check_count = sum(
+        not any(start <= token.start() < end for start, end in quoted_spans)
+        for token in re.finditer(r"\bCHECK\s*\(", review_ddl, flags=re.IGNORECASE)
+    )
+    match = matches[0] if len(matches) == 1 and check_count == 1 else None
     allowed: set[str] = set()
     if match:
         tokens = [token.strip() for token in match.group(1).split(",")]
