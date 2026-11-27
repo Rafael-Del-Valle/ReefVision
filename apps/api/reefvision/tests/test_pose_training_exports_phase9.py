@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from reefvision.db.models import PoseTrainingDataset, PoseTrainingDatasetItem
+from reefvision.jobs.pose_training import materialize_pose_training_exports
 from reefvision.services import pose_training_exports as export_module
 from reefvision.services.pose_interoperability import (
     PoseInteroperabilityService,
@@ -117,6 +118,7 @@ def test_frozen_dataset_exports_exact_frames_and_loss_manifest(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
     export_format: str,
+    tmp_path: Path,
 ) -> None:
     dataset = _frozen_dataset(
         client,
@@ -243,6 +245,19 @@ def test_frozen_dataset_exports_exact_frames_and_loss_manifest(
             }
             readme = archive.read("README.txt").decode("utf-8")
             assert "Never point val at images/train" in readme
+
+            # Exercise the production consumer using the actual API export,
+            # not a hand-written legacy archive header.
+            destination = tmp_path / "materialized"
+            result = materialize_pose_training_exports(
+                training_content=response.content,
+                validation_content=None,
+                destination=destination,
+            )
+            assert result["validation_mode"] == "none"
+            assert result["training_image_count"] == 1
+            assert result["validation_image_count"] == 0
+            assert "val: images/train" in (destination / "data.yaml").read_text().splitlines()
 
         elif export_format == "slp":
             assert "dataset.pose.slp" in names
