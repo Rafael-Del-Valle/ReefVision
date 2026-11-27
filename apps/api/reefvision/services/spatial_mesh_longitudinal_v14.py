@@ -1524,6 +1524,18 @@ def compare_mesh_observations(
         surface_patch_fingerprint_comparison = "matching"
     else:
         surface_patch_fingerprint_comparison = "different"
+    # An identical primary fingerprint fixes the indexed triangles. Complete
+    # but different patch multisets contradict that claim. Legacy missing
+    # patch metadata is not a contradiction; retain it as unavailable.
+    contradictory_patch_fingerprints = (
+        first_hash_valid
+        and second_hash_valid
+        and first_geometry_hash == second_geometry_hash
+        and surface_patch_fingerprint_comparison == "different"
+    )
+    if contradictory_patch_fingerprints:
+        warnings.append("identical_geometry_surface_patch_fingerprints_inconsistent")
+        warnings.append("longitudinal_change_withheld_inconsistent_surface_patch_fingerprints")
     reordered_matching_surface_patches = (
         first_hash_valid
         and second_hash_valid
@@ -1884,12 +1896,16 @@ def compare_mesh_observations(
                 and not rescaled_reexported_geometry
                 and not rescaled_geometry_incomplete_import_lineage
                 and not rescaled_matching_surface_patches
+                and not contradictory_patch_fingerprints
             ),
             "longitudinal_change_withheld_due_to_rescaled_reexported_geometry": (
                 rescaled_reexported_geometry
             ),
             "longitudinal_change_withheld_due_to_rescaled_geometry_incomplete_import_lineage": (
                 rescaled_geometry_incomplete_import_lineage
+            ),
+            "longitudinal_change_withheld_due_to_inconsistent_surface_patch_fingerprints": (
+                contradictory_patch_fingerprints
             ),
             "longitudinal_change_withheld_due_to_rescaled_matching_surface_patches": (
                 rescaled_matching_surface_patches
@@ -1914,10 +1930,12 @@ def compare_mesh_observations(
         or rescaled_reexported_geometry
         or rescaled_geometry_incomplete_import_lineage
         or rescaled_matching_surface_patches
+        or contradictory_patch_fingerprints
     ):
         # Keep original measurements and reconstruction QC intact. Disputed
         # identity, reused project-owned assets, byte-identical originals,
-        # or rescaled copies with incomplete lineage cannot establish biological change.
+        # rescaled copies with incomplete lineage, or contradictory patch
+        # fingerprints cannot establish biological change.
         for key in (
             "delta_surface_area_to_bounding_diagonal_squared_ratio",
             "delta_patch_area_concentration_index",
