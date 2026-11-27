@@ -282,10 +282,11 @@ def test_imported_source_digest_check_qc_matches_saved_comparison(
     assert artifact == expected
 
 
+@pytest.mark.parametrize("inline_after", [False, True], ids=["ply", "inline"])
 def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow(
-    client: TestClient,
+    client: TestClient, inline_after: bool
 ) -> None:
-    """Different source bytes cannot make rescaled identical triangles biological growth."""
+    """Changing source representation cannot make rescaled triangles biological growth."""
     project_id = str(create_project(client, "Rescaled reexport QC")["id"])
     base = f"/api/v1/projects/{project_id}"
     before = {
@@ -303,6 +304,10 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
         "observation_id": "survey-2",
         "observed_at_utc": "2026-10-02T12:00:00Z",
     }
+    if inline_after:
+        del after["ply_text"]
+        after["vertices"] = [[0, 0, 0], [2, 0, 0], [0, 3, 0]]
+        after["faces"] = [[0, 1, 2]]
     response = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
         json={"before": before, "after": after},
@@ -312,16 +317,27 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
     assert expected["after_surface_area_m2"] == pytest.approx(
         4 * expected["before_surface_area_m2"]
     )
-    assert "identical_geometry_different_imported_source_payload" in expected["qc_warnings"]
-    assert "longitudinal_change_withheld_rescaled_reexported_geometry" in expected["qc_warnings"]
+    warnings = expected["qc_warnings"]
+    assert ("identical_geometry_different_imported_source_payload" in warnings) is not inline_after
+    assert ("longitudinal_change_withheld_rescaled_reexported_geometry" in warnings) is (
+        not inline_after
+    )
+    incomplete_warning = "longitudinal_change_withheld_rescaled_geometry_incomplete_import_lineage"
+    assert (incomplete_warning in warnings) is inline_after
     assert (
         "identical_imported_source_payload_reused_across_observations"
         not in expected["qc_warnings"]
     )
     assert (
         expected["provenance"]["longitudinal_change_withheld_due_to_rescaled_reexported_geometry"]
-        is True
+        is not inline_after
     )
+    incomplete_flag = (
+        "longitudinal_change_withheld_due_to_rescaled_geometry_incomplete_import_lineage"
+    )
+    assert expected["provenance"][incomplete_flag] is inline_after
+    assert expected["provenance"]["independent_acquisition_verified"] is False
+    assert expected["provenance"]["scale_uncertainty_only"] is False
     for field in (
         "delta_surface_area_m2",
         "relative_surface_area_change_percent",
@@ -333,8 +349,8 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
     assert expected["provenance"]["calibration_verified"] is False
     assert expected["provenance"]["specimen_identity_verified"] is False
 
-    # A same-scale re-export is still marked as repeated geometry but does not
-    # trigger the narrowly scoped recalibration withholding rule.
+    # A same-scale re-export or inline conversion does not trigger the
+    # narrowly scoped recalibration withholding rule.
     same_scale = {**after, "meters_per_unit": COMMON["meters_per_unit"]}
     control = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
@@ -348,6 +364,7 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
         ]
         is False
     )
+    assert control.json()["provenance"][incomplete_flag] is False
 
     graph = {
         "graph_id": "rescaled-cross-format-reexport-v14",
@@ -384,18 +401,56 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
     assert plan.json()["executable"] is True
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
-    assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+    digests = []
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_longitudinal_comparison"
+        )
+        assert artifact["payload_json"] == expected
+        digests.append(artifact["payload_sha256"])
+    assert digests[0] == digests[1]
+    assert len(digests[0]) == 64
+
+
+@pytest.mark.parametrize("missing", ["before", "after", "both"])
+def test_rescaled_legacy_imports_with_missing_digest_withhold_change(missing: str) -> None:
+    before = preview_from_request(
+        MeshPreviewRequest(
+            **COMMON,
+            obj_text=OBJ,
+            specimen_id="colony:16",
+            observation_id="survey-1",
+            observed_at_utc="2026-10-01T12:00:00Z",
+        )
     )
-    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
-    assert detail.status_code == 200, detail.text
-    assert detail.json()["run"]["status"] == "succeeded"
-    artifact = next(
-        item["payload_json"]
-        for item in detail.json()["artifacts"]
-        if item["data_type"] == "mesh_longitudinal_comparison"
+    after = preview_from_request(
+        MeshPreviewRequest(
+            **{**COMMON, "meters_per_unit": COMMON["meters_per_unit"] * 2},
+            ply_text=PLY,
+            specimen_id="colony:16",
+            observation_id="survey-2",
+            observed_at_utc="2026-10-02T12:00:00Z",
+        )
     )
-    assert artifact == expected
+    for label, preview in (("before", before), ("after", after)):
+        preview["project_id"] = "project-1"
+        if missing in (label, "both"):
+            preview["provenance"].pop("source_payload_sha256")
+    result = compare_mesh_observations(before, after)
+    flag = "longitudinal_change_withheld_due_to_rescaled_geometry_incomplete_import_lineage"
+    assert result["provenance"][flag] is True
+    assert result["provenance"]["independent_acquisition_verified"] is False
+    assert result["delta_surface_area_m2"] is None
+    assert result["average_surface_area_change_m2_per_day"] is None
+    assert result["after_surface_area_m2"] == pytest.approx(4 * result["before_surface_area_m2"])
