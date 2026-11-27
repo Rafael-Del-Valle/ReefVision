@@ -312,3 +312,24 @@ comparison probes passed. Repository tests, Ruff and exact-head CI are not
 confirmed; local checkout cannot resolve github.com. Integrated Alembic
 lineage, representative biology, genuine Windows MSI/GUI acceptance and
 explicit researcher approval remain release HOLD gates.
+
+
+## 2026-11-26 — Biological group and achieved-ratio domain validation
+
+Frozen group keys now obey the original split producer's nonblank rule.
+An unknown group is represented by null, not a shared whitespace label.
+Achieved image fractions must also lie in the closed interval [0, 1]
+before the existing census tolerance is applied. This rejects tiny negative
+or above-one values that previously passed the tolerance and very large JSON
+integers before float conversion could raise an unhandled OverflowError.
+No group is inferred or repaired, and no original research data is changed.
+
+The existing shared validator protects standalone frozen QC, manual
+regeneration and saved typed Workflow Builder retries. Sixteen historical
+schema-parity configurations and three additional database-backed regression
+configurations cover rejection, null/known-group compatibility, rollback
+and required researcher review. Seventeen isolated SQLite JSON probes passed;
+repository tests and exact-head CI remain unconfirmed, as local GitHub
+checkout cannot resolve github.com and Ruff is unavailable. Independent
+Alembic lineage reconciliation, representative scientific acceptance, genuine
+installed Windows MSI/GUI validation and researcher approval remain HOLD.
