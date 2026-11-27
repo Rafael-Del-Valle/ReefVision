@@ -232,6 +232,17 @@ def test_frozen_dataset_exports_exact_frames_and_loss_manifest(
             yaml_text = archive.read("data.yaml").decode("utf-8")
 
             assert "reefvision_keypoint_names" in yaml_text
+            assert "train: images/train" in yaml_text.splitlines()
+            assert "val: images/val" in yaml_text.splitlines()
+            assert "val: images/train" not in yaml_text.splitlines()
+            assert not any(name.startswith(("images/val/", "labels/val/")) for name in names)
+            assert manifest["native_loss_policy"]["validation_split"] == {
+                "included": False,
+                "required_path": "images/val",
+                "independent_validation_required": True,
+            }
+            readme = archive.read("README.txt").decode("utf-8")
+            assert "Never point val at images/train" in readme
 
         elif export_format == "slp":
             assert "dataset.pose.slp" in names
