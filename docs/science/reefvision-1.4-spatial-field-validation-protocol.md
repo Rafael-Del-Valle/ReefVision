@@ -878,3 +878,17 @@ permuted rows, missing hashes, a different primary digest and a consistent
 control; replay the conflict through the standalone API and two executions
 of a saved typed graph with artifact/hash equality. These checks establish
 internal reconstruction consistency, not verified patch or colony identity.
+
+Equal indexed geometry digests and complete matching patch digests also
+require consistent digest-bound topology tuples for mutually available face,
+boundary-edge and nonmanifold-edge counts. A joint unbound count multiset
+can conceal reassignment of topology to another patch. Compare sorted tuples
+of patch digest and available counts, preserving repeated digests as a
+multiset. Emit `identical_geometry_hash_bound_patch_topology_inconsistent`
+and use the existing topology withholding gate when the bound tuples differ
+but the unbound distribution agrees. Missing historical digests or fields
+remain unknown, not contradictory. Controls cover swapped counts, jointly
+reordered rows, missing hashes, different primary geometry and unchanged
+records; replay the swapped-count conflict via standalone API and two
+executions of one persisted typed graph with equal artifacts and hashes.
+These checks do not establish biological identity or anatomical branch length.
