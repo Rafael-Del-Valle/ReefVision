@@ -147,11 +147,19 @@ Also exercise a nonexistent run ID, path traversal characters, PowerShell metach
 
 ## Windows MSI/CAB candidate integrity and clean-install evidence
 
+The branch's `.github/workflows/build-desktop.yml` is triggered by matching pull-request changes or manual dispatch, not by ordinary pushes. PR #73 is already closed; routine branch CI therefore does not create a fresh Windows installer. An exact-SHA successful collector job in `ci.yml` is not a replacement. Keep packaging **BLOCKED** until the owner approves a candidate-specific build and any associated resource use; do not dispatch the build or install an MSI merely to clear this gate.
+
 Run the following **after** a successful Windows installer build, from a dedicated staging directory containing only artifacts from the candidate build. This is an integrity and provenance collector, **not** a substitute for installing and launching the application. Record the exact source commit and build workflow URL separately; artifact filenames do not prove which commit produced them.
+
+Run this snippet in PowerShell 7 (`pwsh`), because `System.IO.Path.GetRelativePath` is not available in Windows PowerShell 5.1.
 
 ```powershell
 $ErrorActionPreference = 'Stop'
 $staging = (Resolve-Path -LiteralPath '.').Path
+$artifactManifest = Join-Path $staging 'installer-artifact-manifest.csv'
+if (Test-Path -LiteralPath $artifactManifest) {
+  throw 'Choose a fresh staging directory; do not overwrite earlier installer evidence.'
+}
 $artifacts = @(Get-ChildItem -LiteralPath $staging -File -Recurse |
   Where-Object { $_.Extension -match '^(?i:\.(msi|cab))$' } |
   Sort-Object FullName)
@@ -168,7 +176,7 @@ $records = @($artifacts | ForEach-Object {
     Signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { '' }
   }
 })
-$records | Export-Csv -LiteralPath (Join-Path $staging 'installer-artifact-manifest.csv') -NoTypeInformation -Encoding UTF8
+$records | Export-Csv -LiteralPath $artifactManifest -NoClobber -NoTypeInformation -Encoding UTF8
 $records | Format-Table -AutoSize
 ```
 
@@ -185,7 +193,16 @@ $cabs = @(Get-ChildItem -LiteralPath $staging -Filter 'rv*.cab' -File | Sort-Obj
 
 Require `provenance.status = matched_complete` and the expected individual MSI/CAB hashes before progressing; `matched_subset` means at least one declared artifact was not supplied. Compare the MSI **Media** table with the complete CAB set separately, because an unsigned manifest cannot establish which CABs the installer actually needs. This procedure never launches `msiexec`.
 
-If the build embeds CAB data inside the MSI, a separate CAB may not exist; record that packaging fact instead of inventing a CAB artifact. An unsigned development MSI must be labeled **unsigned**; a signature status alone is not proof of a trusted publisher or successful installation. Preserve the manifest alongside the exact build logs and immutable artifact copies.
+The current 1.0.3 packaging workflow explicitly requires five or six external CABs. An embedded-only MSI is not compatible with this candidate's acceptance contract; record it as a packaging discrepancy rather than inventing CAB artifacts or passing an MSI-only inventory. An unsigned development MSI must be labeled **unsigned**; a signature status alone is not proof of a trusted publisher or successful installation. Preserve the manifest alongside the exact build logs and immutable artifact copies.
+
+Before any owner-approved installation, use the existing harness to validate paths and read MSI metadata without installing or launching anything:
+
+```powershell
+$harness = Join-Path $repoRoot 'scripts/acceptance-windows-clean-install.ps1'
+& $harness -InstallerPath $msi -AcceptanceRoot 'C:\ReefVision-Acceptance' -PlanOnly
+```
+
+The harness writes a new `.artifacts/windows-clean-acceptance-*/report.json` under the source checkout. Preserve it separately with the candidate SHA and installer hash. A zero exit code in `-PlanOnly` mode is not installation evidence; `plan_only` must be true and `release_acceptance_complete` false. Real acceptance requires explicit owner authorization, a disposable machine and `-DisposableTest` instead of `-PlanOnly`. For upgrade coverage, use a previous MSI only after confirming it honors the isolated acceptance data root, then supply `-PreviousInstallerPath` and `-PreviousInstallerSupportsIsolatedAcceptance`. Do not use `-SkipUpgrade` or `-SkipUninstall` to claim complete release acceptance. The harness's automated camera import and backend probes still do not satisfy its separate interactive WebView2, physical Canon/Sony, training-console and GPU scientific gates.
 
 On a clean Windows account or VM snapshot, record Windows build, architecture, WebView2 runtime, installation command and exit code, installer log, application startup, first image rendering, gallery scrolling, JPG/JPEG import, and read-only training monitor launch. For an interactive MSI install with verbose logging, an operator may use `msiexec.exe /i "<absolute MSI path>" /L*V "<absolute log path>"`; do **not** invoke this automatically from CI on a shared machine. Record installed product/version, WebView2 initialization errors, and any missing runtime dependencies. Reboot only if explicitly required and record it.
 
