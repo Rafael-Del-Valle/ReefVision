@@ -720,10 +720,9 @@ def test_resigned_split_protocol_and_group_census_are_reconciled(
     with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
         validate_frozen_dataset_manifest(version, [item])
 
+
 @pytest.mark.parametrize("schema_version", ["0006", "0007"])
-@pytest.mark.parametrize(
-    "tamper", ["reuse_flag", "class_index", "item_count", "class_count"]
-)
+@pytest.mark.parametrize("tamper", ["reuse_flag", "class_index", "item_count", "class_count"])
 def test_manifest_copy_preserves_json_types(schema_version: str, tamper: str) -> None:
     version, item = _saved_snapshot(schema_version, with_mask=False)
     validate_frozen_dataset_manifest(version, [item])
