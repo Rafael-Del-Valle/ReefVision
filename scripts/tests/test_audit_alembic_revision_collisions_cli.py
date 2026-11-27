@@ -254,3 +254,58 @@ def test_cli_invalid_parent_graph_withholds_ancestry_evidence(tmp_path: Path) ->
         assert len(hashes[str(roots[0] / f"{revision}.py")]) == 64
     assert report["safe_to_reconcile_automatically"] is False
     assert {path: path.read_bytes() for path in files} == files
+
+def test_cli_parent_graph_refuses_unverified_dependency_edges(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    root.mkdir()
+    parent = root / "0037.py"
+    parent.write_text("revision = '0037'\ndown_revision = None\n", encoding="utf-8")
+    child = root / "0038.py"
+    base = "revision = '0038'\ndown_revision = '0037'\n"
+    invalid = (
+        "depends_on = 'missing'\n",
+        "depends_on = ('0037', 'missing')\n",
+        "depends_on = ['0037']\n",
+        "depends_on = '0037'\n",
+        "depends_on = compute_dependencies()\n",
+        "depends_on = None\ndepends_on = 'missing'\n",
+        "depends_on = None\nif True:\n    depends_on = 'missing'\n",
+        "depends_on = None\ndel depends_on\n",
+        "from somewhere import value as depends_on\n",
+        "for depends_on in ['missing']:\n    pass\n",
+        "def depends_on():\n    return 'missing'\n",
+        "depends_on = ('0037', 4)\n",
+    )
+    parent_before = parent.read_bytes()
+    for suffix in invalid:
+        child.write_text(base + suffix, encoding="utf-8")
+        before = child.read_bytes()
+        default = _run(root)
+        assert default.returncode == 0, default.stderr
+        assert "parent_graph_consistent" not in json.loads(default.stdout)
+
+        strict = _run(root, verify_parent_graph=True)
+        assert strict.returncode == 2
+        assert "depends_on" in strict.stderr
+        assert not strict.stdout
+        assert child.read_bytes() == before
+        assert parent.read_bytes() == parent_before
+
+
+def test_cli_parent_graph_accepts_dependency_free_sources(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    root.mkdir()
+    parent = root / "0037.py"
+    parent.write_text("revision = '0037'\ndown_revision = None\n", encoding="utf-8")
+    child = root / "0038.py"
+    base = "revision = '0038'\ndown_revision = '0037'\n"
+    for suffix in ("", "depends_on = None\n", "depends_on: str | None = None\n"):
+        child.write_text(base + suffix, encoding="utf-8")
+        before = child.read_bytes()
+        strict = _run(root, verify_parent_graph=True)
+        assert strict.returncode == 0, strict.stderr
+        report = json.loads(strict.stdout)
+        assert report["parent_graph_consistent"] is True
+        assert report["safe_to_reconcile_automatically"] is False
+        assert child.read_bytes() == before
+
