@@ -510,6 +510,45 @@ describe("ProjectTrainingMonitor", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("discards an in-flight status snapshot after explicit cancellation", async () => {
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
+    vi.mocked(api.cancelTrainingRun).mockResolvedValue({
+      ...activeRun,
+      status: "cancel_requested",
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    const queryClient = renderMonitor();
+    await screen.findByText("Swiftia detector");
+
+    let resolveStale: (runs: api.TrainingRun[]) => void = () => {
+      throw new Error("The stale status request was never started");
+    };
+    vi.mocked(api.getTrainingRuns).mockImplementationOnce(
+      () =>
+        new Promise<api.TrainingRun[]>((resolve) => {
+          resolveStale = resolve;
+        }),
+    );
+    act(() => {
+      void queryClient.refetchQueries({ queryKey: ["training_runs"] });
+    });
+    await waitFor(() => expect(api.getTrainingRuns).toHaveBeenCalledTimes(2));
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel run" }));
+    expect(await screen.findByText("cancel requested")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveStale([activeRun]);
+    });
+
+    expect(screen.getByText("cancel requested")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Cancel run" }),
+    ).not.toBeInTheDocument();
+    expect(api.cancelTrainingRun).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps completed runs visible without presenting cancellation", async () => {
     vi.mocked(api.getTrainingRuns).mockResolvedValue([completedRun]);
 

@@ -165,7 +165,13 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
 
   const cancelMutation = useMutation({
     mutationFn: (runId: string) => cancelTrainingRun(runId),
-    onSuccess: (updatedRun) => {
+    onSuccess: async (updatedRun) => {
+      // A status request started before cancellation may return an older
+      // active snapshot. Discard it before applying the canonical response.
+      await queryClient.cancelQueries({
+        queryKey: ["training_runs", projectId],
+        exact: true,
+      });
       queryClient.setQueryData<TrainingRun[]>(
         ["training_runs", projectId],
         (current) =>
