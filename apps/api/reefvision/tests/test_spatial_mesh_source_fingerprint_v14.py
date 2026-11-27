@@ -347,6 +347,9 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
     patch_flag = "longitudinal_change_withheld_due_to_rescaled_matching_surface_patches"
     assert (patch_warning in warnings) is reindexed
     assert expected["provenance"][patch_flag] is reindexed
+    assert expected["provenance"]["surface_patch_fingerprint_comparison"] == "matching"
+    match_warning = "matching_surface_patches_different_geometry_fingerprints"
+    assert (match_warning in warnings) is reindexed
     assert (
         expected["provenance"]["before_geometry_sha256"]
         != expected["provenance"]["after_geometry_sha256"]
@@ -396,6 +399,8 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
     )
     assert control.json()["provenance"][incomplete_flag] is False
     assert control.json()["provenance"][patch_flag] is False
+    assert control.json()["provenance"]["surface_patch_fingerprint_comparison"] == "matching"
+    assert (match_warning in control.json()["qc_warnings"]) is reindexed
 
     graph = {
         "graph_id": "rescaled-cross-format-reexport-v14",
@@ -557,7 +562,9 @@ def test_rescaled_patch_match_requires_complete_equal_fingerprints(patch_metadat
     for preview in (before, after):
         preview["project_id"] = "project-1"
     flag = "longitudinal_change_withheld_due_to_rescaled_matching_surface_patches"
-    assert compare_mesh_observations(before, after)["provenance"][flag] is True
+    matched = compare_mesh_observations(before, after)
+    assert matched["provenance"][flag] is True
+    assert matched["provenance"]["surface_patch_fingerprint_comparison"] == "matching"
     key = "edge_connected_patch_geometry_sha256"
     if patch_metadata == "missing":
         after.pop(key)
@@ -569,5 +576,8 @@ def test_rescaled_patch_match_requires_complete_equal_fingerprints(patch_metadat
         after[key] = ["f" * 64]
     result = compare_mesh_observations(before, after)
     assert result["provenance"][flag] is False
+    comparison = "different" if patch_metadata == "unequal" else "unavailable"
+    assert result["provenance"]["surface_patch_fingerprint_comparison"] == comparison
+    assert "matching_surface_patches_different_geometry_fingerprints" not in result["qc_warnings"]
     assert result["provenance"]["independent_acquisition_verified"] is False
     assert result["provenance"]["specimen_identity_verified"] is False
