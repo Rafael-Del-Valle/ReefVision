@@ -715,3 +715,15 @@ source format and digest: reuse of a valid asset ID still withholds change.
 Exercise malformed and legacy artifacts directly, and compare standalone
 and twice-executed saved typed graph results for a real imported project
 asset, including identical artifact digests and unverified acquisition status.
+
+Matching parsed geometry and a changed calibration also require withholding
+longitudinal change when at least one observation is a known imported mesh
+but the original byte lineage is incomplete (legacy missing digests or an
+import converted to inline indexed triangles). Preserve both nominal
+measurements, source provenance, the incomplete-lineage QC reason and
+unverified acquisition/identity flags. Do not label these cases as proven
+byte reuse or distinct-file re-export. Same-scale comparisons and pairs
+of purely inline previews retain their existing descriptive behavior.
+Check OBJ-to-PLY and OBJ-to-inline standalone results, three missing-digest
+legacy permutations, and two runs of each persisted typed graph with
+matching artifact digests. No geometry match proves biological identity.
