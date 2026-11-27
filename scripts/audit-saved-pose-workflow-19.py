@@ -1308,6 +1308,43 @@ def inspect(
                     "Frozen source video bytes changed during saved workflow audit",
                 )
             _verify_prelaunch_pose_dataset(root / dataset_path, materialization)
+            # Reconcile the entire weights inventory after the potentially
+            # lengthy dataset recheck, including the original registered seed.
+            # Do not emit the earlier digests for weights that have since changed.
+            if seed_id is not None:
+                current_seed = _managed_file(root, seed.managed_path)
+                current_seed_metadata = current_seed.stat()
+                _require(
+                    current_seed_metadata.st_nlink == 1
+                    and current_seed_metadata.st_size == seed_size
+                    and _digest(current_seed) == training.resolved_model_checksum,
+                    "Registered seed weights changed during saved workflow audit",
+                )
+            for filename in ("best.pt", "last.pt"):
+                expected_checkpoint = verified_checkpoints.get(filename)
+                if expected_checkpoint is None:
+                    candidate = checkpoint.parent / filename
+                    _require(
+                        not candidate.exists() and not candidate.is_symlink(),
+                        f"Unrecorded checkpoint appeared during saved workflow audit: {filename}",
+                    )
+                    continue
+                current_checkpoint = _managed_file(root, expected_weights_prefix + filename)
+                current_checkpoint_metadata = current_checkpoint.stat()
+                _require(
+                    current_checkpoint_metadata.st_nlink == 1
+                    and current_checkpoint_metadata.st_size == expected_checkpoint["size_bytes"]
+                    and _digest(current_checkpoint) == expected_checkpoint["sha256"],
+                    f"Training checkpoint changed during saved workflow audit: {filename}",
+                )
+            current_model = _managed_file(root, model.managed_path)
+            current_model_metadata = current_model.stat()
+            _require(
+                current_model_metadata.st_nlink == 1
+                and current_model_metadata.st_size == model_size
+                and _digest(current_model) == model_sha,
+                "Registered output model changed during saved workflow audit",
+            )
             return {
                 "status": "PASS",
                 "evidence_schema_version": "saved-pose-workflow-audit-0001",
