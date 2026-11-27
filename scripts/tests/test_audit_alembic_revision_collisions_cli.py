@@ -308,4 +308,3 @@ def test_cli_parent_graph_accepts_dependency_free_sources(tmp_path: Path) -> Non
         assert report["parent_graph_consistent"] is True
         assert report["safe_to_reconcile_automatically"] is False
         assert child.read_bytes() == before
-
