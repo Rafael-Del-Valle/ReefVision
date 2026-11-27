@@ -785,3 +785,65 @@ def test_resigned_achieved_ratio_must_be_in_physical_range(
     version.manifest_sha256 = canonical_json_sha256(manifest)
     with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
         validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize("schema_version", ["0006", "0007"])
+@pytest.mark.parametrize(
+    ("requested", "resolved", "valid"),
+    [
+        ("none", "none", True),
+        ("manual", "manual", True),
+        ("random", "group_random", True),
+        ("group_random", "group_random", True),
+        ("random", "random", False),
+        ("manual", "group_random", False),
+        ("unknown", "unknown", False),
+    ],
+)
+def test_resigned_split_method_must_match_producer_resolution(
+    schema_version: str, requested: str, resolved: str, valid: bool
+) -> None:
+    version, item = _saved_snapshot(schema_version, with_mask=False)
+    version.requested_split_method = requested
+    version.resolved_split_method = resolved
+    manifest = deepcopy(version.manifest_json)
+    manifest["split_config"]["requested_split_method"] = requested
+    manifest["split_config"]["resolved_split_method"] = resolved
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+    if valid:
+        validate_frozen_dataset_manifest(version, [item])
+    else:
+        with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+            validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize("schema_version", ["0006", "0007"])
+@pytest.mark.parametrize(
+    ("ratios", "valid"),
+    [
+        (None, True),
+        ({"train": 0.7, "validation": 0.2, "test": 0.1}, True),
+        ({"train": 1.0, "validation": 0.0, "test": 0.0}, True),
+        ({"train": 0.0, "validation": 0.0, "test": 0.0}, False),
+        ({"train": 0.7, "validation": 0.2, "test": 0.2}, False),
+        ({"train": 1.0, "validation": -1e-15, "test": 0.0}, False),
+        ({"train": True, "validation": 0.0, "test": 0.0}, False),
+        ({"train": 10**400, "validation": 0.0, "test": 0.0}, False),
+        ({"train": 1.0, "validation": 0.0}, False),
+    ],
+)
+def test_resigned_requested_ratios_must_be_normalized(
+    schema_version: str, ratios: dict[str, float] | None, valid: bool
+) -> None:
+    version, item = _saved_snapshot(schema_version, with_mask=False)
+    version.requested_ratios_json = ratios
+    manifest = deepcopy(version.manifest_json)
+    manifest["split_config"]["requested_ratios"] = ratios
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+    if valid:
+        validate_frozen_dataset_manifest(version, [item])
+    else:
+        with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+            validate_frozen_dataset_manifest(version, [item])
