@@ -308,6 +308,36 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                         ["current JPEG inventory contains malformed source-file evidence"],
                     )
 
+    def test_comparator_rejects_windows_incompatible_replayed_paths(self) -> None:
+        """Matching fabricated manifests cannot certify unaddressable Windows paths."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            good = {
+                "path": "Sony/DSC_0001.JPEG",
+                "bytes": 42,
+                "sha256": "a" * 64,
+                "jpeg_boundary_markers": True,
+            }
+            baseline = {"root": str(root), "errors": [], "files": [good]}
+            self.assertEqual(MODULE.compare_source_manifest(root, [good], baseline), [])
+            for path in (
+                "CON.JPG", "COM¹.JPEG", "AUX/DSC.JPG", "folder./DSC.JPG",
+                "folder /DSC.JPG", "C:/DSC.JPG", "camera/DSC:1.JPG",
+                "camera/DSC?.JPG", "camera/DSC\x1f.JPG",
+            ):
+                with self.subTest(path=path):
+                    invalid = {**good, "path": path}
+                    self.assertEqual(
+                        MODULE.compare_source_manifest(
+                            root, [invalid], {**baseline, "files": [invalid]}
+                        ),
+                        ["baseline JPEG manifest contains malformed source-file evidence"],
+                    )
+                    self.assertEqual(
+                        MODULE.compare_source_manifest(root, [invalid], baseline),
+                        ["current JPEG inventory contains malformed source-file evidence"],
+                    )
+
     def test_comparator_rejects_duplicate_source_bytes_and_impossible_sizes(self) -> None:
         """Replayed camera evidence cannot certify aliases as independent captures."""
         with tempfile.TemporaryDirectory() as directory:

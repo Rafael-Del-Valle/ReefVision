@@ -694,6 +694,26 @@ def _valid_decoded_geometry(entry: dict[str, object]) -> bool:
     return (display_width, display_height) == expected
 
 
+def _valid_windows_manifest_path(relative: str) -> bool:
+    """Reject replayed source names that cannot be addressed on Windows."""
+    reserved = {
+        "CON", "PRN", "AUX", "NUL",
+        *(f"COM{number}" for number in range(1, 10)),
+        *(f"LPT{number}" for number in range(1, 10)),
+        *(f"{prefix}{digit}" for prefix in ("COM", "LPT") for digit in "¹²³"),
+    }
+    forbidden = set('<>:"\\|?*')
+    for component in relative.split("/"):
+        if (
+            not component
+            or component.endswith((".", " "))
+            or component.split(".")[0].upper() in reserved
+            or any(character in forbidden or ord(character) < 32 for character in component)
+        ):
+            return False
+    return True
+
+
 def compare_source_manifest(
     root: Path, current: list[dict[str, object]], baseline: object
 ) -> list[str]:
@@ -729,6 +749,7 @@ def compare_source_manifest(
             or "\\" in relative
             or relative.startswith("/")
             or any(component in ("", ".", "..") for component in relative.split("/"))
+            or not _valid_windows_manifest_path(relative)
             or Path(relative).suffix.lower() not in JPEG_SUFFIXES
             or type(size) is not int
             or size < len(JPEG_SOI) + len(JPEG_EOI)
@@ -771,6 +792,7 @@ def compare_source_manifest(
             or "\\" in relative
             or relative.startswith("/")
             or any(component in ("", ".", "..") for component in relative.split("/"))
+            or not _valid_windows_manifest_path(relative)
             or Path(relative).suffix.lower() not in JPEG_SUFFIXES
             or type(size) is not int
             or size < len(JPEG_SOI) + len(JPEG_EOI)
