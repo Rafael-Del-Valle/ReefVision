@@ -38,7 +38,7 @@ from reefvision.schemas.pose_training_datasets import (
 from reefvision.services.pose_interoperability import (
     PoseInteroperabilityService,
 )
-from reefvision.storage.datasets import canonical_json_sha256
+from reefvision.services.pose_training_datasets import PoseTrainingDatasetService
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.results_packages import sha256_file
 
@@ -89,9 +89,9 @@ class PoseTrainingExportService:
         if dataset.status != "complete":
             raise ValidationError("Only complete immutable pose training datasets may be exported")
 
-        actual_manifest_sha = canonical_json_sha256(dict(dataset.manifest_json))
-        if actual_manifest_sha != dataset.manifest_sha256:
-            raise ConflictError("Pose training dataset manifest checksum failed")
+        # External exports must enforce the same frozen review and item lineage
+        # as native packages and manifest reads, not only the manifest checksum.
+        PoseTrainingDatasetService(self.session).manifest(dataset.id)
 
         return dataset
 
