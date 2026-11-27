@@ -361,3 +361,68 @@ def test_cli_parent_graph_accepts_unlabeled_sources(tmp_path: Path) -> None:
         assert report["parent_graph_consistent"] is True
         assert report["safe_to_reconcile_automatically"] is False
         assert child.read_bytes() == before
+
+
+def test_cli_strict_graph_rejects_unsafe_revision_and_parent_identifiers(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "versions"
+    root.mkdir()
+    source = root / "migration.py"
+    invalid = (
+        "a-b",
+        "a+b",
+        "a@b",
+        "a b",
+        "a\tb",
+        "a\u200bb",
+        "００３８",
+        "x" * 33,
+        "base",
+        "head",
+        "heads",
+        "a/b",
+        "a.b",
+    )
+    for token in invalid:
+        for field in ("revision", "parent"):
+            revision = token if field == "revision" else "0038"
+            parent = None if field == "revision" else token
+            source.write_text(
+                f"revision = {revision!r}\ndown_revision = {parent!r}\n",
+                encoding="utf-8",
+            )
+            before = source.read_bytes()
+            default = _run(root)
+            assert default.returncode == 0, default.stderr
+            assert "parent_graph_consistent" not in json.loads(default.stdout)
+            strict = _run(root, verify_parent_graph=True)
+            assert strict.returncode == 2
+            assert f"unsupported strict graph {field} identifier" in strict.stderr
+            assert not strict.stdout
+            assert source.read_bytes() == before
+
+
+def test_cli_strict_graph_accepts_numeric_and_namespaced_revision_ids(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "versions"
+    root.mkdir()
+    revisions = ("0037", "0038", "b12_identity_0005", "reefpose_0044", "x" * 32)
+    files = {}
+    for index, revision in enumerate(revisions):
+        parent = revisions[index - 1] if index else None
+        source = root / f"{index}.py"
+        source.write_text(
+            f"revision = {revision!r}\ndown_revision = {parent!r}\n",
+            encoding="utf-8",
+        )
+        files[source] = source.read_bytes()
+
+    result = _run(root, verify_parent_graph=True)
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["parent_graph_consistent"] is True
+    assert report["parent_graphs"][str(root)]["head_revisions"] == [revisions[-1]]
+    assert report["safe_to_reconcile_automatically"] is False
+    assert {path: path.read_bytes() for path in files} == files
