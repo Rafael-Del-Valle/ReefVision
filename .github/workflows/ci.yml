@@ -39,6 +39,7 @@ jobs:
           export REEFVISION_DATABASE_URL="sqlite:///$REEFVISION_DATA_DIR/reefvision.db"
           verify_revision() {
             python - "$1" <<'PY'
+          import difflib
           import json
           import os
           import sqlite3
@@ -73,9 +74,19 @@ jobs:
           if expected == "head":
               snapshot.write_text(json.dumps(schema), encoding="utf-8")
           elif expected == "reupgraded":
-              assert json.loads(snapshot.read_text(encoding="utf-8")) == [
-                  list(row) for row in schema
-              ], "Re-upgraded schema differs from the initial head"
+              before = json.loads(snapshot.read_text(encoding="utf-8"))
+              after = [list(row) for row in schema]
+              if before != after:
+                  diff = "\n".join(difflib.unified_diff(
+                      json.dumps(before, indent=2).splitlines(),
+                      json.dumps(after, indent=2).splitlines(),
+                      fromfile="initial head",
+                      tofile="re-upgraded head",
+                      lineterm="",
+                  ))
+                  raise AssertionError(
+                      f"Re-upgraded schema differs from the initial head:\n{diff}"
+                  )
           print(f"Verified scratch database at {expected}: {revisions}")
           PY
           }
