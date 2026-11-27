@@ -531,3 +531,17 @@ not a scientific node or migration authorization. Existing typed saved QC
 graphs and review gates are unchanged. Cross-version reconciliation,
 representative biology, installed Windows qualification and explicit owner
 approval remain release gates.
+
+## Concurrent WAL regression recovery (2026-11-27)
+
+Exact-head CI 46026973389 passed 123 of 124 lineage tests; the sole failure
+was the older interleaved connection test double, which did not implement
+SQLite's text_factory property. Frontend and native Windows preservation
+passed. The test now uses a real sqlite3.Connection subclass via the factory
+argument. It exercises valid and malformed revision TEXT with a concurrent
+committed WAL writer, verifies one pinned schema/stamp snapshot, redaction,
+restoration of the original decoder on close, and confirms the writer's
+changes actually exist. Two independent local SQLite/pytest probes passed;
+production code is unchanged. The full repository suite and new exact-head
+CI are not yet confirmed. Existing scientific Workflow Builder and approval
+gates remain unchanged; 1.1/1.6 reconciliation and installed GUI remain HOLD.

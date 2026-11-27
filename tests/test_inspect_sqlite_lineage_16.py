@@ -107,23 +107,27 @@ def test_multiple_foreign_key_violations_have_stable_order(tmp_path: Path) -> No
     assert path.read_bytes() == before
 
 
+@pytest.mark.parametrize(
+    ("initial_sql", "expected_stamp"),
+    [("'0038'", "0038"), ("CAST(X'30303338FF' AS TEXT)", None)],
+)
 def test_concurrent_wal_commit_does_not_mix_lineage_evidence(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    initial_sql: str,
+    expected_stamp: str | None,
 ) -> None:
-    """A writer committing mid-inspection must not alter the reader's snapshot."""
+    """Concurrent writes cannot mix snapshot evidence or bypass stamp redaction."""
     path = tmp_path / "concurrent.sqlite"
     with sqlite3.connect(path) as setup:
         setup.execute("PRAGMA journal_mode=WAL")
-        setup.execute("CREATE TABLE alembic_version (version_num TEXT)")
-        setup.execute("INSERT INTO alembic_version VALUES ('0038')")
+        setup.execute("CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)")
+        setup.execute(f"INSERT INTO alembic_version VALUES ({initial_sql})")
     writer = sqlite3.connect(path)
     original_connect = sqlite3.connect
     committed = False
 
-    class InterleavedConnection:
-        def __init__(self, actual: sqlite3.Connection) -> None:
-            self.actual = actual
-
+    class InterleavedConnection(sqlite3.Connection):
         def execute(self, sql: str, *args: object) -> sqlite3.Cursor:
             nonlocal committed
             if sql == "PRAGMA foreign_key_check" and not committed:
@@ -131,21 +135,31 @@ def test_concurrent_wal_commit_does_not_mix_lineage_evidence(
                 writer.execute("CREATE TABLE scientific_records (id INTEGER PRIMARY KEY)")
                 writer.commit()
                 committed = True
-            return self.actual.execute(sql, *args)
+            return super().execute(sql, *args)
 
         def close(self) -> None:
-            self.actual.close()
+            # The temporary revision decoder must not escape its query.
+            assert self.text_factory is str
+            super().close()
 
-    def connect(*args: object, **kwargs: object) -> InterleavedConnection:
-        return InterleavedConnection(original_connect(*args, **kwargs))
+    def connect(*args: object, **kwargs: object) -> sqlite3.Connection:
+        return original_connect(*args, factory=InterleavedConnection, **kwargs)
 
     try:
         monkeypatch.setattr(module.sqlite3, "connect", connect)
         evidence = module.inspect(path)
         assert committed
-        assert evidence["alembic_stamps"] == ["0038"]
+        assert evidence["alembic_stamps"] == [expected_stamp]
         assert not evidence["tables"]["scientific_records"]["present"]
         assert evidence["classification"] == "requires_researcher_review"
+        assert evidence["alembic_stamp_validation_error"] == (
+            "invalid_revision_marker_type_or_value" if expected_stamp is None else None
+        )
+        # Confirm the writer really committed both changes outside the snapshot.
+        assert writer.execute("SELECT count(*) FROM alembic_version").fetchone() == (2,)
+        assert writer.execute(
+            "SELECT name FROM sqlite_master WHERE name='scientific_records'"
+        ).fetchone() == ("scientific_records",)
     finally:
         writer.close()
 
