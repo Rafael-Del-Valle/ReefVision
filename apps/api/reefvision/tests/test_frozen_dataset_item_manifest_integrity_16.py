@@ -151,6 +151,10 @@ def test_frozen_item_evidence_cannot_change_under_standalone_or_saved_qc(
         "summary_image_count_boolean",
         "summary_annotation_count_float",
         "summary_mask_count_boolean",
+        "manifest_reuse_flag_integer",
+        "manifest_class_index_float",
+        "manifest_item_count_boolean",
+        "manifest_item_class_count_float",
         "reused_identity",
         "empty_identity",
         "negative_box",
@@ -212,7 +216,7 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             }
             # ORM equality also conflates bool/float with integer counts.
             flag_modified(item, "per_class_counts_json")
-        elif tamper.startswith("summary_"):
+        elif tamper.startswith(("summary_", "manifest_")):
             pass  # The version manifest is mutated below.
         elif tamper == "source_digest_nonhex":
             item.image_sha256 = "z" * 64
@@ -268,6 +272,24 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             **version.manifest_json,
             "items": [{**payload, "snapshot_sha256": item.snapshot_sha256}],
         }
+        if tamper.startswith("manifest_"):
+            manifest = deepcopy(manifest)
+            if tamper == "manifest_reuse_flag_integer":
+                manifest["split_config"]["reuse_parent_assignments"] = int(
+                    version.reuse_parent_assignments
+                )
+            elif tamper == "manifest_class_index_float":
+                entry = manifest["class_map"][0]
+                entry["class_index"] = float(entry["class_index"])
+            elif tamper == "manifest_item_count_boolean":
+                manifest["items"][0]["annotation_count"] = True
+            else:
+                counts = manifest["items"][0]["per_class_counts"]
+                class_id = str(item.annotation_snapshot_json[0]["label_class_id"])
+                counts[class_id] = 1.0
+            # The original row and its item digest remain unchanged.
+            assert manifest == version.manifest_json
+            assert canonical_json_sha256(manifest) != version.manifest_sha256
         if tamper.startswith("summary_"):
             summary_key, replacement = {
                 "summary_image_count_boolean": ("image_count", True),
@@ -312,7 +334,7 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
                 version_id, ReviewQueueCreateRequest()
             )
 
-        if tamper.startswith(("class_census_", "summary_")):
+        if tamper.startswith(("class_census_", "summary_", "manifest_")):
             with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
                 ReviewQueueService(session, app.state.settings).regenerate(
                     standalone.json()["id"]
