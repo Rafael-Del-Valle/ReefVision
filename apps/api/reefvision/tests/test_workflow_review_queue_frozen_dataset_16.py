@@ -519,7 +519,7 @@ def test_manual_regeneration_refuses_resigned_false_split(client: TestClient, sc
 
     regenerate = f"/api/v1/review-queues/{queue_id}/regenerate"
     refused = client.post(regenerate)
-    assert refused.status_code == 422, refused.text
+    assert refused.status_code == 400, refused.text
     expected = (
         "frozen dataset item membership or split"
         if scope == "frozen"
@@ -575,7 +575,7 @@ def test_manual_regeneration_refuses_resigned_frozen_class_evidence(
 
     regenerate = f"/api/v1/review-queues/{queue_id}/regenerate"
     refused = client.post(regenerate)
-    assert refused.status_code == 422, refused.text
+    assert refused.status_code == 400, refused.text
     assert "frozen annotation evidence does not match manifest" in refused.text
     listing = client.get(endpoint)
     assert listing.status_code == 200, listing.text
@@ -619,7 +619,7 @@ def test_manual_regeneration_requires_complete_queue(client: TestClient, status:
 
     regenerate = f"/api/v1/review-queues/{queue_id}/regenerate"
     refused = client.post(regenerate)
-    assert refused.status_code == 422, refused.text
+    assert refused.status_code == 400, refused.text
     assert "Cannot regenerate incomplete QC review queue" in refused.text
 
     with app.state.session_factory() as session:

@@ -1,0 +1,7 @@
+# ReefVision 1.6 — QC regeneration HTTP contract
+
+2026-11-27. Exact predecessor CI [45953565106](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/45953565106) passed frontend and native-Windows preservation; backend reached pytest (2,985 passed, 32 skipped, 24 failed). Every failure was a manual regeneration refusal test expecting HTTP 422 despite the existing application `ValidationError` handler returning HTTP 400. All refusal responses contained the intended integrity error.
+
+Keep the public API contract: domain validation failures return 400; request/namespace schema validation tests expecting 422 remain unchanged. Correct five assertion sites covering 24 parameterized cases; additionally require the exact saved-science integrity diagnostic (or invalid configuration diagnostic for an array). Preserve rollback, queue ownership, historical compatibility, frozen split/taxon validation, persisted Workflow Builder replay and pending researcher review assertions. No production or migration changes, no weaker acceptance of corrupted evidence.
+
+Release remains HOLD until corrected exact-head CI completes, independent 1.1/1.6 Alembic lineage reconciliation, representative biological workflows, genuine installed Windows MSI/CAB clean/upgrade/rollback and GUI qualification, and explicit researcher approval. Local checkout and Ruff were unavailable during this iteration; do not claim rerun success from the predecessor logs.

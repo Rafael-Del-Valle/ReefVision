@@ -171,7 +171,8 @@ def test_regenerated_workflow_queue_keeps_lineage_without_stealing_retry_owner(
         session.commit()
 
     refused = client.post(f"/api/v1/review-queues/{original_id}/regenerate")
-    assert refused.status_code == 422, refused.text
+    assert refused.status_code == 400, refused.text
+    assert refused.json()["detail"] == "Saved QC review queue snapshot failed integrity validation"
     queues = client.get(f"/api/v1/projects/{project_id}/review-queues")
     assert queues.status_code == 200, queues.text
     assert [queue["id"] for queue in queues.json()] == [original_id]
@@ -396,7 +397,13 @@ def test_manual_qc_regeneration_refuses_invalid_saved_science(
         session.commit()
 
     refused = client.post(f"/api/v1/review-queues/{queue_id}/regenerate")
-    assert refused.status_code == 422, refused.text
+    assert refused.status_code == 400, refused.text
+    expected = (
+        "Cannot regenerate QC queue with invalid saved configuration"
+        if corruption == "array"
+        else "Saved QC review queue snapshot failed integrity validation"
+    )
+    assert refused.json()["detail"] == expected
     with app.state.session_factory() as session:
         queues = session.scalars(
             select(ReviewQueue).where(ReviewQueue.project_id == project_id)
