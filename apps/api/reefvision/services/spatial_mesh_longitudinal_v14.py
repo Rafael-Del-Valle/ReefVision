@@ -1480,7 +1480,8 @@ def compare_mesh_observations(
     )
     # A legacy import without a digest, or a conversion to inline triangles,
     # cannot defeat the recalibration guard merely by losing byte provenance.
-    # Keep the existing descriptive behavior for two purely inline previews.
+    # An asset ID also identifies an imported original even if legacy format
+    # metadata is absent. Keep purely inline previews descriptive.
     rescaled_geometry_incomplete_import_lineage = (
         not reused_imported_source_payload
         and not same_geometry_different_imported_source
@@ -1489,6 +1490,7 @@ def compare_mesh_observations(
         and first_geometry_hash == second_geometry_hash
         and any(
             metadata.get("source_format") in ("obj", "ply_ascii", "glb_2_0")
+            or metadata.get("spatial_source_asset_id") is not None
             for metadata in (first, second)
         )
         and before_scale is not None
