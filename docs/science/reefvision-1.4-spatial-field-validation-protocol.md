@@ -424,6 +424,18 @@ interior crossings, or resolve biological continuity across occlusions.
 Human-reviewed source geometry, anatomical reference lengths and independent
 specimen validation remain necessary before reporting total linear extension.
 
+A provisional chain also reports `endpoint_straightness_ratio`: the Euclidean
+source endpoint distance divided by the selected chain's summed edge length.
+It is dimensionless and independent of meter calibration and trace direction.
+A straight open chain has ratio one; a bent path has a smaller ratio. A closed
+chain has no distinct endpoints and returns null, not a fabricated zero.
+Positive ratios lost to floating-point resolution also return null with QC.
+Compare a unit right triangle's selected two-edge route against the independent
+oracle 1/(1 + sqrt(2)), repeat at three calibrations and both trace directions,
+and check open/closed chains in standalone and twice-executed persisted typed
+mesh-preview workflows. This is selected surface geometry, not a validated
+measure of coral branch straightness, curvature or biological condition.
+
 ### Selected chain geometry fingerprints and junction context
 
 Each provisional chain exposes `source_chain_geometry_sha256` with
