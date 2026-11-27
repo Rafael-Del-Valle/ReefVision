@@ -336,6 +336,14 @@ while ($true) {
         if (Test-ValidScientificMetricValue -Name $metric.Name -Value $metric.Value) {
           $latestMetrics[$metric.Name] = $metric.Value
           $metricSourceNotes[$metric.Name] = ' [summary metric; epoch association unverified]'
+        } elseif ($metric.Name -match '^(train|val)/(loss|(box|cls|dfl|seg|mask)_loss)$') {
+          # A known loss with a corrupt or null summary is not the same as
+          # an absent key. Report it explicitly unless valid history supersedes it.
+          $unmeasuredLosses[$metric.Name] = if ($null -eq $metric.Value) {
+            ' [awaiting first measurement; null summary]'
+          } else {
+            ' [unavailable; invalid summary measurement]'
+          }
         }
       }
     }
@@ -353,11 +361,16 @@ while ($true) {
           continue
         }
         $values = @($series.Value)
+        if ($values.Count -eq 0 -and -not $latestMetrics.ContainsKey($series.Name) -and
+            -not $unmeasuredLosses.ContainsKey($series.Name)) {
+          $unmeasuredLosses[$series.Name] = ' [awaiting first measurement; empty history]'
+        }
         $foundFiniteSample = $false
         for ($index = $values.Count - 1; $index -ge 0; $index -= 1) {
           if (Test-ValidScientificMetricValue -Name $series.Name -Value $values[$index]) {
             $foundFiniteSample = $true
             $latestMetrics[$series.Name] = $values[$index]
+            [void]$unmeasuredLosses.Remove($series.Name)
             $metricSourceNotes[$series.Name] = (' [history entry {0}/{1}; epoch association unverified]' -f ($index + 1), $values.Count)
             if ($index -lt ($values.Count - 1)) {
               $staleMetricSamples[$series.Name] = (' [prior history entry {0}/{1}; latest unavailable]' -f ($index + 1), $values.Count)

@@ -718,4 +718,31 @@ foreach ($warning in @('Summary metrics unavailable: expected a JSON object.',
   }
 }
 
+# Mixed valid and unavailable loss components must not silently disappear
+# from the table. Real history supersedes an invalid summary; an empty
+# history is not a corrupt observation or an invented zero.
+$run = ConvertFrom-Json '{"metrics":{"train/box_loss":-1,"train/cls_loss":null,"train/dfl_loss":"0.2","val/box_loss":0.4},"metrics_history":{"train/dfl_loss":[0],"val/cls_loss":[],"val/dfl_loss":[0.3]}}'
+Invoke-Expression $selectionCode
+if ($latestMetrics.Count -ne 3 -or
+    $latestMetrics['train/dfl_loss'] -ne 0 -or
+    $latestMetrics['val/box_loss'] -ne 0.4 -or
+    $latestMetrics['val/dfl_loss'] -ne 0.3 -or
+    $unmeasuredLosses.ContainsKey('train/dfl_loss')) {
+  throw 'Valid historical or summary evidence was lost or marked unavailable.'
+}
+if ($unmeasuredLosses.Count -ne 3 -or
+    $unmeasuredLosses['train/box_loss'] -notmatch 'invalid summary' -or
+    $unmeasuredLosses['train/cls_loss'] -notmatch 'null summary' -or
+    $unmeasuredLosses['val/cls_loss'] -notmatch 'empty history') {
+  throw 'Missing loss components were hidden or assigned fabricated measurements.'
+}
+$run = ConvertFrom-Json '{"metrics":{"train/box_loss":-0.1,"train/cls_loss":0.5},"metrics_history":{"train/box_loss":[],"train/cls_loss":[]}}'
+Invoke-Expression $selectionCode
+if ($unmeasuredLosses['train/box_loss'] -notmatch 'invalid summary' -or
+    $latestMetrics['train/cls_loss'] -ne 0.5 -or
+    $unmeasuredLosses.ContainsKey('train/cls_loss') -or
+    $staleMetricSamples.Count -ne 0) {
+  throw 'Empty history obscured the summary measurement state.'
+}
+
 Write-Host 'PowerShell training console sanitizer regression passed.'
