@@ -1924,6 +1924,19 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     )
     assert sum(chain["edge_count"] for chain in chains) == union["distinct_nonzero_edge_count"]
     assert all(chain["human_review_verified"] is False for chain in chains)
+    if case in {"ordinary", "closed_loop", "segment_underflow"}:
+        assert len(chains) == 1
+        midpoint = chains[0]["source_arc_midpoint_mesh_units"]
+        if case == "ordinary":
+            fraction = (sqrt(2) - 1) / (2 * sqrt(2))
+            assert midpoint == pytest.approx([fraction, 1 - fraction, 0.0])
+            assert chains[0]["source_arc_midpoint_chain_edge_offset"] == 1
+        elif case == "closed_loop":
+            assert midpoint == pytest.approx([0.5, 0.5, 0.0])
+            assert chains[0]["source_arc_midpoint_chain_edge_offset"] == 1
+        else:
+            assert midpoint == pytest.approx([5e-251, 0.0, 0.0], abs=0)
+            assert chains[0]["source_arc_midpoint_chain_edge_offset"] == 0
     for chain in chains:
         # Compute from source waypoints and round each final bound only once.
         # A rounded nominal meter chord is not an exact uncertainty oracle.
@@ -2933,6 +2946,39 @@ def test_open_chain_straightness_is_scale_and_direction_invariant(scale: float) 
         )
         assert chain["human_review_verified"] is False
         assert chain["biological_validation_status"] == "not_verified_anatomical_centerline"
+
+
+@pytest.mark.parametrize("scale", [0.001, 0.01, 2.0])
+def test_chain_arc_midpoint_is_source_bound_and_direction_invariant(scale: float) -> None:
+    for path in ([0, 2, 1], [1, 2, 0]):
+        params = {
+            **PARAMS,
+            "meters_per_unit": scale,
+            "surface_trace_vertex_paths": [path],
+        }
+        chain = measure_mesh_preview(**params)["surface_trace_exact_edge_union"][
+            "endpoint_graph_chains"
+        ][0]
+        fraction = (sqrt(2) - 1) / (2 * sqrt(2))
+        assert chain["source_arc_midpoint_mesh_units"] == pytest.approx(
+            [fraction, 1 - fraction, 0.0]
+        )
+        assert chain["source_arc_midpoint_chain_edge_offset"] == 1
+        assert chain["human_review_verified"] is False
+
+
+def test_chain_arc_midpoint_at_shared_vertex_uses_earlier_edge() -> None:
+    params = {
+        **PARAMS,
+        "vertices": [[0, 0, 0], [1, 0, 0], [1, 1, 0]],
+        "surface_trace_vertex_paths": [[2, 1, 0]],
+    }
+    chain = measure_mesh_preview(**params)["surface_trace_exact_edge_union"][
+        "endpoint_graph_chains"
+    ][0]
+    assert chain["source_arc_midpoint_mesh_units"] == [1.0, 0.0, 0.0]
+    assert chain["source_arc_midpoint_chain_edge_offset"] == 0
+    assert chain["biological_validation_status"] == "not_verified_anatomical_centerline"
 
 
 def test_chain_geometry_digest_is_source_bound_not_calibration_or_signed_zero() -> None:
