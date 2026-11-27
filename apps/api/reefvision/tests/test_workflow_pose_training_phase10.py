@@ -426,9 +426,9 @@ def test_pose_workflow_replay_checks_secondary_checkpoint_bytes(
         session.commit()
 
     assert last_checkpoint.read_bytes() == secondary_bytes
-    assert execute(processor_with_secondary_checkpoint)["training_run_id"] == result[
-        "training_run_id"
-    ]
+    assert (
+        execute(processor_with_secondary_checkpoint)["training_run_id"] == result["training_run_id"]
+    )
 
     # A persisted digest without its corresponding checkpoint path is not
     # verifiable lineage. Removing the path must not downgrade replay checks.
