@@ -525,3 +525,36 @@ def test_lineage_comparison_preserves_qc_event_vocabulary(
     assert comparison["issues"] == (
         ["QC event CHECK narrows the baseline audit vocabulary"] if expected_status else []
     )
+
+
+def test_qc_lineage_rejects_additional_narrowing_check(tmp_path: Path) -> None:
+    # The vocabulary IN list is correct, but a second independent expression
+    # prevents future assign events. Existing comments cannot reveal that loss.
+    ddl = """
+        CREATE TABLE projects (id TEXT PRIMARY KEY);
+        CREATE TABLE review_queues (
+          id TEXT PRIMARY KEY, project_id TEXT NOT NULL
+        );
+        CREATE TABLE review_queue_items (
+          id TEXT PRIMARY KEY, review_queue_id TEXT NOT NULL, project_id TEXT NOT NULL
+        );
+        CREATE TABLE review_queue_item_events (
+          id TEXT PRIMARY KEY NOT NULL, project_id TEXT NOT NULL,
+          review_queue_id TEXT NOT NULL, review_queue_item_id TEXT NOT NULL,
+          client_request_id TEXT NOT NULL, event_type TEXT NOT NULL,
+          actor TEXT NOT NULL, created_at TEXT NOT NULL,
+          UNIQUE(review_queue_item_id, client_request_id),
+          CHECK(event_type IN ('comment', 'assign', 'unassign')),
+          CHECK(event_type != 'assign'),
+          FOREIGN KEY (review_queue_id) REFERENCES review_queues(id) ON DELETE CASCADE,
+          FOREIGN KEY (review_queue_item_id) REFERENCES review_queue_items(id)
+            ON DELETE CASCADE,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );
+    """
+    status, report = _inspect(tmp_path, ddl, "0038")
+    assert status == 2
+    assert report["classification"] == "ambiguous"
+    assert report["review_event_check"] == "unknown"
+    assert report["sqlite_integrity_check_ok"] is True
+    assert report["automatic_migration_authorized"] is False
