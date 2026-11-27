@@ -739,3 +739,19 @@ imports against PLY re-exports and inline triangles in the standalone API
 and two runs of each saved typed workflow. Preserve original nominal
 measurements, asset ID, available integrity-check evidence and unverified
 identity; same-scale controls remain descriptive.
+
+The order-sensitive primary mesh digest may change during a vertex reindex,
+face reorder or winding reversal. When valid primary digests differ but
+the complete nonempty multiset of exact surface-patch digests matches,
+withhold longitudinal changes if scale differs and at least one observation
+is a known imported original. Record
+`longitudinal_change_withheld_rescaled_matching_surface_patches` and
+preserve nominal measurements and existing source lineage statuses.
+This conservative QC rule does not assert identical full indexed meshes:
+unused vertices and internal connectivity can differ, and neither patch
+hashes nor original file hashes authenticate biological identity. Missing,
+malformed, partial or unequal patch digests do not establish a match.
+Exercise reindexed/reversed PLY and inline triangles with OBJ text and
+project-owned originals via standalone comparisons and twice-executed
+saved typed graphs; retain same-scale controls and artifact hash parity.
+Existing primary digests and review-bundle canonicalization remain intact.
