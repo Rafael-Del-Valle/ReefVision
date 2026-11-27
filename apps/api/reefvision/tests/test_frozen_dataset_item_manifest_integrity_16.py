@@ -177,6 +177,7 @@ def test_frozen_item_evidence_cannot_change_under_standalone_or_saved_qc(
         "blank_biological_group",
         "requested_ratios_not_normalized",
         "resolved_method_inconsistent",
+        "parent_reuse_without_parent",
     ],
 )
 def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
@@ -251,6 +252,9 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
         elif tamper == "resolved_method_inconsistent":
             version.requested_split_method = "manual"
             version.resolved_split_method = "group_random"
+        elif tamper == "parent_reuse_without_parent":
+            assert version.parent_version_id is None
+            version.reuse_parent_assignments = True
         elif tamper == "blank_biological_group":
             item.group_key = "\u2003"
             version.missing_group_key_count = 0
@@ -331,6 +335,7 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             "blank_biological_group",
             "requested_ratios_not_normalized",
             "resolved_method_inconsistent",
+            "parent_reuse_without_parent",
         }:
             manifest["split_config"] = {
                 **version.manifest_json["split_config"],
@@ -348,6 +353,8 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             elif tamper == "resolved_method_inconsistent":
                 manifest["split_config"]["requested_split_method"] = version.requested_split_method
                 manifest["split_config"]["resolved_split_method"] = version.resolved_split_method
+            elif tamper == "parent_reuse_without_parent":
+                manifest["split_config"]["reuse_parent_assignments"] = True
             else:
                 manifest["split_config"]["achieved_ratios"] = version.achieved_ratios_json
         version.manifest_json = manifest
@@ -362,7 +369,7 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             )
 
         if tamper.startswith(("class_census_", "summary_", "manifest_", "achieved_ratios_")) or (
-            tamper == "blank_biological_group"
+            tamper in {"blank_biological_group", "parent_reuse_without_parent"}
         ):
             with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
                 ReviewQueueService(session, app.state.settings).regenerate(standalone.json()["id"])
