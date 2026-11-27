@@ -481,6 +481,7 @@ def test_disputed_identity_withholds_patch_change_but_preserves_observations() -
         "normal",
         "degenerate",
         "profile_conflict",
+        "legacy_centroid_without_patch_profile",
         "topology_conflict",
         "hash_area_conflict",
         "hash_topology_conflict",
@@ -507,7 +508,7 @@ def test_patch_concentration_saved_workflow_matches_standalone(
                 [11, 0, 0],
                 [12, 0, 0],
             ]
-    if mode == "profile_conflict":
+    if mode in ("profile_conflict", "legacy_centroid_without_patch_profile"):
         # Equal source-space area and extents, but a different distribution.
         after["vertices"][4] = [13, 0, 0]
         after["vertices"][5] = [10, 4 / 3, 0]
@@ -516,6 +517,19 @@ def test_patch_concentration_saved_workflow_matches_standalone(
             record = preview_from_request(request)
             record["provenance"]["geometry_sha256"] = "a" * 64
             record.pop("edge_connected_patch_geometry_sha256", None)
+            if mode == "legacy_centroid_without_patch_profile":
+                record["provenance"].pop("meters_per_mesh_unit", None)
+                if request.observation_id == "survey-2":
+                    for field in (
+                        "edge_connected_patch_surface_area_fractions",
+                        "edge_connected_patch_area_concentration_index",
+                        "area_weighted_effective_patch_count",
+                        "edge_connected_patch_surface_areas_m2",
+                    ):
+                        record.pop(field)
+            else:
+                # Isolate the patch-profile gate from independent centroid QC.
+                record.pop("area_weighted_surface_centroid_m")
             return record
 
         monkeypatch.setattr(
@@ -692,6 +706,20 @@ def test_patch_concentration_saved_workflow_matches_standalone(
         assert artifact["delta_surface_area_scale_interval_m2"] is None
         assert artifact["ranked_patch_area_profile_distance"] is None
         assert artifact["ranked_patch_area_jensen_shannon_divergence_bits"] is None
+    elif mode == "legacy_centroid_without_patch_profile":
+        assert "identical_geometry_source_centroid_inconsistent" in artifact["qc_warnings"]
+        assert (
+            "identical_geometry_patch_area_distribution_inconsistent" not in artifact["qc_warnings"]
+        )
+        assert "patch_area_distribution_comparison_unavailable" in artifact["qc_warnings"]
+        flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+        assert artifact["provenance"][flag] is True
+        assert artifact["provenance"]["specimen_identity_verified"] is False
+        assert artifact["before_surface_area_m2"] > 0
+        assert artifact["after_surface_area_m2"] > 0
+        assert artifact["delta_surface_area_m2"] is None
+        assert artifact["delta_surface_area_scale_interval_m2"] is None
+        assert artifact["ranked_patch_area_profile_distance"] is None
     elif mode == "topology_conflict":
         warning = "identical_geometry_patch_topology_distribution_inconsistent"
         assert warning in artifact["qc_warnings"]
@@ -787,6 +815,8 @@ def test_equal_geometry_digest_requires_consistent_patch_area_profile(
     after["provenance"]["geometry_sha256"] = fingerprint
     for record in (before, after):
         record.pop("edge_connected_patch_geometry_sha256", None)
+        # These fixtures also change the centroid; isolate the patch-profile gate.
+        record.pop("area_weighted_surface_centroid_m")
         if missing_scale:
             record["provenance"].pop("meters_per_mesh_unit", None)
     if missing_distribution:
@@ -801,6 +831,7 @@ def test_equal_geometry_digest_requires_consistent_patch_area_profile(
     warning = "identical_geometry_patch_area_distribution_inconsistent"
     flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
     assert (warning in result["qc_warnings"]) is withheld
+    assert "identical_geometry_source_centroid_inconsistent" not in result["qc_warnings"]
     assert result["provenance"][flag] is withheld
     assert result["provenance"]["specimen_identity_verified"] is False
     if withheld:
