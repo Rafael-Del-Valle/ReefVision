@@ -863,3 +863,18 @@ array and different-digest controls. Simulate a legacy summary conflict in
 the standalone API and two executions of one persisted typed graph; require
 artifact equality and equal hashes. This is reconstruction QC, not proof
 of geometry authenticity or biological fragmentation.
+
+Equal valid indexed geometry digests with complete matching patch digest
+multisets also require consistent digest-bound area fractions. Independently
+ranked area fractions can conceal swapped descriptors while retaining the
+same total surface area, concentration and topology. Sort digest/fraction
+pairs (including repeated digests), compare the half-L1 distance at the
+existing 1e-8 tolerance, and emit
+`identical_geometry_hash_bound_patch_area_inconsistent` on contradiction.
+Use the existing calibrated-dimensions withholding gate, retaining nominal
+measurements and unverified identity. Incomplete historical patch hashes
+remain unknown. Test two unequal-area patches with swapped hashes, jointly
+permuted rows, missing hashes, a different primary digest and a consistent
+control; replay the conflict through the standalone API and two executions
+of a saved typed graph with artifact/hash equality. These checks establish
+internal reconstruction consistency, not verified patch or colony identity.
