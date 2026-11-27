@@ -805,3 +805,19 @@ reconstruction QC. Exercise sparse legacy artifacts and verify consistent
 standalone and persisted typed Workflow Builder results. These are
 provenance discrepancies requiring human review, not proof of biological
 change or source authenticity.
+
+Equal valid primary geometry digests also require consistent calibrated
+dimensions: area scales quadratically and bounding-box diagonal scales
+linearly. If either known measurement contradicts its corresponding
+scale relationship, withhold derived longitudinal changes, rates and
+scale-only change intervals; report
+`longitudinal_change_withheld_inconsistent_calibrated_dimensions`.
+Retain both nominal measurements and source QC for review. Missing scales
+or extents do not establish a contradiction. Different or invalid primary
+digests do not establish this equality constraint. Test zero and extreme
+finite areas, inconsistent extents, and consistent and missing-evidence
+controls. Replay historical typed artifacts and simulate a legacy producer
+with a conflicting digest through the standalone endpoint and two executions
+of one persisted typed graph, requiring identical comparison artifact hashes.
+The dimensional check detects contradictory records; it does not establish
+authenticity, anatomical branch length, or verified biological identity.
