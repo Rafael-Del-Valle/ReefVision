@@ -847,3 +847,38 @@ def test_resigned_requested_ratios_must_be_normalized(
     else:
         with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
             validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize("schema_version", ["0006", "0007"])
+@pytest.mark.parametrize(
+    ("parent_id", "manifest_parent_id", "valid"),
+    [
+        ("parent", "parent", True),
+        (None, None, False),
+        ("", "", False),
+        ("  ", "  ", False),
+        ("child", "child", False),
+        ("parent", "other-parent", False),
+        ("parent", None, False),
+    ],
+)
+def test_resigned_parent_reuse_requires_matching_distinct_parent(
+    schema_version: str,
+    parent_id: str | None,
+    manifest_parent_id: str | None,
+    valid: bool,
+) -> None:
+    version, item = _saved_snapshot(schema_version, with_mask=False)
+    version.id = "child"
+    version.parent_version_id = parent_id
+    version.reuse_parent_assignments = True
+    manifest = deepcopy(version.manifest_json)
+    manifest["split_config"]["reuse_parent_assignments"] = True
+    manifest["dataset_version"] = {"parent_version_id": manifest_parent_id}
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+    if valid:
+        validate_frozen_dataset_manifest(version, [item])
+    else:
+        with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+            validate_frozen_dataset_manifest(version, [item])
