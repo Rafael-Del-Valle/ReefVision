@@ -110,6 +110,23 @@ def _validated_revision_marker(value: object) -> str | None:
     return value
 
 
+def _read_revision_markers(connection: sqlite3.Connection) -> list[str | None]:
+    """Read SQLite TEXT safely, retaining BLOB/type rejection and row cardinality."""
+    previous_factory = connection.text_factory
+    try:
+        # SQLite can contain malformed UTF-8 TEXT even when integrity_check is
+        # clean. The default decoder raises an error containing the raw value.
+        # Replacement characters cannot satisfy the visible ASCII token contract.
+        # Scope the decoder to this query; other schema reads stay strict.
+        connection.text_factory = lambda value: value.decode("utf-8", errors="replace")
+        return [
+            _validated_revision_marker(row[0])
+            for row in connection.execute("SELECT version_num FROM alembic_version")
+        ]
+    finally:
+        connection.text_factory = previous_factory
+
+
 def inspect(path: Path) -> dict:
     if not path.is_file():
         raise FileNotFoundError(path)
@@ -227,15 +244,9 @@ def inspect(path: Path) -> dict:
                 # or an expression/partial index that prevents the next stamp.
                 if alembic_stamp_constraint_error is None:
                     alembic_stamp_constraint_error = _stamp_extra_constraints(connection)
-                # Do not sort SQLite mixed-type values or serialize raw BLOBs:
-                # malformed stamps must remain structured, JSON-safe evidence.
-                raw_stamps = [row[0] for row in connection.execute(
-                    "SELECT version_num FROM alembic_version"
-                )]
-                # Preserve row cardinality, but never emit malformed text
-                # (which could contain private research notes or control characters).
-                stamps = [_validated_revision_marker(value) for value in raw_stamps]
-                if len(raw_stamps) != 1:
+                # Preserve row cardinality without exposing malformed TEXT or BLOBs.
+                stamps = _read_revision_markers(connection)
+                if len(stamps) != 1:
                     if alembic_stamp_validation_error is None:
                         alembic_stamp_validation_error = "expected_exactly_one_revision_row"
                 elif stamps[0] is None:
