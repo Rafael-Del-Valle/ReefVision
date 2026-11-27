@@ -264,6 +264,21 @@ def validate_frozen_dataset_manifest(
     ):
         raise ValidationError(message)
 
+    # Parent reuse is only possible with a selected, distinct parent. The
+    # original producer records that parent in both the version and manifest.
+    # Matching copies of the reuse flag cannot invent a parent relationship.
+    if version.reuse_parent_assignments:
+        parent_id = version.parent_version_id
+        version_metadata = manifest.get("dataset_version")
+        if (
+            type(parent_id) is not str
+            or not parent_id.strip()
+            or parent_id == version.id
+            or not isinstance(version_metadata, dict)
+            or version_metadata.get("parent_version_id") != parent_id
+        ):
+            raise ValidationError(message)
+
     # The manifest binds the original frozen taxonomic dictionary, not the
     # project's potentially renamed live classes. Require both the version
     # record and every observation to agree with that immutable dictionary.
