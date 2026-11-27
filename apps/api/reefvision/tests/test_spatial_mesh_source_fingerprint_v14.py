@@ -468,9 +468,7 @@ def test_rescaled_legacy_imports_with_missing_digest_withhold_change(missing: st
 
 
 @pytest.mark.parametrize("asset_side", ["before", "after"])
-def test_rescaled_legacy_asset_without_format_or_digest_withholds_change(
-    asset_side: str,
-) -> None:
+def test_rescaled_legacy_asset_without_format_or_digest_withholds_change(asset_side: str) -> None:
     """An asset-linked legacy preview remains an import even without file metadata."""
     previews = []
     for side, scale, day in (("before", 0.01, 1), ("after", 0.02, 2)):
