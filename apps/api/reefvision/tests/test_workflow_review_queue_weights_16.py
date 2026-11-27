@@ -257,7 +257,11 @@ def test_qc_retry_rejects_equal_looking_boolean_parameters(
         supplied = original if saved_invalid else malformed
         with pytest.raises(ValidationError, match=r"invalid (signal_weights|review parameters)"):
             create_review_queue_workflow_artifact(
-                session, app.state.settings, project_id, {**supplied, **runtime}, {"project": [source]}
+                session,
+                app.state.settings,
+                project_id,
+                {**supplied, **runtime},
+                {"project": [source]},
             )
         session.rollback()
         replay = create_review_queue_workflow_artifact(
@@ -674,7 +678,6 @@ def test_interrupted_qc_retry_requires_real_output_list(client: TestClient, shap
     items = client.get(f"/api/v1/review-queues/{payload['queue_id']}/items")
     assert items.status_code == 200, items.text
     assert items.json()["items"][0]["review_state"] == "pending"
-
 
 
 @pytest.mark.parametrize("shape", ["scalar", "broken_pairs"])
