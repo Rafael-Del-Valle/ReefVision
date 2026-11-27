@@ -336,9 +336,7 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
 
         if tamper.startswith(("class_census_", "summary_", "manifest_")):
             with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
-                ReviewQueueService(session, app.state.settings).regenerate(
-                    standalone.json()["id"]
-                )
+                ReviewQueueService(session, app.state.settings).regenerate(standalone.json()["id"])
 
         nodes = {
             node.node_type: node
