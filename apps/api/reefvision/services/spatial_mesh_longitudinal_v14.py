@@ -86,6 +86,21 @@ def _validate_source_import_provenance(metadata: dict[str, Any]) -> None:
         raise ValueError("Imported mesh source byte count must be positive")
 
 
+def _complete_patch_fingerprints(record: dict[str, Any]) -> list[str] | None:
+    """Return a complete, order-independent multiset of caller-supplied patch hashes."""
+    hashes = record.get("edge_connected_patch_geometry_sha256")
+    count = record.get("edge_connected_patch_count")
+    if (
+        type(count) is not int
+        or count <= 0
+        or not isinstance(hashes, list)
+        or len(hashes) != count
+        or not all(_is_sha256_fingerprint(value) for value in hashes)
+    ):
+        return None
+    return sorted(hashes)
+
+
 def _patch_area_concentration(record: dict[str, Any]) -> tuple[float, float] | None:
     """Recompute scale-invariant patch concentration from complete-mesh fractions.
 
@@ -1497,6 +1512,31 @@ def compare_mesh_observations(
         and after_scale is not None
         and before_scale != after_scale
     )
+    # The primary geometry digest binds vertex and face ordering. A re-export
+    # can renumber or reverse triangles without changing their surface patches.
+    # Match the complete patch multiset only as conservative QC: unused
+    # vertices, connectivity within patches and biological identity may differ.
+    first_patches = _complete_patch_fingerprints(before)
+    second_patches = _complete_patch_fingerprints(after)
+    rescaled_matching_surface_patches = (
+        not reused_imported_source_payload
+        and not reused_spatial_source_asset
+        and first_hash_valid
+        and second_hash_valid
+        and first_geometry_hash != second_geometry_hash
+        and first_patches is not None
+        and first_patches == second_patches
+        and any(
+            metadata.get("source_format") in ("obj", "ply_ascii", "glb_2_0")
+            or metadata.get("spatial_source_asset_id") is not None
+            for metadata in (first, second)
+        )
+        and before_scale is not None
+        and after_scale is not None
+        and before_scale != after_scale
+    )
+    if rescaled_matching_surface_patches:
+        warnings.append("longitudinal_change_withheld_rescaled_matching_surface_patches")
     # Classify original-source lineage separately from registration and identity.
     # Different file bytes (even with different geometry) cannot prove that
     # the underlying photographs or field acquisition were independent.
@@ -1824,12 +1864,16 @@ def compare_mesh_observations(
                 and not reused_spatial_source_asset
                 and not rescaled_reexported_geometry
                 and not rescaled_geometry_incomplete_import_lineage
+                and not rescaled_matching_surface_patches
             ),
             "longitudinal_change_withheld_due_to_rescaled_reexported_geometry": (
                 rescaled_reexported_geometry
             ),
             "longitudinal_change_withheld_due_to_rescaled_geometry_incomplete_import_lineage": (
                 rescaled_geometry_incomplete_import_lineage
+            ),
+            "longitudinal_change_withheld_due_to_rescaled_matching_surface_patches": (
+                rescaled_matching_surface_patches
             ),
             "longitudinal_change_withheld_due_to_reused_source_payload": (
                 reused_imported_source_payload
@@ -1850,6 +1894,7 @@ def compare_mesh_observations(
         or reused_spatial_source_asset
         or rescaled_reexported_geometry
         or rescaled_geometry_incomplete_import_lineage
+        or rescaled_matching_surface_patches
     ):
         # Keep original measurements and reconstruction QC intact. Disputed
         # identity, reused project-owned assets, byte-identical originals,
