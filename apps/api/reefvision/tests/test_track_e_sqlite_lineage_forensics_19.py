@@ -470,3 +470,58 @@ def test_refuses_empty_qc_review_schema_without_real_parent_tables(
     assert report["qc_event_type_violations"] == 0
     assert report["automatic_migration_authorized"] is False
     assert any("parent tables missing" in issue for issue in report["issues"])
+
+
+@pytest.mark.parametrize(
+    ("original_check", "current_check", "expected_status"),
+    [
+        ("triage_complete", "coordination", 2),
+        ("triage_complete", "triage", 2),
+        ("triage", "coordination", 2),
+        ("coordination", "triage_complete", 0),
+        ("triage_complete", "triage_complete", 0),
+    ],
+)
+def test_lineage_comparison_preserves_qc_event_vocabulary(
+    tmp_path: Path, original_check: str, current_check: str, expected_status: int
+) -> None:
+    # Isolate the comparator contract: identical retained row and model
+    # fingerprints do not excuse narrowing the allowed 0039/0040 event types.
+    fingerprint = {"sha256": "a" * 64, "columns": ["id"], "row_count": 1}
+    report = {
+        "schema_version": "reefvision-sqlite-lineage-forensics-0001",
+        "affected_table_content_fingerprint_algorithm": "reefvision-sqlite-row-multiset-v1",
+        "sqlite_integrity_check_ok": True,
+        "foreign_key_violations": 0,
+        "affected_table_row_counts": {"review_queue_item_events": 1},
+        "affected_table_content_fingerprints": {"review_queue_item_events": fingerprint},
+        "qc_event_scope_violations": 0,
+        "qc_event_type_violations": 0,
+        "qc_request_key_unique": True,
+        "qc_required_columns_not_null": True,
+        "qc_event_foreign_keys_valid": True,
+        "qc_event_primary_key_valid": True,
+        "model_registry_row_count": 1,
+        "model_registry_checkpoint_files_verified": True,
+        "model_registry_checkpoint_evidence": {"counts": {"verified": 1}},
+        "model_registry_metadata_fingerprint": fingerprint,
+    }
+    baseline = tmp_path / "baseline.json"
+    candidate = tmp_path / "candidate.json"
+    baseline.write_text(json.dumps(dict(report, review_event_check=original_check)))
+    candidate.write_text(json.dumps(dict(report, review_event_check=current_check)))
+    script = Path(__file__).resolve().parents[4] / "scripts" / "compare-lineage-reports.py"
+    result = subprocess.run(
+        [sys.executable, str(script), str(baseline), str(candidate)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == expected_status, result.stderr
+    comparison = json.loads(result.stdout)
+    assert comparison["retained_content_matches"] is (expected_status == 0)
+    assert comparison["automatic_migration_authorized"] is False
+    assert comparison["table_results"]["review_queue_item_events"] == "full_content_matches"
+    assert comparison["issues"] == (
+        ["QC event CHECK narrows the baseline audit vocabulary"] if expected_status else []
+    )
