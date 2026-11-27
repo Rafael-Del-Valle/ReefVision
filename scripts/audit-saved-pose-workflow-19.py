@@ -1468,7 +1468,7 @@ def main() -> int:
     parser.add_argument(
         "--require-independent-evidence",
         action="store_true",
-        help="Require independent graph, training, holdout and seed digests plus sealed execution",
+        help="Require independent graph, training, holdout, seed and execution digests",
     )
     args = parser.parse_args()
     try:
@@ -1481,9 +1481,10 @@ def main() -> int:
                         args.expected_dataset_manifest_sha256,
                         args.expected_validation_manifest_sha256,
                         args.expected_seed_model_sha256,
+                        args.expected_training_execution_sha256,
                     )
                 ),
-                "Independent acceptance requires graph, training, holdout and seed digests",
+                "Independent acceptance requires graph, training, holdout, seed and execution digests",
             )
         expected_digests: dict[str, str] = {}
         for key, value in (
