@@ -170,6 +170,23 @@ def test_original_0007_raster_snapshot_retains_traced_content() -> None:
     validate_frozen_dataset_manifest(version, [item])
 
 
+@pytest.mark.parametrize("area", [12, 20])
+def test_original_raster_float_pixel_edges_remain_valid(area: int) -> None:
+    version, item = _saved_raster_snapshot()
+    mask = deepcopy(item.mask_annotation_snapshot_json[0])
+    for key in ("x_min", "y_min", "x_max", "y_max"):
+        mask[key] = float(mask[key])
+    mask["area_pixels"] = area
+    item.mask_annotation_snapshot_json = [mask]
+    payload = _item_payload(item, schema_version="0007")
+    item.snapshot_sha256 = canonical_json_sha256(payload)
+    manifest = deepcopy(version.manifest_json)
+    manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+    validate_frozen_dataset_manifest(version, [item])
+
+
 @pytest.mark.parametrize(
     "tamper",
     [
@@ -181,6 +198,11 @@ def test_original_0007_raster_snapshot_retains_traced_content() -> None:
         "outside_bbox",
         "zero_area",
         "oversized_area",
+        "area_exceeds_bbox",
+        "fractional_x_min",
+        "fractional_y_min",
+        "fractional_x_max",
+        "fractional_y_max",
     ],
 )
 def test_resigned_raster_metadata_cannot_create_untraceable_observations(tamper: str) -> None:
@@ -200,6 +222,10 @@ def test_resigned_raster_metadata_cannot_create_untraceable_observations(tamper:
         mask["x_max"] = item.width_px + 1
     elif tamper == "zero_area":
         mask["area_pixels"] = 0
+    elif tamper == "area_exceeds_bbox":
+        mask["area_pixels"] = 21  # Source box contains only 4 x 5 pixels.
+    elif tamper.startswith("fractional_"):
+        mask[tamper.removeprefix("fractional_")] += 0.5
     else:
         mask["area_pixels"] = item.width_px * item.height_px + 1
     item.mask_annotation_snapshot_json = [mask]
