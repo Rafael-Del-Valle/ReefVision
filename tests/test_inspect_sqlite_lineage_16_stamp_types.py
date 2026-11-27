@@ -191,3 +191,86 @@ def test_stamp_check_and_index_contracts_in_both_comparison_inputs(
         assert "private coral data" not in result.stdout + result.stderr
         assert "9223372036854775808" not in result.stdout + result.stderr
         assert [database.read_bytes() for database in databases] == originals
+
+
+@pytest.mark.parametrize(
+    ("declaration", "suffix", "error"),
+    [
+        ("version_num TEXT NOT NULL PRIMARY KEY", "", None),
+        ("version_num VARCHAR(32) NOT NULL PRIMARY KEY", "", None),
+        ("version_num TEXT NOT NULL PRIMARY KEY /* ON CONFLICT IGNORE */", "", None),
+        (
+            'version_num TEXT NOT NULL, CONSTRAINT "WITHOUT ROWID" PRIMARY KEY(version_num)',
+            "", None,
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY ON CONFLICT REPLACE",
+            "", "alembic_version_write_storage_options_require_review",
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY ON /* comment */ CONFLICT IGNORE",
+            "", "alembic_version_write_storage_options_require_review",
+        ),
+        (
+            "version_num TEXT NOT NULL ON CONFLICT FAIL PRIMARY KEY",
+            "", "alembic_version_write_storage_options_require_review",
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY", " WITHOUT ROWID",
+            "alembic_version_write_storage_options_require_review",
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY", " WITHOUT /* comment */ ROWID",
+            "alembic_version_write_storage_options_require_review",
+        ),
+        (
+            "version_num TEXT NOT NULL DEFAULT 'private stamp default' PRIMARY KEY",
+            "", "alembic_version_default_requires_review",
+        ),
+        (
+            "version_num TEXT NOT NULL DEFAULT NULL PRIMARY KEY",
+            "", "alembic_version_default_requires_review",
+        ),
+        (
+            "version_num TEXT NOT NULL DEFAULT (lower('X')) PRIMARY KEY",
+            "", "alembic_version_default_requires_review",
+        ),
+    ],
+)
+def test_stamp_write_storage_options_in_both_comparison_inputs(
+    tmp_path: Path, declaration: str, suffix: str, error: str | None
+) -> None:
+    databases = [tmp_path / "source.sqlite", tmp_path / "copy.sqlite"]
+    for database in databases:
+        with sqlite3.connect(database) as connection:
+            connection.execute(f"CREATE TABLE alembic_version ({declaration}){suffix}")
+            connection.execute("INSERT INTO alembic_version VALUES ('0039')")
+            connection.execute("CREATE TABLE observations (note TEXT)")
+            connection.execute("INSERT INTO observations VALUES ('private coral data')")
+            assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    originals = [database.read_bytes() for database in databases]
+    for options in [
+        [],
+        ["--fail-on-noncanonical-stamp"],
+        ["--fail-on-integrity-error"],
+        ["--fail-on-lineage-collision"],
+        ["--fail-on-revision-mismatch"],
+    ]:
+        result = subprocess.run(
+            [
+                sys.executable, str(SCRIPT), str(databases[0]),
+                "--compare-to", str(databases[1]), *options,
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode == (0 if error is None or not options else 2), result.stderr
+        report = json.loads(result.stdout)
+        assert report["alembic_stamp_constraint_error"] == error
+        comparison = report["schema_comparison"]
+        assert comparison["matches"] is True
+        assert comparison["revision_markers_match"] is (error is None)
+        assert comparison["reference_integrity"]["alembic_stamp_constraint_error"] == error
+        assert report["classification"] == "requires_researcher_review"
+        assert "private coral data" not in result.stdout + result.stderr
+        assert "private stamp default" not in result.stdout + result.stderr
+        assert [database.read_bytes() for database in databases] == originals
