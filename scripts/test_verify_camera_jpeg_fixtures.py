@@ -189,6 +189,51 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 [],
             )
 
+    def test_manifest_replay_rejects_inconsistent_alias_and_decode_labels(self) -> None:
+        """Saved JPEG evidence cannot silently change alias or decode coverage."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            record = {
+                "path": "camera.JfIf",
+                "extension": ".jfif",
+                "bytes": 42,
+                "sha256": "a" * 64,
+                "jpeg_boundary_markers": True,
+            }
+            baseline = {"root": str(root), "errors": [], "files": [record]}
+            self.assertEqual(MODULE.compare_source_manifest(root, [record], baseline), [])
+            for patch in (
+                {"extension": ".jpeg"},
+                {"extension": ".JFIF"},
+                {"extension": None},
+                {"jpeg_pixel_width": 12},
+                {"jpeg_exif_orientation": 1},
+                {"jpeg_icc_profile_present": True},
+            ):
+                with self.subTest(patch=patch):
+                    invalid = {**record, **patch}
+                    self.assertEqual(
+                        MODULE.compare_source_manifest(
+                            root, [invalid], {**baseline, "files": [invalid]}
+                        ),
+                        ["baseline JPEG manifest contains inconsistent evidence labels"],
+                    )
+                    self.assertEqual(
+                        MODULE.compare_source_manifest(root, [invalid], baseline),
+                        ["current JPEG inventory contains inconsistent evidence labels"],
+                    )
+            legacy = {key: value for key, value in record.items() if key != "extension"}
+            self.assertEqual(
+                MODULE.compare_source_manifest(root, [legacy], baseline),
+                ["source JPEG extension evidence missing since baseline: 'camera.JfIf'"],
+            )
+            self.assertEqual(
+                MODULE.compare_source_manifest(
+                    root, [record], {**baseline, "files": [legacy]}
+                ),
+                [],
+            )
+
     def test_decoded_manifest_requires_valid_source_and_display_geometry(self) -> None:
         """Matching malformed inventories cannot certify camera pixel geometry."""
         with tempfile.TemporaryDirectory() as directory:

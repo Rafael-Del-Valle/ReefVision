@@ -729,6 +729,21 @@ def _windows_manifest_paths_collide(paths: list[str]) -> bool:
     return False
 
 
+def _valid_manifest_evidence_labels(entry: dict[str, object], relative: str) -> bool:
+    """Keep alias routing and the decode-evidence level explicit on replay."""
+    # Older checksum-only manifests did not necessarily include an extension.
+    # If present, it must match the canonical filename-derived alias exactly.
+    if "extension" in entry and entry["extension"] != Path(relative).suffix.lower():
+        return False
+    # A checksum-only record cannot also claim decoded geometry, EXIF or ICC
+    # evidence. Otherwise removing just the decode flag bypasses its checks.
+    if "jpeg_decodable" not in entry and any(
+        key.startswith("jpeg_") and key != "jpeg_boundary_markers" for key in entry
+    ):
+        return False
+    return True
+
+
 def compare_source_manifest(
     root: Path, current: list[dict[str, object]], baseline: object
 ) -> list[str]:
@@ -749,6 +764,7 @@ def compare_source_manifest(
 
     expected: dict[str, tuple[int, str]] = {}
     expected_hashes: set[str] = set()
+    expected_alias_labels: set[str] = set()
     # A previously decoded camera baseline must not be silently downgraded to
     # header-only verification in the post-import acceptance pass.
     expected_decoded: dict[str, dict[str, object]] = {}
@@ -773,6 +789,8 @@ def compare_source_manifest(
             or entry.get("jpeg_boundary_markers") is not True
         ):
             return ["baseline JPEG manifest contains malformed source-file evidence"]
+        if not _valid_manifest_evidence_labels(entry, relative):
+            return ["baseline JPEG manifest contains inconsistent evidence labels"]
         if relative in expected:
             return ["baseline JPEG manifest contains duplicate source-file paths"]
         # Replayed manifests must enforce the same duplicate-source rule as
@@ -781,6 +799,8 @@ def compare_source_manifest(
             return ["baseline JPEG manifest contains duplicate source bytes"]
         expected_hashes.add(checksum)
         expected[relative] = (size, checksum)
+        if "extension" in entry:
+            expected_alias_labels.add(relative)
         if "jpeg_decodable" in entry:
             if entry["jpeg_decodable"] is not True:
                 return ["baseline JPEG manifest contains unverified pixel-decode evidence"]
@@ -819,6 +839,8 @@ def compare_source_manifest(
             or record.get("jpeg_boundary_markers") is not True
         ):
             return ["current JPEG inventory contains malformed source-file evidence"]
+        if not _valid_manifest_evidence_labels(record, relative):
+            return ["current JPEG inventory contains inconsistent evidence labels"]
         if relative in actual:
             return ["current JPEG inventory contains duplicate source-file paths"]
         actual[relative] = record
@@ -839,6 +861,8 @@ def compare_source_manifest(
         errors.append(f"source JPEG added since baseline: {relative!r}")
     for relative in sorted(actual.keys() & expected.keys()):
         record = actual[relative]
+        if relative in expected_alias_labels and "extension" not in record:
+            errors.append(f"source JPEG extension evidence missing since baseline: {relative!r}")
         if (record["bytes"], record["sha256"]) != expected[relative]:
             errors.append(f"source JPEG bytes changed since baseline: {relative!r}")
         # A header-only baseline may be upgraded to pixel verification, but
