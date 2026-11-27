@@ -948,3 +948,15 @@ Exercise inflated axes at either timepoint, zero axes against positive
 extent, missing scale, missing dimensions, consistent and near-equal
 values, plus standalone and twice-persisted typed graph artifact parity.
 This tolerance checks numerical self-consistency, not biological uncertainty.
+
+Independent longitudinal QC gates must not mask one another. A missing
+historical patch-area profile makes patch-distribution comparison unknown,
+not proof of consistent indexed geometry. Keep the patch-only regression
+fixture free of centroid evidence; separately replay the same contradictory
+geometry with missing late patch distribution and missing scale metadata at
+both timepoints, but retained source centroids. Require the centroid warning,
+no fabricated patch-distribution warning, retained nominal observations,
+withheld area changes/scale intervals, provisional identity and identical
+standalone and twice-executed saved typed graph artifacts and hashes.
+This regression preserves fail-closed scientific QC rather than weakening
+it to satisfy the earlier patch-only expectation.
