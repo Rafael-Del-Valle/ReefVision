@@ -458,10 +458,11 @@ def test_disputed_identity_withholds_patch_change_but_preserves_observations() -
     assert result["provenance"]["longitudinal_change_withheld_due_to_identity_dispute"] is True
 
 
-@pytest.mark.parametrize("degenerate", [False, True])
+@pytest.mark.parametrize("mode", ["normal", "degenerate", "profile_conflict"])
 def test_patch_concentration_saved_workflow_matches_standalone(
-    client: TestClient, degenerate: bool
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, mode: str
 ) -> None:
+    degenerate = mode == "degenerate"
     project_id = str(create_project(client, "Patch concentration timepoints")["id"])
     base = f"/api/v1/projects/{project_id}"
     before, after = _meshes()
@@ -475,6 +476,20 @@ def test_patch_concentration_saved_workflow_matches_standalone(
                 [11, 0, 0],
                 [12, 0, 0],
             ]
+    if mode == "profile_conflict":
+        # Equal source-space area and extents, but a different distribution.
+        after["vertices"][4] = [13, 0, 0]
+        after["vertices"][5] = [10, 4 / 3, 0]
+
+        def legacy_preview(request: MeshPreviewRequest) -> dict:
+            record = preview_from_request(request)
+            record["provenance"]["geometry_sha256"] = "a" * 64
+            record.pop("edge_connected_patch_geometry_sha256", None)
+            return record
+
+        monkeypatch.setattr(
+            "reefvision.services.spatial_source_assets_v14.preview_from_request", legacy_preview
+        )
     standalone = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
         json={"before": before, "after": after},
@@ -523,22 +538,49 @@ def test_patch_concentration_saved_workflow_matches_standalone(
     }
     saved = client.post(f"{base}/workflow-graphs", json={"graph": graph})
     assert saved.status_code == 201, saved.text
-    run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
-    assert run.status_code == 202, run.text
     app = cast(FastAPI, client.app)
-    assert process_workflow_run_job(
-        app.state.settings, app.state.session_factory, str(run.json()["job_id"])
-    )
-    detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
-    assert detail.status_code == 200, detail.text
-    assert detail.json()["run"]["status"] == "succeeded"
-    artifact = next(
-        item["payload_json"]
-        for item in detail.json()["artifacts"]
-        if item["data_type"] == "mesh_longitudinal_comparison"
-    )
-    assert artifact == expected
-    if degenerate:
+    hashes: list[str] = []
+    artifact: dict = {}
+    for _ in range(2):
+        run = client.post(f"{base}/workflow-runs", json={"graph_record_id": saved.json()["id"]})
+        assert run.status_code == 202, run.text
+        assert process_workflow_run_job(
+            app.state.settings, app.state.session_factory, str(run.json()["job_id"])
+        )
+        detail = client.get(f"/api/v1/workflow-runs/{run.json()['id']}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["run"]["status"] == "succeeded"
+        saved_artifact = next(
+            item
+            for item in detail.json()["artifacts"]
+            if item["data_type"] == "mesh_longitudinal_comparison"
+        )
+        artifact = saved_artifact["payload_json"]
+        assert artifact == expected
+        hashes.append(saved_artifact["payload_sha256"])
+    assert len(hashes[0]) == 64
+    assert hashes[0] == hashes[1]
+    if mode == "profile_conflict":
+        assert "identical_geometry_patch_area_distribution_inconsistent" in artifact["qc_warnings"]
+        assert "identical_geometry_shape_ratio_inconsistent" not in artifact["qc_warnings"]
+        assert (
+            "identical_geometry_area_inconsistent_with_calibration_scale"
+            not in artifact["qc_warnings"]
+        )
+        assert (
+            "identical_geometry_extent_inconsistent_with_calibration_scale"
+            not in artifact["qc_warnings"]
+        )
+        flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+        assert artifact["provenance"][flag] is True
+        assert artifact["provenance"]["specimen_identity_verified"] is False
+        assert artifact["before_patch_area_concentration_index"] == pytest.approx(0.625)
+        assert artifact["after_patch_area_concentration_index"] == pytest.approx(0.5)
+        assert artifact["delta_surface_area_m2"] is None
+        assert artifact["delta_surface_area_scale_interval_m2"] is None
+        assert artifact["ranked_patch_area_profile_distance"] is None
+        assert artifact["ranked_patch_area_jensen_shannon_divergence_bits"] is None
+    elif degenerate:
         assert artifact["before_patch_area_concentration_index"] is None
         assert artifact["after_patch_area_concentration_index"] is None
         assert artifact["delta_patch_area_concentration_index"] is None
@@ -552,6 +594,50 @@ def test_patch_concentration_saved_workflow_matches_standalone(
         assert artifact["ranked_patch_area_jensen_shannon_divergence_bits"] == pytest.approx(
             0.0487949406953985
         )
+
+
+@pytest.mark.parametrize(
+    ("fingerprint", "missing_scale", "missing_distribution", "withheld"),
+    [
+        ("a" * 64, False, False, True),
+        ("a" * 64, True, False, True),
+        ("a" * 64, True, True, False),
+        ("b" * 64, False, False, False),
+        (None, False, False, False),
+    ],
+)
+def test_equal_geometry_digest_requires_consistent_patch_area_profile(
+    fingerprint: str | None, missing_scale: bool, missing_distribution: bool, withheld: bool
+) -> None:
+    early, late = _meshes()
+    late["vertices"][4] = [13, 0, 0]
+    late["vertices"][5] = [10, 4 / 3, 0]
+    before, after = _preview(early), _preview(late)
+    before["provenance"]["geometry_sha256"] = "a" * 64
+    after["provenance"]["geometry_sha256"] = fingerprint
+    for record in (before, after):
+        record.pop("edge_connected_patch_geometry_sha256", None)
+        if missing_scale:
+            record["provenance"].pop("meters_per_mesh_unit", None)
+    if missing_distribution:
+        for field in (
+            "edge_connected_patch_surface_area_fractions",
+            "edge_connected_patch_area_concentration_index",
+            "area_weighted_effective_patch_count",
+            "edge_connected_patch_surface_areas_m2",
+        ):
+            after.pop(field)
+    result = compare_mesh_observations(before, after)
+    warning = "identical_geometry_patch_area_distribution_inconsistent"
+    flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+    assert (warning in result["qc_warnings"]) is withheld
+    assert result["provenance"][flag] is withheld
+    assert result["provenance"]["specimen_identity_verified"] is False
+    if withheld:
+        assert result["delta_surface_area_m2"] is None
+        assert result["ranked_patch_area_profile_distance"] is None
+    else:
+        assert result["delta_surface_area_m2"] is not None
 
 
 def test_ranked_patch_divergence_zero_for_identical_area_profiles() -> None:
