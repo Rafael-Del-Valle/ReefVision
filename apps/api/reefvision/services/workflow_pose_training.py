@@ -556,22 +556,27 @@ def _check_declared_pose_job_manifest_lineage(
 
 
 def _check_frozen_pose_job_request(
-    snapshot: dict[str, Any] | None,
+    run: TrainingRun,
     request: dict[str, Any],
 ) -> None:
     """Detect drift from a newly queued child job without breaking legacy runs."""
+    snapshot = run.draft_snapshot_json
     if not isinstance(snapshot, dict):
         raise ValidationError("Pose training child job snapshot must be a JSON object")
-    if "pose_child_job_request_sha256" not in snapshot:
-        return
-    expected = snapshot["pose_child_job_request_sha256"]
+    if "pose_child_job_request_sha256" in snapshot:
+        expected = snapshot["pose_child_job_request_sha256"]
+        if (
+            not isinstance(expected, str)
+            or len(expected) != 64
+            or any(char not in "0123456789abcdef" for char in expected)
+            or canonical_json_sha256(request) != expected
+        ):
+            raise ValidationError("Pose training child job request checksum changed")
     if (
-        not isinstance(expected, str)
-        or len(expected) != 64
-        or any(char not in "0123456789abcdef" for char in expected)
-        or canonical_json_sha256(request) != expected
+        "pose_training_execution_sha256" in request
+        and request["pose_training_execution_sha256"] != _pose_training_execution_sha256(run)
     ):
-        raise ValidationError("Pose training child job request checksum changed")
+        raise ValidationError("Pose training child job frozen execution parameters changed")
 
 
 def _completed_workflow_pose_training_run(
@@ -879,7 +884,7 @@ def _reused_pose_training_result(
         split_manifest_sha256=run.split_manifest_sha256,
     )
 
-    _check_frozen_pose_job_request(run.draft_snapshot_json, request)
+    _check_frozen_pose_job_request(run, request)
 
     # Persisted result paths are untrusted on replay. Reject malformed values
     # before managed-path resolution so recovery fails with a domain error.
@@ -1812,7 +1817,7 @@ def create_pose_workflow_training_result(
         split_manifest_sha256=split_manifest_sha256,
     )
 
-    _check_frozen_pose_job_request(run.draft_snapshot_json, request)
+    _check_frozen_pose_job_request(run, request)
 
     # Validate the persisted run itself before first exposing its checkpoint.
     # A worker can change training configuration after the job was queued;
