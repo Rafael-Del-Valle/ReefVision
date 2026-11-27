@@ -283,8 +283,9 @@ def test_imported_source_digest_check_qc_matches_saved_comparison(
 
 
 @pytest.mark.parametrize("inline_after", [False, True], ids=["ply", "inline"])
+@pytest.mark.parametrize("asset_before", [False, True], ids=["obj-text", "obj-asset"])
 def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow(
-    client: TestClient, inline_after: bool
+    client: TestClient, inline_after: bool, asset_before: bool
 ) -> None:
     """Changing source representation cannot make rescaled triangles biological growth."""
     project_id = str(create_project(client, "Rescaled reexport QC")["id"])
@@ -304,6 +305,13 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
         "observation_id": "survey-2",
         "observed_at_utc": "2026-10-02T12:00:00Z",
     }
+    if asset_before:
+        uploaded = client.post(
+            f"{base}/spatial/assets", files={"file": ("coral.obj", OBJ.encode("utf-8"))}
+        )
+        assert uploaded.status_code == 201, uploaded.text
+        del before["obj_text"]
+        before["asset_id"] = uploaded.json()["id"]
     if inline_after:
         del after["ply_text"]
         after["vertices"] = [[0, 0, 0], [2, 0, 0], [0, 3, 0]]
@@ -336,6 +344,9 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
         "longitudinal_change_withheld_due_to_rescaled_geometry_incomplete_import_lineage"
     )
     assert expected["provenance"][incomplete_flag] is inline_after
+    if asset_before:
+        assert expected["provenance"]["before_spatial_source_asset_id"] == before["asset_id"]
+        assert expected["provenance"]["before_source_payload_integrity_checked"] is True
     assert expected["provenance"]["independent_acquisition_verified"] is False
     assert expected["provenance"]["scale_uncertainty_only"] is False
     for field in (
@@ -453,4 +464,52 @@ def test_rescaled_legacy_imports_with_missing_digest_withhold_change(missing: st
     assert result["provenance"]["independent_acquisition_verified"] is False
     assert result["delta_surface_area_m2"] is None
     assert result["average_surface_area_change_m2_per_day"] is None
+    assert result["after_surface_area_m2"] == pytest.approx(4 * result["before_surface_area_m2"])
+
+
+@pytest.mark.parametrize("asset_side", ["before", "after"])
+def test_rescaled_legacy_asset_without_format_or_digest_withholds_change(
+    asset_side: str,
+) -> None:
+    """An asset-linked legacy preview remains an import even without file metadata."""
+    previews = []
+    for side, scale, day in (("before", 0.01, 1), ("after", 0.02, 2)):
+        source = (
+            {"obj_text": OBJ}
+            if side == asset_side
+            else {"vertices": [[0, 0, 0], [2, 0, 0], [0, 3, 0]], "faces": [[0, 1, 2]]}
+        )
+        preview = preview_from_request(
+            MeshPreviewRequest.model_validate(
+                {
+                    **COMMON,
+                    **source,
+                    "meters_per_unit": scale,
+                    "specimen_id": "colony:16",
+                    "observation_id": f"survey-{day}",
+                    "observed_at_utc": f"2026-10-0{day}T12:00:00Z",
+                }
+            )
+        )
+        preview["project_id"] = "project-1"
+        if side == asset_side:
+            provenance = preview["provenance"]
+            provenance["spatial_source_asset_id"] = "00000000-0000-4000-8000-000000000001"
+            for field in (
+                "source_format",
+                "source_payload_sha256",
+                "source_payload_size_bytes",
+                "source_payload_integrity_checked",
+            ):
+                provenance.pop(field, None)
+        previews.append(preview)
+    result = compare_mesh_observations(*previews)
+    flag = "longitudinal_change_withheld_due_to_rescaled_geometry_incomplete_import_lineage"
+    assert result["provenance"][flag] is True
+    assert result["provenance"]["independent_acquisition_verified"] is False
+    assert result["provenance"]["acquisition_lineage_status"] == (
+        "insufficient_original_source_lineage"
+    )
+    assert result["delta_surface_area_m2"] is None
+    assert result["delta_axis_aligned_bounding_box_diagonal_m"] is None
     assert result["after_surface_area_m2"] == pytest.approx(4 * result["before_surface_area_m2"])
