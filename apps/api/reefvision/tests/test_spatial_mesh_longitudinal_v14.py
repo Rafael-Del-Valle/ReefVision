@@ -231,6 +231,8 @@ def test_area_scale_overlap_standalone_and_two_saved_graph_runs(
     # Explicit relative tolerance accommodates binary64 representation of 1.1,
     # without an absolute tolerance that could hide a tiny change or its sign.
     assert expected["delta_surface_area_m2"] == pytest.approx(expected_delta, rel=1e-12, abs=0)
+    flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+    assert expected["provenance"][flag] is False
     if topology in ("near_identical", "near_identical_decrease"):
         assert expected["relative_surface_area_change_percent"] == pytest.approx(
             100 * (expected_delta / 0.5), rel=1e-12, abs=0
@@ -1907,8 +1909,16 @@ def test_identical_geometry_requires_area_consistent_with_scale(
     result = compare_mesh_observations(before, after)
     warning = "identical_geometry_area_inconsistent_with_calibration_scale"
     assert (warning in result["qc_warnings"]) is inconsistent
+    flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+    assert result["provenance"][flag] is inconsistent
+    assert result["before_surface_area_m2"] == first_area
+    assert result["after_surface_area_m2"] == second_area
+    if inconsistent:
+        assert result["delta_surface_area_m2"] is None
+        assert result["average_surface_area_change_m2_per_day"] is None
+        assert result["provenance"]["scale_uncertainty_only"] is False
     normalized = result["scale_normalized_surface_area_ratio_after_to_before"]
-    if first_area > 0:
+    if first_area > 0 and not inconsistent:
         assert normalized == pytest.approx(second_area / (4 * first_area))
     else:
         assert normalized is None
@@ -2317,6 +2327,14 @@ def test_identical_mesh_extent_requires_calibration_consistency(
     result = compare_mesh_observations(before, after)
     warning = "identical_geometry_extent_inconsistent_with_calibration_scale"
     assert (warning in result["qc_warnings"]) is inconsistent
+    flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+    assert result["provenance"][flag] is inconsistent
+    assert result["before_axis_aligned_bounding_box_diagonal_m"] == early_extent
+    assert result["after_axis_aligned_bounding_box_diagonal_m"] == late_extent
+    if inconsistent:
+        assert result["delta_axis_aligned_bounding_box_diagonal_m"] is None
+        assert result["delta_surface_area_m2"] is None
+        assert result["scale_normalized_bounding_box_diagonal_ratio_after_to_before"] is None
     assert (
         "identical_geometry_area_inconsistent_with_calibration_scale" not in result["qc_warnings"]
     )
@@ -2882,6 +2900,54 @@ def test_typed_mesh_executor_rejects_invalid_partial_topology(
             execute_mesh_longitudinal_comparison(
                 session, app.state.settings, "project-1", {}, inputs
             )
+
+
+@pytest.mark.parametrize(
+    ("area", "extent", "fingerprint", "withheld"),
+    [
+        (5.0, 2.0, "a" * 64, True),
+        (4.0, 3.0, "a" * 64, True),
+        (4.0, 2.0, "a" * 64, False),
+        (5.0, 3.0, "b" * 64, False),
+        (5.0, 3.0, None, False),
+    ],
+)
+def test_typed_mesh_replay_withholds_inconsistent_calibrated_dimensions(
+    client: TestClient, area: float, extent: float, fingerprint: str | None, withheld: bool
+) -> None:
+    """Legacy typed artifacts cannot turn contradictory dimensions into growth."""
+    before, after = _minimal_topology_pair()
+    before["axis_aligned_bounding_box_diagonal_m"] = 1.0
+    before["provenance"].update(geometry_sha256="a" * 64, meters_per_mesh_unit=1.0)
+    after.update(surface_area_m2=area, axis_aligned_bounding_box_diagonal_m=extent)
+    after["provenance"].update(geometry_sha256=fingerprint, meters_per_mesh_unit=2.0)
+    inputs = {
+        "before": [WorkflowArtifact(data_type="mesh_measurement_preview", payload_json=before)],
+        "after": [WorkflowArtifact(data_type="mesh_measurement_preview", payload_json=after)],
+    }
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        result = execute_mesh_longitudinal_comparison(
+            session, app.state.settings, "project-1", {}, inputs
+        )[0]["payload"]
+    assert result == compare_mesh_observations(before, after)
+    flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+    warning = "longitudinal_change_withheld_inconsistent_calibrated_dimensions"
+    assert result["provenance"][flag] is withheld
+    assert (warning in result["qc_warnings"]) is withheld
+    assert result["before_surface_area_m2"] == 1.0
+    assert result["after_surface_area_m2"] == area
+    assert result["after_axis_aligned_bounding_box_diagonal_m"] == extent
+    assert result["provenance"]["specimen_identity_verified"] is False
+    if withheld:
+        assert result["delta_surface_area_m2"] is None
+        assert result["delta_axis_aligned_bounding_box_diagonal_m"] is None
+        assert result["delta_surface_area_scale_interval_m2"] is None
+        assert result["surface_area_difference_sign_under_scale_only_bounds"] is None
+        assert result["provenance"]["scale_uncertainty_only"] is False
+    else:
+        assert result["delta_surface_area_m2"] == area - 1.0
+        assert result["delta_axis_aligned_bounding_box_diagonal_m"] == extent - 1.0
 
 
 def test_longitudinal_partial_patch_arrays_do_not_invent_totals() -> None:
