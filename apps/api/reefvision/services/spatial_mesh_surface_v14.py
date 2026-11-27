@@ -126,7 +126,24 @@ def _trace_endpoint_chains(
                 break
             remaining.remove(edge)
             path.append(next_point)
-        source_length = sum((edge_lengths[frozenset(pair)] for pair in pairwise(path)), Fraction(0))
+        segment_lengths = [edge_lengths[frozenset(pair)] for pair in pairwise(path)]
+        source_length = sum(segment_lengths, Fraction(0))
+        # Locate half of the selected chain's arc length before calibration.
+        # Exact rational interpolation avoids overflow in coordinate sums and
+        # loss of a short segment when accumulating widely differing lengths.
+        remaining_to_midpoint = source_length / 2
+        midpoint_edge_offset = 0
+        for midpoint_edge_offset, segment_length in enumerate(segment_lengths):
+            if remaining_to_midpoint <= segment_length:
+                break
+            remaining_to_midpoint -= segment_length
+        midpoint_start = path[midpoint_edge_offset]
+        midpoint_end = path[midpoint_edge_offset + 1]
+        midpoint_fraction = remaining_to_midpoint / segment_lengths[midpoint_edge_offset]
+        source_midpoint = [
+            float(Fraction(first) + midpoint_fraction * (Fraction(last) - Fraction(first)))
+            for first, last in zip(midpoint_start, midpoint_end, strict=True)
+        ]
         calibrated = source_length * Fraction(scale)
         nominal = float(calibrated)
         warnings: list[str] = []
@@ -180,6 +197,8 @@ def _trace_endpoint_chains(
                 "endpoint_graph_degrees": [len(adjacency[path[0]]), len(adjacency[path[-1]])],
                 "edge_count": len(path) - 1,
                 "is_closed": path[0] == path[-1],
+                "source_arc_midpoint_mesh_units": source_midpoint,
+                "source_arc_midpoint_chain_edge_offset": midpoint_edge_offset,
                 "source_endpoint_chord_mesh_units": float(chord),
                 "endpoint_chord_length_m": None if chord > 0 and chord_m == 0 else chord_m,
                 "endpoint_chord_length_scale_only_interval_m": chord_interval,
