@@ -336,6 +336,63 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                             ),
                         )
 
+    def test_replay_rejects_contradictory_exif_raster_evidence(self) -> None:
+        """Matching bytes cannot certify inconsistent native EXIF dimensions."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            header = {
+                "path": "CAMERA.JPG",
+                "bytes": 42,
+                "sha256": "a" * 64,
+                "jpeg_boundary_markers": True,
+            }
+            decoded = {
+                **header,
+                "jpeg_decodable": True,
+                "jpeg_pixel_width": 12,
+                "jpeg_pixel_height": 8,
+                "jpeg_display_width": 8,
+                "jpeg_display_height": 12,
+                "jpeg_exif_orientation": 6,
+            }
+            dimensions = {
+                "jpeg_exif_pixel_width": 12,
+                "jpeg_exif_pixel_height": 8,
+                "jpeg_exif_dimensions_match_raster": True,
+            }
+            for valid in (
+                decoded,
+                {**decoded, "jpeg_exif_pixel_width": 12},
+                {**decoded, **dimensions},
+                {**decoded, "jpeg_exif_pixel_width": None,
+                 "jpeg_exif_pixel_height": None, "jpeg_exif_dimensions_match_raster": None},
+            ):
+                with self.subTest(valid=valid):
+                    baseline = {"root": str(root), "errors": [], "files": [valid]}
+                    self.assertEqual(MODULE.compare_source_manifest(root, [valid], baseline), [])
+            for patch in (
+                {"jpeg_exif_pixel_width": 8, "jpeg_exif_pixel_height": 12},
+                {"jpeg_exif_pixel_width": True},
+                {"jpeg_exif_pixel_height": "8"},
+                {"jpeg_exif_pixel_width": 0},
+                {"jpeg_exif_pixel_height": None},
+                {"jpeg_exif_pixel_width_invalid_type": "bytes"},
+                {"jpeg_exif_pixel_height_invalid_type": False},
+                {"jpeg_exif_dimensions_match_raster": None},
+            ):
+                with self.subTest(patch=patch):
+                    invalid = {**decoded, **dimensions, **patch}
+                    baseline = {"root": str(root), "errors": [], "files": [invalid]}
+                    self.assertEqual(
+                        MODULE.compare_source_manifest(root, [invalid], baseline),
+                        ["baseline JPEG manifest contains failed decoded QC evidence"],
+                    )
+                    baseline["files"] = [header]
+                    self.assertIn(
+                        "source JPEG decoded QC failed: 'CAMERA.JPG'",
+                        MODULE.compare_source_manifest(root, [invalid], baseline),
+                    )
+
     def test_replay_rejects_contradictory_icc_payload_evidence(self) -> None:
         """A matching replay cannot certify a malformed embedded-profile fingerprint."""
         with tempfile.TemporaryDirectory() as directory:

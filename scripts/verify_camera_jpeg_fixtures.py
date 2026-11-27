@@ -766,6 +766,29 @@ def _valid_decoded_qc(entry: dict[str, object]) -> bool:
     dimensions_match = entry.get("jpeg_exif_dimensions_match_raster")
     if dimensions_match is not None and dimensions_match is not True:
         return False
+    # A replay may omit legacy optional fields, but a recorded EXIF scalar
+    # must agree with the native raster, not the orientation-adjusted display.
+    # Do not trust a positive/absent QC verdict over contradictory raw fields.
+    for axis in ("width", "height"):
+        key = f"jpeg_exif_pixel_{axis}"
+        if entry.get(f"{key}_invalid_type") is not None:
+            return False
+        value = entry.get(key)
+        if value is not None and (
+            type(value) is not int or value != entry[f"jpeg_pixel_{axis}"]
+        ):
+            return False
+        if dimensions_match is True and key in entry and value is None:
+            return False
+    if all(f"jpeg_exif_pixel_{axis}" in entry for axis in ("width", "height")):
+        width = entry["jpeg_exif_pixel_width"]
+        height = entry["jpeg_exif_pixel_height"]
+        if (width is None) != (height is None):
+            return False
+        if "jpeg_exif_dimensions_match_raster" in entry and (
+            (dimensions_match is True) != (width is not None and height is not None)
+        ):
+            return False
     # ICC evidence identifies the embedded payload, not a calibrated color
     # measurement. Validate every recorded member and reject contradictions
     # even if both manifests were replayed with identical malformed values.
