@@ -1607,13 +1607,20 @@ def compare_mesh_observations(
             warnings.append("identical_imported_source_payload_metadata_inconsistent")
         if first_hash_valid and second_hash_valid and first_geometry_hash != second_geometry_hash:
             warnings.append("identical_imported_source_payload_geometry_inconsistent")
+    contradictory_topology = (
+        first_hash_valid
+        and second_hash_valid
+        and first_geometry_hash == second_geometry_hash
+        and bool(topology_changed_fields)
+    )
     if first_hash_valid and second_hash_valid and first_geometry_hash == second_geometry_hash:
         warnings.append("identical_geometry_fingerprint")
         # A fingerprint covers the original triangles; calibration cannot alter
         # triangle counts or mesh connectivity. Conflicting topology metadata
         # indicates a provenance/serialization discrepancy, not biological change.
-        if topology_changed_fields:
+        if contradictory_topology:
             warnings.append("identical_geometry_topology_metadata_inconsistent")
+            warnings.append("longitudinal_change_withheld_inconsistent_topology")
         if before_scale is not None and after_scale is not None:
             if before_scale != after_scale:
                 warnings.append("identical_geometry_rescaled_not_biological_growth")
@@ -1897,6 +1904,7 @@ def compare_mesh_observations(
                 and not rescaled_geometry_incomplete_import_lineage
                 and not rescaled_matching_surface_patches
                 and not contradictory_patch_fingerprints
+                and not contradictory_topology
             ),
             "longitudinal_change_withheld_due_to_rescaled_reexported_geometry": (
                 rescaled_reexported_geometry
@@ -1904,6 +1912,7 @@ def compare_mesh_observations(
             "longitudinal_change_withheld_due_to_rescaled_geometry_incomplete_import_lineage": (
                 rescaled_geometry_incomplete_import_lineage
             ),
+            "longitudinal_change_withheld_due_to_inconsistent_topology": contradictory_topology,
             "longitudinal_change_withheld_due_to_inconsistent_surface_patch_fingerprints": (
                 contradictory_patch_fingerprints
             ),
@@ -1931,11 +1940,12 @@ def compare_mesh_observations(
         or rescaled_geometry_incomplete_import_lineage
         or rescaled_matching_surface_patches
         or contradictory_patch_fingerprints
+        or contradictory_topology
     ):
         # Keep original measurements and reconstruction QC intact. Disputed
         # identity, reused project-owned assets, byte-identical originals,
         # rescaled copies with incomplete lineage, or contradictory patch
-        # fingerprints cannot establish biological change.
+        # fingerprints or topology cannot establish biological change.
         for key in (
             "delta_surface_area_to_bounding_diagonal_squared_ratio",
             "delta_patch_area_concentration_index",
