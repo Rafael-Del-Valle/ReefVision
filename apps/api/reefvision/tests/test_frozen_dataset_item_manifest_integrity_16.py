@@ -183,6 +183,8 @@ def test_frozen_item_evidence_cannot_change_under_standalone_or_saved_qc(
         "identity_version",
         "identity_number",
         "identity_status",
+        "split_metadata_fractional_seed",
+        "split_metadata_nontext_warning",
     ],
 )
 def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
@@ -244,6 +246,10 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             version.eligible_annotation_statuses_json = ["reviewed", "not_a_real_status"]
         elif tamper == "split_seed_row_drift":
             version.split_seed = 42 if version.split_seed is None else version.split_seed + 1
+        elif tamper == "split_metadata_fractional_seed":
+            version.split_seed = cast(int, 1.5)
+        elif tamper == "split_metadata_nontext_warning":
+            version.warnings_json = cast(list[str], [1])
         elif tamper == "missing_group_count_forged":
             version.missing_group_key_count += 1
         elif tamper.startswith("achieved_ratios_"):
@@ -382,6 +388,12 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
                 manifest["split_config"]["reuse_parent_assignments"] = True
             else:
                 manifest["split_config"]["achieved_ratios"] = version.achieved_ratios_json
+        if tamper.startswith("split_metadata_"):
+            manifest["split_config"] = {
+                **version.manifest_json["split_config"],
+                "split_seed": version.split_seed,
+                "warnings": version.warnings_json,
+            }
         version.manifest_json = manifest
         flag_modified(version, "manifest_json")
         version.manifest_sha256 = canonical_json_sha256(manifest)
@@ -394,7 +406,14 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             )
 
         if tamper.startswith(
-            ("class_census_", "summary_", "manifest_", "achieved_ratios_", "identity_")
+            (
+                "class_census_",
+                "summary_",
+                "manifest_",
+                "achieved_ratios_",
+                "identity_",
+                "split_metadata_",
+            )
         ) or (
             tamper
             in {"blank_biological_group", "parent_reuse_without_parent", "parent_metadata_drift"}

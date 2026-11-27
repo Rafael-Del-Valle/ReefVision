@@ -127,6 +127,15 @@ def _valid_requested_ratios(ratios: object) -> bool:
     )
 
 
+def _valid_split_metadata(seed: object, warnings: object) -> bool:
+    """Preserve the producer's integer seed and textual scientific warnings."""
+    return (
+        (seed is None or type(seed) is int)
+        and isinstance(warnings, list)
+        and all(type(warning) is str and bool(warning.strip()) for warning in warnings)
+    )
+
+
 def _matches_count_map(saved: object, expected: Counter[str]) -> bool:
     """Require exact integer biological counts, not equal-looking JSON flags/floats."""
     return (
@@ -261,6 +270,7 @@ def validate_frozen_dataset_manifest(
         requested_method not in ("none", "manual", "random", "group_random")
         or version.resolved_split_method != expected_method
         or not _valid_requested_ratios(version.requested_ratios_json)
+        or not _valid_split_metadata(version.split_seed, version.warnings_json)
     ):
         raise ValidationError(message)
 
@@ -480,11 +490,9 @@ def validate_frozen_dataset_manifest(
         # Python equality treats JSON flags, integers and integral floats as
         # interchangeable. The manifest copy must preserve the exact typed
         # payload, even if its outer checksum was recomputed independently.
-        if (
-            canonical_json_sha256(payload) != item.snapshot_sha256
-            or canonical_json_bytes(entries.get(item.image_id))
-            != canonical_json_bytes({**payload, "snapshot_sha256": item.snapshot_sha256})
-        ):
+        if canonical_json_sha256(payload) != item.snapshot_sha256 or canonical_json_bytes(
+            entries.get(item.image_id)
+        ) != canonical_json_bytes({**payload, "snapshot_sha256": item.snapshot_sha256}):
             raise ValidationError(message)
 
     # The source producer calculates achieved ratios from *image* membership,

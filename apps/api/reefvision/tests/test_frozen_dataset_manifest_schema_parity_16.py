@@ -954,3 +954,40 @@ def test_resigned_manifest_cannot_claim_another_study_or_version(
     version.manifest_sha256 = canonical_json_sha256(manifest)
     with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
         validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize("schema_version", ["0006", "0007"])
+@pytest.mark.parametrize(
+    ("seed", "warnings", "valid"),
+    [
+        (None, [], True),
+        (42, ["Group-aware splitting was applied."], True),
+        (-12, [], True),
+        (True, [], False),
+        (1.0, [], False),
+        (1.5, [], False),
+        ("not-a-seed", [], False),
+        (None, {}, False),
+        (None, "warning", False),
+        (None, [1], False),
+        (None, [""], False),
+        (None, ["\u2003"], False),
+        (None, [None], False),
+    ],
+)
+def test_resigned_split_metadata_retains_seed_and_warning_types(
+    schema_version: str, seed: object, warnings: object, valid: bool
+) -> None:
+    version, item = _saved_snapshot(schema_version, with_mask=False)
+    version.split_seed = cast(int | None, seed)
+    version.warnings_json = cast(list[str], warnings)
+    manifest = deepcopy(version.manifest_json)
+    manifest["split_config"]["split_seed"] = seed
+    manifest["split_config"]["warnings"] = warnings
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+    if valid:
+        validate_frozen_dataset_manifest(version, [item])
+    else:
+        with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+            validate_frozen_dataset_manifest(version, [item])
