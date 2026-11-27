@@ -627,6 +627,7 @@ def inspect(
             # modified footage cannot pass real scientific acceptance even
             # when database snapshots and model checkpoints still agree.
             video_digests: dict[str, str] = {}
+            video_paths: dict[str, str] = {}
             verified_source_bytes = 0
             source_items = dataset.manifest_json["items"] + (
                 validation_dataset.manifest_json["items"] if validation_id is not None else []
@@ -654,6 +655,7 @@ def inspect(
                     "Frozen source video bytes are missing or changed",
                 )
                 video_digests[video_id] = expected_video_sha
+                video_paths[video_id] = source_video.managed_path
                 verified_source_bytes += video_size
             job = session.get(Job, training.job_id)
             _require(
@@ -1296,6 +1298,16 @@ def inspect(
                 model_sha == checkpoint_sha,
                 "Registered local model bytes differ from the trained checkpoint",
             )
+            # SQLite pins database rows, not the filesystem. Recheck the
+            # original footage and extracted training tree after decoding and
+            # checkpoint inspection, so edits during the audit cannot pass
+            # merely because the initial fingerprints were correct.
+            for video_id, managed_path in video_paths.items():
+                _require(
+                    _digest(_managed_file(root, managed_path)) == video_digests[video_id],
+                    "Frozen source video bytes changed during saved workflow audit",
+                )
+            _verify_prelaunch_pose_dataset(root / dataset_path, materialization)
             return {
                 "status": "PASS",
                 "evidence_schema_version": "saved-pose-workflow-audit-0001",
