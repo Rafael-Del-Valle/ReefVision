@@ -1068,6 +1068,22 @@ def _reused_pose_training_result(
         if actual_digest != expected_digest:
             raise ValidationError("Recovered pose-training checkpoint artifact checksum changed")
 
+    # Current workflow results must account for every run-local best/last
+    # checkpoint, including one omitted from the persisted worker manifest.
+    # Keep historical snapshots readable, but never publish unrecorded weights
+    # in a newly finalized or replayed scientific result.
+    if snapshot_version == "pose-workflow-training-snapshot-0004":
+        for path_field, filename in (
+            ("best_checkpoint_path", "best.pt"),
+            ("last_checkpoint_path", "last.pt"),
+        ):
+            if frozen_checkpoint.get(path_field) is None and filename != checkpoint.name:
+                candidate = expected_weights_dir / filename
+                if candidate.exists() or candidate.is_symlink():
+                    raise ValidationError(
+                        "Recovered pose-training output contains an unrecorded checkpoint"
+                    )
+
     # This manifest is returned to downstream workflow nodes. Verify its
     # dataset and split lineage against the already-validated frozen snapshot.
     expected_artifact_lineage = {
