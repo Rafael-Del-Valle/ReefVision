@@ -755,3 +755,14 @@ Exercise reindexed/reversed PLY and inline triangles with OBJ text and
 project-owned originals via standalone comparisons and twice-executed
 saved typed graphs; retain same-scale controls and artifact hash parity.
 Existing primary digests and review-bundle canonicalization remain intact.
+
+Report `surface_patch_fingerprint_comparison` separately from acquisition
+lineage and calibration: matching or different complete digest multisets,
+or unavailable when either record has incomplete/invalid patch metadata.
+Emit `matching_surface_patches_different_geometry_fingerprints` when the
+complete multisets match but valid primary digests differ, including
+same-scale comparisons. This is a screening flag for possible re-export,
+not evidence of independent acquisition or specimen identity. The existing
+recalibration withholding rule is unchanged; same-scale results remain
+descriptive. Verify the flag in standalone and replayed typed artifacts,
+with missing, malformed, partial and unequal digest controls.
