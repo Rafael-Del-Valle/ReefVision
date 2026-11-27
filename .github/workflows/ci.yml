@@ -42,12 +42,39 @@ jobs:
           import difflib
           import json
           import os
+          import re
           import sqlite3
           import sys
           from pathlib import Path
 
           from alembic.config import Config
           from alembic.script import ScriptDirectory
+
+          def canonical_table_sql(sql):
+              # SQLAlchemy batch reflection can reorder trailing table constraints
+              # across processes. Preserve column order and each full constraint,
+              # and leave unfamiliar SQL and conflict policies untouched.
+              lines = sql.split("\n")
+              if lines[-1] != ")":
+                  return sql
+              start = len(lines) - 1
+              while start > 0 and re.match(
+                  r"\t(?:CONSTRAINT \S+ (?:CHECK|UNIQUE|FOREIGN KEY)\b|FOREIGN KEY\()",
+                  lines[start - 1],
+              ):
+                  start -= 1
+              tail = lines[start:-1]
+              if (
+                  start == 0
+                  or len(tail) < 2
+                  or not lines[start - 1].endswith(", ")
+                  or any(not line.endswith(", ") for line in tail[:-1])
+                  or tail[-1].endswith(",")
+                  or any("ON CONFLICT" in line.upper() for line in tail)
+              ):
+                  return sql
+              constraints = sorted([line[:-2] for line in tail[:-1]] + tail[-1:])
+              return "\n".join(lines[:start] + [", \n".join(constraints), ")"])
 
           expected = sys.argv[1]
           database = Path(os.environ["REEFVISION_DATA_DIR"]) / "reefvision.db"
@@ -59,6 +86,11 @@ jobs:
                   "ORDER BY type, name"
               ).fetchall()
               violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+          schema = [
+              (kind, name, table, canonical_table_sql(sql)
+               if kind == "table" and sql is not None else sql)
+              for kind, name, table, sql in schema
+          ]
           if expected in ("head", "reupgraded"):
               head = ScriptDirectory.from_config(
                   Config("apps/api/alembic.ini")
