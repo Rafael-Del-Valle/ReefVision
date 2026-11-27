@@ -178,6 +178,7 @@ def test_frozen_item_evidence_cannot_change_under_standalone_or_saved_qc(
         "requested_ratios_not_normalized",
         "resolved_method_inconsistent",
         "parent_reuse_without_parent",
+        "parent_metadata_drift",
     ],
 )
 def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
@@ -222,7 +223,7 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             }
             # ORM equality also conflates bool/float with integer counts.
             flag_modified(item, "per_class_counts_json")
-        elif tamper.startswith(("summary_", "manifest_")):
+        elif tamper.startswith(("summary_", "manifest_")) or tamper == "parent_metadata_drift":
             pass  # The version manifest is mutated below.
         elif tamper == "source_digest_nonhex":
             item.image_sha256 = "z" * 64
@@ -293,6 +294,13 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             **version.manifest_json,
             "items": [{**payload, "snapshot_sha256": item.snapshot_sha256}],
         }
+        if tamper == "parent_metadata_drift":
+            assert version.parent_version_id is None
+            assert not version.reuse_parent_assignments
+            manifest["dataset_version"] = {
+                **manifest["dataset_version"],
+                "parent_version_id": "invented-parent",
+            }
         if tamper.startswith("manifest_"):
             manifest = deepcopy(manifest)
             if tamper == "manifest_reuse_flag_integer":
@@ -369,7 +377,7 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             )
 
         if tamper.startswith(("class_census_", "summary_", "manifest_", "achieved_ratios_")) or (
-            tamper in {"blank_biological_group", "parent_reuse_without_parent"}
+            tamper in {"blank_biological_group", "parent_reuse_without_parent", "parent_metadata_drift"}
         ):
             with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
                 ReviewQueueService(session, app.state.settings).regenerate(standalone.json()["id"])
