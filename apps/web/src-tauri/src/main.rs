@@ -258,7 +258,7 @@ function Format-SafeText {
   $splicedMetric = "(?<=[0-9.])$terminalEdit(?=[0-9.])|(?<=[A-Za-z_])$terminalEdit(?=[A-Za-z0-9_/])"
   # A control after train/ or val/ can fabricate a canonical box/cls/dfl
   # loss label even when the left neighbor is '/', not an ASCII letter.
-  $lossLabelSplice = "(?:train/|val/)$terminalEdit(?:box_loss|cls_loss|dfl_loss|seg_loss|loss)\b"
+  $lossLabelSplice = "(?:train/|val/)$terminalEdit(?:box_loss|cls_loss|dfl_loss|seg_loss|mask_loss|loss)\b"
   if ([regex]::IsMatch($text, $splicedMetric) -or [regex]::IsMatch($text, $lossLabelSplice)) {
     return '[terminal-edited field omitted]'
   }
@@ -295,8 +295,8 @@ function Test-ValidScientificMetricValue {
   if (-not (Test-FiniteMetricValue -Value $Value)) { return $false }
   # Mixed-case JSON/PowerShell aliases remain YOLO losses and must obey the
   # same nonnegative measurement contract as canonical lowercase metric names.
-  if ($Name -in @('train/box_loss', 'train/cls_loss', 'train/dfl_loss', 'train/seg_loss',
-                    'val/box_loss', 'val/cls_loss', 'val/dfl_loss', 'val/seg_loss')) {
+  if ($Name -in @('train/box_loss', 'train/cls_loss', 'train/dfl_loss', 'train/seg_loss', 'train/mask_loss',
+                    'val/box_loss', 'val/cls_loss', 'val/dfl_loss', 'val/seg_loss', 'val/mask_loss')) {
     return [Convert]::ToDouble($Value, [Globalization.CultureInfo]::InvariantCulture) -ge 0
   }
   return $true
@@ -365,8 +365,8 @@ while ($true) {
         }
       }
     }
-    $trainingLosses = @('train/box_loss', 'train/cls_loss', 'train/dfl_loss', 'train/seg_loss', 'train/loss')
-    $validationLosses = @('val/box_loss', 'val/cls_loss', 'val/dfl_loss', 'val/seg_loss', 'val/loss')
+    $trainingLosses = @('train/box_loss', 'train/cls_loss', 'train/dfl_loss', 'train/seg_loss', 'train/mask_loss', 'train/loss')
+    $validationLosses = @('val/box_loss', 'val/cls_loss', 'val/dfl_loss', 'val/seg_loss', 'val/mask_loss', 'val/loss')
     # Display missing numeric measurements explicitly. Plain worker-log text
     # may mention box/cls/dfl losses, but it is never a verified metrics source.
     $hasTrainingLoss = @($trainingLosses | Where-Object { $latestMetrics.ContainsKey($_) -or $unmeasuredLosses.ContainsKey($_) }).Count -gt 0

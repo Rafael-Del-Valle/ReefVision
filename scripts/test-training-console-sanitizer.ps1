@@ -60,6 +60,8 @@ $splicedFields = @(
   ('train/cls_loss=0' + [char]0x001B + '[0m' + '.30'),
   ('train/dfl_loss=0.' + [char]0x2060 + '10'),
   ('train/' + [char]0x001B + ']0;forged title' + [char]0x0007 + 'box_loss=0.25'),
+  ('train/' + [char]0x001B + '[0m' + 'mask_loss=0.25'),
+  ('val/' + [char]0x200B + 'mask_loss=0.30'),
   ('metrics/mAP' + [char]0x001B + '[32m' + '50(B)')
 )
 foreach ($field in $splicedFields) {
@@ -616,6 +618,33 @@ if ($latestMetrics.ContainsKey('train/dfl_loss') -or
 if ($staleMetricSamples['train/box_loss'] -notmatch 'latest unavailable' -or
     $staleMetricSamples['train/cls_loss'] -notmatch 'summary fallback') {
   throw 'Corrupt YOLO history obscured prior/summary loss provenance.'
+}
+
+# Mask-loss aliases are standard nonnegative components too. Keep the
+# actual history or a valid summary fallback, not a corrupt negative value.
+$run = [pscustomobject]@{
+  metrics = [pscustomobject]@{
+    'train/mask_loss' = 0.7
+    'VAL/MASK_LOSS' = -0.8
+    'train/loss' = -0.25
+  }
+  metrics_history = [pscustomobject]@{
+    'TRAIN/MASK_LOSS' = @(0.4, -0.1)
+    'val/mask_loss' = @(-0.2)
+  }
+}
+Invoke-Expression $selectionCode
+if ($latestMetrics['train/mask_loss'] -ne 0.4 -or
+    $staleMetricSamples['train/mask_loss'] -notmatch 'latest unavailable' -or
+    $latestMetrics.ContainsKey('val/mask_loss') -or
+    -not $unmeasuredLosses.ContainsKey('val/mask_loss') -or
+    $latestMetrics['train/loss'] -ne -0.25) {
+  throw 'Mask-loss validation or signed-objective provenance failed.'
+}
+# Mask components belong in the explicit training/validation loss tables.
+if ($monitorScript -notmatch '\$trainingLosses = @\([^\r\n]*''train/mask_loss''' -or
+    $monitorScript -notmatch '\$validationLosses = @\([^\r\n]*''val/mask_loss''') {
+  throw 'Mask loss must be included in the corresponding loss table.'
 }
 
 Write-Host 'PowerShell training console sanitizer regression passed.'
