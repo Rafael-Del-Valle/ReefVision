@@ -766,3 +766,17 @@ not evidence of independent acquisition or specimen identity. The existing
 recalibration withholding rule is unchanged; same-scale results remain
 descriptive. Verify the flag in standalone and replayed typed artifacts,
 with missing, malformed, partial and unequal digest controls.
+
+Historical artifacts with complete matching surface-patch hashes but missing
+or malformed primary mesh digests now emit
+`matching_surface_patches_primary_geometry_fingerprint_unavailable`.
+The same conservative recalibration withholding rule applies if at least
+one timepoint is an imported original and both known scales differ.
+Do not treat missing primary digests as evidence of different geometry.
+Same-scale comparisons remain descriptive; incomplete patch metadata
+cannot establish a match. Exercise both timepoint orders and both missing
+and malformed primary digests, with same-scale and incomplete-patch
+controls. Current producer artifacts retain valid primary digests; verify
+the existing standalone and twice-replayed typed graph still distinguishes
+reindexed geometry from missing primary provenance. No authentication of
+legacy hashes, biological identity, or acquisition independence is implied.
