@@ -289,3 +289,26 @@ Python mapping equality treats JSON booleans and integral floats as equal to int
 Five additional database-backed regression configurations re-sign a frozen study with boolean/float taxon counts or malformed summary counts, test standalone refusal and manual regeneration refusal, saved-workflow refusal and rollback to the original queue. Twelve isolated SQLite JSON census checks and six summary-type probes passed; full repository tests and final exact-head CI are unverified (local GitHub DNS prevents checkout; Ruff unavailable). These probes do not establish biological or installed Windows acceptance.
 
 Release HOLD: independent 1.1/1.6 Alembic-0038 reconciliation, complete CI, representative scientific and saved-workflow acceptance, genuine Windows MSI/CAB installed GUI clean installation/upgrade/rollback and explicit researcher approval. No cross-version merging, release, deployment, weights or user-asset changes.
+
+## 2026-11-26 — Typed manifest-copy identity
+
+A frozen row and its separately checksummed manifest copy must contain the
+same JSON types, not merely compare equal as Python mappings. For example,
+a copied split-reuse flag of `0`, a taxonomic index of `0.0`, or a copied
+biological count of `true` can otherwise compare equal to valid original
+values. The shared validator now compares canonical JSON bytes for recorded
+split settings, the frozen class dictionary and each per-image payload
+(including its existing snapshot digest). Neither schema 0006 nor 0007
+changes; no migration, duplicate workflow node, model download or data repair
+is introduced. These checks do not authenticate research against an actor
+who can rewrite all independent records and checksums.
+
+Eight schema-parity regression configurations exercise both historical
+formats, and four database-backed configurations check standalone creation,
+manual regeneration, saved typed QC workflow refusal, rollback and original
+queue recovery with dimensionless scores and required researcher review.
+Seven adversarial and six unchanged independent SQLite JSON round-trip
+comparison probes passed. Repository tests, Ruff and exact-head CI are not
+confirmed; local checkout cannot resolve github.com. Integrated Alembic
+lineage, representative biology, genuine Windows MSI/GUI acceptance and
+explicit researcher approval remain release HOLD gates.
