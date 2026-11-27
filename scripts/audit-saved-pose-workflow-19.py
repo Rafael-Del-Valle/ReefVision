@@ -354,6 +354,7 @@ def inspect(
     from reefvision.services.pose_training_exports import PoseTrainingExportService
     from reefvision.services.workflow_pose_training import (
         DEFAULT_POSE_TRAINING_CONFIG,
+        _check_frozen_pose_job_request,
         _pose_dataset,
     )
     from reefvision.services.workflow_provenance import build_workflow_run_provenance
@@ -691,6 +692,9 @@ def inspect(
                 and canonical_json_sha256(request) == snapshot["pose_child_job_request_sha256"],
                 "Queued training job request differs from its frozen fingerprint",
             )
+            # Use the same execution seal as the worker and completed-node replay.
+            # Legacy requests without a seal remain auditable but cannot claim it.
+            _check_frozen_pose_job_request(training, request)
             # Reconcile the architecture independently of the persisted request hash.
             # Earlier saved requests did not record an architecture pin.
             _require(
@@ -1344,6 +1348,7 @@ def inspect(
                     "experiment_package_versions_sha256"
                 ],
                 "child_job_request_sha256": snapshot["pose_child_job_request_sha256"],
+                "pose_training_execution_sha256": request.get("pose_training_execution_sha256"),
                 "metrics_history_sha256": snapshot["metrics_history_sha256"],
                 "provider_id": training.provider_id,
                 "architecture": training.architecture,
