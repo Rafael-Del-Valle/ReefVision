@@ -913,9 +913,7 @@ def materialize_pose_training_exports(
         "val: images/val",
     ]:
         del yaml_lines[2]
-    yaml_lines[2] = (
-        "val: images/val" if validation_content is not None else "val: images/train"
-    )
+    yaml_lines[2] = "val: images/val" if validation_content is not None else "val: images/train"
     yaml_text = "\n".join(yaml_lines) + "\n"
     yaml_path.write_text(
         yaml_text,
