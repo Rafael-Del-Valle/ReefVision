@@ -727,3 +727,15 @@ of purely inline previews retain their existing descriptive behavior.
 Check OBJ-to-PLY and OBJ-to-inline standalone results, three missing-digest
 legacy permutations, and two runs of each persisted typed graph with
 matching artifact digests. No geometry match proves biological identity.
+
+A canonical project spatial-source asset ID is also evidence of an imported
+original in legacy previews whose source format, byte count and digest
+were not recorded. When geometry matches but scale changes, pairing such
+an asset-linked preview with inline triangles must withhold longitudinal
+change in either timepoint order. This is an incomplete-lineage QC
+decision, not authentication of the asset ID or proof of byte reuse.
+Exercise both legacy permutations, and compare actual project-owned OBJ
+imports against PLY re-exports and inline triangles in the standalone API
+and two runs of each saved typed workflow. Preserve original nominal
+measurements, asset ID, available integrity-check evidence and unverified
+identity; same-scale controls remain descriptive.
