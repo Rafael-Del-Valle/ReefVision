@@ -467,3 +467,25 @@ are unchanged. Release HOLD remains for cross-version 0038 reconciliation,
 representative biology and saved-workflow validation, real installed
 Windows MSI/CAB/GUI clean installation, upgrade/rollback, and researcher
 approval. No changes to 1.7 or revised 1.8.
+
+## Bounded visible revision marker tokens (2026-11-27)
+
+The independent copy comparison now refuses revision strings longer than
+Alembic's declared 32-character capacity, non-ASCII lookalike digits,
+invisible format controls and embedded whitespace. SQLite does not
+enforce VARCHAR length; otherwise identical copies of an invalid stamp
+could pass the strict revision and collision gates. Existing ordinary
+ASCII identifiers, including foreign textual identifiers, remain
+diagnostic evidence rather than proof of applied lineage.
+
+Sixteen independent SQLite probes passed (five valid controls and eleven
+invalid markers). Sixteen paired CLI regression cases exercise the four
+strict gates, diagnostic mode, unchanged database bytes and sentinel
+privacy. Repository regressions are pending exact-head CI; local checkout
+is DNS-blocked. Existing typed saved QC workflow, retry and researcher
+review remain unchanged. This is a read-only migration preflight, not
+an executable scientific analysis node or migration authorization.
+
+Release HOLD remains for cross-version reconciliation, representative
+biology and saved-workflow acceptance, genuine Windows MSI/CAB and
+installed-GUI upgrade/rollback, full exact-head CI and researcher approval.
