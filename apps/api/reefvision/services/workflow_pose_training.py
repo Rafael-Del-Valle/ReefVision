@@ -572,10 +572,9 @@ def _check_frozen_pose_job_request(
             or canonical_json_sha256(request) != expected
         ):
             raise ValidationError("Pose training child job request checksum changed")
-    if (
-        "pose_training_execution_sha256" in request
-        and request["pose_training_execution_sha256"] != _pose_training_execution_sha256(run)
-    ):
+    if "pose_training_execution_sha256" in request and request[
+        "pose_training_execution_sha256"
+    ] != _pose_training_execution_sha256(run):
         raise ValidationError("Pose training child job frozen execution parameters changed")
 
 
