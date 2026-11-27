@@ -239,6 +239,42 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 [],
             )
 
+    def test_header_only_baseline_rejects_invalid_decode_upgrade(self) -> None:
+        """Optional stronger verification must not certify invalid pixel evidence."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            header = {
+                "path": "CAMERA.JPG",
+                "bytes": 42,
+                "sha256": "a" * 64,
+                "jpeg_boundary_markers": True,
+            }
+            baseline = {"root": str(root), "errors": [], "files": [header]}
+            decoded = {
+                **header,
+                "jpeg_decodable": True,
+                "jpeg_pixel_width": 12,
+                "jpeg_pixel_height": 8,
+                "jpeg_display_width": 8,
+                "jpeg_display_height": 12,
+                "jpeg_exif_orientation": 6,
+            }
+            for valid in (header, decoded):
+                self.assertEqual(
+                    MODULE.compare_source_manifest(root, [valid], baseline), []
+                )
+            for invalid in (
+                {**header, "jpeg_decodable": False},
+                {**header, "jpeg_decodable": True},
+                {**decoded, "jpeg_decodable": 1},
+                {**decoded, "jpeg_display_width": 12},
+            ):
+                with self.subTest(invalid=invalid):
+                    self.assertEqual(
+                        MODULE.compare_source_manifest(root, [invalid], baseline),
+                        ["source JPEG pixel-decode upgrade invalid: 'CAMERA.JPG'"],
+                    )
+
     def test_comparator_rejects_untrusted_current_integrity_records(self) -> None:
         """A malformed replay cannot be accepted or crash the camera comparator."""
         with tempfile.TemporaryDirectory() as directory:

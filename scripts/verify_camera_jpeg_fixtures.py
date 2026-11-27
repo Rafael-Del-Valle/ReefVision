@@ -799,6 +799,13 @@ def compare_source_manifest(
         record = actual[relative]
         if (record["bytes"], record["sha256"]) != expected[relative]:
             errors.append(f"source JPEG bytes changed since baseline: {relative!r}")
+        # A header-only baseline may be upgraded to pixel verification, but
+        # a failed or malformed upgrade is not valid acceptance evidence.
+        if relative not in expected_decoded and "jpeg_decodable" in record:
+            if record["jpeg_decodable"] is not True or not _valid_decoded_geometry(record):
+                errors.append(
+                    f"source JPEG pixel-decode upgrade invalid: {relative!r}"
+                )
         if relative in expected_decoded:
             if record.get("jpeg_decodable") is not True:
                 errors.append(
