@@ -385,7 +385,12 @@ while ($true) {
         }
         if (-not $foundFiniteSample -and $values.Count -gt 0 -and -not $latestMetrics.ContainsKey($series.Name)) {
           $onlyPlaceholders = @($values | Where-Object { $null -ne $_ }).Count -eq 0
-          $unmeasuredLosses[$series.Name] = if ($onlyPlaceholders) {
+          $unmeasuredLosses[$series.Name] = if ($onlyPlaceholders -and
+              $unmeasuredLosses.ContainsKey($series.Name) -and
+              $unmeasuredLosses[$series.Name] -match 'invalid summary measurement') {
+            # Reserved history slots do not erase evidence of a corrupt summary.
+            ' [unavailable; invalid summary measurement; null history placeholders]'
+          } elseif ($onlyPlaceholders) {
             ' [awaiting first measurement; null history placeholders]'
           } else {
             ' [unavailable; recorded history contains no finite numeric measurement]'

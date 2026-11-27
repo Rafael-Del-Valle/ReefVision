@@ -745,4 +745,22 @@ if ($unmeasuredLosses['train/box_loss'] -notmatch 'invalid summary' -or
   throw 'Empty history obscured the summary measurement state.'
 }
 
+# Null-only history is not evidence that an invalid summary never existed.
+# Preserve the QC failure while distinguishing reserved entries from corruption.
+$run = ConvertFrom-Json '{"metrics":{"train/box_loss":-0.1,"train/cls_loss":null,"train/dfl_loss":"0.2","val/box_loss":0.5},"metrics_history":{"train/box_loss":[null,null],"train/cls_loss":[null],"train/dfl_loss":[null],"val/box_loss":[null]}}'
+Invoke-Expression $selectionCode
+foreach ($key in @('train/box_loss', 'train/dfl_loss')) {
+  if ($latestMetrics.ContainsKey($key) -or
+      $unmeasuredLosses[$key] -notmatch 'invalid summary measurement; null history placeholders' -or
+      $unmeasuredLosses[$key] -match 'awaiting first measurement') {
+    throw ('Null placeholders obscured a corrupt summary: {0}' -f $key)
+  }
+}
+if ($unmeasuredLosses['train/cls_loss'] -notmatch 'awaiting first measurement; null history placeholders' -or
+    $latestMetrics['val/box_loss'] -ne 0.5 -or
+    $staleMetricSamples['val/box_loss'] -notmatch 'summary fallback' -or
+    $unmeasuredLosses.ContainsKey('val/box_loss')) {
+  throw 'Null placeholders changed genuine summary or missing-measurement provenance.'
+}
+
 Write-Host 'PowerShell training console sanitizer regression passed.'
