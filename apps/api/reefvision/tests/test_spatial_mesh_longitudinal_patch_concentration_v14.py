@@ -669,7 +669,9 @@ def test_patch_concentration_saved_workflow_matches_standalone(
             "identical_geometry_patch_topology_distribution_inconsistent"
             not in artifact["qc_warnings"]
         )
-        assert "identical_geometry_hash_bound_patch_area_inconsistent" not in artifact["qc_warnings"]
+        assert (
+            "identical_geometry_hash_bound_patch_area_inconsistent" not in artifact["qc_warnings"]
+        )
         assert artifact["reconstruction_topology_changed_fields"] == []
         assert artifact["provenance"]["longitudinal_change_withheld_due_to_inconsistent_topology"]
         assert artifact["provenance"]["specimen_identity_verified"] is False
@@ -871,7 +873,9 @@ def test_identical_geometry_hash_bound_patch_topology(mode: str, withheld: bool)
     warning = "identical_geometry_hash_bound_patch_topology_inconsistent"
     flag = "longitudinal_change_withheld_due_to_inconsistent_topology"
     assert (warning in result["qc_warnings"]) is withheld
-    assert "identical_geometry_patch_topology_distribution_inconsistent" not in result["qc_warnings"]
+    assert (
+        "identical_geometry_patch_topology_distribution_inconsistent" not in result["qc_warnings"]
+    )
     assert "identical_geometry_hash_bound_patch_area_inconsistent" not in result["qc_warnings"]
     assert result["provenance"][flag] is withheld
     assert result["reconstruction_topology_changed_fields"] == []
