@@ -913,8 +913,10 @@ For equal valid indexed-geometry fingerprints, the area-weighted surface
 centroid relative to the source origin must also remain consistent after
 uniform calibration. Normalize the three centroid coordinates by each
 observation's positive calibrated bounding-box diagonal. Compare the
-finite dimensionless vectors in source-axis order (relative tolerance
-1e-8, absolute tolerance 1e-12); a contradiction reports
+finite dimensionless vectors in source-axis order with absolute tolerance
+max(1e-8, eight ULPs of either normalized coordinate) and zero relative
+tolerance. This prevents a large source-origin offset from masking a
+mesh-scale inconsistency while allowing floating-point roundoff. A contradiction reports
 `identical_geometry_source_centroid_inconsistent` and uses the existing
 inconsistent-calibrated-dimensions withholding gate. Preserve original
 area and extent, but withhold longitudinal change and registered-centroid
@@ -925,3 +927,10 @@ without historical calibration scale, missing centroid, different primary
 geometry and consistent rescaling; replay a shifted legacy centroid via
 standalone API and two runs of the same saved typed graph with matching
 artifact hashes.
+
+Include far-origin legacy controls at one billion mesh diagonals from the
+source origin: consistent rescaling, a representationally small offset,
+and shifts of either sign by one tenth of a diagonal. Require the latter
+to withhold longitudinal quantities. Repeat through the standalone API
+and two runs of one persisted typed graph with artifact/hash equality.
+The threshold is a numerical consistency rule, not biological uncertainty.
