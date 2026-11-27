@@ -895,6 +895,54 @@ def test_reused_legacy_asset_flags_known_lineage_conflicts(
     assert result["delta_surface_area_m2"] is None
 
 
+@pytest.mark.parametrize(
+    "asset_id",
+    [
+        "",
+        " ",
+        123,
+        True,
+        ["11111111-1111-4111-8111-111111111111"],
+        "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+        "11111111111141118111111111111111",
+        "11111111-1111-4111-8111-111111111111\n",
+    ],
+)
+def test_longitudinal_rejects_noncanonical_asset_identity(asset_id: object) -> None:
+    before = _imported_observation("early", 1)
+    after = _imported_observation("late", 2)
+    after["provenance"]["spatial_source_asset_id"] = asset_id
+    with pytest.raises(ValueError, match="Spatial source asset ID must be a canonical"):
+        compare_mesh_observations(before, after)
+
+
+def test_inline_geometry_cannot_claim_project_original() -> None:
+    before = _observation("early", 1)
+    after = _observation("late", 2)
+    after["provenance"]["spatial_source_asset_id"] = "11111111-1111-4111-8111-111111111111"
+    with pytest.raises(ValueError, match="Inline indexed triangles cannot carry"):
+        compare_mesh_observations(before, after)
+
+
+def test_legacy_asset_id_without_format_remains_provisional() -> None:
+    before = _imported_observation("early", 1)
+    after = _imported_observation("late", 1)
+    asset_id = "11111111-1111-4111-8111-111111111111"
+    for record in (before, after):
+        record["provenance"]["spatial_source_asset_id"] = asset_id
+        for key in (
+            "source_format",
+            "source_payload_sha256",
+            "source_payload_size_bytes",
+            "source_payload_integrity_checked",
+        ):
+            record["provenance"].pop(key)
+    result = compare_mesh_observations(before, after)
+    assert result["provenance"]["acquisition_lineage_status"] == "reused_spatial_source_asset"
+    assert result["provenance"]["independent_acquisition_verified"] is False
+    assert result["delta_surface_area_m2"] is None
+
+
 def test_project_asset_reimport_changes_versioned_review_digest_without_changing_bytes() -> None:
     """Asset ownership changes must not silently retain a review snapshot hash."""
     before = _imported_observation("early", 1)
