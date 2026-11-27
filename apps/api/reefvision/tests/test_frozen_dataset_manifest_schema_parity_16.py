@@ -746,3 +746,42 @@ def test_manifest_copy_preserves_json_types(schema_version: str, tamper: str) ->
     version.manifest_json = original
     version.manifest_sha256 = canonical_json_sha256(original)
     validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize("schema_version", ["0006", "0007"])
+@pytest.mark.parametrize("group_key", ["", " \t", "\u2003", None, "parent-fragment-1"])
+def test_resigned_group_key_preserves_producer_contract(
+    schema_version: str, group_key: str | None
+) -> None:
+    version, item = _saved_snapshot(schema_version, with_mask=False)
+    item.group_key = group_key
+    version.missing_group_key_count = int(group_key is None)
+    payload = _item_payload(item, schema_version=schema_version)
+    item.snapshot_sha256 = canonical_json_sha256(payload)
+    manifest = deepcopy(version.manifest_json)
+    manifest["split_config"]["missing_group_key_count"] = version.missing_group_key_count
+    manifest["items"] = [{**payload, "snapshot_sha256": item.snapshot_sha256}]
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+    if group_key is not None and not group_key.strip():
+        with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+            validate_frozen_dataset_manifest(version, [item])
+    else:
+        validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize("schema_version", ["0006", "0007"])
+@pytest.mark.parametrize("ratio", [-1e-15, 1.0 + 1e-15, 10**400])
+def test_resigned_achieved_ratio_must_be_in_physical_range(
+    schema_version: str, ratio: float
+) -> None:
+    version, item = _saved_snapshot(schema_version, with_mask=False)
+    ratios = dict(version.achieved_ratios_json)
+    ratios["train" if ratio > 1 else "test"] = ratio
+    version.achieved_ratios_json = ratios
+    manifest = deepcopy(version.manifest_json)
+    manifest["split_config"]["achieved_ratios"] = ratios
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+    with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+        validate_frozen_dataset_manifest(version, [item])
