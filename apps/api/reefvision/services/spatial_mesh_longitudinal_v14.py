@@ -1618,11 +1618,38 @@ def compare_mesh_observations(
         sorted(zip(*(first_patch_arrays[field] for field in shared_patch_fields), strict=True))
         != sorted(zip(*(second_patch_arrays[field] for field in shared_patch_fields), strict=True))
     )
+    # A joint count multiset alone cannot detect topology assigned to the
+    # wrong patch. Bind counts to complete matching patch digests when present.
+    # Repeated digests are compared as a multiset, not as unique identities.
+    hash_bound_patch_topology_changed = False
+    if (
+        first_hash_valid
+        and second_hash_valid
+        and first_geometry_hash == second_geometry_hash
+        and shared_patch_fields
+        and not patch_topology_changed
+        and surface_patch_fingerprint_comparison == "matching"
+    ):
+        bound_topology = [
+            sorted(
+                zip(
+                    record["edge_connected_patch_geometry_sha256"],
+                    *(arrays[field] for field in shared_patch_fields),
+                    strict=True,
+                )
+            )
+            for record, arrays in zip((before, after), topology_patch_arrays, strict=True)
+        ]
+        hash_bound_patch_topology_changed = bound_topology[0] != bound_topology[1]
     contradictory_topology = (
         first_hash_valid
         and second_hash_valid
         and first_geometry_hash == second_geometry_hash
-        and (bool(topology_changed_fields) or patch_topology_changed)
+        and (
+            bool(topology_changed_fields)
+            or patch_topology_changed
+            or hash_bound_patch_topology_changed
+        )
     )
     contradictory_calibrated_dimensions = False
     if first_hash_valid and second_hash_valid and first_geometry_hash == second_geometry_hash:
@@ -1632,6 +1659,8 @@ def compare_mesh_observations(
         # indicates a provenance/serialization discrepancy, not biological change.
         if patch_topology_changed:
             warnings.append("identical_geometry_patch_topology_distribution_inconsistent")
+        if hash_bound_patch_topology_changed:
+            warnings.append("identical_geometry_hash_bound_patch_topology_inconsistent")
         if contradictory_topology:
             warnings.append("identical_geometry_topology_metadata_inconsistent")
             warnings.append("longitudinal_change_withheld_inconsistent_topology")
