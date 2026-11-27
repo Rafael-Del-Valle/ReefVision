@@ -97,6 +97,19 @@ def _stamp_extra_constraints(connection: sqlite3.Connection) -> str | None:
     return None
 
 
+def _validated_revision_marker(value: object) -> str | None:
+    """Return only bounded visible revision tokens for diagnostic output."""
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > 32
+        or "\\" in value
+        or any(not 33 <= ord(char) <= 126 for char in value)
+    ):
+        return None
+    return value
+
+
 def inspect(path: Path) -> dict:
     if not path.is_file():
         raise FileNotFoundError(path)
@@ -219,20 +232,13 @@ def inspect(path: Path) -> dict:
                 raw_stamps = [row[0] for row in connection.execute(
                     "SELECT version_num FROM alembic_version"
                 )]
-                stamps = [value if isinstance(value, str) else None for value in raw_stamps]
+                # Preserve row cardinality, but never emit malformed text
+                # (which could contain private research notes or control characters).
+                stamps = [_validated_revision_marker(value) for value in raw_stamps]
                 if len(raw_stamps) != 1:
                     if alembic_stamp_validation_error is None:
                         alembic_stamp_validation_error = "expected_exactly_one_revision_row"
-                elif (
-                    not isinstance(raw_stamps[0], str)
-                    or not raw_stamps[0]
-                    # SQLite does not enforce VARCHAR(32). Require a bounded,
-                    # visible ASCII token rather than accepting lookalike Unicode
-                    # digits, embedded whitespace, or invisible format controls.
-                    or len(raw_stamps[0]) > 32
-                    or "\\" in raw_stamps[0]
-                    or any(not 33 <= ord(char) <= 126 for char in raw_stamps[0])
-                ):
+                elif stamps[0] is None:
                     if alembic_stamp_validation_error is None:
                         alembic_stamp_validation_error = "invalid_revision_marker_type_or_value"
             except sqlite3.DatabaseError as exc:
