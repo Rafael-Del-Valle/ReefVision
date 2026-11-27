@@ -487,6 +487,7 @@ def test_disputed_identity_withholds_patch_change_but_preserves_observations() -
         "centroid_conflict",
         "far_origin_centroid_conflict",
         "axis_aspect_conflict",
+        "axis_diagonal_conflict",
     ],
 )
 def test_patch_concentration_saved_workflow_matches_standalone(
@@ -566,14 +567,16 @@ def test_patch_concentration_saved_workflow_matches_standalone(
             "reefvision.services.spatial_source_assets_v14.preview_from_request",
             legacy_hash_topology_preview,
         )
-    if mode == "axis_aspect_conflict":
+    if mode in ("axis_aspect_conflict", "axis_diagonal_conflict"):
         before, after = _topology_meshes()
 
         def legacy_axis_preview(request: MeshPreviewRequest) -> dict:
             record = preview_from_request(request)
             if request.observation_id == "survey-2":
                 x, y, z = record["axis_aligned_dimensions_m"]
-                record["axis_aligned_dimensions_m"] = [y, x, z]
+                record["axis_aligned_dimensions_m"] = (
+                    [y, x, z] if mode == "axis_aspect_conflict" else [2 * x, 2 * y, 2 * z]
+                )
             return record
 
         monkeypatch.setattr(
@@ -706,8 +709,13 @@ def test_patch_concentration_saved_workflow_matches_standalone(
         assert artifact["delta_surface_area_m2"] is None
         assert artifact["delta_surface_area_scale_interval_m2"] is None
         assert artifact["registered_surface_centroid_separation_m"] is None
-    elif mode == "axis_aspect_conflict":
-        assert "identical_geometry_axis_aspect_ratios_inconsistent" in artifact["qc_warnings"]
+    elif mode in ("axis_aspect_conflict", "axis_diagonal_conflict"):
+        warning = (
+            "identical_geometry_axis_aspect_ratios_inconsistent"
+            if mode == "axis_aspect_conflict"
+            else "identical_geometry_axis_lengths_diagonal_inconsistent"
+        )
+        assert warning in artifact["qc_warnings"]
         assert "identical_geometry_shape_ratio_inconsistent" not in artifact["qc_warnings"]
         flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
         assert artifact["provenance"][flag] is True
@@ -965,6 +973,45 @@ def test_identical_geometry_axis_aspect_consistency(mode: str, withheld: bool) -
     assert (warning in result["qc_warnings"]) is withheld
     assert result["provenance"][flag] is withheld
     assert result["provenance"]["specimen_identity_verified"] is False
+    assert (result["delta_surface_area_m2"] is None) is withheld
+
+
+@pytest.mark.parametrize(
+    ("mode", "withheld"),
+    [
+        ("before_inflated", True),
+        ("after_inflated", True),
+        ("after_zero", True),
+        ("missing_scale", True),
+        ("missing_dimensions", False),
+        ("unchanged", False),
+        ("near_equal", False),
+    ],
+)
+def test_identical_geometry_axis_lengths_match_diagonal(mode: str, withheld: bool) -> None:
+    before, after = (_preview(payload) for payload in _topology_meshes())
+    key = "axis_aligned_dimensions_m"
+    if mode == "before_inflated":
+        before[key] = [2 * value for value in before[key]]
+    if mode in ("after_inflated", "missing_scale"):
+        after[key] = [2 * value for value in after[key]]
+    if mode == "after_zero":
+        after[key] = [0.0, 0.0, 0.0]
+    if mode == "missing_scale":
+        after["provenance"].pop("meters_per_mesh_unit", None)
+    if mode == "missing_dimensions":
+        after.pop(key)
+    if mode == "near_equal":
+        after[key] = [(1 + 1e-10) * value for value in after[key]]
+    result = compare_mesh_observations(before, after)
+    warning = "identical_geometry_axis_lengths_diagonal_inconsistent"
+    flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+    assert (warning in result["qc_warnings"]) is withheld
+    assert "identical_geometry_axis_aspect_ratios_inconsistent" not in result["qc_warnings"]
+    assert result["provenance"][flag] is withheld
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert result["before_surface_area_m2"] == before["surface_area_m2"]
+    assert result["after_surface_area_m2"] == after["surface_area_m2"]
     assert (result["delta_surface_area_m2"] is None) is withheld
 
 
