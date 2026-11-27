@@ -282,10 +282,11 @@ def test_imported_source_digest_check_qc_matches_saved_comparison(
     assert artifact == expected
 
 
+@pytest.mark.parametrize("reindexed", [False, True], ids=["original", "reindexed"])
 @pytest.mark.parametrize("inline_after", [False, True], ids=["ply", "inline"])
 @pytest.mark.parametrize("asset_before", [False, True], ids=["obj-text", "obj-asset"])
 def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow(
-    client: TestClient, inline_after: bool, asset_before: bool
+    client: TestClient, inline_after: bool, asset_before: bool, reindexed: bool
 ) -> None:
     """Changing source representation cannot make rescaled triangles biological growth."""
     project_id = str(create_project(client, "Rescaled reexport QC")["id"])
@@ -316,6 +317,15 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
         del after["ply_text"]
         after["vertices"] = [[0, 0, 0], [2, 0, 0], [0, 3, 0]]
         after["faces"] = [[0, 1, 2]]
+    if reindexed:
+        if inline_after:
+            after["vertices"] = [[0, 3, 0], [0, 0, 0], [2, 0, 0]]
+            after["faces"] = [[1, 0, 2]]
+        else:
+            after["ply_text"] = PLY.replace(
+                "0 0 0\n2 0 0\n0 3 0\n3 0 1 2\n",
+                "0 3 0\n0 0 0\n2 0 0\n3 1 0 2\n",
+            )
     response = client.post(
         f"{base}/spatial/mesh-longitudinal-comparison",
         json={"before": before, "after": after},
@@ -326,24 +336,34 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
         4 * expected["before_surface_area_m2"]
     )
     warnings = expected["qc_warnings"]
-    assert ("identical_geometry_different_imported_source_payload" in warnings) is not inline_after
-    assert ("longitudinal_change_withheld_rescaled_reexported_geometry" in warnings) is (
-        not inline_after
-    )
+    exact_reexport = not inline_after and not reindexed
+    incomplete = inline_after and not reindexed
+    assert ("identical_geometry_different_imported_source_payload" in warnings) is exact_reexport
+    assert (
+        "longitudinal_change_withheld_rescaled_reexported_geometry" in warnings
+    ) is exact_reexport
     incomplete_warning = "longitudinal_change_withheld_rescaled_geometry_incomplete_import_lineage"
-    assert (incomplete_warning in warnings) is inline_after
+    assert (incomplete_warning in warnings) is incomplete
+    patch_warning = "longitudinal_change_withheld_rescaled_matching_surface_patches"
+    patch_flag = "longitudinal_change_withheld_due_to_rescaled_matching_surface_patches"
+    assert (patch_warning in warnings) is reindexed
+    assert expected["provenance"][patch_flag] is reindexed
+    assert (
+        expected["provenance"]["before_geometry_sha256"]
+        != expected["provenance"]["after_geometry_sha256"]
+    ) is reindexed
     assert (
         "identical_imported_source_payload_reused_across_observations"
         not in expected["qc_warnings"]
     )
     assert (
         expected["provenance"]["longitudinal_change_withheld_due_to_rescaled_reexported_geometry"]
-        is not inline_after
+        is exact_reexport
     )
     incomplete_flag = (
         "longitudinal_change_withheld_due_to_rescaled_geometry_incomplete_import_lineage"
     )
-    assert expected["provenance"][incomplete_flag] is inline_after
+    assert expected["provenance"][incomplete_flag] is incomplete
     if asset_before:
         assert expected["provenance"]["before_spatial_source_asset_id"] == before["asset_id"]
         assert expected["provenance"]["before_source_payload_integrity_checked"] is True
@@ -376,6 +396,7 @@ def test_rescaled_cross_format_reexport_withholds_false_growth_in_saved_workflow
         is False
     )
     assert control.json()["provenance"][incomplete_flag] is False
+    assert control.json()["provenance"][patch_flag] is False
 
     graph = {
         "graph_id": "rescaled-cross-format-reexport-v14",
