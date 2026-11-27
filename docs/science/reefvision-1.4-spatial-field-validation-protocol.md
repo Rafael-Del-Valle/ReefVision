@@ -996,3 +996,16 @@ calibration is unavailable, not a measured zero, and collapsed nonzero scale
 intervals receive explicit QC. Verify independently through the standalone
 preview and twice-replayed saved typed mesh preview. Neither chord nor selected
 chain length establishes anatomical centerline length or biological identity.
+
+For chain chord bounds, evaluate the binary64 source endpoint distance,
+calibration scale and relative uncertainty as exact rational operands before
+rounding each final bound to binary64. Do not derive reference bounds from
+an already rounded nominal meter value: that can differ by one ULP.
+Use an independent source-waypoint distance in the saved-workflow oracle
+and retain exact payload/hash parity. Include a positive subnormal nominal
+chord (source separation 5e-224, scale 1e-100, relative uncertainty 0.9):
+the positive lower bound rounds to zero, so the interval is unavailable
+and emits `surface_trace_chain_chord_interval_unrepresentable`, while the
+nominal chord remains positive. Repeat through the standalone preview and
+twice through the same persisted graph. These are numerical controls, not
+biological validation or confidence intervals.
