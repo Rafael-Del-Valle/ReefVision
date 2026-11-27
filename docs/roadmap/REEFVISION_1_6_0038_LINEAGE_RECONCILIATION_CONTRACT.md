@@ -415,3 +415,27 @@ reconciliation or a new scientific workflow capability. Existing saved typed
 QC workflows and researcher-review gates remain intact. Release HOLD pending
 cross-track migration reconciliation, representative biological validation,
 physical installed Windows MSI/CAB/GUI upgrade/rollback and approval.
+
+## Desktop startup parity for stamp write/storage options (2026-11-27)
+
+The preceding diagnostic-only change passed all three jobs in exact-head
+CI #45984652401, including backend, frontend/E2E and native Windows
+preservation. The desktop startup guard nevertheless still allowed a
+valid-looking revision key with a default value, an explicit conflict
+policy, or WITHOUT ROWID storage to reach migration code. Match the
+diagnostic's rejection of those options before any migration writes,
+without removing the deliberately retained keyless legacy pre-review
+compatibility. The check uses existing comment-aware SQL tokenization
+and SQLite column metadata; it exposes no raw DDL or private defaults.
+
+The new 12-case regression compares the startup guard and independent
+inspector, checks repeat desktop refusal before Alembic upgrade, and
+preserves exact database bytes and a biological sentinel. Independent
+SQLAlchemy/SQLite probes passed all 12 configurations (8 refused,
+4 ordinary or quoted/comment controls). Full repository test results
+for this change are not yet verified. This is a startup safety gate,
+not a new scientific workflow node or a resolution of the 0038 collision;
+existing typed QC workflows, provenance, retries and human review remain
+unchanged. Release HOLD pending cross-track reconciliation, representative
+biological and saved-workflow acceptance, physical installed Windows
+MSI/CAB/GUI upgrade/rollback, and researcher approval.

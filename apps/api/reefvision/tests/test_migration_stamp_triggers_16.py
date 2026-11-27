@@ -273,3 +273,99 @@ def test_stamp_index_semantics_block_unsafe_desktop_startup(
             assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037",)
             assert db.execute("SELECT note FROM observations").fetchone() == ("private coral data",)
         assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    ("declaration", "suffix", "error"),
+    [
+        ("version_num TEXT NOT NULL PRIMARY KEY", "", None),
+        ("version_num VARCHAR(32) NOT NULL PRIMARY KEY", "", None),
+        ("version_num TEXT NOT NULL PRIMARY KEY /* ON CONFLICT IGNORE */", "", None),
+        (
+            'version_num TEXT NOT NULL, CONSTRAINT "WITHOUT ROWID" PRIMARY KEY(version_num)',
+            "",
+            None,
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY ON CONFLICT REPLACE",
+            "",
+            "write/storage options",
+        ),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY ON /* comment */ CONFLICT IGNORE",
+            "",
+            "write/storage options",
+        ),
+        (
+            "version_num TEXT NOT NULL ON CONFLICT FAIL PRIMARY KEY",
+            "",
+            "write/storage options",
+        ),
+        ("version_num TEXT NOT NULL PRIMARY KEY", " WITHOUT ROWID", "write/storage options"),
+        (
+            "version_num TEXT NOT NULL PRIMARY KEY",
+            " WITHOUT /* comment */ ROWID",
+            "write/storage options",
+        ),
+        (
+            "version_num TEXT NOT NULL DEFAULT 'private coral data' PRIMARY KEY",
+            "",
+            "column default",
+        ),
+        ("version_num TEXT NOT NULL DEFAULT NULL PRIMARY KEY", "", "column default"),
+        (
+            "version_num TEXT NOT NULL DEFAULT (lower('X')) PRIMARY KEY",
+            "",
+            "column default",
+        ),
+    ],
+)
+def test_stamp_write_storage_options_match_inspector_and_block_unsafe_startup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    declaration: str,
+    suffix: str,
+    error: str | None,
+) -> None:
+    path = tmp_path / "research.sqlite"
+    with sqlite3.connect(path) as db:
+        db.execute(f"CREATE TABLE alembic_version ({declaration}){suffix}")
+        db.execute("INSERT INTO alembic_version VALUES ('0037')")
+        db.execute("CREATE TABLE observations (note TEXT)")
+        db.execute("INSERT INTO observations VALUES ('private coral data')")
+        assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+
+    original = path.read_bytes()
+    report = module.inspect(path)
+    assert report["canonical_alembic_stamp_constraints"] is (error is None)
+    assert report["upgrade_authorized"] is False
+    assert "private coral data" not in json.dumps(report)
+
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    try:
+        with engine.connect() as connection:
+            if error is None:
+                assert_compatible_revision_0038(connection)
+            else:
+                with pytest.raises(RuntimeError, match=f"version-table {error}") as exc:
+                    assert_compatible_revision_0038(connection)
+                assert "private coral data" not in str(exc.value)
+    finally:
+        engine.dispose()
+
+    if error is not None:
+        settings = Settings(data_dir=tmp_path, database_url=f"sqlite:///{path.as_posix()}")
+        settings.ensure_directories()
+
+        def unexpected_upgrade(*args: object, **kwargs: object) -> None:
+            pytest.fail("Unsafe revision options must not reach Alembic upgrade")
+
+        monkeypatch.setattr("reefvision.desktop.command.upgrade", unexpected_upgrade)
+        for _ in range(2):
+            with pytest.raises(RuntimeError, match=f"version-table {error}"):
+                run_pending_migrations(settings)
+
+    with sqlite3.connect(path) as db:
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0037",)
+        assert db.execute("SELECT note FROM observations").fetchone() == ("private coral data",)
+    assert path.read_bytes() == original

@@ -226,6 +226,26 @@ def assert_compatible_revision_0038(connection: Connection) -> None:
                 "revision stamping may fail after migration writes. Preserve the "
                 "database and reconcile provenance without running migrations."
             )
+        # Match the independent read-only inspector's write/storage checks.
+        # Preserve legacy keyless pre-review layouts, but do not allow a
+        # different conflict policy, implicit stamp value or rowid contract.
+        stamp_tokens = _sqlite_ddl_tokens(stamp_ddl)
+        if any(
+            pair in {("ON", "CONFLICT"), ("WITHOUT", "ROWID")}
+            for pair in itertools.pairwise(stamp_tokens)
+        ):
+            raise RuntimeError(
+                "Unsafe ReefVision Alembic version-table write/storage options: "
+                "preserve the database and reconcile revision identity before migrating."
+            )
+        if any(
+            row[1] == "version_num" and row[4] is not None
+            for row in connection.exec_driver_sql("PRAGMA table_xinfo(alembic_version)")
+        ):
+            raise RuntimeError(
+                "Unsafe ReefVision Alembic version-table column default: "
+                "preserve the database and reconcile revision identity before migrating."
+            )
     # Preserve row multiplicity: two identical stamps are still an invalid
     # Alembic state and must not be hidden by set deduplication.
     version_columns = {column["name"] for column in inspector.get_columns("alembic_version")}
