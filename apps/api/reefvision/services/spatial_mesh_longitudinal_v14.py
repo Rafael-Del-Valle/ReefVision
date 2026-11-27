@@ -1676,7 +1676,8 @@ def compare_mesh_observations(
         # Aspect ratios cannot detect uniformly inflated axis lengths.
         # The calibrated diagonal must also agree with the axis lengths
         # within each record; missing historical fields remain unknown.
-        if extent is not None and not isclose(hypot(*dimensions), extent, rel_tol=1e-8, abs_tol=0.0):
+        diagonal = hypot(*dimensions)
+        if extent is not None and not isclose(diagonal, extent, rel_tol=1e-8, abs_tol=0.0):
             contradictory_calibrated_dimensions = True
             warnings.append(
                 "identical_geometry_axis_lengths_diagonal_inconsistent"
