@@ -634,3 +634,31 @@ migration evidence, not a new scientific Workflow Builder operation.
 Existing saved QC runs, units, provenance, retry and human review are
 unchanged. Cross-version reconciliation, populated biological acceptance,
 installed Windows MSI/GUI and researcher approval remain release gates.
+
+## Dependency-free ancestry boundary (2026-11-27)
+
+Alembic's independent `depends_on` edges also constrain applied revision
+order. Previously the opt-in parent graph audit ignored them and could
+report a valid source graph even when Alembic could not resolve a missing
+dependency. The supported 1.1/1.6 linear-family comparison is now explicitly
+limited to sources with no dependency declaration or one literal None.
+Nonempty dependency links, dynamic declarations and ambiguous bindings
+fail strict inspection before any ancestry evidence is emitted. The
+default collision-only mode remains unchanged. This is a conservative
+limitation, not support for arbitrary dependency DAGs or branch labels.
+
+All nine pinned divergent/successor migration sources listed above declare
+`depends_on = None` (typed in 1.6). The existing static parent-link parser
+is reused for dependency validation, retaining literal multi-parent links.
+Two CLI regressions cover 12 refused dependency forms and three compatible
+controls, source preservation and default-mode compatibility. Local Python
+probes of the extracted parser passed 12 refusals and five valid parent
+controls; a real Alembic 1.18.4 revision loader independently reproduced
+the missing-dependency failure. The full repository CLI suite and exact-head
+CI remain unverified because local GitHub checkout is DNS-blocked.
+
+No migrations or databases are modified. Existing typed saved QC workflows,
+provenance, retries and investigator review remain intact. Release HOLD
+still requires reviewed cross-version reconciliation, populated scientific
+and saved-workflow validation, installed Windows MSI/CAB/GUI acceptance
+and explicit researcher approval.
