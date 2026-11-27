@@ -89,6 +89,7 @@ def _saved_snapshot(
     }
     manifest = {
         "schema_version": schema_version,
+        "dataset_version": {"parent_version_id": None},
         "class_map": class_map,
         "split_config": split_config,
         "summary": summary,
@@ -97,6 +98,8 @@ def _saved_snapshot(
     version = cast(
         DatasetVersion,
         SimpleNamespace(
+            id="child",
+            parent_version_id=None,
             schema_version=schema_version,
             class_map_json=class_map,
             eligible_annotation_statuses_json=["reviewed"],
@@ -875,6 +878,36 @@ def test_resigned_parent_reuse_requires_matching_distinct_parent(
     manifest = deepcopy(version.manifest_json)
     manifest["split_config"]["reuse_parent_assignments"] = True
     manifest["dataset_version"] = {"parent_version_id": manifest_parent_id}
+    version.manifest_json = manifest
+    version.manifest_sha256 = canonical_json_sha256(manifest)
+    if valid:
+        validate_frozen_dataset_manifest(version, [item])
+    else:
+        with pytest.raises(ValidationError, match="Frozen dataset item snapshot"):
+            validate_frozen_dataset_manifest(version, [item])
+
+
+@pytest.mark.parametrize("schema_version", ["0006", "0007"])
+@pytest.mark.parametrize(
+    ("parent_id", "metadata", "valid"),
+    [
+        (None, {"parent_version_id": None}, True),
+        ("parent", {"parent_version_id": "parent"}, True),
+        (None, {}, False),
+        (None, None, False),
+        ("parent", {"parent_version_id": None}, False),
+        (None, {"parent_version_id": "parent"}, False),
+        ("child", {"parent_version_id": "child"}, False),
+        (" ", {"parent_version_id": " "}, False),
+    ],
+)
+def test_resigned_parent_metadata_is_bound_without_reuse(
+    schema_version: str, parent_id: str | None, metadata: dict[str, str | None] | None, valid: bool
+) -> None:
+    version, item = _saved_snapshot(schema_version, with_mask=False)
+    version.parent_version_id = parent_id
+    manifest = deepcopy(version.manifest_json)
+    manifest["dataset_version"] = metadata
     version.manifest_json = manifest
     version.manifest_sha256 = canonical_json_sha256(manifest)
     if valid:
