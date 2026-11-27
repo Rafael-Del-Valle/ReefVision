@@ -49,7 +49,7 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                            if line.startswith("| Extension routing |"))
         for suffix in ("JPG", "JPEG", "JPE", "JFIF", "JFI", "JIF"):
             with self.subTest(suffix=suffix):
-                self.assertIn(suffix, routing_row.replace("/", " ").split())
+                self.assertIn(suffix, routing_row.replace("/", " ").replace(",", " ").split())
 
     def test_owner_camera_scanner_decodes_and_replays_every_jpeg_suffix(self) -> None:
         """Exercise the shared scanner, not a second documentation-only suffix filter."""
