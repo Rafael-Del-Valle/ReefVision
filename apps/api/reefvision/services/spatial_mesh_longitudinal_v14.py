@@ -1653,6 +1653,32 @@ def compare_mesh_observations(
         ):
             contradictory_calibrated_dimensions = True
             warnings.append("identical_geometry_patch_area_distribution_inconsistent")
+        # Independently ranked fractions can hide swapped patch descriptors.
+        # Complete matching patch hashes allow a stronger, order-independent
+        # check of the association between source triangles and area fractions.
+        # Duplicate digests are matched by sorted fraction within each digest.
+        if (
+            surface_patch_fingerprint_comparison == "matching"
+            and before_patch_distribution is not None
+            and after_patch_distribution is not None
+        ):
+            patch_profiles = [
+                sorted(
+                    zip(
+                        record["edge_connected_patch_geometry_sha256"],
+                        record["edge_connected_patch_surface_area_fractions"],
+                        strict=True,
+                    )
+                )
+                for record in (before, after)
+            ]
+            bound_profile_distance = 0.5 * fsum(
+                abs(early[1] - late[1])
+                for early, late in zip(*patch_profiles, strict=True)
+            )
+            if bound_profile_distance > 1e-8:
+                contradictory_calibrated_dimensions = True
+                warnings.append("identical_geometry_hash_bound_patch_area_inconsistent")
         if before_scale is not None and after_scale is not None:
             if before_scale != after_scale:
                 warnings.append("identical_geometry_rescaled_not_biological_growth")
