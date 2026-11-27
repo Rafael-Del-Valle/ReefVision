@@ -115,6 +115,18 @@ def _valid_frozen_raster_mask(snapshot: dict[str, Any], width_px: Any, height_px
     )
 
 
+def _valid_requested_ratios(ratios: object) -> bool:
+    """Validate normalized producer weights, not the achieved split census."""
+    if ratios is None:
+        return True
+    if not isinstance(ratios, dict) or set(ratios) != {"train", "validation", "test"}:
+        return False
+    return (
+        all(type(value) in (int, float) and 0 <= value <= 1 for value in ratios.values())
+        and abs(sum(ratios.values()) - 1.0) <= 1e-12
+    )
+
+
 def _matches_count_map(saved: object, expected: Counter[str]) -> bool:
     """Require exact integer biological counts, not equal-looking JSON flags/floats."""
     return (
@@ -233,6 +245,22 @@ def validate_frozen_dataset_manifest(
         )
         or type(version.missing_group_key_count) is not int
         or version.missing_group_key_count != sum(item.group_key is None for item in items)
+    ):
+        raise ValidationError(message)
+
+    # Both original producers normalize explicit requested weights and only
+    # resolve random to group_random when at least one group is known.
+    # Matching copies alone cannot establish a valid experimental protocol.
+    requested_method = version.requested_split_method
+    expected_method = (
+        "group_random"
+        if requested_method == "random" and any(item.group_key is not None for item in items)
+        else requested_method
+    )
+    if (
+        requested_method not in ("none", "manual", "random", "group_random")
+        or version.resolved_split_method != expected_method
+        or not _valid_requested_ratios(version.requested_ratios_json)
     ):
         raise ValidationError(message)
 
