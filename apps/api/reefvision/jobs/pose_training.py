@@ -167,18 +167,25 @@ def _verified_pose_trainer_save_dir(actual: Path, expected: Path) -> Path:
     return save_dir
 
 
-def _canonical_pose_export_schema(yaml_text: str) -> tuple[int, int]:
-    """Validate canonical frozen metadata before creating scientific files."""
+def _pose_export_header_lines(yaml_text: str) -> list[str]:
+    """Remove only the known external-export validation guidance line."""
 
-    # The internal frozen-data exporter writes a canonical dataset header.
-    # A substring check could accept comments or duplicate YAML keys, allowing
-    # a later train/val/path declaration to silently redirect scientific data.
     yaml_lines = yaml_text.splitlines()
     if yaml_lines[2:4] == [
         "# Supply independent reviewed validation images and labels before training.",
         "val: images/val",
     ]:
         del yaml_lines[2]
+    return yaml_lines
+
+
+def _canonical_pose_export_schema(yaml_text: str) -> tuple[int, int]:
+    """Validate canonical frozen metadata before creating scientific files."""
+
+    # The internal frozen-data exporter writes a canonical dataset header.
+    # A substring check could accept comments or duplicate YAML keys, allowing
+    # a later train/val/path declaration to silently redirect scientific data.
+    yaml_lines = _pose_export_header_lines(yaml_text)
     top_level = [line for line in yaml_lines if line and not line[0].isspace()]
     if (
         len(top_level) != 6
@@ -779,9 +786,10 @@ def materialize_pose_training_exports(
             "refusing to overwrite prior scientific data"
         )
 
-    # A mismatched holdout header is invalid frozen training provenance.
+    # A mismatched holdout schema is invalid frozen training provenance.
     # Check it before claiming the immutable dataset, so the saved Workflow
     # Builder execution can retry with a corrected validation export.
+    validation_header = b""
     if validation_content is not None:
         try:
             with (
@@ -796,14 +804,23 @@ def materialize_pose_training_exports(
                 # unrelated members, which might be corrupt.
                 if validation_archive.testzip() is not None:
                     raise ValidationError("Pose training export contains a corrupt archive member")
-                if training_archive.read("data.yaml") != validation_archive.read("data.yaml"):
-                    raise ValidationError(
-                        "Ultralytics pose validation export has incompatible data.yaml"
-                    )
                 # Do not create a training directory if the holdout has
                 # incomplete scientist-reviewed frame pairs.
                 _preflight_pose_zip_labels(training_archive)
                 _preflight_pose_zip_labels(validation_archive)
+                training_header = training_archive.read("data.yaml")
+                validation_header = validation_archive.read("data.yaml")
+                # Both headers are canonical now. Only the validation path
+                # may differ between legacy and current frozen exports.
+                # Preserve the full ordered class and landmark definitions.
+                training_schema = _pose_export_header_lines(training_header.decode("utf-8"))[3:]
+                validation_schema = _pose_export_header_lines(
+                    validation_header.decode("utf-8")
+                )[3:]
+                if training_schema != validation_schema:
+                    raise ValidationError(
+                        "Ultralytics pose validation export has incompatible data.yaml"
+                    )
                 # Verify independence before claiming the run directory.
                 _reject_overlapping_pose_zip_frames(training_archive, validation_archive)
         except KeyError as exc:
@@ -848,14 +865,10 @@ def materialize_pose_training_exports(
         # independently reviewed validation frames.
         stage_identity = validation_stage.lstat()
         try:
-            # A separate frozen split must use exactly the training export's
-            # landmark ordering and class map. Otherwise Ultralytics silently
-            # interprets validation labels using the wrong scientific schema.
+            # The staged header must retain its own original frozen bytes.
+            # Its ordered schema already matched the training header above.
             validation_yaml = validation_stage / "data.yaml"
-            if (
-                not validation_yaml.is_file()
-                or validation_yaml.read_text(encoding="utf-8") != yaml_text
-            ):
+            if not validation_yaml.is_file() or validation_yaml.read_bytes() != validation_header:
                 raise ValidationError(
                     "Ultralytics pose validation export has incompatible data.yaml"
                 )
@@ -907,12 +920,7 @@ def materialize_pose_training_exports(
     # Ultralytics still needs an existing loader path even with val=False.
     # The local trainer disables validation and final evaluation in that mode.
     # Rewrite only the validated top-level header, not class/landmark names.
-    yaml_lines = yaml_text.splitlines()
-    if yaml_lines[2:4] == [
-        "# Supply independent reviewed validation images and labels before training.",
-        "val: images/val",
-    ]:
-        del yaml_lines[2]
+    yaml_lines = _pose_export_header_lines(yaml_text)
     yaml_lines[2] = "val: images/val" if validation_content is not None else "val: images/train"
     yaml_text = "\n".join(yaml_lines) + "\n"
     yaml_path.write_text(
