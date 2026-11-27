@@ -489,6 +489,7 @@ def test_disputed_identity_withholds_patch_change_but_preserves_observations() -
         "far_origin_centroid_conflict",
         "axis_aspect_conflict",
         "axis_diagonal_conflict",
+        "different_geometry_axis_diagonal_conflict",
     ],
 )
 def test_patch_concentration_saved_workflow_matches_standalone(
@@ -581,8 +582,13 @@ def test_patch_concentration_saved_workflow_matches_standalone(
             "reefvision.services.spatial_source_assets_v14.preview_from_request",
             legacy_hash_topology_preview,
         )
-    if mode in ("axis_aspect_conflict", "axis_diagonal_conflict"):
-        before, after = _topology_meshes()
+    if mode in (
+        "axis_aspect_conflict",
+        "axis_diagonal_conflict",
+        "different_geometry_axis_diagonal_conflict",
+    ):
+        if mode != "different_geometry_axis_diagonal_conflict":
+            before, after = _topology_meshes()
 
         def legacy_axis_preview(request: MeshPreviewRequest) -> dict:
             record = preview_from_request(request)
@@ -748,6 +754,17 @@ def test_patch_concentration_saved_workflow_matches_standalone(
         flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
         assert artifact["provenance"][flag] is True
         assert artifact["provenance"]["specimen_identity_verified"] is False
+        assert artifact["delta_surface_area_m2"] is None
+        assert artifact["delta_axis_aligned_bounding_box_diagonal_m"] is None
+        assert artifact["delta_surface_area_scale_interval_m2"] is None
+    elif mode == "different_geometry_axis_diagonal_conflict":
+        assert "mesh_axis_lengths_diagonal_inconsistent" in artifact["qc_warnings"]
+        assert "identical_geometry_fingerprint" not in artifact["qc_warnings"]
+        flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+        assert artifact["provenance"][flag] is True
+        assert artifact["provenance"]["specimen_identity_verified"] is False
+        assert artifact["before_surface_area_m2"] > 0
+        assert artifact["after_surface_area_m2"] > 0
         assert artifact["delta_surface_area_m2"] is None
         assert artifact["delta_axis_aligned_bounding_box_diagonal_m"] is None
         assert artifact["delta_surface_area_scale_interval_m2"] is None
@@ -1044,6 +1061,41 @@ def test_identical_geometry_axis_lengths_match_diagonal(mode: str, withheld: boo
     assert result["before_surface_area_m2"] == before["surface_area_m2"]
     assert result["after_surface_area_m2"] == after["surface_area_m2"]
     assert (result["delta_surface_area_m2"] is None) is withheld
+
+
+@pytest.mark.parametrize("timepoint", [0, 1])
+@pytest.mark.parametrize(
+    ("mode", "withheld"),
+    [
+        ("inflated", True),
+        ("missing_fingerprint", True),
+        ("missing_dimensions", False),
+        ("near_equal", False),
+        ("unchanged", False),
+    ],
+)
+def test_distinct_geometry_axis_lengths_match_diagonal(
+    timepoint: int, mode: str, withheld: bool
+) -> None:
+    observations = [_preview(payload) for payload in _meshes()]
+    record = observations[timepoint]
+    key = "axis_aligned_dimensions_m"
+    if mode in ("inflated", "missing_fingerprint"):
+        record[key] = [2 * value for value in record[key]]
+    if mode == "missing_fingerprint":
+        record["provenance"].pop("geometry_sha256")
+    if mode == "missing_dimensions":
+        record.pop(key)
+    if mode == "near_equal":
+        record[key] = [(1 + 1e-10) * value for value in record[key]]
+    result = compare_mesh_observations(*observations)
+    warning = "mesh_axis_lengths_diagonal_inconsistent"
+    flag = "longitudinal_change_withheld_due_to_inconsistent_calibrated_dimensions"
+    assert (warning in result["qc_warnings"]) is withheld
+    assert result["provenance"][flag] is withheld
+    assert result["provenance"]["specimen_identity_verified"] is False
+    assert (result["delta_surface_area_m2"] is None) is withheld
+    assert (result["delta_axis_aligned_bounding_box_diagonal_m"] is None) is withheld
 
 
 @pytest.mark.parametrize(
