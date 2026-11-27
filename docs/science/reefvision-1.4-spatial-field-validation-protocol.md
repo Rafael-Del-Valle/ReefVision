@@ -834,3 +834,17 @@ constraint to different or invalid digests. Test legacy records with
 missing scales and both matching and conflicting descriptors; exercise
 standalone and twice-executed persisted typed graphs with and without
 scale metadata. This check is reconstruction QC, not biological identity.
+
+Complete ranked patch-area fractions are also invariant to a common
+calibration scale. For equal valid primary geometry digests, a ranked
+profile total-variation distance greater than 1e-8 triggers
+`identical_geometry_patch_area_distribution_inconsistent` and the existing
+calibrated-dimension withholding flag. A concentration index alone cannot
+establish equality of profiles. Missing legacy distributions remain unknown;
+different or invalid primary digests retain descriptive reconstruction QC.
+Preserve original nominal measurements and concentration descriptors, but
+withhold derived longitudinal change, uncertainty and profile comparisons.
+Validate a conflicting legacy digest with equal source-space total area and
+extent but redistributed patch areas, including standalone and two runs of
+the same persisted typed graph with equal comparison artifact hashes. This
+is a consistency check, not biological fragmentation or identity evidence.
