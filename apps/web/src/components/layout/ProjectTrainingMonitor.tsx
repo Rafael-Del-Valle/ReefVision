@@ -186,6 +186,10 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
   );
 
   const activeRuns = runs.filter(trainingRunIsActive);
+  let activityLabel =
+    activeRuns.length > 0 ? `${activeRuns.length} active` : "No active runs";
+  if (runsQuery.isPending) activityLabel = "Checking training status…";
+  if (runsQuery.isError) activityLabel = "Training status unavailable";
 
   const visibleRuns = [
     ...activeRuns,
@@ -204,10 +208,14 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
     >
       <div className="rv-inspector-card-heading">
         <strong>Training monitor</strong>
-        <span className={activeRuns.length > 0 ? "training-active" : undefined}>
-          {activeRuns.length > 0
-            ? `${activeRuns.length} active`
-            : "No active runs"}
+        <span
+          className={
+            !runsQuery.isError && activeRuns.length > 0
+              ? "training-active"
+              : undefined
+          }
+        >
+          {activityLabel}
         </span>
       </div>
 
@@ -224,6 +232,8 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
       {runsQuery.error && (
         <p className="form-error" role="alert">
           Training runs could not be loaded: {runsQuery.error.message}
+          {visibleRuns.length > 0 &&
+            " Showing last known observations; current status is unverified."}
         </p>
       )}
 
@@ -241,7 +251,8 @@ export function ProjectTrainingMonitor({ projectId }: { projectId: string }) {
         <div className="rv-training-monitor-list">
           {visibleRuns.map((run) => {
             const active = trainingRunIsActive(run);
-            const canCancel = active && run.status !== "cancel_requested";
+            const canCancel =
+              !runsQuery.isError && active && run.status !== "cancel_requested";
             const metrics = metricEntries(run);
 
             return (

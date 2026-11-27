@@ -529,6 +529,51 @@ describe("ProjectTrainingMonitor", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("does not claim no active runs when the initial status request fails", async () => {
+    vi.mocked(api.getTrainingRuns).mockRejectedValue(new Error("Offline"));
+
+    renderMonitor();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Offline");
+    expect(screen.getByText("Training status unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("No active runs")).not.toBeInTheDocument();
+    expect(screen.queryByText("No training runs yet")).not.toBeInTheDocument();
+    expect(api.cancelTrainingRun).not.toHaveBeenCalled();
+  });
+
+  it("labels cached observations as stale and hides cancellation until status recovers", async () => {
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
+
+    const queryClient = renderMonitor();
+    await screen.findByText("Swiftia detector");
+    expect(screen.getByText("1 active")).toBeInTheDocument();
+
+    vi.mocked(api.getTrainingRuns).mockRejectedValue(new Error("Offline"));
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ["training_runs"] });
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Showing last known observations; current status is unverified.",
+    );
+    expect(screen.getByText("Training status unavailable")).toBeInTheDocument();
+    expect(screen.getByText("0.8123")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Cancel run" }),
+    ).not.toBeInTheDocument();
+
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([activeRun]);
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ["training_runs"] });
+    });
+    expect(await screen.findByText("1 active")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Cancel run" }),
+    ).toBeInTheDocument();
+    expect(api.cancelTrainingRun).not.toHaveBeenCalled();
+  });
+
   it("shows an explicit empty state before the first training run", async () => {
     renderMonitor();
 
