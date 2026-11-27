@@ -295,6 +295,9 @@ def test_stamp_write_storage_options_in_both_comparison_inputs(
         (" 0038", False),
         ("0038 ", False),
         ("", False),
+        ("private coral observation coordinates", False),
+        ("private coral data", False),
+        ("secret\x00field", False),
     ],
 )
 def test_revision_marker_token_contract_in_either_copy(
@@ -332,7 +335,54 @@ def test_revision_marker_token_contract_in_either_copy(
         comparison = report["schema_comparison"]
         assert comparison["matches"] is True
         assert comparison["revision_markers_match"] is valid
+        assert report["alembic_stamps"] == [marker if valid else None]
+        assert comparison["reference_alembic_stamps"] == [marker if valid else None]
         assert comparison["reference_integrity"]["alembic_stamp_validation_error"] == expected
         assert report["classification"] == "requires_researcher_review"
         assert "private coral data" not in result.stdout + result.stderr
+        assert [database.read_bytes() for database in databases] == originals
+
+
+@pytest.mark.parametrize("invalid_index", [0, 1])
+def test_invalid_revision_marker_is_redacted_on_either_side(
+    tmp_path: Path, invalid_index: int
+) -> None:
+    databases = [tmp_path / "source.sqlite", tmp_path / "copy.sqlite"]
+    private_marker = "private coral field location"
+    for index, database in enumerate(databases):
+        with sqlite3.connect(database) as connection:
+            connection.execute(
+                "CREATE TABLE alembic_version (version_num TEXT NOT NULL PRIMARY KEY)"
+            )
+            marker = private_marker if index == invalid_index else "0039"
+            connection.execute("INSERT INTO alembic_version VALUES (?)", (marker,))
+            connection.execute("CREATE TABLE observations (note TEXT)")
+            connection.execute("INSERT INTO observations VALUES ('private observation')")
+    originals = [database.read_bytes() for database in databases]
+    for options in [
+        [],
+        ["--fail-on-noncanonical-stamp"],
+        ["--fail-on-integrity-error"],
+        ["--fail-on-lineage-collision"],
+        ["--fail-on-revision-mismatch"],
+    ]:
+        result = subprocess.run(
+            [
+                sys.executable, str(SCRIPT), str(databases[0]),
+                "--compare-to", str(databases[1]), *options,
+            ],
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode == (2 if options else 0), result.stderr
+        report = json.loads(result.stdout)
+        comparison = report["schema_comparison"]
+        assert report["alembic_stamps"] == [None if invalid_index == 0 else "0039"]
+        assert comparison["reference_alembic_stamps"] == [
+            None if invalid_index == 1 else "0039"
+        ]
+        assert comparison["matches"] is True
+        assert comparison["revision_markers_match"] is False
+        assert report["classification"] == "requires_researcher_review"
+        assert private_marker not in result.stdout + result.stderr
+        assert "private observation" not in result.stdout + result.stderr
         assert [database.read_bytes() for database in databases] == originals
