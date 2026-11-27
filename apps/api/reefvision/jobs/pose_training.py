@@ -813,11 +813,9 @@ def materialize_pose_training_exports(
                 # Both headers are canonical now. Only the validation path
                 # may differ between legacy and current frozen exports.
                 # Preserve the full ordered class and landmark definitions.
-                training_schema = _pose_export_header_lines(training_header.decode("utf-8"))[3:]
-                validation_schema = _pose_export_header_lines(
-                    validation_header.decode("utf-8")
-                )[3:]
-                if training_schema != validation_schema:
+                train_schema = _pose_export_header_lines(training_header.decode("utf-8"))[3:]
+                val_schema = _pose_export_header_lines(validation_header.decode("utf-8"))[3:]
+                if train_schema != val_schema:
                     raise ValidationError(
                         "Ultralytics pose validation export has incompatible data.yaml"
                     )
