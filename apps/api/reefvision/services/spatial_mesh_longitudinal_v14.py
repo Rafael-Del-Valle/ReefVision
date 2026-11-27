@@ -1478,6 +1478,23 @@ def compare_mesh_observations(
         and after_scale is not None
         and before_scale != after_scale
     )
+    # A legacy import without a digest, or a conversion to inline triangles,
+    # cannot defeat the recalibration guard merely by losing byte provenance.
+    # Keep the existing descriptive behavior for two purely inline previews.
+    rescaled_geometry_incomplete_import_lineage = (
+        not reused_imported_source_payload
+        and not same_geometry_different_imported_source
+        and first_hash_valid
+        and second_hash_valid
+        and first_geometry_hash == second_geometry_hash
+        and any(
+            metadata.get("source_format") in ("obj", "ply_ascii", "glb_2_0")
+            for metadata in (first, second)
+        )
+        and before_scale is not None
+        and after_scale is not None
+        and before_scale != after_scale
+    )
     # Classify original-source lineage separately from registration and identity.
     # Different file bytes (even with different geometry) cannot prove that
     # the underlying photographs or field acquisition were independent.
@@ -1496,6 +1513,8 @@ def compare_mesh_observations(
         warnings.append("identical_geometry_different_imported_source_payload")
     if rescaled_reexported_geometry:
         warnings.append("longitudinal_change_withheld_rescaled_reexported_geometry")
+    if rescaled_geometry_incomplete_import_lineage:
+        warnings.append("longitudinal_change_withheld_rescaled_geometry_incomplete_import_lineage")
     if reused_imported_source_payload:
         warnings.append("identical_imported_source_payload_reused_across_observations")
         # A reprocessed or recalibrated copy of one original file cannot
@@ -1802,9 +1821,13 @@ def compare_mesh_observations(
                 and not reused_imported_source_payload
                 and not reused_spatial_source_asset
                 and not rescaled_reexported_geometry
+                and not rescaled_geometry_incomplete_import_lineage
             ),
             "longitudinal_change_withheld_due_to_rescaled_reexported_geometry": (
                 rescaled_reexported_geometry
+            ),
+            "longitudinal_change_withheld_due_to_rescaled_geometry_incomplete_import_lineage": (
+                rescaled_geometry_incomplete_import_lineage
             ),
             "longitudinal_change_withheld_due_to_reused_source_payload": (
                 reused_imported_source_payload
@@ -1824,10 +1847,11 @@ def compare_mesh_observations(
         or reused_imported_source_payload
         or reused_spatial_source_asset
         or rescaled_reexported_geometry
+        or rescaled_geometry_incomplete_import_lineage
     ):
         # Keep original measurements and reconstruction QC intact. Disputed
         # identity, reused project-owned assets, byte-identical originals,
-        # or rescaled re-exports cannot establish independent biological change.
+        # or rescaled copies with incomplete lineage cannot establish biological change.
         for key in (
             "delta_surface_area_to_bounding_diagonal_squared_ratio",
             "delta_patch_area_concentration_index",
