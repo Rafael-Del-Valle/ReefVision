@@ -29,76 +29,39 @@ Keep **HOLD** until all required gates above and the versioned roadmap are compl
 
 ## Camera JPEG acceptance: reproducible original-file manifest
 
-Before importing any camera files, create an immutable source manifest in PowerShell (run in a directory containing **copies** of original camera media, never in the only source directory):
+Use the repository's read-only JPEG inventory as the primary pre/post evidence
+instead of a separate in-tree CSV. It detects filesystem links, Windows path
+collisions, duplicate bytes, malformed JPEG markers, decode failures, EXIF geometry
+and ICC payload fingerprints. Work only with owner-approved copies of original
+camera files in a dedicated non-linked directory; keep all reports outside it.
 
-```powershell
-$ErrorActionPreference = 'Stop'
-$root = (Resolve-Path -LiteralPath '.').Path
-$files = @(Get-ChildItem -LiteralPath $root -File -Recurse |
-  Where-Object { $_.Extension -match '^(?i:\.(jpg|jpeg|jpe|jfif|jfi|jif))$' } |
-  Sort-Object FullName)
-if ($files.Count -eq 0) { throw 'No original JPEG camera samples found' }
-$manifest = @($files | ForEach-Object {
-  [pscustomobject]@{
-    RelativePath = [IO.Path]::GetRelativePath($root, $_.FullName)
-    Extension = $_.Extension
-    Bytes = $_.Length
-    SHA256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
-  }
-})
-$manifest | Export-Csv -LiteralPath (Join-Path $root 'jpeg-source-manifest.csv') -NoTypeInformation -Encoding UTF8
-$manifest | Format-Table -AutoSize
-```
+### Separate physical-camera and alias-routing cohorts
 
-Use separate physical camera originals for `.jpg`, `.JPG`, `.jpeg`, and `.JPEG` when available. For `.jpe`, `.jfif`, `.jfi`, and `.jif`, record whether the sample is genuinely camera-generated or an explicitly labeled **alias copy**; renaming a file only exercises extension routing and does **not** validate decoder compatibility. Record EXIF orientation, ICC profile (including CMYK if present), dimensions, and camera model from a trusted metadata reader; never infer them from the extension. Test import, thumbnail, first-image viewport, full-resolution image, navigation, annotation overlay, and reopen for every sample. Unsupported color profiles or aliases must produce a clear recoverable error rather than a blank viewport.
+The inventory deliberately rejects identical SHA-256 hashes, even if filenames
+or extensions differ. Do not put a capture and its renamed alias copies in the
+same accepted inventory. Use independent fixture roots and evidence records:
 
-After import, verify **every original** against the saved manifest with the following read-only PowerShell check. Run from the same root directory used to generate the CSV; this intentionally fails closed on missing files, changed bytes, duplicate manifest paths, or newly added JPEGs. It does not modify the camera originals.
+| Cohort | Preparation | What a passing run demonstrates |
+| --- | --- | --- |
+| Physical-camera originals | Distinct unmodified Sony/Canon or other available camera captures; preserve native names and extensions. | Representative original-camera decoding and installed-app rendering for the tested files only. |
+| Extension routing | One approved byte-for-byte copy per original digest in each separate fixture root; exercise JPG/JPEG and JPE/JFIF/JFI/JIF, including mixed case. | Extension routing for the tested copies; not additional independent captures or additional camera models. |
+| Duplicate negative control | A separate disposable fixture root with two byte-identical copies under different names/extensions. | Inventory must exit nonzero and report duplicate source bytes; this root must never be counted as passing physical-camera evidence. |
 
-```powershell
-$ErrorActionPreference = 'Stop'
-$root = (Resolve-Path -LiteralPath '.').Path
-$manifestPath = Join-Path $root 'jpeg-source-manifest.csv'
-if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { throw 'Missing source manifest' }
-$expected = @(Import-Csv -LiteralPath $manifestPath)
-if ($expected.Count -eq 0) { throw 'Empty source manifest' }
-$seen = [Collections.Generic.HashSet[string]::new([StringComparer]::OrdinalIgnoreCase)
-foreach ($entry in $expected) {
-  $relative = [string]$entry.RelativePath
-  $segments = @($relative -split '[\\/]')
-  if ([IO.Path]::IsPathRooted($relative) -or ($segments -contains '..')) {
-    throw "Unsafe manifest path: $relative"
-  }
-  if (-not $seen.Add($relative)) { throw "Duplicate manifest path: $relative" }
-  $full = [IO.Path]::GetFullPath((Join-Path $root $relative))
-  $withinRoot = $full.StartsWith($root.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)
-  if (-not $withinRoot -or -not (Test-Path -LiteralPath $full -PathType Leaf)) {
-    throw "Missing or escaped source file: $relative"
-  }
-  $file = Get-Item -LiteralPath $full
-  $hash = (Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash
-  if ($file.Length -ne [long]$entry.Bytes -or $hash -ne $entry.SHA256) {
-    throw "Source changed after import: $relative"
-  }
-}
-$actual = @(Get-ChildItem -LiteralPath $root -File -Recurse |
-  Where-Object { $_.Extension -match '^(?i:\.(jpg|jpeg|jpe|jfif|jfi|jif))$' })
-if ($actual.Count -ne $expected.Count) { throw 'JPEG source set changed since manifest creation' }
-"PASS: $($expected.Count) original JPEG files match pre-import SHA-256 and size"
-```
+For each alias root, record the original source digest, original filename,
+alias filename and tested extension in a separate operator record. An alias
+copy must never be counted as a new biological observation or experimental
+unit. Distinct source hashes are necessary for this fixture inventory, but
+are not sufficient to establish scientific independence.
 
-For a separately validated JPEG decoder/EXIF inventory, also run the repository's
-read-only scanner on an owner-approved **copy** of the camera samples, both
-before and after import (do not write its JSON report into the fixture tree):
-`python scripts/verify_camera_jpeg_fixtures.py "C:\camera-test-copies" --verify-decode`.
-It covers all six supported JPEG suffixes, case variants, EXIF geometry, ICC
-payload fingerprints, collision/duplicate-source risks, and filesystem links;
-a nonzero exit blocks acceptance. Keep both reports outside the source directory.
-Neither this scanner nor the PowerShell hash check substitutes for installed
-WebView2 or physical Canon/Sony image-compatibility evidence.
+For every physical or alias file, test import, thumbnail, first-image viewport,
+full-resolution image, navigation, annotation overlay and reopen. Record camera
+make/model as declared by metadata (not authenticated camera origin), native
+and display dimensions, EXIF orientation, ICC profile fingerprint and any
+recoverable decode/display error. Include CMYK JPEG when available. Synthetic
+samples cannot substitute for actual original-camera acceptance.
 
-
-The scanner can now enforce a saved **pre-import source inventory** directly,
-in addition to the separate PowerShell CSV check. Use a dedicated evidence
+The scanner enforces a saved **pre-import source inventory** directly.
+Run the following independently for each positive cohort. Use a dedicated evidence
 directory **outside** the approved camera fixture tree, preserve its SHA-256
 separately, and keep the same absolute fixture path between runs:
 
@@ -107,8 +70,12 @@ $ErrorActionPreference = 'Stop'
 $cameraRoot = 'C:\camera-test-copies'
 $evidenceRoot = 'C:\camera-evidence'
 New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
+# Use a fresh evidence directory per cohort/candidate; do not overwrite earlier QC.
 $before = Join-Path $evidenceRoot 'jpeg-before.json'
 $after = Join-Path $evidenceRoot 'jpeg-after.json'
+if ((Test-Path -LiteralPath $before) -or (Test-Path -LiteralPath $after)) {
+  throw 'Choose a fresh evidence directory; do not overwrite prior reports.'
+}
 python scripts/verify_camera_jpeg_fixtures.py $cameraRoot --verify-decode > $before
 if ($LASTEXITCODE -ne 0) { throw 'Camera pre-import inventory failed.' }
 $beforeSha256 = (Get-FileHash -LiteralPath $before -Algorithm SHA256).Hash
@@ -125,8 +92,8 @@ The scanner refuses baseline files **inside** the approved camera fixture tree
 and refuses baseline paths traversing symbolic links or Windows junctions.
 Keep the JSON evidence in an independent, non-linked directory as shown above;
 these checks protect provenance boundaries but do not authenticate the operator.
-Comparison rejects a different source root, duplicate/unsafe manifest paths, changed source
-hashes even when file size is unchanged, missing files and new JPEG files.
+Comparison rejects a different source root, duplicate/unsafe manifest paths,
+duplicate source hashes, malformed decoded geometry, changed source hashes even when file size is unchanged, missing files and new JPEG files.
 The optional `--expected-manifest-sha256` flag also rejects a baseline whose
 JSON bytes differ from the separately recorded pre-import digest, including
 when altered JPEGs and baseline hashes have been co-edited. A baseline created
