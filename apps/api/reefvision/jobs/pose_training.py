@@ -173,10 +173,18 @@ def _canonical_pose_export_schema(yaml_text: str) -> tuple[int, int]:
     # The internal frozen-data exporter writes a canonical dataset header.
     # A substring check could accept comments or duplicate YAML keys, allowing
     # a later train/val/path declaration to silently redirect scientific data.
-    top_level = [line for line in yaml_text.splitlines() if line and not line[0].isspace()]
+    yaml_lines = yaml_text.splitlines()
+    if yaml_lines[2:4] == [
+        "# Supply independent reviewed validation images and labels before training.",
+        "val: images/val",
+    ]:
+        del yaml_lines[2]
+    top_level = [line for line in yaml_lines if line and not line[0].isspace()]
     if (
         len(top_level) != 6
-        or top_level[:3] != ["path: .", "train: images/train", "val: images/train"]
+        or yaml_lines[:4] != top_level[:4]
+        or top_level[:2] != ["path: .", "train: images/train"]
+        or top_level[2] not in {"val: images/train", "val: images/val"}
         or re.fullmatch(r"kpt_shape: \[[1-9]\d*, 3\]", top_level[3]) is None
         or top_level[4:] != ["names:", "reefvision_keypoint_names:"]
     ):
@@ -185,7 +193,6 @@ def _canonical_pose_export_schema(yaml_text: str) -> tuple[int, int]:
     # Require the nested class map and ordered landmarks to match the
     # canonical frozen exporter too. The six outer YAML keys alone do not
     # detect duplicate class indices or extra keypoints within a section.
-    yaml_lines = yaml_text.splitlines()
     landmark_header = yaml_lines.index("reefvision_keypoint_names:")
     class_lines = yaml_lines[5:landmark_header]
     landmark_lines = yaml_lines[landmark_header + 1 :]
@@ -894,23 +901,22 @@ def materialize_pose_training_exports(
                 )
             shutil.rmtree(validation_stage)
 
-        if "val: images/train" in yaml_text:
-            yaml_text = yaml_text.replace(
-                "val: images/train",
-                "val: images/val",
-                1,
-            )
-        elif "val:" not in yaml_text:
-            yaml_text += "val: images/val\n"
-        else:
-            raise ValidationError("Ultralytics pose export has an unexpected validation path")
-
         validation_mode = "separate_frozen_pose_dataset"
 
-    # When no separate validation dataset is supplied, data.yaml may
-    # retain the interoperability export's val: images/train entry.
-    # The production runner explicitly forces val=False in that case.
-    # Therefore those frames are never silently treated as validation.
+    # External exports reserve images/val. For internal exploratory runs only,
+    # Ultralytics still needs an existing loader path even with val=False.
+    # The local trainer disables validation and final evaluation in that mode.
+    # Rewrite only the validated top-level header, not class/landmark names.
+    yaml_lines = yaml_text.splitlines()
+    if yaml_lines[2:4] == [
+        "# Supply independent reviewed validation images and labels before training.",
+        "val: images/val",
+    ]:
+        del yaml_lines[2]
+    yaml_lines[2] = (
+        "val: images/val" if validation_content is not None else "val: images/train"
+    )
+    yaml_text = "\n".join(yaml_lines) + "\n"
     yaml_path.write_text(
         yaml_text,
         encoding="utf-8",
