@@ -126,3 +126,54 @@ def test_cli_rejects_symlinked_migration_directory(tmp_path: Path) -> None:
     assert result.returncode != 0
     assert "Migration directory has a symbolic-link ancestor" in result.stderr
     assert source.read_bytes() == before
+
+
+def test_cli_distinguishes_shared_and_divergent_source_without_authorizing_merge(
+    tmp_path: Path,
+) -> None:
+    roots = [tmp_path / name for name in ("science", "review", "third")]
+    files = {}
+    for root in roots:
+        root.mkdir()
+        for revision in ("0037", "0038", "0039", "0040", "0041"):
+            source = root / f"{revision}.py"
+            body = f'revision = "{revision}"\n'
+            if revision != "0037":
+                body += "# science\n" if root == roots[0] else "# QC\n"
+            source.write_text(body, encoding="utf-8")
+            files[source] = source.read_bytes()
+    only_science = roots[0] / "0042.py"
+    only_science.write_text('revision = "0042"\n', encoding="utf-8")
+    files[only_science] = only_science.read_bytes()
+
+    for order in (roots, list(reversed(roots))):
+        result = _run(*order)
+        assert result.returncode == 2
+        report = json.loads(result.stdout)
+        assert report["collision_source_relationship"] == {
+            "0037": "byte_identical",
+            "0038": "source_differs",
+            "0039": "source_differs",
+            "0040": "source_differs",
+            "0041": "source_differs",
+        }
+        assert report["collision_free"] is False
+        assert report["safe_to_reconcile_automatically"] is False
+        assert set(report["collisions"]) == {"0037", "0038", "0039", "0040", "0041"}
+        assert report["revision_count"] == 6
+        assert {path: path.read_bytes() for path in files} == files
+
+
+def test_cli_identical_duplicate_within_one_lineage_remains_a_collision(
+    tmp_path: Path,
+) -> None:
+    first = tmp_path / "0038_a.py"
+    second = tmp_path / "0038_b.py"
+    for path in (first, second):
+        path.write_text('revision = "0038"\n', encoding="utf-8")
+    result = _run(tmp_path)
+    assert result.returncode == 2
+    report = json.loads(result.stdout)
+    assert report["collision_source_relationship"] == {"0038": "byte_identical"}
+    assert report["collision_free"] is False
+    assert report["safe_to_reconcile_automatically"] is False
