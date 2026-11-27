@@ -2537,6 +2537,13 @@ def _assert_chain_traversals(
     # Independent directed scan, without the service's reverse edge index.
     for chain in chains:
         chain_pairs = list(pairwise(chain["source_waypoints_mesh_units"]))
+        # Independent geometric oracle, also exercised by saved-graph parity.
+        chord = dist(chain_pairs[0][0], chain_pairs[-1][1])
+        length = sum(dist(first, last) for first, last in chain_pairs)
+        if chain["is_closed"]:
+            assert chain["endpoint_straightness_ratio"] is None
+        else:
+            assert chain["endpoint_straightness_ratio"] == pytest.approx(chord / length)
         expected = []
         for trace_index, path in enumerate(paths):
             for trace_offset, (a, b) in enumerate(pairwise(path)):
@@ -2850,6 +2857,24 @@ def test_exact_trace_endpoint_graph_does_not_connect_interior_crossings() -> Non
         assert component["length_scale_only_interval_m"] == pytest.approx([0.018, 0.022])
     assert topology["human_review_verified"] is False
     assert "surface_trace_cross_component_collinear_overlap" not in union["qc_warnings"]
+
+
+@pytest.mark.parametrize("scale", [0.001, 0.01, 2.0])
+def test_open_chain_straightness_is_scale_and_direction_invariant(scale: float) -> None:
+    for path in ([0, 2, 1], [1, 2, 0]):
+        result = measure_mesh_preview(
+            **{
+                **PARAMS,
+                "meters_per_unit": scale,
+                "surface_trace_vertex_paths": [path],
+            }
+        )
+        chains = result["surface_trace_exact_edge_union"]["endpoint_graph_chains"]
+        assert len(chains) == 1
+        chain = chains[0]
+        assert chain["endpoint_straightness_ratio"] == pytest.approx(1 / (1 + sqrt(2)))
+        assert chain["human_review_verified"] is False
+        assert chain["biological_validation_status"] == "not_verified_anatomical_centerline"
 
 
 def test_chain_geometry_digest_is_source_bound_not_calibration_or_signed_zero() -> None:
