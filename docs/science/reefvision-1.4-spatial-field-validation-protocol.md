@@ -848,3 +848,18 @@ Validate a conflicting legacy digest with equal source-space total area and
 extent but redistributed patch areas, including standalone and two runs of
 the same persisted typed graph with equal comparison artifact hashes. This
 is a consistency check, not biological fragmentation or identity evidence.
+
+Equal valid indexed-geometry digests also require consistent per-patch
+topology distributions, not just matching aggregate counts. Compare the
+multiset of joint face, boundary-edge and nonmanifold-edge counts using only
+fields available at both timepoints. Reordering complete patch rows does
+not establish a conflict. Missing legacy arrays stay unknown. A conflict
+emits `identical_geometry_patch_topology_distribution_inconsistent` and
+uses the existing inconsistent-topology withholding flag. Retain nominal
+measurements and aggregate QC; do not report derived biological change.
+Test four faces in two patches with face-count profiles [3, 1] and [2, 2]
+and identical aggregate boundary counts, including permutation, missing
+array and different-digest controls. Simulate a legacy summary conflict in
+the standalone API and two executions of one persisted typed graph; require
+artifact equality and equal hashes. This is reconstruction QC, not proof
+of geometry authenticity or biological fragmentation.
