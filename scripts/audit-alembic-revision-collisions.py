@@ -387,6 +387,17 @@ def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
             revision: {path: source_sha256[path] for path in paths}
             for revision, paths in collisions.items()
         },
+        # Common byte-identical history is still a duplicate identifier, but
+        # reviewers need to distinguish it from independently changed source.
+        # A source difference is not itself proof of different DDL.
+        "collision_source_relationship": {
+            revision: (
+                "byte_identical"
+                if len({source_sha256[path] for path in paths}) == 1
+                else "source_differs"
+            )
+            for revision, paths in collisions.items()
+        },
         "collision_free": not bool(collisions),
     }
     if verify_parent_graph:
