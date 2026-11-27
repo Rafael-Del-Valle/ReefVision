@@ -175,6 +175,8 @@ def test_frozen_item_evidence_cannot_change_under_standalone_or_saved_qc(
         "achieved_ratios_negative",
         "achieved_ratios_huge",
         "blank_biological_group",
+        "requested_ratios_not_normalized",
+        "resolved_method_inconsistent",
     ],
 )
 def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
@@ -244,6 +246,11 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             else:
                 key, value = "train", 0.123456
             version.achieved_ratios_json = {**version.achieved_ratios_json, key: value}
+        elif tamper == "requested_ratios_not_normalized":
+            version.requested_ratios_json = {"train": 0.8, "validation": 0.4, "test": 0.1}
+        elif tamper == "resolved_method_inconsistent":
+            version.requested_split_method = "manual"
+            version.resolved_split_method = "group_random"
         elif tamper == "blank_biological_group":
             item.group_key = "\u2003"
             version.missing_group_key_count = 0
@@ -322,6 +329,8 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
             "achieved_ratios_negative",
             "achieved_ratios_huge",
             "blank_biological_group",
+            "requested_ratios_not_normalized",
+            "resolved_method_inconsistent",
         }:
             manifest["split_config"] = {
                 **version.manifest_json["split_config"],
@@ -334,6 +343,11 @@ def test_resigned_frozen_detection_census_fails_standalone_and_saved_qc(
                 manifest["split_config"]["missing_group_key_count"] = (
                     version.missing_group_key_count
                 )
+            elif tamper == "requested_ratios_not_normalized":
+                manifest["split_config"]["requested_ratios"] = version.requested_ratios_json
+            elif tamper == "resolved_method_inconsistent":
+                manifest["split_config"]["requested_split_method"] = version.requested_split_method
+                manifest["split_config"]["resolved_split_method"] = version.resolved_split_method
             else:
                 manifest["split_config"]["achieved_ratios"] = version.achieved_ratios_json
         version.manifest_json = manifest
