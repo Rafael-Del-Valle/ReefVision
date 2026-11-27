@@ -1676,9 +1676,7 @@ def compare_mesh_observations(
         # Aspect ratios cannot detect uniformly inflated axis lengths.
         # The calibrated diagonal must also agree with the axis lengths
         # within each record; missing historical fields remain unknown.
-        if extent is not None and not isclose(
-            hypot(*dimensions), extent, rel_tol=1e-8, abs_tol=0.0
-        ):
+        if extent is not None and not isclose(hypot(*dimensions), extent, rel_tol=1e-8, abs_tol=0.0):
             contradictory_calibrated_dimensions = True
             warnings.append(
                 "identical_geometry_axis_lengths_diagonal_inconsistent"
@@ -1688,7 +1686,7 @@ def compare_mesh_observations(
         largest = max(dimensions)
         profile = [value / largest for value in dimensions] if largest > 0 else None
         axis_profiles.append(profile)
-    if first_hash_valid and second_hash_valid and first_geometry_hash == second_geometry_hash:
+    if identical_geometry:
         warnings.append("identical_geometry_fingerprint")
         # A fingerprint covers the original triangles; calibration cannot alter
         # triangle counts or mesh connectivity. Conflicting topology metadata
