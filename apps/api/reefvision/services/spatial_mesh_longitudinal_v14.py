@@ -1693,9 +1693,8 @@ def compare_mesh_observations(
             ):
                 raise ValueError("Axis-aligned dimensions must be three finite nonnegative values")
             largest = max(dimensions)
-            axis_profiles.append(
-                [value / largest for value in dimensions] if largest > 0 else None
-            )
+            profile = [value / largest for value in dimensions] if largest > 0 else None
+            axis_profiles.append(profile)
         early_axes, late_axes = axis_profiles
         if early_axes is not None and late_axes is not None and any(
             not isclose(early, late, rel_tol=1e-8, abs_tol=1e-12)
