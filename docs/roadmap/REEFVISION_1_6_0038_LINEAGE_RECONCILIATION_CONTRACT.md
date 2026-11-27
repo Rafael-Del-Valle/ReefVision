@@ -389,3 +389,29 @@ The independent 1.1/1.6 migration graph is still unresolved. Existing typed
 executable QC workflows, units, saved runs, provenance, retry and explicit
 researcher review remain unchanged; this preflight is not a scientific
 workflow operation. No database modification or release is authorized.
+
+## Alembic stamp write and storage semantics (2026-11-27, Track D)
+
+The diagnostic previously accepted a single, non-null, ascending BINARY
+revision key with a default value, alternative SQLite `ON CONFLICT` policy,
+or `WITHOUT ROWID` storage. These may preserve the current revision and pass
+integrity checks while changing future stamp insertion, duplicate handling,
+or storage semantics. The read-only inspector now also requires no column
+default, no explicit conflict policy, and ordinary rowid storage. It uses the
+existing comment-aware SQL tokenization rather than searching raw DDL text;
+normal comments and explicit BINARY collation remain compatible. No raw stamp
+default or DDL is added to the report.
+
+The existing strict-CLI regression now covers 26 combinations, including
+ordinary and WITHOUT ROWID versions of all 13 key declarations, repeated
+read-only inspection, no authorization, redacted sentinel data and unchanged
+database bytes. Independent SQLite checks validated the fixture DDL and
+reproduced the earlier metadata-only false acceptance. Predecessor exact-head
+CI #45975009660 passed backend (including lint, type, pytest and migration
+checks), frontend (including Playwright and build), and native Windows
+preservation. The new exact-head tests remain to be independently confirmed.
+This strengthens the migration reconciliation evidence gate; it is not a
+reconciliation or a new scientific workflow capability. Existing saved typed
+QC workflows and researcher-review gates remain intact. Release HOLD pending
+cross-track migration reconciliation, representative biological validation,
+physical installed Windows MSI/CAB/GUI upgrade/rollback and approval.

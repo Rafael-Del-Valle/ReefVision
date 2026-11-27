@@ -326,6 +326,7 @@ def test_qc_table_stages_reject_all_pre_creation_stamps_without_data_changes(
         assert db.execute("SELECT note FROM coral_sentinel").fetchone() == ("original observation",)
 
 
+@pytest.mark.parametrize("without_rowid", [False, True])
 @pytest.mark.parametrize(
     ("stamp_definition", "canonical"),
     [
@@ -337,17 +338,26 @@ def test_qc_table_stages_reject_all_pre_creation_stamps_without_data_changes(
         ("version_num TEXT NOT NULL PRIMARY KEY DESC", False),
         ("version_num TEXT NOT NULL, PRIMARY KEY (version_num COLLATE NOCASE)", False),
         ("version_num TEXT NOT NULL, PRIMARY KEY (version_num DESC)", False),
+        ("version_num TEXT NOT NULL PRIMARY KEY ON CONFLICT REPLACE", False),
+        ("version_num TEXT NOT NULL PRIMARY KEY ON CONFLICT IGNORE", False),
+        ("version_num TEXT NOT NULL ON CONFLICT REPLACE PRIMARY KEY", False),
+        ("version_num TEXT NOT NULL DEFAULT 'private stamp default' PRIMARY KEY", False),
+        ("version_num TEXT NOT NULL PRIMARY KEY /* ON CONFLICT REPLACE */", True),
     ],
 )
-def test_alembic_stamp_primary_key_semantics_are_read_only(tmp_path, stamp_definition, canonical):
-    """An unchanged revision string can hide incompatible index semantics."""
+def test_alembic_stamp_primary_key_semantics_are_read_only(
+    tmp_path, stamp_definition, canonical, without_rowid
+):
+    """An unchanged revision string can hide incompatible write/storage semantics."""
     import json
     import subprocess
     import sys
 
     path = tmp_path / "qc-stamp-key.sqlite"
+    canonical = canonical and not without_rowid
+    suffix = " WITHOUT ROWID" if without_rowid else ""
     with sqlite3.connect(path) as db:
-        db.execute(f"CREATE TABLE alembic_version ({stamp_definition})")
+        db.execute(f"CREATE TABLE alembic_version ({stamp_definition}){suffix}")
         db.execute("INSERT INTO alembic_version VALUES ('0039')")
         db.execute("CREATE TABLE review_queue_item_events (id INTEGER PRIMARY KEY, note TEXT)")
         db.execute("INSERT INTO review_queue_item_events VALUES (1, 'private coral observation')")
@@ -362,6 +372,7 @@ def test_alembic_stamp_primary_key_semantics_are_read_only(tmp_path, stamp_defin
     assert result["revision_rows"] == ["0039"]
     assert result["upgrade_authorized"] is False
     assert "private coral observation" not in json.dumps(result)
+    assert "private stamp default" not in json.dumps(result)
     strict = subprocess.run(
         [sys.executable, str(SCRIPT), str(path), "--fail-on-warning"],
         capture_output=True,
