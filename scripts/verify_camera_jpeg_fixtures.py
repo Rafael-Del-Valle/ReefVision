@@ -764,7 +764,38 @@ def _valid_decoded_qc(entry: dict[str, object]) -> bool:
             return False
     # Missing EXIF dimensions are legitimate; an explicit mismatch is not.
     dimensions_match = entry.get("jpeg_exif_dimensions_match_raster")
-    return dimensions_match is None or dimensions_match is True
+    if dimensions_match is not None and dimensions_match is not True:
+        return False
+    # ICC evidence identifies the embedded payload, not a calibrated color
+    # measurement. Validate every recorded member and reject contradictions
+    # even if both manifests were replayed with identical malformed values.
+    # Older decoded manifests may contain only the payload hash.
+    present_key = "jpeg_icc_profile_present"
+    size_key = "jpeg_icc_profile_bytes"
+    hash_key = "jpeg_icc_profile_sha256"
+    present = entry.get(present_key)
+    size = entry.get(size_key)
+    checksum = entry.get(hash_key)
+    if present_key in entry and type(present) is not bool:
+        return False
+    if size_key in entry and (
+        type(size) is not int or not 0 <= size <= entry["bytes"]
+    ):
+        return False
+    if hash_key in entry and checksum is not None and (
+        not isinstance(checksum, str) or re.fullmatch(r"[0-9a-f]{64}", checksum) is None
+    ):
+        return False
+    # Compare all available presence indicators without inferring an absent
+    # legacy field. An empty payload cannot have an embedded-profile hash.
+    indicators = []
+    if present_key in entry:
+        indicators.append(present)
+    if size_key in entry:
+        indicators.append(size > 0)
+    if hash_key in entry:
+        indicators.append(checksum is not None)
+    return not indicators or all(value == indicators[0] for value in indicators)
 
 
 def compare_source_manifest(

@@ -336,6 +336,71 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                             ),
                         )
 
+    def test_replay_rejects_contradictory_icc_payload_evidence(self) -> None:
+        """A matching replay cannot certify a malformed embedded-profile fingerprint."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            header = {
+                "path": "CAMERA.JPG",
+                "bytes": 42,
+                "sha256": "a" * 64,
+                "jpeg_boundary_markers": True,
+            }
+            decoded = {
+                **header,
+                "jpeg_decodable": True,
+                "jpeg_pixel_width": 12,
+                "jpeg_pixel_height": 8,
+                "jpeg_display_width": 12,
+                "jpeg_display_height": 8,
+                "jpeg_exif_orientation": None,
+            }
+            profile = {
+                "jpeg_icc_profile_present": True,
+                "jpeg_icc_profile_bytes": 12,
+                "jpeg_icc_profile_sha256": "b" * 64,
+            }
+            for valid in (
+                decoded,
+                {**decoded, "jpeg_icc_profile_sha256": "b" * 64},
+                {**decoded, **profile},
+                {
+                    **decoded,
+                    "jpeg_icc_profile_present": False,
+                    "jpeg_icc_profile_bytes": 0,
+                    "jpeg_icc_profile_sha256": None,
+                },
+            ):
+                with self.subTest(valid=valid):
+                    baseline = {"root": str(root), "errors": [], "files": [valid]}
+                    self.assertEqual(MODULE.compare_source_manifest(root, [valid], baseline), [])
+            for patch in (
+                {"jpeg_icc_profile_present": 1},
+                {"jpeg_icc_profile_present": False},
+                {"jpeg_icc_profile_bytes": True},
+                {"jpeg_icc_profile_bytes": 0},
+                {"jpeg_icc_profile_bytes": -1},
+                {"jpeg_icc_profile_bytes": 43},
+                {"jpeg_icc_profile_bytes": None},
+                {"jpeg_icc_profile_sha256": None},
+                {"jpeg_icc_profile_sha256": "b" * 63},
+                {"jpeg_icc_profile_sha256": "z" * 64},
+                {"jpeg_icc_profile_sha256": 123},
+            ):
+                with self.subTest(patch=patch):
+                    invalid = {**decoded, **profile, **patch}
+                    baseline = {"root": str(root), "errors": [], "files": [invalid]}
+                    self.assertEqual(
+                        MODULE.compare_source_manifest(root, [invalid], baseline),
+                        ["baseline JPEG manifest contains failed decoded QC evidence"],
+                    )
+                    baseline["files"] = [header]
+                    self.assertIn(
+                        "source JPEG decoded QC failed: 'CAMERA.JPG'",
+                        MODULE.compare_source_manifest(root, [invalid], baseline),
+                    )
+
+
     def test_header_only_baseline_rejects_invalid_decode_upgrade(self) -> None:
         """Optional stronger verification must not certify invalid pixel evidence."""
         with tempfile.TemporaryDirectory() as directory:
