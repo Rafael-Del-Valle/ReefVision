@@ -744,6 +744,29 @@ def _valid_manifest_evidence_labels(entry: dict[str, object], relative: str) -> 
     return True
 
 
+def _valid_decoded_qc(entry: dict[str, object]) -> bool:
+    """Do not accept a replayed decode whose recorded QC explicitly failed."""
+    # These are the same failure flags inventory() reports in its errors list.
+    # Missing fields are allowed for older manifests; a present flag must
+    # be a genuine JSON false, not an integer, string, or null placeholder.
+    for field in (
+        "jpeg_exif_camera_make_malformed",
+        "jpeg_exif_camera_model_malformed",
+        "jpeg_exif_datetime_original_malformed",
+        "jpeg_exif_offset_time_original_malformed",
+        "jpeg_exif_subsec_time_original_malformed",
+        "jpeg_exif_exposure_ifd_conflict",
+        "jpeg_exif_offset_without_datetime_original",
+        "jpeg_exif_subsec_without_datetime_original",
+        "jpeg_exif_ifd0_dimension_conflict",
+    ):
+        if field in entry and entry[field] is not False:
+            return False
+    # Missing EXIF dimensions are legitimate; an explicit mismatch is not.
+    dimensions_match = entry.get("jpeg_exif_dimensions_match_raster")
+    return dimensions_match is None or dimensions_match is True
+
+
 def compare_source_manifest(
     root: Path, current: list[dict[str, object]], baseline: object
 ) -> list[str]:
@@ -806,6 +829,8 @@ def compare_source_manifest(
                 return ["baseline JPEG manifest contains unverified pixel-decode evidence"]
             if not _valid_decoded_geometry(entry):
                 return ["baseline JPEG manifest contains invalid decoded geometry evidence"]
+            if not _valid_decoded_qc(entry):
+                return ["baseline JPEG manifest contains failed decoded QC evidence"]
             expected_decoded[relative] = entry
 
     if _windows_manifest_paths_collide(list(expected)):
@@ -872,6 +897,8 @@ def compare_source_manifest(
                 errors.append(
                     f"source JPEG pixel-decode upgrade invalid: {relative!r}"
                 )
+        if record.get("jpeg_decodable") is True and not _valid_decoded_qc(record):
+            errors.append(f"source JPEG decoded QC failed: {relative!r}")
         if relative in expected_decoded:
             if record.get("jpeg_decodable") is not True:
                 errors.append(

@@ -284,6 +284,58 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                 [],
             )
 
+    def test_replay_rejects_failed_decoded_qc_even_with_matching_bytes(self) -> None:
+        """A cleared errors list cannot erase explicit failed camera QC."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            header = {
+                "path": "CAMERA.JPG",
+                "bytes": 42,
+                "sha256": "a" * 64,
+                "jpeg_boundary_markers": True,
+            }
+            decoded = {
+                **header,
+                "jpeg_decodable": True,
+                "jpeg_pixel_width": 12,
+                "jpeg_pixel_height": 8,
+                "jpeg_display_width": 12,
+                "jpeg_display_height": 8,
+                "jpeg_exif_orientation": None,
+                "jpeg_exif_capture_timezone_unknown": True,
+                "jpeg_exif_dimensions_match_raster": None,
+            }
+            baseline = {"root": str(root), "errors": [], "files": [decoded]}
+            self.assertEqual(MODULE.compare_source_manifest(root, [decoded], baseline), [])
+            for field, value in (
+                ("jpeg_exif_camera_make_malformed", True),
+                ("jpeg_exif_camera_model_malformed", 0),
+                ("jpeg_exif_datetime_original_malformed", True),
+                ("jpeg_exif_offset_time_original_malformed", "false"),
+                ("jpeg_exif_subsec_time_original_malformed", None),
+                ("jpeg_exif_exposure_ifd_conflict", True),
+                ("jpeg_exif_offset_without_datetime_original", True),
+                ("jpeg_exif_subsec_without_datetime_original", True),
+                ("jpeg_exif_ifd0_dimension_conflict", True),
+                ("jpeg_exif_dimensions_match_raster", False),
+                ("jpeg_exif_dimensions_match_raster", 1),
+            ):
+                with self.subTest(field=field, value=value):
+                    invalid = {**decoded, field: value}
+                    self.assertEqual(
+                        MODULE.compare_source_manifest(
+                            root, [invalid], {**baseline, "files": [invalid]}
+                        ),
+                        ["baseline JPEG manifest contains failed decoded QC evidence"],
+                    )
+                    for prior in (header, decoded):
+                        self.assertIn(
+                            "source JPEG decoded QC failed: 'CAMERA.JPG'",
+                            MODULE.compare_source_manifest(
+                                root, [invalid], {**baseline, "files": [prior]}
+                            ),
+                        )
+
     def test_header_only_baseline_rejects_invalid_decode_upgrade(self) -> None:
         """Optional stronger verification must not certify invalid pixel evidence."""
         with tempfile.TemporaryDirectory() as directory:
