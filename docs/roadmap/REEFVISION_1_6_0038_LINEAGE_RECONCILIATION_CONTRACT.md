@@ -510,3 +510,24 @@ unchanged bytes. Full exact-head CI, reviewed cross-version reconciliation,
 representative biological saved workflows and installed Windows acceptance
 remain separate gates. No new scientific workflow node is needed for this
 offline diagnostic; existing typed saved QC execution and review remain intact.
+
+
+## Undecodable SQLite revision TEXT (2026-11-27)
+
+SQLite can store invalid UTF-8 as TEXT with clean quick and integrity checks.
+The default Python driver decoder raises an exception containing the offending
+value, bypassing revision-marker redaction and losing the row count.
+The revision query now scopes a replacement-character decoder to that query
+alone, restores the original connection decoder in a finally block, and
+applies the existing visible ASCII token validator. Invalid TEXT is null in
+the report, not a leaked exception or accepted revision. Non-TEXT values
+remain rejected. Legitimate UTF-8 and UTF-16 database markers still work.
+
+Added ten paired-copy malformed-byte cases and three supported-encoding
+controls, checking strict refusal, byte preservation and researcher review.
+Twenty-three independent SQLite probes passed; the full repository suite
+and exact-head CI remain unverified. This is read-only migration preflight,
+not a scientific node or migration authorization. Existing typed saved QC
+graphs and review gates are unchanged. Cross-version reconciliation,
+representative biology, installed Windows qualification and explicit owner
+approval remain release gates.
