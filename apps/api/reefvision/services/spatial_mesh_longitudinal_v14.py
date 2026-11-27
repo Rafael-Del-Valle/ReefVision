@@ -1631,6 +1631,15 @@ def compare_mesh_observations(
         ):
             contradictory_calibrated_dimensions = True
             warnings.append("identical_geometry_shape_ratio_inconsistent")
+        # Relative patch areas are also invariant to a common calibration scale.
+        # Compare the complete ranked profiles, not only their concentration,
+        # which can be identical for distinct area distributions.
+        if (
+            ranked_patch_area_profile_distance is not None
+            and ranked_patch_area_profile_distance > 1e-8
+        ):
+            contradictory_calibrated_dimensions = True
+            warnings.append("identical_geometry_patch_area_distribution_inconsistent")
         if before_scale is not None and after_scale is not None:
             if before_scale != after_scale:
                 warnings.append("identical_geometry_rescaled_not_biological_growth")
