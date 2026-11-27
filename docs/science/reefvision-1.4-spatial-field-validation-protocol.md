@@ -934,3 +934,17 @@ and shifts of either sign by one tenth of a diagonal. Require the latter
 to withhold longitudinal quantities. Repeat through the standalone API
 and two runs of one persisted typed graph with artifact/hash equality.
 The threshold is a numerical consistency rule, not biological uncertainty.
+
+For equal valid indexed-geometry fingerprints, also check each available
+calibrated axis-length triple against its own bounding-box diagonal using
+an overflow-resistant Euclidean norm (relative tolerance 1e-8, zero
+absolute tolerance). Uniform inflation can preserve axis aspect ratios
+while contradicting the recorded extent. Report
+`identical_geometry_axis_lengths_diagonal_inconsistent` and withhold
+longitudinal changes via the existing calibrated-dimensions QC gate;
+retain the nominal observations and provisional identity status. Missing
+historical axis lengths or diagonal do not establish a contradiction.
+Exercise inflated axes at either timepoint, zero axes against positive
+extent, missing scale, missing dimensions, consistent and near-equal
+values, plus standalone and twice-persisted typed graph artifact parity.
+This tolerance checks numerical self-consistency, not biological uncertainty.
