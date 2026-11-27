@@ -908,3 +908,20 @@ Test swapped unequal axes with unchanged diagonal, missing calibration,
 missing axis vectors, different geometry digest and consistent rescaling.
 Replay the swapped-axis conflict through the standalone API and twice
 through one persisted typed graph with identical artifacts and hashes.
+
+For equal valid indexed-geometry fingerprints, the area-weighted surface
+centroid relative to the source origin must also remain consistent after
+uniform calibration. Normalize the three centroid coordinates by each
+observation's positive calibrated bounding-box diagonal. Compare the
+finite dimensionless vectors in source-axis order (relative tolerance
+1e-8, absolute tolerance 1e-12); a contradiction reports
+`identical_geometry_source_centroid_inconsistent` and uses the existing
+inconsistent-calibrated-dimensions withholding gate. Preserve original
+area and extent, but withhold longitudinal change and registered-centroid
+derived quantities. Missing centroids, nonpositive or missing diagonals
+and unrepresentable normalized vectors remain unknown. This check does
+not validate registration or movement. Test shifted centroid with and
+without historical calibration scale, missing centroid, different primary
+geometry and consistent rescaling; replay a shifted legacy centroid via
+standalone API and two runs of the same saved typed graph with matching
+artifact hashes.
