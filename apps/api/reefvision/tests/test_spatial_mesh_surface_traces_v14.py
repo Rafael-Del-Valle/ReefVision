@@ -1810,6 +1810,9 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     )
     artifact = record["payload_json"]
     if case in {
+        "ordinary",
+        "closed_loop",
+        "finite_detour_chord_underflow",
         "cross_trace_unequal_overlap",
         "mixed_component_overlap",
         "oblique_component_overlap",
@@ -1919,6 +1922,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         if chord > 0 and nominal_chord == 0:
             assert chain["endpoint_chord_length_m"] is None
             assert chain["endpoint_chord_length_scale_only_interval_m"] is None
+            assert "surface_trace_chain_chord_underflow" in chain["qc_warnings"]
         else:
             assert chain["endpoint_chord_length_m"] == pytest.approx(nominal_chord, abs=0)
             uncertainty = params["relative_scale_uncertainty"]
@@ -3014,6 +3018,14 @@ def test_trace_union_numeric_qc_is_visible_at_preview_level(uncertainty: float |
         for interval in span_intervals[:2]:
             assert interval == pytest.approx([0.01 * (1 - uncertainty), 0.01 * (1 + uncertainty)])
         assert span_intervals[2] == [0.0, 0.0]
+    chain = union["endpoint_graph_chains"][0]
+    assert chain["endpoint_chord_length_m"] == pytest.approx(0.01)
+    if uncertainty is None or uncertainty == 1e-30:
+        assert chain["endpoint_chord_length_scale_only_interval_m"] is None
+    else:
+        assert chain["endpoint_chord_length_scale_only_interval_m"] == pytest.approx(
+            [0.01 * (1 - uncertainty), 0.01 * (1 + uncertainty)]
+        )
     if uncertainty is None or uncertainty == 1e-30:
         assert corrected["length_scale_only_interval_m"] is None
     else:
