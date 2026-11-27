@@ -1913,6 +1913,22 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
     )
     assert sum(chain["edge_count"] for chain in chains) == union["distinct_nonzero_edge_count"]
     assert all(chain["human_review_verified"] is False for chain in chains)
+    for chain in chains:
+        chord = chain["source_endpoint_chord_mesh_units"]
+        nominal_chord = chord * params["meters_per_unit"]
+        if chord > 0 and nominal_chord == 0:
+            assert chain["endpoint_chord_length_m"] is None
+            assert chain["endpoint_chord_length_scale_only_interval_m"] is None
+        else:
+            assert chain["endpoint_chord_length_m"] == pytest.approx(nominal_chord, abs=0)
+            uncertainty = params["relative_scale_uncertainty"]
+            if uncertainty is None:
+                assert chain["endpoint_chord_length_scale_only_interval_m"] is None
+            else:
+                assert chain["endpoint_chord_length_scale_only_interval_m"] == pytest.approx(
+                    [nominal_chord * (1 - uncertainty), nominal_chord * (1 + uncertainty)],
+                    abs=0,
+                )
     assert {warning for chain in chains for warning in chain["qc_warnings"]} <= set(
         artifact["qc_warnings"]
     )
@@ -1925,7 +1941,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert chains[0]["source_length_mesh_units"] == pytest.approx(1e-250, abs=0)
         assert chains[0]["length_m"] is None
         assert chains[0]["length_scale_only_interval_m"] is None
-        assert chains[0]["qc_warnings"] == [warning]
+        assert chains[0]["qc_warnings"] == [warning, "surface_trace_chain_chord_underflow"]
         assert chains[1]["length_m"] == union["length_m"]
         assert chains[1]["qc_warnings"] == []
         assert chains[0]["selected_trace_memberships"] == [
@@ -2000,7 +2016,10 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert corrected["qc_warnings"] == ["surface_trace_collinear_union_length_underflow"]
         assert chains[0]["length_m"] is None
         assert chains[0]["length_scale_only_interval_m"] is None
-        assert chains[0]["qc_warnings"] == ["surface_trace_chain_length_underflow"]
+        assert chains[0]["qc_warnings"] == [
+            "surface_trace_chain_length_underflow",
+            "surface_trace_chain_chord_underflow",
+        ]
     if case == "reused_geometric_segment":
         assert union["nonzero_edge_traversal_count"] == 4
         assert union["distinct_nonzero_edge_count"] == 3
@@ -2539,6 +2558,7 @@ def _assert_chain_traversals(
         chain_pairs = list(pairwise(chain["source_waypoints_mesh_units"]))
         # Independent geometric oracle, also exercised by saved-graph parity.
         chord = dist(chain_pairs[0][0], chain_pairs[-1][1])
+        assert chain["source_endpoint_chord_mesh_units"] == pytest.approx(chord, abs=0)
         length = sum(dist(first, last) for first, last in chain_pairs)
         if chain["is_closed"]:
             assert chain["endpoint_straightness_ratio"] is None
@@ -2873,6 +2893,11 @@ def test_open_chain_straightness_is_scale_and_direction_invariant(scale: float) 
         assert len(chains) == 1
         chain = chains[0]
         assert chain["endpoint_straightness_ratio"] == pytest.approx(1 / (1 + sqrt(2)))
+        assert chain["source_endpoint_chord_mesh_units"] == 1.0
+        assert chain["endpoint_chord_length_m"] == pytest.approx(scale)
+        assert chain["endpoint_chord_length_scale_only_interval_m"] == pytest.approx(
+            [scale * 0.9, scale * 1.1]
+        )
         assert chain["human_review_verified"] is False
         assert chain["biological_validation_status"] == "not_verified_anatomical_centerline"
 
@@ -2972,6 +2997,7 @@ def test_trace_union_numeric_qc_is_visible_at_preview_level(uncertainty: float |
         "surface_trace_exact_edge_union_interval_unrepresentable",
         "surface_trace_collinear_union_interval_unrepresentable",
         "surface_trace_chain_interval_unrepresentable",
+        "surface_trace_chain_chord_interval_unrepresentable",
         "surface_trace_component_interval_unrepresentable",
         "surface_trace_component_axis_span_interval_unrepresentable",
     }
