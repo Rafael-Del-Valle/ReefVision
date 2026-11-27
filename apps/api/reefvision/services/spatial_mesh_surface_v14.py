@@ -144,9 +144,24 @@ def _trace_endpoint_chains(
         # Straightness belongs to this canonical geometric chain, not the
         # original trace or an anatomical branch. A closed chain has no
         # distinct endpoints. Compute before calibration to avoid scale loss.
+        chord = Fraction(dist(path[0], path[-1]))
+        calibrated_chord = chord * Fraction(scale)
+        chord_m = float(calibrated_chord)
+        chord_interval = None
+        if chord > 0 and chord_m == 0:
+            warnings.append("surface_trace_chain_chord_underflow")
+        elif relative_scale_uncertainty is not None:
+            uncertainty = Fraction(relative_scale_uncertainty)
+            lower = float(calibrated_chord * (1 - uncertainty))
+            upper = float(calibrated_chord * (1 + uncertainty))
+            if chord > 0 and (
+                (uncertainty < 1 and lower == 0) or (uncertainty > 0 and lower == upper)
+            ):
+                warnings.append("surface_trace_chain_chord_interval_unrepresentable")
+            else:
+                chord_interval = [lower, upper]
         straightness = None
         if path[0] != path[-1]:
-            chord = Fraction(dist(path[0], path[-1]))
             straightness = float(min(Fraction(1), chord / source_length))
             if straightness == 0:
                 straightness = None
@@ -165,6 +180,9 @@ def _trace_endpoint_chains(
                 "endpoint_graph_degrees": [len(adjacency[path[0]]), len(adjacency[path[-1]])],
                 "edge_count": len(path) - 1,
                 "is_closed": path[0] == path[-1],
+                "source_endpoint_chord_mesh_units": float(chord),
+                "endpoint_chord_length_m": None if chord > 0 and chord_m == 0 else chord_m,
+                "endpoint_chord_length_scale_only_interval_m": chord_interval,
                 "endpoint_straightness_ratio": straightness,
                 "source_length_mesh_units": float(source_length),
                 "length_m": nominal if nominal > 0 else None,
