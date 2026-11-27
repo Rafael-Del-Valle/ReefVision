@@ -545,3 +545,63 @@ changes actually exist. Two independent local SQLite/pytest probes passed;
 production code is unchanged. The full repository suite and new exact-head
 CI are not yet confirmed. Existing scientific Workflow Builder and approval
 gates remain unchanged; 1.1/1.6 reconciliation and installed GUI remain HOLD.
+
+
+## Pinned successor collision inventory and source triage (2026-11-27)
+
+Rechecked main at `e94dad6a3bece7b776bf45776bc5d06cfbc2c0dc`,
+Track A 1.1 at `a3ea9c7827c748a671bce7103d2f11b0af3a6c9a`,
+and Track D 1.6 at `840274e2718f11da34155931702832d842233039`.
+Compared migration-file changes from main and read the nine individual
+migration sources at those pinned heads. These are Git blob IDs, not database
+content checksums. All listed revisions have the immediately preceding
+numeric revision as their parent; there are **four** divergent revision IDs,
+not just the initial 0038 collision.
+
+| Revision | 1.1 source and Git blob | 1.6 source and Git blob |
+| --- | --- | --- |
+| 0038 | scientific_data — f066c4c3babaeeb6a1ae25e47c13ad4b54df4232 | review_queue_item_events — bbf1800c6615172c17d305834bfd7d8aaf4ae892 |
+| 0039 | computed_metrics — c13a16679e5918b118cb578cb844976d0531f04f | review_queue_triage_event_types — 95df4e595022d07e5363e676ae33d1406bb2ec04 |
+| 0040 | environmental_event_definitions — 78f25db9064cd510ec316c724dca1c70afc209d1 | review_queue_complete_event — 64b8a212dc8e8d72ac22c1b7aa231433c68c1a1a |
+| 0041 | computed_annotation_aggregates — ffa78e862f177c3eac26468e020005708db1454b | review_queue_bulk_request_registry — ffdd803cb3467f2dd4d924e92baaa57bd4887169 |
+| 0042 | environmental_analysis_records — cc39e27d1a1f676059c5d651868f76ae5b83db45 | absent from isolated 1.6 |
+
+The two families touch distinct post-0037 table names in the audited
+sources, but that does not prove combined runtime compatibility. 1.1
+0041 adds two scalar-default discriminator columns and nullable aggregate
+configuration; 0042 adds immutable environmental analysis definitions and
+results with saved workflow references, source snapshots and uncertainty.
+1.6 0039/0040 recreate the QC event CHECK while guarding scope/orphans;
+0041 adds the global bulk request registry with restrictive parent FKs.
+Its populated downgrade is explicitly refused. Do not downgrade either
+family to reconcile it: 1.1 downgrades drop scientific tables/columns,
+and 1.6 downgrades can refuse valid audit history.
+
+Expand the required populated 1.1 fixture matrix to **every** stage
+0038–0042, including environmental event definitions, scalar and aggregate
+results, environmental analysis source and uncertainty evidence, saved
+workflow references, and each existing content hash. Test 1.6 at each
+0038–0041 stage with append-only event history and bulk idempotency. No
+fixture may reinterpret a numeric stamp without independent schema and
+row evidence. No migration files from the other branch have been copied.
+
+The existing read-only collision CLI now emits
+`collision_source_relationship` for every repeated revision ID, using
+the same per-file SHA-256 snapshot already used for its fingerprints:
+`byte_identical` or `source_differs`. This distinguishes common unchanged
+history from a source difference without conflating a comment-only edit
+with incompatible DDL. Both categories still count as collisions and
+retain exit 2 and `safe_to_reconcile_automatically=false`. A byte-identical
+duplicate inside one lineage is also refused. The new CLI regressions
+exercise three isolated roots, reverse input order, all four successor
+collisions, a one-sided successor, and an identical within-root duplicate.
+Four independent local classification probes passed; the full CLI suite
+and exact new-head CI are not yet verified (local checkout DNS failure).
+
+Predecessor CI #46035183120 passed backend, frontend/E2E/build and native
+Windows preservation. This is a source-level reconciliation input, not
+an integrated migration or installed Windows acceptance. Existing typed
+saved QC Workflow Builder execution, units, provenance, retry and mandatory
+researcher review are unchanged. Release remains HOLD for reviewed
+cross-version reconciliation, populated biological/workflow validation,
+real MSI/CAB installed-GUI clean/upgrade/rollback and explicit approval.
