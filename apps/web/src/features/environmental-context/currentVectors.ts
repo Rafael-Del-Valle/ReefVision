@@ -151,7 +151,10 @@ export function currentVectors(records: ScientificRecord[]): CurrentVector[] {
       row.subject?.prediction_id ?? null,
       row.subject?.model_run_id ?? null,
       row.location.latitude,
-      row.location.longitude,
+      // The two endpoints of the WGS84 longitude interval describe the same
+      // meridian. Group them before checking component multiplicity, so alias
+      // duplicates cannot become two apparently independent vectors.
+      row.location.longitude === 180 ? -180 : row.location.longitude,
       row.observed_at,
       row.depth_m,
       row.depth_reference,
