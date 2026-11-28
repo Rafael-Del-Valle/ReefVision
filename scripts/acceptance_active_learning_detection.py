@@ -134,6 +134,7 @@ def run_detection_acceptance(
     epochs: int,
     imgsz: int,
     batch: int,
+    synthetic: bool = False,
 ) -> dict[str, Any]:
     command = [
         sys.executable,
@@ -149,6 +150,8 @@ def run_detection_acceptance(
         "--batch",
         str(batch),
     ]
+    if synthetic:
+        command.append("--synthetic")
     completed = subprocess.run(command, check=False)
     report_path = output / "report.json"
     if completed.returncode != 0 or not report_path.is_file():
@@ -165,8 +168,8 @@ def run_detection_acceptance(
 def _metric(metrics: dict[str, Any], token: str) -> float | None:
     normalized_token = token.casefold().replace(" ", "")
     for key, value in metrics.items():
-        normalized_key = str(key).casefold().replace(" ", "")
-        if normalized_token in normalized_key:
+        normalized_key = str(key).split("/")[-1].partition("(")[0].casefold().strip()
+        if normalized_token == normalized_key:
             try:
                 return float(value)
             except (TypeError, ValueError):
@@ -195,6 +198,9 @@ def main() -> int:
     parser.add_argument("--imgsz", type=int, default=640)
     parser.add_argument("--batch", type=int, default=2)
     parser.add_argument("--confidence", type=float, default=0.001)
+    parser.add_argument(
+        "--synthetic", action="store_true", help="Label the supplied images as generated fixtures."
+    )
     args = parser.parse_args()
 
     source = args.dataset.resolve()
@@ -226,6 +232,7 @@ def main() -> int:
         epochs=args.epochs,
         imgsz=args.imgsz,
         batch=args.batch,
+        synthetic=args.synthetic,
     )
 
     baseline_state = baseline_output / "reefvision-data"
@@ -389,6 +396,7 @@ def main() -> int:
         epochs=args.epochs,
         imgsz=args.imgsz,
         batch=args.batch,
+        synthetic=args.synthetic,
     )
     random_report = run_detection_acceptance(
         dataset=random_dataset,
@@ -396,6 +404,7 @@ def main() -> int:
         epochs=args.epochs,
         imgsz=args.imgsz,
         batch=args.batch,
+        synthetic=args.synthetic,
     )
     active_metrics = _selected_metric_summary(active_report)
     random_metrics = _selected_metric_summary(random_report)
@@ -413,9 +422,10 @@ def main() -> int:
             ["git", "rev-parse", "HEAD"], text=True
         ).strip(),
         "scope": (
-            "Equal-budget real biological detection Active Learning experiment. PASS means "
-            "both acquisition arms executed reproducibly, not that Active Learning beat "
-            "random."
+            "Equal-budget synthetic detector workflow exercise."
+            if args.synthetic
+            else "Equal-budget real biological detection Active Learning experiment. PASS means "
+            "both acquisition arms executed reproducibly, not that Active Learning beat random."
         ),
         "source_dataset": str(source),
         "partition_seed": args.partition_seed,
