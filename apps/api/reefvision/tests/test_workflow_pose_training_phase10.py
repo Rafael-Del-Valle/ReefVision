@@ -65,6 +65,7 @@ from reefvision.services.workflow_runtime_adapters import (
 )
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import (
+    filesystem_io_path,
     resolve_managed_project_path,
 )
 from reefvision.tests.test_pose_training_datasets_phase9 import (
@@ -1088,7 +1089,7 @@ def test_native_reefpose_cancellation_retries_from_resumable_checkpoint(
             test_settings,
             str(run.artifact_manifest_json["resume_best_checkpoint_path"]),
         )
-        assert managed_best.is_file()
+        assert filesystem_io_path(managed_best).is_file()
         JobService(session).retry(job_id)
         session.refresh(run)
         assert run.status == "queued"

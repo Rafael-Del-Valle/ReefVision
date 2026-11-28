@@ -11,7 +11,7 @@ from httpx import Response
 from reefvision.db.models import VideoAsset
 from reefvision.services import video_assets as video_assets_module
 from reefvision.services.video_assets import VideoAssetService
-from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.projects import filesystem_io_path, resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_telemetry import FIXTURES
 from reefvision.tests.test_video_tracking_phase6 import _fake_metadata
@@ -335,7 +335,9 @@ def test_uploaded_srt_is_primary_and_aligned_airdata_fills_missing_fields(
     assert video["airdata_alignment"]["evidence"]
 
     settings = cast(FastAPI, client.app).state.settings
-    airdata_path = resolve_managed_project_path(settings, video["airdata_telemetry"]["source_path"])
+    relative_log = video["airdata_telemetry"]["source_path"]
+    assert relative_log.startswith(f"projects/{project['id']}/videos/telemetry/")
+    airdata_path = filesystem_io_path(resolve_managed_project_path(settings, relative_log))
     assert airdata_path.is_file()
     with cast(FastAPI, client.app).state.session_factory() as session:
         source = VideoAssetService(session, settings).telemetry_source(video["id"])

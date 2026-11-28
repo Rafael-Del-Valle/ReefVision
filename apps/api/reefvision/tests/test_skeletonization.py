@@ -12,6 +12,7 @@ from reefvision.services.skeletonization import (
     SkeletonizationService,
     _connected_components_8,
 )
+from reefvision.storage.projects import filesystem_io_path
 from reefvision.tests.test_annotations import create_project, import_one
 
 
@@ -102,7 +103,7 @@ def test_disconnected_raster_is_blocked_without_silent_bridging(
 
     app = cast(FastAPI, client.app)
     relative_path = f"projects/{project['id']}/masks/{image_id}/{mask_id}-skeleton-readiness.png"
-    mask_path = app.state.settings.resolved_data_dir / Path(relative_path)
+    mask_path = filesystem_io_path(app.state.settings.resolved_data_dir / Path(relative_path))
     mask_path.parent.mkdir(parents=True, exist_ok=True)
     raster = Image.new("L", (64, 64), 0)
     for x in range(8, 16):

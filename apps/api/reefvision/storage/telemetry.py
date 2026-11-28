@@ -9,6 +9,7 @@ from reefvision.domain.errors import ValidationError
 from reefvision.geospatial.airdata import parse_airdata_csv
 from reefvision.geospatial.dji_srt import parse_dji_srt
 from reefvision.geospatial.synchronization import IndexedTelemetrySource
+from reefvision.storage.projects import filesystem_io_path
 
 MAX_SRT_BYTES = 32 * 1024 * 1024
 MAX_AIRDATA_BYTES = 64 * 1024 * 1024
@@ -26,7 +27,7 @@ def find_paired_srt(video_path: Path) -> Path | None:
         matches = sorted(
             (
                 path
-                for path in video_path.parent.iterdir()
+                for path in filesystem_io_path(video_path.parent).iterdir()
                 if path.is_file() and matching_srt_name(video_path.name, path.name)
             ),
             key=lambda path: path.name,
@@ -35,7 +36,7 @@ def find_paired_srt(video_path: Path) -> Path | None:
         raise ValidationError("Cannot inspect video directory for telemetry") from exc
     if len(matches) > 1:
         raise ValidationError("Multiple matching SRT telemetry files; choose an unambiguous pair")
-    return matches[0] if matches else None
+    return video_path.parent / matches[0].name if matches else None
 
 
 def find_paired_airdata(video_path: Path) -> Path | None:
@@ -54,7 +55,7 @@ def find_paired_airdata(video_path: Path) -> Path | None:
         candidates = sorted(
             (
                 candidate
-                for candidate in parent.iterdir()
+                for candidate in filesystem_io_path(parent).iterdir()
                 if candidate.is_file() and candidate.suffix.casefold() == ".csv"
             ),
             key=lambda candidate: candidate.name.casefold(),
@@ -70,7 +71,7 @@ def find_paired_airdata(video_path: Path) -> Path | None:
         except ValidationError:
             continue
 
-        valid.append(candidate)
+        valid.append(parent / candidate.name)
 
         if len(valid) > 1:
             return None
@@ -92,7 +93,7 @@ def read_srt_stream(stream: BinaryIO) -> tuple[bytes, IndexedTelemetrySource]:
 
 def load_dji_srt(path: Path) -> IndexedTelemetrySource:
     try:
-        with path.open("rb") as stream:
+        with filesystem_io_path(path).open("rb") as stream:
             return read_srt_stream(stream)[1]
     except OSError as exc:
         raise ValidationError("SRT telemetry source is missing or unreadable") from exc
@@ -111,34 +112,36 @@ def read_airdata_stream(stream: BinaryIO) -> tuple[bytes, IndexedTelemetrySource
 
 def load_airdata_csv(path: Path) -> IndexedTelemetrySource:
     try:
-        with path.open("rb") as stream:
+        with filesystem_io_path(path).open("rb") as stream:
             return read_airdata_stream(stream)[1]
     except OSError as exc:
         raise ValidationError("AirData telemetry source is missing or unreadable") from exc
 
 
 def write_airdata(path: Path, data: bytes) -> None:
+    path = filesystem_io_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
 
 
 def remove_airdata(path: Path) -> None:
-    path.unlink(missing_ok=True)
+    filesystem_io_path(path).unlink(missing_ok=True)
 
 
 def write_srt(path: Path, data: bytes) -> None:
+    path = filesystem_io_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
 
 
 def remove_srt(path: Path) -> None:
-    path.unlink(missing_ok=True)
+    filesystem_io_path(path).unlink(missing_ok=True)
 
 
 @contextmanager
 def open_video_source(path: Path) -> Iterator[BinaryIO]:
     try:
-        stream = path.open("rb")
+        stream = filesystem_io_path(path).open("rb")
     except OSError as exc:
         raise ValidationError("Video source is missing or unreadable") from exc
     with stream:
