@@ -408,6 +408,7 @@ class TrainingService:
             blockers.append("Unsupported checkpoint source")
 
         training_config = self._merged_training_config(payload.training_config)
+        blockers.extend(self._optimizer_blockers(training_config))
         training_config["amp"] = payload.precision == "amp"
         try:
             validation = validate_ultralytics_training_configuration(
@@ -1044,6 +1045,14 @@ class TrainingService:
     def _merged_training_config(self, config: dict[str, Any]) -> dict[str, Any]:
         return {**DEFAULT_TRAINING_CONFIG, **(config or {})}
 
+    def _optimizer_blockers(self, config: dict[str, Any]) -> list[str]:
+        if "lr0" in config and str(config.get("optimizer", "auto")).lower() == "auto":
+            return [
+                "Choose an explicit optimizer to set the initial learning rate (lr0), "
+                "or clear lr0 to use the automatic optimizer."
+            ]
+        return []
+
     def _merged_tuning_config(self, config: dict[str, Any]) -> dict[str, Any]:
         return {**DEFAULT_TUNING_CONFIG, **(config or {})}
 
@@ -1181,6 +1190,7 @@ class TrainingService:
         blockers.extend(
             self._architecture_blockers(draft.architecture, draft.initial_checkpoint_source)
         )
+        blockers.extend(self._optimizer_blockers(draft.training_config_json))
         if draft.precision not in TRAINING_PRECISIONS:
             blockers.append("Supported precision modes are fp32 and amp")
         if (
