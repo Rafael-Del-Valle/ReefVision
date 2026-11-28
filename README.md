@@ -97,6 +97,7 @@ The distinction between model predictions and reviewed annotations is intentiona
 
 ## Documentation
 
+- [ReefVision 2.0 research candidate quick start and qualification limits](docs/RESEARCH_CANDIDATE_QUICKSTART.md)
 - [Desktop installation and packaging](docs/DESKTOP_BUILD_AND_INSTALL.md)
 - [Developer setup and validation](docs/DEVELOPMENT.md)
 - [Feature reference](docs/FEATURE_REFERENCE.md)
