@@ -280,3 +280,22 @@ def test_strict_graph_accepts_unmodified_literal_parent_list(tmp_path: Path) -> 
     report = _module().audit([root], verify_parent_graph=True)
     assert report["parent_graph_consistent"] is True
     assert report["safe_to_reconcile_automatically"] is False
+
+
+def test_packaged_16_graph_matches_current_lineage() -> None:
+    """Exercise strict verification against the actual isolated migration sources."""
+    root = SCRIPT.parents[1] / "apps" / "api" / "migrations" / "versions"
+    before = {path: path.read_bytes() for path in root.glob("*.py")}
+    report = _module().audit([root], verify_parent_graph=True)
+
+    assert report["revision_count"] == 42
+    assert report["collision_free"] is True
+    assert report["parent_graph_consistent"] is True
+    assert report["safe_to_reconcile_automatically"] is False
+    graph = report["parent_graphs"][str(root)]
+    assert graph["root_revisions"] == ["0001"]
+    assert graph["head_revisions"] == ["0041"]
+    assert graph["missing_parent_revisions"] == []
+    assert graph["cycle_revisions"] == []
+    assert graph["duplicate_revision_ids"] == []
+    assert {path: path.read_bytes() for path in root.glob("*.py")} == before

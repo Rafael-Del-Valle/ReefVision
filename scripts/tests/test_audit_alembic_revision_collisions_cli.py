@@ -376,7 +376,7 @@ def test_cli_strict_graph_rejects_unsafe_revision_and_parent_identifiers(
         "a b",
         "a\tb",
         "a\u200bb",
-        "００３８",
+        "\uff10\uff10\uff13\uff18",
         "x" * 33,
         "base",
         "head",

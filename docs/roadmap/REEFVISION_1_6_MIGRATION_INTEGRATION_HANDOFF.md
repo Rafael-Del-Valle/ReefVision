@@ -509,3 +509,29 @@ a proof of arbitrary Python execution behavior.
 No migration files, data, or saved Workflow Builder behavior changed. HOLD for
 reviewed cross-version migration integration, representative biology, exact-head
 CI, installed Windows GUI/MSI upgrade and rollback, and researcher approval.
+
+## 2026-11-27 — Strict verification of the actual packaged lineage
+
+Exact-head CI #46083865728 passed frontend and native Windows preservation,
+and 322 independent inspector tests passed. The collision audit step then
+failed Ruff RUF001 on the deliberate fullwidth identifier fixture. Represent
+the same four Unicode code points using escapes; the invalid identifier and
+assertions remain identical at runtime. No test is disabled or weakened.
+
+The CI collision step previously ran the actual migration tree only in legacy
+inventory mode. Add a regression to the already-invoked strict parent-graph
+test module so CI must also verify the real isolated 1.6 tree, not just small
+synthetic graphs. Independently inspected all 42 source metadata declarations:
+0001 is the single root, 0041 the single head, and the historical
+53ba400993db revision lies between 0014 and 0015. Require 42 unique revisions,
+consistent graph, no unresolved parents/cycles/duplicates, unchanged source
+bytes, and no automatic reconciliation permission. This locks the current
+isolated 1.6 acceptance lineage; a deliberate future migration requires a
+reviewed update to the test expectation.
+
+This is source-only evidence, not a database upgrade or proof of arbitrary
+Python execution, combined branch compatibility, or installed GUI behavior.
+No existing scientific workflows, migrations, observations or reviewer
+approvals change. Release HOLD pending replacement exact-head CI, reviewed
+cross-version reconciliation, representative biological and persisted workflow
+acceptance, installed Windows upgrade/rollback and explicit researcher approval.
