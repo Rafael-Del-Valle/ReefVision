@@ -204,6 +204,11 @@ export function ActiveLearningWorkspace({
               <option value="quality">Quality risk</option>
             </select>
           </label>
+          <p className="annotation-helper">
+            Images previously assigned to test in this project, their matching
+            source files, and their related groups stay out of acquisition and
+            feedback datasets.
+          </p>
           {datasetVersionId && (
             <p className="annotation-helper">
               The round ranks training and unassigned images in this snapshot

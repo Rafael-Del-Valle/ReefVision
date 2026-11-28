@@ -24,7 +24,7 @@ def test_imported_detector_checkpoint_seeds_a_run_without_scratch_yaml(
     prefix = f"/api/v1/projects/{project['id']}"
     model = client.post(
         f"{prefix}/models/register",
-        data={"purpose": "detector", "provider_name": "ultralytics"},
+        data={"purpose": "detector", "provider_name": "ultralytics", "trust_checkpoint": "true"},
         files={"file": ("best.pt", b"test detector checkpoint", "application/octet-stream")},
     )
     assert model.status_code == 200, model.text

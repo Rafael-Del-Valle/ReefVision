@@ -426,3 +426,152 @@ def test_closed_round_keeps_feedback_at_closure_when_queue_is_revisited(client: 
     assert feedback["completion_fraction"] == 1
     assert feedback["skipped_count"] == 1
     assert feedback["feedback_dataset_version_id"] is None
+
+
+def test_project_test_groups_stay_out_of_live_and_separate_pool_rounds(client: TestClient) -> None:
+    project = create_project(client, "Longitudinal test holdout")
+    prefix = f"/api/v1/projects/{project['id']}"
+    original, safe = _import_images(client, project["id"])
+
+    def group(image_id: str, value: str) -> None:
+        assert client.patch(f"/api/v1/images/{image_id}", json={"group_key": value}).is_success
+
+    group(original, "held colony")
+    group(safe, "other colony")
+    reference = client.post(
+        f"{prefix}/dataset-versions",
+        json={
+            "name": "Study split",
+            "eligible_annotation_statuses": ["unannotated"],
+            "split_method": "manual",
+            "manual_assignments": [{"image_id": original, "split": "test"}],
+        },
+    )
+    assert reference.status_code == 201, reference.text
+    duplicate = import_one(
+        client, project["id"], filename="renamed.png", relative_path="renamed.png"
+    )
+    assert duplicate["duplicates"][0]["duplicate_image_id"] == original
+    group(original, "updated held colony")
+    mate = import_one(
+        client, project["id"], filename="later.png", relative_path="later.png", size=(91, 63)
+    )["successful"][0]["image_id"]
+    group(mate, "held colony")
+    second_mate = import_one(
+        client,
+        project["id"],
+        filename="renamed-colony.png",
+        relative_path="renamed-colony.png",
+        size=(97, 63),
+    )["successful"][0]["image_id"]
+    group(second_mate, "updated held colony")
+    pool = client.post(
+        f"{prefix}/dataset-versions",
+        json={
+            "name": "Separately frozen pool",
+            "eligible_annotation_statuses": ["unannotated"],
+            "split_method": "none",
+        },
+    )
+    assert pool.status_code == 201, pool.text
+    model = _seed_detector_proposals(
+        client, project, {safe: 0.99, original: 0.01, mate: 0.01, second_mate: 0.01}
+    )
+    rounds = []
+    for version_id in (None, pool.json()["id"]):
+        result = client.post(
+            f"{prefix}/active-learning-rounds",
+            json={
+                "name": "Holdout stays reserved",
+                "dataset_version_id": version_id,
+                "model_ids": [model],
+                "requested_size": 10,
+            },
+        )
+        assert result.status_code == 201, result.text
+        rounds.append(result.json())
+        assert [item["image_id"] for item in result.json()["selection_manifest_json"]["items"]] == [
+            safe
+        ]
+
+    other = create_project(client, "Independent collection")
+    matching_content, _ = _import_images(client, other["id"])
+    group(matching_content, "held colony")
+    other_model = _seed_detector_proposals(client, other, {matching_content: 0.01})
+    selection = client.post(
+        f"/api/v1/projects/{other['id']}/active-learning-rounds",
+        json={"name": "Other project", "model_ids": [other_model]},
+    )
+    assert selection.status_code == 201, selection.text
+    assert selection.json()["selection_manifest_json"]["items"][0]["image_id"] == matching_content
+
+    for image_id in (safe, original, mate, second_mate):
+        assert client.patch(
+            f"/api/v1/images/{image_id}", json={"annotation_status": "reviewed"}
+        ).is_success
+    item = rounds[1]["selection_manifest_json"]["items"][0]
+    assert client.post(f"/api/v1/review-queue-items/{item['queue_item_id']}/complete").is_success
+    closed = client.post(f"/api/v1/active-learning-rounds/{rounds[1]['id']}/complete")
+    assert closed.status_code == 200, closed.text
+    feedback_id = closed.json()["feedback_summary_json"]["feedback_dataset_version_id"]
+    assert [
+        item["image_id"]
+        for item in client.get(f"/api/v1/dataset-versions/{feedback_id}/items").json()
+    ] == [safe]
+
+
+def test_automatic_feedback_does_not_designate_reviewed_acquisitions_as_new_holdouts(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Training feedback")
+    prefix = f"/api/v1/projects/{project['id']}"
+    for i in range(10):
+        image = import_one(
+            client, project["id"], filename=f"{i}.png", relative_path=f"{i}.png", size=(80 + i, 60)
+        )
+        image_id = image["successful"][0]["image_id"]
+        assert client.patch(
+            f"/api/v1/images/{image_id}", json={"annotation_status": "reviewed"}
+        ).is_success
+    created = client.post(
+        f"{prefix}/active-learning-rounds",
+        json={"name": "Reviewed training batch", "requested_size": 10},
+    ).json()
+    for item in created["selection_manifest_json"]["items"]:
+        assert client.post(
+            f"/api/v1/review-queue-items/{item['queue_item_id']}/complete"
+        ).is_success
+    result = client.post(f"/api/v1/active-learning-rounds/{created['id']}/complete")
+    assert result.status_code == 200, result.text
+    feedback = result.json()["feedback_summary_json"]["feedback_dataset_version_id"]
+    items = client.get(f"/api/v1/dataset-versions/{feedback}/items").json()
+    assert len(items) == 10
+    assert {item["split"] for item in items} == {"train"}
+
+
+def test_new_test_assignment_blocks_feedback_on_an_already_open_round(client: TestClient) -> None:
+    project = create_project(client, "Late holdout assignment")
+    prefix = f"/api/v1/projects/{project['id']}"
+    _import_images(client, project["id"])
+    round_record = client.post(
+        f"{prefix}/active-learning-rounds", json={"name": "Earlier round", "requested_size": 1}
+    ).json()
+    item = round_record["selection_manifest_json"]["items"][0]
+    _mark_image_reviewed(client, project, item["image_id"])
+    assert client.post(f"/api/v1/review-queue-items/{item['queue_item_id']}/complete").is_success
+    holdout = client.post(
+        f"{prefix}/dataset-versions",
+        json={
+            "name": "New test set",
+            "eligible_annotation_statuses": ["reviewed"],
+            "split_method": "manual",
+            "manual_assignments": [{"image_id": item["image_id"], "split": "test"}],
+        },
+    )
+    assert holdout.status_code == 201, holdout.text
+    complete = client.post(f"/api/v1/active-learning-rounds/{round_record['id']}/complete")
+    assert complete.status_code == 409, complete.text
+    assert "reserved for testing" in complete.json()["detail"]
+    assert [version["id"] for version in client.get(f"{prefix}/dataset-versions").json()] == [
+        holdout.json()["id"]
+    ]

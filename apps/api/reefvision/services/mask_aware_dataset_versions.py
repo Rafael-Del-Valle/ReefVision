@@ -152,6 +152,7 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
         request: DatasetVersionCreateRequest,
         *,
         commit: bool = True,
+        excluded_image_ids: set[str] | None = None,
     ) -> DatasetVersionResponse:
         project = self._project(project_id)
         self._parent_version(project.id, request.parent_version_id)
@@ -159,6 +160,12 @@ class MaskAwareDatasetVersionService(DatasetVersionService):
             project.id,
             list(request.eligible_annotation_statuses),
         )
+        if excluded_image_ids:
+            candidates = [
+                candidate
+                for candidate in candidates
+                if candidate.image.id not in excluded_image_ids
+            ]
         if not candidates:
             raise ValidationError("No images match the selected annotation statuses")
 
