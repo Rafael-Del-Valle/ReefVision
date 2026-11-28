@@ -609,23 +609,29 @@ def process_reefpose_training_job(
             shutil.rmtree(work_root, ignore_errors=True)
         return True
     except ReefPoseCancelledError as exc:
+        message = str(exc)
         with factory() as session:
             job = session.get(Job, job_id)
             run = session.get(TrainingRun, run_id) if run_id else None
             now = datetime.now(UTC)
             if run is not None:
                 if output_dir is not None and managed_output_dir is not None:
-                    _record_interrupted_checkpoint(settings, run, output_dir, managed_output_dir)
-                    log_path = output_dir / "training.jsonl"
-                    if log_path.is_file():
-                        shutil.copy2(log_path, managed_output_dir / "training.jsonl")
+                    try:
+                        _record_interrupted_checkpoint(
+                            settings, run, output_dir, managed_output_dir
+                        )
+                        log_path = output_dir / "training.jsonl"
+                        if log_path.is_file():
+                            shutil.copy2(log_path, managed_output_dir / "training.jsonl")
+                    except OSError as storage_error:
+                        message += f". Saving recovery files failed: {storage_error}"
                 run.result_checkpoint_path = None
                 run.status = run.stage = "cancelled"
-                run.error_message = str(exc)
+                run.error_message = message
                 run.completed_at = now
             if job is not None:
                 job.status = "cancelled"
-                job.error_message = str(exc)
+                job.error_message = message
                 job.completed_at = now
                 job.result_json = {**dict(job.result_json or {}), "stage": "cancelled"}
             session.commit()
