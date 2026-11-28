@@ -847,7 +847,11 @@ it("pairs equivalent antimeridian components without modifying stored coordinate
       east,
       {
         ...north,
-        location: { latitude: 32.5, longitude: -179.999999, crs: "EPSG:4326" },
+        location: {
+          latitude: 32.5,
+          longitude: -179.999999,
+          crs: "EPSG:4326",
+        },
       },
     ]),
   ).toEqual([]);
