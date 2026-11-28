@@ -145,6 +145,13 @@ def _trace_endpoint_chains(
             float(Fraction(first) + midpoint_fraction * (Fraction(last) - Fraction(first)))
             for first, last in zip(midpoint_start, midpoint_end, strict=True)
         ]
+        # Integrate position along the selected polyline, weighting each
+        # edge by its source length rather than weighting sampled vertices.
+        weighted_coordinates = [Fraction(0) for _ in range(3)]
+        for (first, last), length in zip(pairwise(path), segment_lengths, strict=True):
+            for axis in range(3):
+                weighted_coordinates[axis] += length * (Fraction(first[axis]) + Fraction(last[axis]))
+        source_arc_centroid = [float(value / (2 * source_length)) for value in weighted_coordinates]
         calibrated = source_length * Fraction(scale)
         nominal = float(calibrated)
         warnings: list[str] = []
@@ -199,6 +206,7 @@ def _trace_endpoint_chains(
                 "edge_count": len(path) - 1,
                 "is_closed": path[0] == path[-1],
                 "source_arc_midpoint_mesh_units": source_midpoint,
+                "source_arc_centroid_mesh_units": source_arc_centroid,
                 "source_arc_midpoint_chain_edge_offset": midpoint_edge_offset,
                 "source_arc_midpoint_edge_fraction": {
                     "numerator": str(midpoint_fraction.numerator),
