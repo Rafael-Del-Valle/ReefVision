@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from itertools import permutations
 from typing import Any, cast
 
 import pytest
@@ -19,8 +20,10 @@ from reefvision.db.models import (
 from reefvision.domain.errors import ValidationError
 from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.schemas.review_queues import ReviewScoreWeights
+from reefvision.services.review_queues import ReviewQueueService
 from reefvision.services.workflow_review_queue import create_review_queue_workflow_artifact
 from reefvision.services.workflow_review_queue_integrity import (
+    V3_SIGNAL_LABELS,
     queue_item_evidence_sha256,
     validate_saved_queue_snapshot,
 )
@@ -801,3 +804,40 @@ def test_half_cent_score_survives_standalone_and_saved_qc_replay(client: TestCli
     assert items.status_code == 200, items.text
     assert items.json()["items"][0]["score"] == 73.12
     assert items.json()["items"][0]["review_state"] == "pending"
+
+
+def test_qc_producer_uses_frozen_signal_order(client: TestClient) -> None:
+    # The schema and producer must agree on order for half-cent scores.
+    assert tuple(ReviewScoreWeights.model_fields) == tuple(V3_SIGNAL_LABELS)
+    weights = dict.fromkeys(V3_SIGNAL_LABELS, 0.0)
+    weights.update(
+        low_mean_confidence=29.0,
+        low_min_confidence=28.0,
+        pending_proposals=16.0,
+        unreviewed_state=23.0,
+    )
+    raw = dict.fromkeys(V3_SIGNAL_LABELS, 0.0)
+    raw.update(
+        low_mean_confidence=0.8,
+        low_min_confidence=0.8,
+        pending_proposals=1.0,
+        unreviewed_state=1.0,
+    )
+    normalized = {**raw, "pending_proposals": 0.1}
+    weight_model = ReviewScoreWeights.model_validate(weights)
+    active = [signal for signal in weights if weights[signal]]
+    inactive = [signal for signal in weights if not weights[signal]]
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        service = ReviewQueueService(session, app.state.settings)
+        expected = service._signal_breakdown(
+            signal_values=raw, normalized_signals=normalized, weights=weight_model
+        )
+        assert expected[1] == 73.12
+        for order in permutations(active):
+            reordered = {signal: raw[signal] for signal in (*order, *inactive)}
+            assert service._signal_breakdown(
+                signal_values=reordered,
+                normalized_signals=normalized,
+                weights=weight_model,
+            ) == expected

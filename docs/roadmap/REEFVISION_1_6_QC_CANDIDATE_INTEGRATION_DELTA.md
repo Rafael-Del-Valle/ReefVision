@@ -134,3 +134,7 @@ verified all 24 permutations of the four nonzero inputs, including a
 negative control for the adjacent cent. The new standalone, regeneration
 and saved-workflow replay regression has not yet executed in repository
 CI. No schema change or researcher approval is implied.
+
+### Producer-side order guard (2026-11-28)
+
+The v3 QC producer now iterates the same frozen signal order as replay validation. The existing canonical producer order and formula are unchanged; reordering a caller's mapping cannot change a half-cent priority. The regression uses all 24 permutations of four weighted signals and checks the schema order and complete component breakdown. Existing standalone creation, regeneration, saved graph execution and artifact replay coverage remains required. The integrated 1.6 producer at `a580042e84c4d2fa0a646fbf8ec5a3dc90657fa8` still iterates the input map; review this narrow guard with the previous replay fix when selectively integrating, without blending branches. Independent arithmetic probes passed; repository execution and Windows qualification are separate gates.

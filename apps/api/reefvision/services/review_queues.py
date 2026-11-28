@@ -120,7 +120,9 @@ class ReviewQueueService:
         labels = V3_SIGNAL_LABELS
         breakdown: list[dict[str, Any]] = []
         total_score = 0.0
-        for signal_id, raw_value in signal_values.items():
+        # Match the frozen v3 replay order, even if an input mapping is reordered.
+        for signal_id in labels:
+            raw_value = signal_values[signal_id]
             normalized_value = normalized_signals[signal_id]
             weight = float(weight_map[signal_id])
             contribution = (normalized_value * weight / total_weight) * 100.0
