@@ -796,7 +796,7 @@ def test_half_cent_score_survives_standalone_and_saved_qc_replay(client: TestCli
         session.rollback()
 
     regenerated = client.post(f"/api/v1/review-queues/{standalone.json()['id']}/regenerate")
-    assert regenerated.status_code == 201, regenerated.text
+    assert regenerated.status_code == 200, regenerated.text
     items = client.get(f"/api/v1/review-queues/{regenerated.json()['id']}/items")
     assert items.status_code == 200, items.text
     assert items.json()["items"][0]["score"] == 73.12
