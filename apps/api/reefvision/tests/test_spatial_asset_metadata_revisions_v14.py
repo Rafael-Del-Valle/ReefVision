@@ -245,3 +245,49 @@ def test_spatial_metadata_append_rejects_corrupt_head_without_writing(
     assert next_revision.status_code == 201, next_revision.text
     assert next_revision.json()["revision"] == 2
     assert next_revision.json()["previous_revision_id"] == record["id"]
+
+
+def test_spatial_metadata_append_rejects_corrupt_ancestor(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Spatial metadata full history")["id"])
+    asset = _import_asset(client, project_id)
+    base = f"/api/v1/projects/{project_id}/spatial/assets/{asset['id']}"
+    payload = {"coordinate_unit": "unknown", "created_by_identity": "local_user"}
+    records = []
+    for _ in range(3):
+        response = client.post(f"{base}/metadata-revisions", json=payload)
+        assert response.status_code == 201, response.text
+        records.append(response.json())
+    app = cast(FastAPI, client.app)
+
+    for ancestor in records[:2]:
+        with app.state.session_factory() as session:
+            row = session.get(SpatialAssetMetadataRevision, ancestor["id"])
+            assert row is not None
+            row.content_sha256 = "0" * 64
+            session.commit()
+
+        # The head itself has an intact digest and immediate source binding.
+        head = client.get(f"{base}/metadata-revisions/{records[-1]['id']}")
+        assert head.status_code == 200, head.text
+        assert head.json() == records[-1]
+        rejected = client.post(f"{base}/metadata-revisions", json=payload)
+        assert rejected.status_code == 400, rejected.text
+        assert "integrity" in rejected.json()["detail"].lower()
+
+        with app.state.session_factory() as session:
+            row = session.get(SpatialAssetMetadataRevision, ancestor["id"])
+            assert row is not None
+            row.content_sha256 = ancestor["content_sha256"]
+            session.commit()
+
+        listed = client.get(f"{base}/metadata-revisions")
+        assert listed.status_code == 200, listed.text
+        assert listed.json() == records
+        assert client.get(f"{base}/content").content == OBJ
+
+    appended = client.post(f"{base}/metadata-revisions", json=payload)
+    assert appended.status_code == 201, appended.text
+    assert appended.json()["revision"] == 4
+    assert appended.json()["previous_revision_id"] == records[-1]["id"]
