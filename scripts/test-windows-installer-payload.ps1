@@ -1,5 +1,14 @@
 $ErrorActionPreference = 'Stop'
 function Get-FileHash { throw 'The installer verifier must also work without this cmdlet.' }
+# npm launches the Windows PowerShell build in a child where this cmdlet can be unavailable.
+foreach ($entry in 'build-desktop.ps1', 'verify-windows-msi.ps1', 'verify-windows-installer-payload.ps1') {
+    $script = Get-Command (Join-Path $PSScriptRoot $entry)
+    $unavailable = $script.ScriptBlock.Ast.Find({
+        param($node)
+        $node -is [System.Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Get-FileHash'
+    }, $true)
+    if ($unavailable) { throw "Installer build calls unavailable Get-FileHash in $entry at line $($unavailable.Extent.StartLineNumber)." }
+}
 $folder = Join-Path $env:TEMP ('reefvision-rc-payload-test-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $folder | Out-Null
 $verifier = Join-Path $PSScriptRoot 'verify-windows-installer-payload.ps1'
