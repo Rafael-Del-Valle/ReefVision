@@ -96,6 +96,49 @@ def create_version(
     return cast(dict[str, Any], response.json())
 
 
+def test_parent_holdout_group_survives_replacement_of_all_eligible_members(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Returning colony")
+    prefix = f"/api/v1/projects/{project['id']}/dataset-versions"
+
+    def import_group_member(name: str, color: tuple[int, int, int]) -> str:
+        uploaded = import_image(
+            client, project["id"], filename=name, relative_path=name, color=color
+        )
+        image_id = str(uploaded["successful"][0]["image_id"])
+        update_image(client, image_id, group_key="colony-A", annotation_status="reviewed")
+        return image_id
+
+    original = import_group_member("first.png", (44, 21, 33))
+    request = {
+        "name": "Reference split",
+        "eligible_annotation_statuses": ["reviewed"],
+        "split_method": "manual",
+    }
+    parent = client.post(
+        prefix, json={**request, "manual_assignments": [{"image_id": original, "split": "test"}]}
+    )
+    assert parent.status_code == 201, parent.text
+    update_image(client, original, group_key="colony-A", annotation_status="in_progress")
+    replacement = import_group_member("later.png", (91, 35, 99))
+    child_request = {
+        **request,
+        "name": "New season",
+        "parent_version_id": parent.json()["id"],
+        "reuse_parent_assignments": True,
+    }
+    conflict = client.post(
+        prefix,
+        json={**child_request, "manual_assignments": [{"image_id": replacement, "split": "train"}]},
+    )
+    assert conflict.status_code == 400, conflict.text
+    child = client.post(prefix, json=child_request)
+    assert child.status_code == 201, child.text
+    items = client.get(f"/api/v1/dataset-versions/{child.json()['id']}/items").json()
+    assert [(item["image_id"], item["split"]) for item in items] == [(replacement, "test")]
+
+
 def test_dataset_version_preview_is_deterministic_and_group_aware(client: TestClient) -> None:
     project = create_project(client, "Preview study")
     image_ids: list[str] = []

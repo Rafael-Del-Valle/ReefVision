@@ -364,14 +364,22 @@ class DatasetVersionService:
             self._parent_items(candidates[0].image.project_id, request) if candidates else {}
         )
         fixed_assignments = {image_id: item.split for image_id, item in parent_items.items()}
+        group_assignments: dict[str, str] = {}
+        for item in parent_items.values():
+            if (
+                item.group_key is not None
+                and group_assignments.setdefault(item.group_key, item.split) != item.split
+            ):
+                raise ValidationError("A parent group has conflicting frozen split assignments")
         for candidate in candidates:
             parent_item = parent_items.get(candidate.image.id)
-            if parent_item is None:
-                continue
-            if parent_item.group_key != candidate.image.group_key:
+            if parent_item is not None and parent_item.group_key != candidate.image.group_key:
                 raise ValidationError(
                     "Parent split reuse requires matching group keys for reused images"
                 )
+            group = candidate.image.group_key
+            if group is not None and group in group_assignments:
+                fixed_assignments[candidate.image.id] = group_assignments[group]
         for image_id, split in manual_assignments.items():
             existing = fixed_assignments.get(image_id)
             if existing is not None and existing != split:
