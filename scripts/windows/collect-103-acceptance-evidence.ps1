@@ -171,6 +171,11 @@ if (-not [string]::IsNullOrWhiteSpace($ProvenancePath)) {
         # Fingerprint the exact locked manifest snapshot used for parsing.
         # This records consistency, not publisher authenticity or MSI validity.
         $manifestBytes = $manifestStream.Length
+        # This manifest describes at most seven artifacts. Bound the input
+        # before hashing or allocating a JSON string on an acceptance host.
+        if ($manifestBytes -gt 1MB) {
+            throw 'Build provenance manifest exceeds the 1 MiB size limit.'
+        }
         $manifestHasher = [System.Security.Cryptography.SHA256]::Create()
         try {
             $manifestSha256 = ([BitConverter]::ToString($manifestHasher.ComputeHash($manifestStream))).Replace('-', '').ToLowerInvariant()
@@ -180,7 +185,13 @@ if (-not [string]::IsNullOrWhiteSpace($ProvenancePath)) {
         $manifestStream.Position = 0
         $manifestReader = [IO.StreamReader]::new($manifestStream)
         try {
-            $manifest = $manifestReader.ReadToEnd() | ConvertFrom-Json
+            $manifestText = $manifestReader.ReadToEnd()
+            # ConvertFrom-Json can enumerate a singleton root array into its
+            # object, obscuring malformed provenance. Require an object root.
+            if (-not $manifestText.TrimStart().StartsWith('{', [StringComparison]::Ordinal)) {
+                throw 'Build provenance must be a JSON object.'
+            }
+            $manifest = $manifestText | ConvertFrom-Json
         } finally {
             $manifestReader.Dispose()
         }

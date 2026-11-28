@@ -169,6 +169,33 @@ try {
         @($completeSix.artifacts | Where-Object { $_.kind -eq 'cab' -and $_.status -eq 'hashed' }).Count -ne 6) {
         throw 'Six-CAB manifest did not produce complete installer evidence.'
     }
+    # A singleton root array must not be unwrapped into valid provenance;
+    # an oversized manifest must fail before parsing even if its JSON is valid.
+    $validManifestJson = $candidateManifest | ConvertTo-Json -Depth 5
+    foreach ($invalidManifest in @(
+        @{ json = ('[' + $validManifestJson + ']'); error = 'Build provenance must be a JSON object' }
+        @{ json = ($validManifestJson + (' ' * 1MB)); error = 'Build provenance manifest exceeds the 1 MiB size limit' }
+    )) {
+        Set-Content -LiteralPath $manifestPath -Value $invalidManifest.json -Encoding UTF8
+        $beforeRejectedHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash
+        $invalidManifestRejected = $false
+        try {
+            $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $sixCabPaths -ProvenancePath $manifestPath
+        } catch {
+            if ($_.Exception.Message -notmatch [regex]::Escape($invalidManifest.error)) { throw }
+            $invalidManifestRejected = $true
+        }
+        if (-not $invalidManifestRejected -or
+            (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash -cne $beforeRejectedHash) {
+            throw 'Invalid manifest was accepted or its bytes were changed.'
+        }
+    }
+    Set-Content -LiteralPath $manifestPath -Value $validManifestJson -Encoding UTF8
+    $restoredManifest = (& $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $sixCabPaths -ProvenancePath $manifestPath |
+        Out-String | ConvertFrom-Json)
+    if ($restoredManifest.provenance.status -cne 'matched_complete' -or $restoredManifest.provenance.verifiedArtifacts -ne 7) {
+        throw 'A valid object manifest failed after invalid root and size checks.'
+    }
     # JSON array values must not exploit PowerShell's array comparison or
     # string conversion semantics to masquerade as scalar build identity.
     foreach ($field in @('version', 'source_commit')) {
