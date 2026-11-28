@@ -24,6 +24,7 @@ from reefvision.services.model_comparison_stills_v15 import compare_image_models
 from reefvision.storage.models import hash_model_file
 from reefvision.tests.test_dataset_versions import import_image, update_image
 from reefvision.tests.test_mask_annotations import _mask_payload
+from reefvision.tests.test_model_inference import approve_generated_checkpoint
 
 REFERENCE = [(1, 1), (8, 1), (8, 8), (1, 8)]
 
@@ -107,7 +108,9 @@ def _register(
     client: TestClient, project: str, version: dict[str, Any], class_id: str, task: str, name: str
 ) -> ModelRegistration:
     app = cast(FastAPI, client.app)
-    checkpoint = app.state.settings.resolved_data_dir / f"{name}.pt"
+    relative_path = f"projects/{project}/models/{name}.pt"
+    checkpoint = app.state.settings.resolved_data_dir / relative_path
+    checkpoint.parent.mkdir(parents=True, exist_ok=True)
     checkpoint.write_bytes(name.encode())
     digest, size = hash_model_file(checkpoint)
     with app.state.session_factory() as session:
@@ -132,7 +135,7 @@ def _register(
             purpose="detector" if task == "detect" else "segmenter",
             display_name=name,
             source_filename=checkpoint.name,
-            managed_path=checkpoint.name,
+            managed_path=relative_path,
             sha256=digest,
             file_size_bytes=size,
             framework="fixture",
@@ -156,6 +159,7 @@ def _register(
         session.commit()
         session.refresh(model)
         session.expunge(model)
+    approve_generated_checkpoint(client, project, model.id, digest)
     return model
 
 
