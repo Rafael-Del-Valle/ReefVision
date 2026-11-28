@@ -3,6 +3,7 @@
 from io import BytesIO
 from types import SimpleNamespace
 from typing import Any, ClassVar, cast
+from zipfile import ZipFile
 
 import numpy as np
 import pytest
@@ -10,9 +11,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw
 
+from reefvision.jobs.export import process_export_job
 from reefvision.jobs.inference import process_inference_job
 from reefvision.services.models import ModelService
 from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_dataset_versions import create_version
 from reefvision.tests.test_model_inference import FakeDetectorRegistrationProvider, register_model
 
 
@@ -114,6 +117,26 @@ def test_gallery_tiling_restores_source_boxes_and_merges_overlap(
     )
     assert accepted.status_code == 200, accepted.text
     assert accepted.json()["annotation"]["x_max"] == size[0]
+    reviewed = client.patch(f"/api/v1/images/{image_id}", json={"annotation_status": "reviewed"})
+    assert reviewed.status_code == 200, reviewed.text
+    version = create_version(client, project["id"], name="Reviewed tile boundary")
+    export = client.post(
+        f"/api/v1/dataset-versions/{version['id']}/exports", json={"format": "yolo_detection"}
+    )
+    assert export.status_code == 200, export.text
+    assert process_export_job(
+        app.state.settings, app.state.session_factory, export.json()["job"]["id"]
+    )
+    archive = client.get(f"/api/v1/exports/{export.json()['export']['id']}/download")
+    assert archive.status_code == 200, archive.text
+    with ZipFile(BytesIO(archive.content)) as snapshot:
+        labels = [p for p in snapshot.namelist() if "/labels/" in "/" + p and p.endswith(".txt")]
+        assert len(labels) == 1
+        class_id, *box = snapshot.read(labels[0]).decode().split()
+    assert class_id == "0"
+    assert list(map(float, box)) == pytest.approx(
+        [3062 / size[0], 2140 / size[1], 20 / size[0], 20 / size[1]], abs=0.000001
+    )
     for invalid in [{"overlap_y": 1}, {"batch_size": 0}, {"width": -1}]:
         response = client.post(
             base + "/inference-jobs", json={**body, "tiling": {**tile, **invalid}}
