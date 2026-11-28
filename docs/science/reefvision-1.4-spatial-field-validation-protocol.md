@@ -1148,3 +1148,21 @@ records, unchanged original bytes and a successful third revision.
 
 These operations are not cryptographic signatures, authenticated human review,
 or proof of biological calibration. No measurement node contract changes.
+
+### Completed structural parse request integrity
+
+A successful background parse must retain both a result and its original
+request binding. Before exposing a completed summary on asset list or detail,
+check the request schema, project/asset identifiers, source digest, format,
+managed path and exact integer byte count against the immutable asset record.
+A missing result or changed request cannot be hidden by an otherwise valid
+result digest. In a disposable OBJ fixture, alter the request schema, digest,
+format, path and byte count (including a numerically equal floating-point
+count), then remove the result. Require list and detail to reject each case,
+retain access to unchanged original bytes, and restore the exact original
+summary after restoring the fixture.
+
+This is an audit of completed background job metadata, not a reparse of the
+original, a signature, a calibration verification or a new measurement node.
+Standalone and persisted typed previews continue to resolve the original
+bytes independently of the background summary.
