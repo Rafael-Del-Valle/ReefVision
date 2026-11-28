@@ -1,14 +1,10 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "./spatialDesktop";
 import { randomUUID } from "node:crypto";
 
 test("saves and reloads projected polygon coverage against the local API", async ({
-  page,
+  desktop: { page, api, web },
 }) => {
-  test.skip(
-    process.env.REEFVISION_SCIENCE_LIVE_ACCEPTANCE !== "1",
-    "Requires an isolated ReefVision API and frontend.",
-  );
-  const api = "http://127.0.0.1:8000/api/v1";
   const name = `Synthetic ROI ${randomUUID()}`;
   const project = await page.request.post(`${api}/projects`, {
     data: { name, template: "blank" },
@@ -26,7 +22,7 @@ test("saves and reloads projected polygon coverage against the local API", async
   expect(label.status(), await label.text()).toBe(201);
   const labelId = (await label.json()).id;
 
-  await page.goto("http://127.0.0.1:5173/");
+  await page.goto(web);
   const png = await page.evaluate(() => {
     const canvas = document.createElement("canvas");
     canvas.width = 10;
@@ -87,6 +83,9 @@ test("saves and reloads projected polygon coverage against the local API", async
   );
   await page.reload();
   await page.getByRole("button", { name: new RegExp(name) }).click();
+  await page
+    .getByRole("tab", { name: "Data & annotation", exact: true })
+    .click();
   await page.getByRole("tab", { name: "Computed Metrics" }).click();
   await page
     .getByRole("button", { name: "Open verified mask coverage" })
@@ -128,6 +127,9 @@ test("saves and reloads projected polygon coverage against the local API", async
 
   await page.reload();
   await page.getByRole("button", { name: new RegExp(name) }).click();
+  await page
+    .getByRole("tab", { name: "Data & annotation", exact: true })
+    .click();
   await page.getByRole("tab", { name: "Computed Metrics" }).click();
   await page
     .getByRole("button", { name: "Open verified mask coverage" })
@@ -139,6 +141,9 @@ test("saves and reloads projected polygon coverage against the local API", async
   expect(csv.ok(), await csv.text()).toBeTruthy();
   expect(await csv.text()).toContain("projective_reference_plane");
 
+  await page
+    .getByRole("tab", { name: "Data & annotation", exact: true })
+    .click();
   await page.getByRole("tab", { name: "Scientific Heatmaps" }).click();
   await page.getByLabel("Show scalar-calibrated density").check();
   await expect(page.getByText(/Physical density unavailable/)).toBeVisible();
@@ -149,6 +154,9 @@ test("saves and reloads projected polygon coverage against the local API", async
   expect(scalar.ok(), await scalar.text()).toBeTruthy();
   await page.reload();
   await page.getByRole("button", { name: new RegExp(name) }).click();
+  await page
+    .getByRole("tab", { name: "Data & annotation", exact: true })
+    .click();
   await page.getByRole("tab", { name: "Scientific Heatmaps" }).click();
   await page.getByLabel("Show scalar-calibrated density").check();
   await expect(
