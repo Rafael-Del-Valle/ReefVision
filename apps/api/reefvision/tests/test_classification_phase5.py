@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import io
 import json
+import shutil
+import zipfile
 from pathlib import Path
 from typing import cast
 
@@ -8,9 +11,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from reefvision.config import Settings
 from reefvision.jobs import classification_inference as inference_module
 from reefvision.jobs import classification_training as training_module
+from reefvision.main import create_app
 from reefvision.ml.classification import ClassificationScore, ClassificationTrainingResult
+from reefvision.storage.backups import create_sqlite_snapshot, resolve_database_path
+from reefvision.storage.projects import filesystem_io_path
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_dataset_versions import (
     create_version,
@@ -170,6 +177,64 @@ def test_image_and_crop_classification_datasets_are_immutable(client: TestClient
     stored = client.get(f"/api/v1/classification-datasets/{image_payload['id']}")
     assert stored.status_code == 200, stored.text
     assert stored.json()["manifest_sha256"] == image_payload["manifest_sha256"]
+
+
+def test_long_profile_classification_archives_reopen_and_deduplicate(
+    client: TestClient, test_settings: Settings, tmp_path: Path
+) -> None:
+    project, _image_ids, version_id = _seed_project(client)
+    profile = tmp_path / "relocated-profile"
+    while len(str(profile)) < 165:
+        profile /= "field-station-profile"
+    shutil.copytree(
+        filesystem_io_path(test_settings.resolved_data_dir / "projects"),
+        filesystem_io_path(profile / "projects"),
+    )
+    database = profile / "test.db"
+    create_sqlite_snapshot(resolve_database_path(test_settings), database)
+    settings = test_settings.model_copy(
+        update={"data_dir": profile, "database_url": f"sqlite:///{database.as_posix()}"}
+    )
+    endpoint = f"/api/v1/projects/{project['id']}/classification-datasets"
+    request = {"dataset_version_id": version_id, "mode": "image", "label_set": "species"}
+
+    app = create_app(settings)
+    with TestClient(app) as relocated:
+        created = relocated.post(endpoint, json=request)
+        assert created.status_code == 201, created.text
+        dataset = created.json()
+        duplicate = relocated.post(endpoint, json=request)
+        assert duplicate.status_code == 201, duplicate.text
+        assert duplicate.json()["id"] == dataset["id"]
+    app.state.engine.dispose()
+
+    output = profile / dataset["output_path"]
+    archive = profile / dataset["archive_path"]
+    assert len(str(archive)) >= 260
+    assert not Path(dataset["output_path"]).is_absolute()
+    assert not Path(dataset["archive_path"]).is_absolute()
+    assert {path.name for path in filesystem_io_path(output.parent).iterdir()} == {
+        output.name,
+        archive.name,
+    }
+    manifest_name = "reefvision-classification-manifest.json"
+    assert (
+        json.loads(filesystem_io_path(output / manifest_name).read_bytes())
+        == dataset["manifest_json"]
+    )
+    reopened_app = create_app(settings)
+    with TestClient(reopened_app) as reopened:
+        downloaded = reopened.get(f"/api/v1/classification-datasets/{dataset['id']}/download")
+        assert downloaded.status_code == 200, downloaded.text
+        assert downloaded.content == filesystem_io_path(archive).read_bytes()
+        with zipfile.ZipFile(io.BytesIO(downloaded.content)) as package:
+            assert json.loads(package.read(manifest_name)) == dataset["manifest_json"]
+            samples = [sample["sample_path"] for sample in dataset["manifest_json"]["samples"]]
+            assert len(samples) == 2
+            assert set(package.namelist()) == {manifest_name, *samples}
+            for sample in samples:
+                assert package.read(sample) == filesystem_io_path(output / sample).read_bytes()
+    reopened_app.state.engine.dispose()
 
 
 def test_classification_training_inference_and_review(

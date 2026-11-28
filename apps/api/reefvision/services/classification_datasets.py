@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import shutil
 import zipfile
@@ -31,7 +30,7 @@ from reefvision.schemas.classification import (
     ClassificationDatasetResponse,
 )
 from reefvision.storage.datasets import canonical_json_sha256
-from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.projects import filesystem_io_path, resolve_managed_project_path
 
 _SPLIT_DIR = {"train": "train", "validation": "val", "test": "test"}
 
@@ -103,7 +102,7 @@ class ClassificationDatasetService:
         dataset = self.session.get(ClassificationDataset, dataset_id)
         if dataset is None:
             raise NotFoundError("Classification dataset not found")
-        path = resolve_managed_project_path(self.settings, dataset.archive_path)
+        path = filesystem_io_path(resolve_managed_project_path(self.settings, dataset.archive_path))
         if not path.is_file():
             raise NotFoundError("Classification dataset archive is missing")
         return path
@@ -163,8 +162,10 @@ class ClassificationDatasetService:
         dataset_id = str(uuid4())
         relative_root = f"{project.storage_root}/classification/datasets/{dataset_id}"
         relative_archive = f"{project.storage_root}/classification/datasets/{dataset_id}.zip"
-        output_root = resolve_managed_project_path(self.settings, relative_root)
-        archive_path = resolve_managed_project_path(self.settings, relative_archive)
+        output_root = filesystem_io_path(resolve_managed_project_path(self.settings, relative_root))
+        archive_path = filesystem_io_path(
+            resolve_managed_project_path(self.settings, relative_archive)
+        )
         shutil.rmtree(output_root, ignore_errors=True)
         archive_path.unlink(missing_ok=True)
         output_root.mkdir(parents=True)
@@ -182,7 +183,9 @@ class ClassificationDatasetService:
                     raise ValidationError(
                         "Classification source image no longer matches its snapshot"
                     )
-                source = resolve_managed_project_path(self.settings, image.managed_path)
+                source = filesystem_io_path(
+                    resolve_managed_project_path(self.settings, image.managed_path)
+                )
                 if not source.is_file():
                     raise ValidationError("Classification source image is missing")
                 try:
@@ -238,10 +241,7 @@ class ClassificationDatasetService:
                                     continue
                                 sample_image = rgb.crop(bounds)
                                 crop_bounds = list(bounds)
-                            save_target = str(destination.resolve())
-                            if os.name == "nt" and not save_target.startswith("\\\\?\\"):
-                                save_target = "\\\\?\\" + save_target
-                            sample_image.save(save_target, format="JPEG", quality=95)
+                            sample_image.save(destination, format="JPEG", quality=95)
                             relative_sample = destination.relative_to(output_root).as_posix()
                             class_counts[class_id] += 1
                             samples.append(
