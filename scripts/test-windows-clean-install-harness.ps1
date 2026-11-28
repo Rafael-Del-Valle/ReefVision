@@ -134,8 +134,97 @@ $parseErrors = $null
 )
 Assert-True (@($parseErrors).Count -eq 0) "Windows acceptance PowerShell syntax invalid: $($parseErrors -join '; ')"
 $acceptanceScript = Get-Content -LiteralPath $acceptancePath -Raw
-Assert-True ($acceptanceScript.Contains('[void]$view.Execute()')) 'MSI ProductVersion extraction must suppress COM Execute output.'
-Assert-True ($acceptanceScript.Contains('[void]$view.Close()')) 'MSI ProductVersion extraction must suppress COM Close output.'
+
+# Exercise the actual timeout path without launching or signaling any desktop.
+# Distinguish the initial baseline launch from the candidate relaunch in evidence.
+$startupAst = [System.Management.Automation.Language.Parser]::ParseFile(
+    $acceptancePath,
+    [ref]$parseTokens,
+    [ref]$parseErrors
+)
+$waitFunction = $startupAst.Find({
+    param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Wait-BackendPort'
+}, $true)
+Assert-True ($null -ne $waitFunction) 'Backend startup wait function is missing.'
+. ([scriptblock]::Create($waitFunction.Extent.Text))
+foreach ($launchStage in @('initial installed launch (1.0.3)', 'candidate relaunch (1.1.0)')) {
+    $missingPath = Join-Path $env:TEMP ([guid]::NewGuid().ToString('N') + '-backend-port.txt')
+    $timeoutMessage = ''
+    $currentProcess = [System.Diagnostics.Process]::GetCurrentProcess()
+    try {
+        Wait-BackendPort -Path $missingPath -DesktopProcess $currentProcess -BackendLogPath "$missingPath.log" -LaunchStage $launchStage -Seconds 0 | Out-Null
+    } catch {
+        $timeoutMessage = $_.Exception.Message
+    } finally {
+        $currentProcess.Dispose()
+    }
+    Assert-True ($timeoutMessage.Contains('Backend did not publish its port within 0 seconds')) 'Missing port must fail on timeout.'
+    Assert-True ($timeoutMessage.Contains($launchStage)) 'Startup timeout evidence must identify the launch stage and version.'
+    Assert-True ($timeoutMessage.Contains("desktop PID $PID")) 'Startup timeout evidence must identify the desktop PID.'
+}
+# Test diagnostic contents, not just the timeout prefix. These are isolated
+# fixture logs; no real application is started and no process is signaled.
+$diagnosticRoot = Join-Path $env:TEMP ('reefvision-startup-logs-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $diagnosticRoot | Out-Null
+$diagnosticProcess = [System.Diagnostics.Process]::GetCurrentProcess()
+try {
+    $diagnosticPort = Join-Path $diagnosticRoot 'backend-port.txt'
+    $diagnosticBackend = Join-Path $diagnosticRoot 'backend.log'
+    $diagnosticApi = Join-Path $diagnosticRoot 'api.log'
+    Set-Content -LiteralPath $diagnosticBackend -Value @(1..25 | ForEach-Object { 'backend-record-{0:D2}' -f $_ })
+    Set-Content -LiteralPath $diagnosticApi -Value @(1..25 | ForEach-Object { 'api-record-{0:D2}' -f $_ })
+    $diagnosticMessage = ''
+    try {
+        Wait-BackendPort -Path $diagnosticPort -DesktopProcess $diagnosticProcess -BackendLogPath $diagnosticBackend -LaunchStage 'fixture launch' -Seconds 0 | Out-Null
+    } catch {
+        $diagnosticMessage = $_.Exception.Message
+    }
+    Assert-True ($diagnosticMessage.Contains('Backend did not publish its port within 0 seconds')) 'Log diagnostics must not turn a startup timeout into success.'
+    Assert-True ($diagnosticMessage.Contains('backend.log:') -and $diagnosticMessage.Contains('api.log:')) 'Both isolated startup logs must be identified.'
+    Assert-True ($diagnosticMessage.Contains('backend-record-06') -and $diagnosticMessage.Contains('backend-record-25')) 'Backend diagnostics must retain the latest 20 records.'
+    Assert-True ($diagnosticMessage.Contains('api-record-06') -and $diagnosticMessage.Contains('api-record-25')) 'API diagnostics must retain the latest 20 records.'
+    Assert-True (-not $diagnosticMessage.Contains('backend-record-05') -and -not $diagnosticMessage.Contains('api-record-05')) 'Startup diagnostics must omit earlier records.'
+
+    Clear-Content -LiteralPath $diagnosticBackend
+    Remove-Item -LiteralPath $diagnosticApi
+    $diagnosticMessage = ''
+    try {
+        Wait-BackendPort -Path $diagnosticPort -DesktopProcess $diagnosticProcess -BackendLogPath $diagnosticBackend -LaunchStage 'fixture launch' -Seconds 0 | Out-Null
+    } catch {
+        $diagnosticMessage = $_.Exception.Message
+    }
+    Assert-True ($diagnosticMessage.Contains('Backend did not publish its port within 0 seconds')) 'Absent diagnostic content must not mask the startup failure.'
+    Assert-True ($diagnosticMessage -match 'backend\.log:\s*\(empty\)') 'An empty backend log must be distinguished from a missing log.'
+    Assert-True ($diagnosticMessage -match 'api\.log:\s*\(unavailable\)') 'A missing API log must be explicitly unavailable.'
+} finally {
+    $diagnosticProcess.Dispose()
+    Remove-Item -LiteralPath $diagnosticRoot -Recurse -Force
+}
+
+Assert-True ($acceptanceScript.Contains('-LaunchStage "initial installed launch ($initialVersion)"')) 'Initial launch must identify the actual installed version.'
+Assert-True ($acceptanceScript.Contains('-LaunchStage "candidate relaunch ($ProductVersion)"')) 'Candidate relaunch must identify the candidate version.'
+
+Assert-True ($acceptanceScript.Contains('$null = $view.Execute()')) 'MSI property extraction must suppress COM Execute output.'
+Assert-True ($acceptanceScript.Contains('$null = $view.Close()')) 'MSI property extraction must suppress COM Close output.'
+
+# Compile and exercise the actual native enumeration path on the Windows
+# acceptance runner. PID 0 cannot own a user desktop window; no process is
+# signaled and no live ReefVision training or desktop job is interrupted.
+Assert-True ((Invoke-ReefVisionWindowClose -ProcessId 0) -eq 0) 'PID-zero window enumeration should signal nothing.'
+# The disposable MSI test must launch the genuine interactive GUI. Hiding the
+# Tauri window via STARTF_USESHOWWINDOW caused the previous candidate to pass
+# API/WebView2 startup but fail clean shutdown on both fresh and upgrade paths.
+# Require the OS main-window close path first; native PID-scoped WM_CLOSE is a
+# last resort, and neither path may force-kill the installed application.
+Assert-True ($acceptanceScript -match '(?m)^\s*Start-Process -FilePath \(Join-Path \$InstallRoot ''ReefVision\.exe''\) -WorkingDirectory \$InstallRoot -PassThru\s*$') 'MSI acceptance must launch a normal GUI window, not a hidden desktop.'
+Assert-True ($acceptanceScript.Contains('$Process.CloseMainWindow()')) 'MSI acceptance must request the normal Tauri main-window close.'
+Assert-True ($acceptanceScript.Contains('if (-not $closedByMainWindow)')) 'Native close fallback must only execute when the main-window request is unavailable.'
+
+Assert-True ($acceptanceScript.Contains('Invoke-ReefVisionWindowClose -ProcessId $Process.Id')) 'Acceptance shutdown must enumerate hidden native windows, not MainWindowHandle.'
+Assert-True (-not $acceptanceScript.Contains('$Process.MainWindowHandle')) 'Hidden desktop acceptance must not depend on MainWindowHandle.'
+Assert-True (-not $acceptanceScript.Contains('Stop-Process -Force')) 'Acceptance must not mask a failed graceful shutdown with a forced kill.'
+
 # Guard the packaged acceptance request against retired project templates and
 # legacy model catalog selectors. Production API supports blank projects only.
 Assert-True ($acceptanceScript.Contains("template='blank'")) 'Acceptance project must use the supported blank template.'
@@ -173,9 +262,9 @@ Assert-True ($acceptanceScript.Contains("HF_HUB_OFFLINE'] = '0'")) 'Opt-in live 
 Assert-True ($acceptanceScript.Contains('samAcceptedMaskId')) 'Live SAM acceptance must validate mask preservation.'
 Assert-True ($acceptanceScript.Contains("'api.log', 'api.log.1'")) 'Failed SAM2 acceptance must archive API logs, not only startup backend.log.'
 Assert-True ($acceptanceScript.Contains('api.log.tail.log') -or $acceptanceScript.Contains('$logName.tail.log')) 'SAM2 API log archive name must match the uploaded *.log evidence pattern.'
-Assert-True ($acceptanceScript.Contains('$expectedInitialVersion')) 'Acceptance must verify which MSI version launched before upgrade.'
-Assert-True ($acceptanceScript.Contains('$postUpgradeVersion')) 'Acceptance must read the packaged API version after upgrade.'
-Assert-True ($acceptanceScript.Contains('Post-upgrade API version')) 'Upgrade must fail when the packaged API version did not change to the candidate.'
+Assert-True ($acceptanceScript.Contains('$initialVersion = Get-AcceptanceMsiProperty -Path $initialInstaller -Name ''ProductVersion''')) 'Acceptance must read the MSI version launched before upgrade.'
+Assert-True ($acceptanceScript.Contains('Assert-AcceptancePackagedBackend -Api $api -ExpectedAppVersion $initialVersion')) 'Acceptance must verify the initial packaged API matches the installed MSI.'
+Assert-True ($acceptanceScript.Contains('Assert-AcceptancePackagedBackend -Api $api -ExpectedAppVersion $ProductVersion')) 'Acceptance must verify the post-upgrade packaged API matches the candidate MSI.'
 Assert-True ($acceptanceScript -match 'Stop-AcceptanceDesktop\s+\$desktop\s*\r?\n\s*\$projectChecksum\s*=\s*\(Get-FileHash\s+-LiteralPath\s+\(Join-Path\s+\$DataRoot\s+''reefvision\.db''\)') 'Desktop shutdown must occur before hashing reefvision.db.'
 Assert-True ($acceptanceScript -match 'Where-Object\s+FullName\s+-eq\s+''reefvision-exchange-manifest\.json''') 'Project Exchange validation does not require the canonical manifest name.'
 Assert-True ($acceptanceScript -notmatch 'Where-Object\s+FullName\s+-eq\s+''manifest\.json''') 'Project Exchange validation still accepts the incorrect manifest.json name.'

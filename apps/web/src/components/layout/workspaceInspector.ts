@@ -4,6 +4,9 @@ export type WorkspaceInspectorView =
   | "gallery"
   | "versions"
   | "interoperability"
+  | "environmental_context"
+  | "computed_metrics"
+  | "scientific_heatmaps"
   | "models"
   | "training"
   | "classification"
@@ -41,6 +44,9 @@ export const WORKSPACE_INSPECTOR_VIEWS: WorkspaceInspectorView[] = [
   "gallery",
   "versions",
   "interoperability",
+  "environmental_context",
+  "computed_metrics",
+  "scientific_heatmaps",
   "models",
   "training",
   "classification",
@@ -119,6 +125,68 @@ const WORKSPACE_INSPECTORS: Record<
         label: "Images & annotation",
         target: "gallery",
         description: "Return to managed project imagery and annotations.",
+      },
+    ],
+  },
+  environmental_context: {
+    title: "Environmental observations",
+    summary:
+      "Inspect project scientific records and import local sensor or NOAA station observations.",
+    boundary: "record",
+    recordPolicy:
+      "Original and normalized quantities retain observation time, depth, quality flags, and source provenance. Unknown depth remains unknown; source kinds distinguish observations from modeled and derived data.",
+    actions: [
+      {
+        label: "Images & annotation",
+        target: "gallery",
+        description: "Return to the imagery associated with project records.",
+      },
+      {
+        label: "Video & tracking",
+        target: "video",
+        description: "Inspect organism tracks and geographic observations.",
+      },
+    ],
+  },
+  computed_metrics: {
+    title: "Computed scientific metrics",
+    summary:
+      "Define unit-aware expressions and calculate immutable results from explicit scientific records.",
+    boundary: "record",
+    recordPolicy:
+      "Every result preserves the formula version, definition hash, input snapshots, units, uncertainty, subject identity, and workflow provenance. Verified annotations and unverified predictions remain separate evidence categories.",
+    actions: [
+      {
+        label: "Environmental Context",
+        target: "environmental_context",
+        description: "Inspect the scientific records used as metric inputs.",
+      },
+      {
+        label: "Workflow Builder",
+        target: "workflows",
+        description: "Run a saved metric definition in a reproducible graph.",
+      },
+    ],
+  },
+  scientific_heatmaps: {
+    title: "Scientific spatial heatmaps",
+    summary:
+      "Inspect source-pixel object distributions with independent reviewed-box, verified-mask, and provisional-prediction layers.",
+    boundary: "mixed",
+    recordPolicy:
+      "Heatmaps are read-only derived views. Bounding-rectangle centroids determine grid membership. They do not establish union mask coverage, calibrated physical density, or reviewer agreement. Pending predictions are never counted as verified annotations.",
+    actions: [
+      {
+        label: "Images & annotation",
+        target: "gallery",
+        description:
+          "Inspect original imagery and use the canonical annotation workflow.",
+      },
+      {
+        label: "Computed Metrics",
+        target: "computed_metrics",
+        description:
+          "Inspect unit-aware calculations and immutable scientific records.",
       },
     ],
   },

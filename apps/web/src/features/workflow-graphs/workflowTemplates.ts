@@ -34,6 +34,269 @@ const projectImages = {
   ],
 };
 
+function environmentalAnalysisGraph(
+  graphId: string,
+  name: string,
+  nodeType: string,
+  parameters: Record<string, unknown>,
+) {
+  return {
+    graph_id: graphId,
+    name,
+    schema_version: "workflow-graph-0001",
+    metadata: {
+      scientific_scope: "descriptive_environmental_context",
+      causal_claims_supported: false,
+    },
+    nodes: [
+      {
+        node_id: "project",
+        node_type: "project_source",
+        parameters: {},
+        position: { x: 40, y: 80 },
+      },
+      {
+        node_id: "analysis",
+        node_type: nodeType,
+        parameters,
+        position: { x: 380, y: 80 },
+      },
+    ],
+    edges: [
+      {
+        edge_id: "project-analysis",
+        source_node_id: "project",
+        source_port_id: "project",
+        target_node_id: "analysis",
+        target_port_id: "project",
+      },
+    ],
+  };
+}
+
+const environmentalAnalysisTemplates: WorkflowTemplate[] = [
+  {
+    id: "environmental-current-streamlines",
+    name: "Persisted current streamlines",
+    description:
+      "Explicit paired current records and seeds → deterministic frozen-field streamlines with immutable provenance.",
+    graph: environmentalAnalysisGraph(
+      "persisted-current-streamlines",
+      "Persisted current streamlines",
+      "current_streamline_analysis",
+      {
+        name: "Current streamlines",
+        scientific_record_ids: ["replace-with-current-record-id"],
+        seeds: [{ latitude: 32.7808, longitude: -79.9236 }],
+        step_seconds: 60,
+        max_steps: 1000,
+        max_length_m: 100000,
+        stagnation_m_s: 1e-9,
+      },
+    ),
+  },
+  {
+    id: "environmental-lunar-context",
+    name: "Persisted lunar context",
+    description:
+      "Explicit UTC timestamps → deterministic offline lunar calculation → immutable evidence.",
+    graph: environmentalAnalysisGraph(
+      "persisted-lunar-context",
+      "Persisted lunar context",
+      "lunar_context_analysis",
+      {
+        name: "Lunar context",
+        observed_at: ["2026-04-03T13:00:00Z"],
+      },
+    ),
+  },
+  {
+    id: "environmental-tidal-context",
+    name: "Bounded NOAA tidal context",
+    description:
+      "Explicit station, datum, UTC time, and distance bounds → separate observed and predicted tidal evidence.",
+    graph: environmentalAnalysisGraph(
+      "bounded-noaa-tidal-context",
+      "Bounded NOAA tidal context",
+      "tidal_context_analysis",
+      {
+        name: "Tidal context",
+        observed_at: "2026-04-03T13:00:00Z",
+        location: { latitude: 32.7808, longitude: -79.9236 },
+        station_id: "8665530",
+        datum: "MLLW",
+        max_time_delta_s: 900,
+        max_distance_m: 1000,
+      },
+    ),
+  },
+  {
+    id: "environmental-event-windows",
+    name: "Environmental event windows",
+    description:
+      "Saved threshold samples → explicit bounded windows with deterministic overlap merging.",
+    graph: environmentalAnalysisGraph(
+      "environmental-event-windows",
+      "Environmental event windows",
+      "event_window_analysis",
+      {
+        name: "Environmental event windows",
+        event_definition_id: "replace-with-threshold-definition-id",
+        before_s: 3600,
+        after_s: 3600,
+        boundary_policy: "inclusive",
+      },
+    ),
+  },
+  {
+    id: "environmental-observation-join",
+    name: "Observation–environment join",
+    description:
+      "Explicit biological records → bounded time, location, and optional depth matching.",
+    graph: environmentalAnalysisGraph(
+      "observation-environment-join",
+      "Observation–environment join",
+      "observation_environment_join",
+      {
+        name: "Observation–environment join",
+        observation_record_ids: ["replace-with-observation-record-id"],
+        environmental_variable: "water_temperature",
+        max_time_delta_s: 3600,
+        max_distance_m: 1000,
+        require_depth_match: false,
+        max_depth_delta_m: 0,
+      },
+    ),
+  },
+  {
+    id: "environmental-lagged-comparison",
+    name: "Descriptive lagged comparison",
+    description:
+      "Saved observation join → explicit lags with sample-reuse and pseudoreplication diagnostics.",
+    graph: environmentalAnalysisGraph(
+      "descriptive-lagged-comparison",
+      "Descriptive lagged comparison",
+      "lagged_comparison",
+      {
+        name: "Descriptive lagged comparison",
+        join_result_id: "replace-with-join-result-id",
+        lags_s: [-3600, 0, 3600],
+      },
+    ),
+  },
+];
+
+const computedScientificMetric = {
+  graph_id: "computed-scientific-metric",
+  name: "Computed scientific metric",
+  schema_version: "workflow-graph-0001",
+  nodes: [
+    {
+      node_id: "project",
+      node_type: "project_source",
+      parameters: {},
+      position: { x: 40, y: 80 },
+    },
+    {
+      node_id: "records",
+      node_type: "scientific_records_source",
+      parameters: {
+        record_ids: ["replace-with-scientific-record-id"],
+      },
+      position: { x: 360, y: 80 },
+    },
+    {
+      node_id: "metric",
+      node_type: "computed_metric",
+      parameters: {
+        definition_id: "replace-with-metric-definition-id",
+        bindings: { input: "replace-with-scientific-record-id" },
+      },
+      position: { x: 700, y: 80 },
+    },
+  ],
+  edges: [
+    {
+      edge_id: "project-records",
+      source_node_id: "project",
+      source_port_id: "project",
+      target_node_id: "records",
+      target_port_id: "project",
+    },
+    {
+      edge_id: "records-metric",
+      source_node_id: "records",
+      source_port_id: "records",
+      target_node_id: "metric",
+      target_port_id: "records",
+    },
+  ],
+};
+
+const reviewedAnnotationAggregate = {
+  graph_id: "reviewed-annotation-aggregate",
+  name: "Reviewed annotation aggregate",
+  schema_version: "workflow-graph-0001",
+  nodes: [
+    {
+      node_id: "project",
+      node_type: "project_source",
+      parameters: {},
+      position: { x: 40, y: 80 },
+    },
+    {
+      node_id: "aggregate",
+      node_type: "annotation_aggregate",
+      parameters: {
+        definition_id: "replace-with-aggregate-definition-id",
+        image_ids: ["replace-with-reviewed-image-id"],
+      },
+      position: { x: 380, y: 80 },
+    },
+  ],
+  edges: [
+    {
+      edge_id: "project-aggregate",
+      source_node_id: "project",
+      source_port_id: "project",
+      target_node_id: "aggregate",
+      target_port_id: "project",
+    },
+  ],
+};
+
+const verifiedMaskCoverage = {
+  graph_id: "verified-mask-coverage",
+  name: "Verified mask area and coverage",
+  schema_version: "workflow-graph-0001",
+  nodes: [
+    {
+      node_id: "project",
+      node_type: "project_source",
+      parameters: {},
+      position: { x: 40, y: 80 },
+    },
+    {
+      node_id: "coverage",
+      node_type: "mask_coverage",
+      parameters: {
+        definition_id: "replace-with-mask-coverage-definition-id",
+        image_ids: ["replace-with-reviewed-image-id"],
+      },
+      position: { x: 380, y: 80 },
+    },
+  ],
+  edges: [
+    {
+      edge_id: "project-coverage",
+      source_node_id: "project",
+      source_port_id: "project",
+      target_node_id: "coverage",
+      target_port_id: "project",
+    },
+  ],
+};
+
 const localConsensus = {
   graph_id: "two-of-three-detection-consensus",
   name: "2-of-3 local detection consensus",
@@ -965,6 +1228,21 @@ export function createPoseArchitectureWorkflow(
 }
 
 export const workflowTemplates: WorkflowTemplate[] = [
+  ...environmentalAnalysisTemplates,
+  {
+    id: "verified-mask-coverage",
+    name: "Verified mask area and coverage",
+    description:
+      "Explicit reviewed images → overlap-safe mask union and coverage → immutable result.",
+    graph: verifiedMaskCoverage,
+  },
+  {
+    id: "reviewed-annotation-aggregate",
+    name: "Reviewed annotation aggregate",
+    description:
+      "Explicit reviewed images → replicate-aware verified annotation count → immutable result.",
+    graph: reviewedAnnotationAggregate,
+  },
   {
     id: "pose-architecture-training",
     name: "Pose architecture → train from scratch",
@@ -978,6 +1256,13 @@ export const workflowTemplates: WorkflowTemplate[] = [
     description:
       "Pose inference → temporal identity → scientist review → Active Learning → verified dataset → retrain → register → Results Package, with a visual next-iteration cue.",
     graph: poseActiveLearningRetrain,
+  },
+  {
+    id: "computed-scientific-metric",
+    name: "Computed scientific metric",
+    description:
+      "Explicit scientific records → safe unit-aware definition → immutable result.",
+    graph: computedScientificMetric,
   },
   {
     id: "project-images",

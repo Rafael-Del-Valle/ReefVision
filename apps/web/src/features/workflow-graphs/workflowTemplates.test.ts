@@ -6,6 +6,113 @@ import {
 } from "./workflowTemplates";
 
 describe("workflowTemplates", () => {
+  it("includes executable templates for every environmental-analysis node", () => {
+    const expected = new Set([
+      "current_streamline_analysis",
+      "lunar_context_analysis",
+      "tidal_context_analysis",
+      "event_window_analysis",
+      "observation_environment_join",
+      "lagged_comparison",
+    ]);
+    const found = new Set<string>();
+
+    for (const template of workflowTemplates.filter((item) =>
+      item.id.startsWith("environmental-"),
+    )) {
+      const graph = template.graph as {
+        nodes: Array<{ node_type: string }>;
+        edges: Array<{ source_port_id: string; target_port_id: string }>;
+      };
+      expect(graph.nodes[0].node_type).toBe("project_source");
+      found.add(graph.nodes[1].node_type);
+      expect(graph.edges).toContainEqual(
+        expect.objectContaining({
+          source_port_id: "project",
+          target_port_id: "project",
+        }),
+      );
+    }
+
+    expect(found).toEqual(expected);
+  });
+
+  it("includes an explicit reviewed annotation aggregate workflow", () => {
+    const template = workflowTemplates.find(
+      (item) => item.id === "reviewed-annotation-aggregate",
+    );
+    expect(template).toBeDefined();
+    const graph = template?.graph as {
+      nodes: Array<{ node_type: string; parameters: Record<string, unknown> }>;
+      edges: Array<{ source_port_id: string; target_port_id: string }>;
+    };
+    expect(graph.nodes.map((node) => node.node_type)).toEqual([
+      "project_source",
+      "annotation_aggregate",
+    ]);
+    expect(graph.nodes[1].parameters).toEqual({
+      definition_id: "replace-with-aggregate-definition-id",
+      image_ids: ["replace-with-reviewed-image-id"],
+    });
+    expect(graph.edges).toContainEqual(
+      expect.objectContaining({
+        source_port_id: "project",
+        target_port_id: "project",
+      }),
+    );
+  });
+
+  it("includes an executable verified mask coverage workflow", () => {
+    const template = workflowTemplates.find(
+      (item) => item.id === "verified-mask-coverage",
+    );
+    expect(template).toBeDefined();
+    const graph = template?.graph as {
+      nodes: Array<{ node_type: string; parameters: Record<string, unknown> }>;
+    };
+    expect(graph.nodes.map((node) => node.node_type)).toEqual([
+      "project_source",
+      "mask_coverage",
+    ]);
+    expect(graph.nodes[1].parameters).toEqual({
+      definition_id: "replace-with-mask-coverage-definition-id",
+      image_ids: ["replace-with-reviewed-image-id"],
+    });
+  });
+
+  it("includes an explicit scientific-record metric workflow", () => {
+    const template = workflowTemplates.find(
+      (item) => item.id === "computed-scientific-metric",
+    );
+    expect(template).toBeDefined();
+    const graph = template?.graph as {
+      nodes: Array<{
+        node_type: string;
+        parameters: Record<string, unknown>;
+      }>;
+      edges: Array<{ source_port_id: string; target_port_id: string }>;
+    };
+    expect(graph.nodes.map((node) => node.node_type)).toEqual([
+      "project_source",
+      "scientific_records_source",
+      "computed_metric",
+    ]);
+    expect(graph.nodes[1].parameters.record_ids).toEqual([
+      "replace-with-scientific-record-id",
+    ]);
+    expect(graph.nodes[2].parameters).toMatchObject({
+      definition_id: "replace-with-metric-definition-id",
+      bindings: { input: "replace-with-scientific-record-id" },
+    });
+    expect(
+      graph.edges.some(
+        (edge) =>
+          edge.source_port_id === "records" &&
+          edge.target_port_id === "records",
+      ),
+    ).toBe(true);
+  });
+
   it("builds seed-free pose architecture training from an immutable dataset", () => {
     const graph = createPoseArchitectureWorkflow("yolo11m-pose.yaml");
     expect(

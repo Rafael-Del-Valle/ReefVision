@@ -35,6 +35,10 @@ class VideoAssets:
     def get_record(self, _video_id: str) -> object:
         return self.video
 
+    def telemetry_content_sha256(self, _video_id: str) -> str | None:
+        telemetry = self.video.metadata_json.get("telemetry", {})
+        return telemetry.get("content_sha256")
+
 
 class Calibrations:
     def __init__(self, calibration: object) -> None:
@@ -125,6 +129,31 @@ def test_sync_tolerance_changes_production_hash() -> None:
     )
 
     assert first != second
+
+
+def test_srt_content_and_timezone_evidence_change_production_hash() -> None:
+    instance = service()
+    video_assets = cast(VideoAssets, instance.video_assets)
+    video = cast(SimpleNamespace, video_assets.video)
+    telemetry = video.metadata_json["telemetry"]
+    telemetry.update(
+        {
+            "wall_clock_sample_count": 1,
+            "utc_offset_minutes": -300,
+            "utc_offset_evidence": "Field log confirms EST",
+            "content_sha256": "c" * 64,
+        }
+    )
+    first = instance.configuration_hash("video-1")
+
+    telemetry["content_sha256"] = "d" * 64
+    second = instance.configuration_hash("video-1")
+    assert first != second
+
+    telemetry["content_sha256"] = "c" * 64
+    telemetry["utc_offset_minutes"] = -240
+    third = instance.configuration_hash("video-1")
+    assert first != third
 
 
 def test_invalid_alignment_metadata_is_rejected() -> None:

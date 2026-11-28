@@ -12,13 +12,13 @@ from reefvision.geospatial.georeferencing_policy import (
     MINIMUM_RAY_DEPRESSION_DEG,
 )
 
-GEOREFERENCING_CONFIGURATION_SCHEMA_VERSION = "georeferencing-configuration-0003"
+GEOREFERENCING_CONFIGURATION_SCHEMA_VERSION = "georeferencing-configuration-0004"
 
 GEOREFERENCING_ALGORITHM_NAME = "camera_ray_surface_intersection"
 GEOREFERENCING_ALGORITHM_VERSION = "opencv-dji-enu-flat-wgs84-v3"
 GEOREFERENCING_SURFACE_MODEL = "local_horizontal_plane"
 GEOREFERENCING_REPRESENTATIVE_PIXEL_POLICY_VERSION = "1.0.0"
-GEOREFERENCING_SYNCHRONIZATION_VERSION = "nearest-frame-time-v1"
+GEOREFERENCING_SYNCHRONIZATION_VERSION = "explicit-pts-evidence-gated-srt-utc-v2"
 GEOREFERENCING_POSE_CONVENTION_VERSION = "absolute-gimbal-ned-to-enu-v1"
 GEOREFERENCING_TELEMETRY_SELECTION_VERSION = "srt-primary-explicit-airdata-fallback-v2"
 
@@ -53,6 +53,10 @@ class GeoreferencingConfigurationSnapshot:
     project_height_evidence: str
 
     max_telemetry_delta_s: float
+
+    srt_content_sha256: str | None = None
+    srt_utc_offset_minutes: int | None = None
+    srt_utc_offset_evidence: str | None = None
 
     minimum_ray_depression_deg: float = MINIMUM_RAY_DEPRESSION_DEG
     algorithm_name: str = GEOREFERENCING_ALGORITHM_NAME
@@ -128,6 +132,18 @@ def canonical_configuration_payload(
     if snapshot.calibration_revision < 1:
         raise GeoreferencingConfigurationError("calibration_revision must be at least 1")
 
+    offset_evidence = _optional_text(snapshot.srt_utc_offset_evidence)
+    if (snapshot.srt_utc_offset_minutes is None) != (offset_evidence is None):
+        raise GeoreferencingConfigurationError(
+            "SRT UTC offset and timezone evidence must be supplied together"
+        )
+    if snapshot.srt_utc_offset_minutes is not None and not (
+        -840 <= snapshot.srt_utc_offset_minutes <= 840
+    ):
+        raise GeoreferencingConfigurationError(
+            "srt_utc_offset_minutes must be between -840 and 840"
+        )
+
     return {
         "schema_version": (GEOREFERENCING_CONFIGURATION_SCHEMA_VERSION),
         "video": {
@@ -155,6 +171,16 @@ def canonical_configuration_payload(
                     snapshot.srt_sample_count,
                     field_name="srt_sample_count",
                 ),
+                "content_sha256": (
+                    _sha256_text(
+                        snapshot.srt_content_sha256,
+                        field_name="srt_content_sha256",
+                    )
+                    if snapshot.srt_content_sha256 is not None
+                    else None
+                ),
+                "utc_offset_minutes": snapshot.srt_utc_offset_minutes,
+                "utc_offset_evidence": offset_evidence,
             },
             "airdata": {
                 "source_id": _optional_text(snapshot.airdata_source_id),

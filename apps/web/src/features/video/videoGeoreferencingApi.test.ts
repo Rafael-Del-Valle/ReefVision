@@ -34,6 +34,8 @@ describe("video georeferencing API", () => {
       airdataFile: airdata,
       airdataTimeOffsetSeconds: 6.19,
       airdataTimeOffsetEvidence: "  source-only SRT/AirData alignment  ",
+      telemetryUtcOffsetMinutes: -300,
+      telemetryUtcOffsetEvidence: "  field log confirms EST  ",
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -48,6 +50,10 @@ describe("video georeferencing API", () => {
     expect(form.get("airdata_time_offset_s")).toBe("6.19");
     expect(form.get("airdata_time_offset_evidence")).toBe(
       "source-only SRT/AirData alignment",
+    );
+    expect(form.get("telemetry_utc_offset_minutes")).toBe("-300");
+    expect(form.get("telemetry_utc_offset_evidence")).toBe(
+      "field log confirms EST",
     );
   });
 

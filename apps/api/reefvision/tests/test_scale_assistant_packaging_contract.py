@@ -21,6 +21,21 @@ def test_windows_provider_stack_uses_only_opencv_contrib_distribution() -> None:
     assert not any(line.startswith("opencv-contrib-python-headless") for line in active_lines)
 
 
+def test_no_deps_provider_stack_pins_required_transitive_runtimes() -> None:
+    requirements = (ROOT / "requirements" / "providers-windows-cu121-py312.txt").read_text(
+        encoding="utf-8"
+    )
+    active_lines = {
+        line.strip().casefold()
+        for line in requirements.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+
+    assert "sympy==1.13.1" in active_lines
+    assert "polars-runtime-32==1.35.2" in active_lines
+    assert "pytz==2025.2" in active_lines
+
+
 def test_bootstrap_resets_shared_cv2_namespace_before_pinned_install() -> None:
     bootstrap = (ROOT / "scripts" / "bootstrap.ps1").read_text(encoding="utf-8")
 

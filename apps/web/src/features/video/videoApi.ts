@@ -110,6 +110,10 @@ export interface VideoTelemetryMetadata {
   source_path: string | null;
   path_kind: "managed" | "external" | null;
   sample_count: number;
+  wall_clock_sample_count?: number;
+  utc_offset_minutes?: number | null;
+  utc_offset_evidence?: string | null;
+  content_sha256?: string | null;
   error: string | null;
 }
 
@@ -253,6 +257,7 @@ export interface PoseProviderUncertaintyEvidence {
 
 export interface VideoTrackKeyframe {
   frame: number;
+  timestamp_seconds?: number | null;
   bbox: [number, number, number, number];
   confidence?: number | null;
   keypoints?: VideoPoseKeypoint[] | null;
@@ -510,6 +515,8 @@ export function getVideos(
 
 export interface VideoImportOptions {
   telemetryFile?: File | null;
+  telemetryUtcOffsetMinutes?: number;
+  telemetryUtcOffsetEvidence?: string | null;
   airdataFile?: File | null;
   airdataTimeOffsetSeconds?: number;
   airdataTimeOffsetEvidence?: string | null;
@@ -524,6 +531,16 @@ export function importVideo(
   form.append("file", file);
   if (options.telemetryFile) {
     form.append("telemetry_file", options.telemetryFile);
+    if (options.telemetryUtcOffsetMinutes !== undefined) {
+      form.append(
+        "telemetry_utc_offset_minutes",
+        String(options.telemetryUtcOffsetMinutes),
+      );
+      const evidence = options.telemetryUtcOffsetEvidence?.trim();
+      if (evidence) {
+        form.append("telemetry_utc_offset_evidence", evidence);
+      }
+    }
   }
   if (options.airdataFile) {
     form.append("airdata_file", options.airdataFile);
