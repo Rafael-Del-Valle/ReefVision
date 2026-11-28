@@ -76,7 +76,9 @@ def _tamper_metadata_frame_with_consistent_section_checksum(
     return target.getvalue()
 
 
-def _tamper_parse_geometry_with_consistent_section_checksum(archive_bytes: bytes) -> bytes:
+def _tamper_parse_with_consistent_section_checksum(
+    archive_bytes: bytes, *, request_overrides: dict[str, object] | None = None
+) -> bytes:
     source = io.BytesIO(archive_bytes)
     target = io.BytesIO()
     with zipfile.ZipFile(source, "r") as incoming:
@@ -86,7 +88,10 @@ def _tamper_parse_geometry_with_consistent_section_checksum(archive_bytes: bytes
     section = manifest["sections"]["jobs"]
     rows = [json.loads(line) for line in members[section["path"]].splitlines()]
     parse_job = next(row for row in rows if row["job_type"] == "spatial_source_parse")
-    parse_job["result_json"]["geometry_sha256"] = "0" * 64
+    if request_overrides is None:
+        parse_job["result_json"]["geometry_sha256"] = "0" * 64
+    else:
+        parse_job["request_json"].update(request_overrides)
     records = "".join(
         json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in rows
     ).encode()
@@ -353,7 +358,7 @@ def test_spatial_original_and_review_round_trip_and_reject_tampering(
     )
     assert rejected_metadata_import.status_code == 400, rejected_metadata_import.text
 
-    altered_parse = _tamper_parse_geometry_with_consistent_section_checksum(archive_bytes)
+    altered_parse = _tamper_parse_with_consistent_section_checksum(archive_bytes)
     parse_inspection = client.post(
         "/api/v1/exchange-packages/inspect",
         files={"file": ("altered-parse.reefvision.zip", altered_parse, "application/zip")},
@@ -369,6 +374,30 @@ def test_spatial_original_and_review_round_trip_and_reject_tampering(
         files={"file": ("altered-parse.reefvision.zip", altered_parse, "application/zip")},
     )
     assert rejected_parse_import.status_code == 400, rejected_parse_import.text
+
+    for overrides in (
+        {"size_bytes": float(len(OBJ))},
+        {"size_bytes": True},
+        {"size_bytes": len(OBJ) + 1},
+        {"managed_path": "unrelated.obj"},
+    ):
+        altered_request = _tamper_parse_with_consistent_section_checksum(
+            archive_bytes, request_overrides=overrides
+        )
+        files = {"file": ("altered-request.reefvision.zip", altered_request, "application/zip")}
+        request_inspection = client.post("/api/v1/exchange-packages/inspect", files=files)
+        assert request_inspection.status_code == 200, request_inspection.text
+        assert request_inspection.json()["compatible"] is False
+        assert any(
+            "parse job binding is invalid" in error.lower()
+            for error in request_inspection.json()["errors"]
+        ), request_inspection.json()["errors"]
+        rejected_request = client.post("/api/v1/exchange-packages/import", files=files)
+        assert rejected_request.status_code == 400, rejected_request.text
+
+    original = client.get(f"{base}/spatial/assets/{asset['id']}/content")
+    assert original.status_code == 200, original.text
+    assert original.content == OBJ
 
 
 def test_spatial_project_exchange_requires_original_media(
