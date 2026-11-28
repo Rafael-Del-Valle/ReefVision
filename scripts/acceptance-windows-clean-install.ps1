@@ -157,16 +157,15 @@ function Stop-AcceptanceDesktop($Process) {
 }
 function Import-AcceptanceImage(
     [string]$Url,
-    [byte[]]$ImageBytes = $null,
+    [Parameter(Mandatory = $true)][byte[]]$ImageBytes,
     [string]$Filename = 'acceptance.png',
     [string]$RelativePath = 'synthetic/acceptance.png'
 ) {
     Add-Type -AssemblyName System.Net.Http
-    $png = if ($null -ne $ImageBytes) { $ImageBytes } else { [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=') }
     $client = New-Object System.Net.Http.HttpClient
     $form = New-Object System.Net.Http.MultipartFormDataContent
     try {
-        $file = New-Object System.Net.Http.ByteArrayContent -ArgumentList (,$png)
+        $file = New-Object System.Net.Http.ByteArrayContent -ArgumentList (,$ImageBytes)
         $file.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse('image/png')
         $form.Add($file, 'files', $Filename)
         $form.Add((New-Object System.Net.Http.StringContent($RelativePath)), 'relative_paths')
@@ -290,7 +289,11 @@ try {
     })
     if ($CachedWeights.Count -gt 0) { throw 'Fresh profile contains unexpected model weights.' }
     $report.model_policy = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "$($Architectures.Count) architectures; zero pretrained/downloadable models; zero cached weights; isolated provider caches."
-    $import = Import-AcceptanceImage "$api/projects/$projectId/imports/images"
+    # Capture an independent digest of the actual upload, before the API stores it.
+    $originalImageBytes = [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=')
+    $originalImageStream = [IO.MemoryStream]::new([byte[]]$originalImageBytes)
+    try { $originalImageHash = (Get-FileHash -InputStream $originalImageStream -Algorithm SHA256).Hash } finally { $originalImageStream.Dispose() }
+    $import = Import-AcceptanceImage -Url "$api/projects/$projectId/imports/images" -ImageBytes $originalImageBytes
     $imageId = $import.successful[0].image_id
     $session = Invoke-RestMethod "$api/images/$imageId/annotations"
     $annotationId = [guid]::NewGuid().ToString()
@@ -620,6 +623,11 @@ try {
 
         $exportedImage = @($manifest.media | Where-Object { $_.kind -eq 'image' -and $_.record_id -ceq $imageId })
         if ($exportedImage.Count -ne 1) { throw 'Project Exchange did not include the original acceptance image.' }
+        # An internally consistent archive can still contain the wrong image.
+        # Tie its manifest to the bytes uploaded before the restart or upgrade.
+        if ($exportedImage[0].sha256 -ine $originalImageHash -or $exportedImage[0].size_bytes -ne $originalImageBytes.Length) {
+            throw 'Project Exchange original image does not match the pre-restart uploaded bytes.'
+        }
         foreach ($media in $manifest.media) {
             $members = @($zip.Entries | Where-Object FullName -ceq $media.path)
             if ($members.Count -ne 1 -or $members[0].Length -ne $media.size_bytes) {
@@ -633,7 +641,7 @@ try {
         }
     } finally { $zip.Dispose() }
     $archiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
-    $report.project_exchange = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Verified $verifiedSections record sections, saved project/class/image/annotation identities, and all included media sizes and digests; archive SHA-256 $archiveHash"
+    $report.project_exchange = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Verified $verifiedSections record sections, saved project/class/image/annotation identities, original uploaded image SHA-256 $originalImageHash, and all included media sizes and digests; archive SHA-256 $archiveHash"
     Stop-AcceptanceDesktop $desktop
 
     if (-not $SkipUninstall) {
