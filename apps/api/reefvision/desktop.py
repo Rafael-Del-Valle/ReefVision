@@ -94,12 +94,15 @@ def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
         help="Process one queued annotated-video export job and exit",
     )
     parser.add_argument(
-        "--detector-training-job", help="Process one scheduled detector fit and exit"
+        "--ultralytics-training-job",
+        "--detector-training-job",
+        dest="detector_training_job",
+        help="Process one scheduled Ultralytics detection or instance segmentation fit and exit",
     )
     parser.add_argument("--worker-parent", type=int, help=argparse.SUPPRESS)
     namespace = parser.parse_args(argv)
     if (namespace.detector_training_job is None) != (namespace.worker_parent is None):
-        parser.error("--detector-training-job and --worker-parent must be used together")
+        parser.error("The training job ID and --worker-parent must be used together")
     return DesktopLaunchOptions(
         host=namespace.host,
         port=namespace.port,
