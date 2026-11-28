@@ -145,7 +145,9 @@ def validate_spatial_exchange_records(
             or asset is None
             or request.get("expected_source_sha256") != asset.get("sha256")
             or request.get("source_format") != asset.get("source_format")
+            or type(request.get("size_bytes")) is not int
             or request.get("size_bytes") != asset.get("size_bytes")
+            or request.get("managed_path") != asset.get("managed_path")
         ):
             raise ValidationError("Spatial source parse job binding is invalid")
         result_json = row.get("result_json")
