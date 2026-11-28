@@ -829,3 +829,41 @@ it("rejects repeated geographic cells even with distinct component IDs", () => {
   }
   expect(summarizeCurrentSlice([first])).toMatchObject({ count: 1 });
 });
+
+it("pairs equivalent antimeridian components without modifying stored coordinates", () => {
+  const east = component("current_eastward_velocity", 3, {
+    location: { latitude: 32.5, longitude: 180, crs: "EPSG:4326" },
+  });
+  const north = component("current_northward_velocity", 4, {
+    location: { latitude: 32.5, longitude: -180, crs: "EPSG:4326" },
+  });
+  const vectors = currentVectors([east, north]);
+  expect(vectors).toHaveLength(1);
+  expect(vectors[0]).toMatchObject({ longitude: 180, speed: 5 });
+  expect(currentVectors([north, east])).toEqual(vectors);
+  expect(north.location?.longitude).toBe(-180);
+  expect(
+    currentVectors([
+      east,
+      {
+        ...north,
+        location: { latitude: 32.5, longitude: -179.999999, crs: "EPSG:4326" },
+      },
+    ]),
+  ).toEqual([]);
+  const duplicateEast = {
+    ...east,
+    id: "east-alias",
+    location: north.location,
+  };
+  const duplicateNorth = {
+    ...north,
+    id: "north-alias",
+    location: east.location,
+  };
+  expect(currentVectors([east, north, duplicateEast])).toEqual([]);
+  expect(currentVectors([east, north, duplicateNorth])).toEqual([]);
+  expect(
+    currentVectors([east, north, duplicateEast, duplicateNorth]),
+  ).toEqual([]);
+});
