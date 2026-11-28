@@ -1306,8 +1306,8 @@ def measure_mesh_preview(
         traversal_count = sum(traversal_counts.values())
         trace_membership_count = sum(len(edges) for edges in trace_edge_sets)
         memberships: Counter[frozenset[_TracePoint]] = Counter()
-        for edges in trace_edge_sets:
-            memberships.update(edges)
+        for selected_edges in trace_edge_sets:
+            memberships.update(selected_edges)
         # Separate repeated passes by one selection from overlap across
         # selections, keeping exact endpoint-pair semantics throughout.
         cross_trace_redundant_length = sum(
@@ -1508,6 +1508,9 @@ def measure_mesh_preview(
             "within_trace_redundant_source_length_mesh_units": float(within_trace_redundant_length),
             "cross_trace_redundant_source_length_mesh_units": float(cross_trace_redundant_length),
             "cross_trace_shared_source_length_mesh_units": float(shared_source_length),
+            "cross_trace_shared_source_length_fraction": (
+                float(shared_source_length / source_total) if source_total else None
+            ),
             "source_length_mesh_units": float(source_total),
             "length_m": None if calibrated_total > 0 and length_m == 0 else length_m,
             "length_scale_only_interval_m": interval,
