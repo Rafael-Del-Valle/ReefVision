@@ -24,6 +24,7 @@ from reefvision.storage.backups import (
     discard_restore_staging,
     has_restore_job_receipt,
     hash_file,
+    is_profile_local_path,
     restore_metadata_filenames,
     restore_staging_path,
     verify_backup_directory,
@@ -76,18 +77,38 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
         manifest = json.loads(
             backup_io_path(backup_root / BACKUP_MANIFEST_FILENAME).read_text(encoding="utf-8")
         )
-        inventory = manifest.get("file_inventory")
-        if not isinstance(inventory, list):
+        full_inventory = manifest.get("file_inventory")
+        if not isinstance(full_inventory, list):
             raise RuntimeError("Backup manifest file inventory is missing")
         database_filename = manifest.get("database_filename")
         if not isinstance(database_filename, str) or not database_filename:
             raise RuntimeError("Backup manifest database filename is missing")
+        # Older media can contain local coordination or trust state. Verify all media
+        # first, then copy only the portable entries to the new profile.
+        inventory = []
+        local_members = []
+        for entry in full_inventory:
+            if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+                raise RuntimeError("Backup manifest contains an invalid inventory entry")
+            parts = PurePosixPath(entry["path"]).parts
+            if parts[:1] == ("data",) and is_profile_local_path(parts[1:]):
+                local_members.append(entry["path"])
+            else:
+                inventory.append(entry)
         receipt_filename, marker_filename = restore_metadata_filenames(inventory, database_filename)
         request = {**request, "restore_receipt_filename": receipt_filename}
 
         if backup_io_path(destination_root).exists():
             if not has_restore_job_receipt(destination_root, job_id, request):
                 raise FileExistsError("The selected restore destination already exists")
+            for member in local_members:
+                target = _restore_target_path(
+                    destination_root, backup_path=member, database_filename=database_filename
+                )
+                if backup_io_path(target).exists():
+                    raise RuntimeError(
+                        "The recovery contains profile-local state. Restore to a new destination."
+                    )
             # The prior process published the directory before committing the job result.
             _verify_restored_copy(
                 destination_root, inventory=inventory, database_filename=database_filename
@@ -103,7 +124,7 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
                 job_id=job_id,
                 destination_path=destination_relative,
                 restored_count=len(inventory),
-                restored_bytes=int(verification["total_size_bytes"]),
+                restored_bytes=sum(entry["size_bytes"] for entry in inventory),
                 verification_status=verification["status"],
                 receipt_filename=receipt_filename,
                 marker_filename=marker_filename,
@@ -126,11 +147,7 @@ def process_restore_job(settings: Settings, factory: sessionmaker[Session], job_
         restored_paths: list[Path] = []
         for entry in inventory:
             ensure_job_not_cancelled(factory, job_id)
-            if not isinstance(entry, dict):
-                raise RuntimeError("Backup manifest contains an invalid inventory entry")
-            relative_path = entry.get("path")
-            if not isinstance(relative_path, str):
-                raise RuntimeError("Backup manifest path entry is invalid")
+            relative_path = entry["path"]
             source = backup_member_path(backup_root, relative_path)
             destination = _restore_target_path(
                 staging_root,

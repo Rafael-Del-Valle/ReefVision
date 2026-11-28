@@ -83,11 +83,32 @@ def backup_root_path(settings: Settings, relative_path: str) -> Path:
     return resolve_managed_project_path(settings, relative_path)
 
 
+def is_profile_local_path(parts: tuple[str, ...]) -> bool:
+    """Identify profile-scoped checkpoint approvals and operating-system worker locks."""
+    if not parts:
+        return False
+    first = parts[0].casefold()
+    return (
+        first == "checkpoint-approvals"
+        or (len(parts) == 1 and first == "compute-worker.lock")
+        or (
+            len(parts) == 2
+            and first == "runtime"
+            and parts[1].casefold() == "headless-session.lock"
+        )
+    )
+
+
 def _live_profile_entries(data_root: Path) -> Iterator[Path]:
     # Recovery copies and in-flight restores have their own database and files.
     # Prune at the profile root so a project asset with the same name is preserved.
     for entry in data_root.iterdir():
-        if os.path.normcase(entry.name) in {BACKUP_DIRECTORY, "backups", "recoveries", ".t"}:
+        if is_profile_local_path((entry.name,)) or os.path.normcase(entry.name) in {
+            BACKUP_DIRECTORY,
+            "backups",
+            "recoveries",
+            ".t",
+        }:
             continue
         if entry.is_dir() and not entry.is_symlink():
             yield from entry.rglob("*")
@@ -202,7 +223,13 @@ def build_backup_plan(
     data_io_root = backup_io_path(data_root)
     data_files: list[BackupFileCandidate] = []
     included_sections = ["database", "projects", "thumbnails", "models"]
-    excluded_sections = ["backups", "recoveries", "transient staging directories"]
+    excluded_sections = [
+        "backups",
+        "recoveries",
+        "transient staging directories",
+        "worker locks",
+        "checkpoint approvals",
+    ]
     if include_logs:
         included_sections.append("logs")
     else:
@@ -510,6 +537,8 @@ def _should_exclude(
     parts = relative_path.parts
     if not parts:
         return False
+    if is_profile_local_path(parts):
+        return True
     if parts[0] == "logs" and not include_logs:
         return True
     if ".imports" in parts or ".model-imports" in parts:
