@@ -16,12 +16,12 @@ from reefvision.db.models import (
     ModelRegistration,
     PredictionProposal,
     Project,
-    ReviewQueue,
     ReviewQueueItem,
 )
 from reefvision.db.models.project import utc_now
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.schemas.active_learning import (
+    AcquisitionQueueScope,
     ActiveLearningFeedbackResponse,
     ActiveLearningRoundCreateRequest,
     ActiveLearningRoundResponse,
@@ -29,6 +29,7 @@ from reefvision.schemas.active_learning import (
 from reefvision.schemas.dataset_versions import DatasetVersionCreateRequest, SplitRatios
 from reefvision.schemas.review_queues import ReviewQueueCreateRequest, ReviewScoreWeights
 from reefvision.services.mask_aware_dataset_versions import MaskAwareDatasetVersionService
+from reefvision.services.review_queue_transaction_16 import begin_serialized_review_triage
 from reefvision.services.review_queues import ReviewQueueService
 from reefvision.storage.datasets import canonical_json_sha256
 
@@ -111,7 +112,7 @@ class ActiveLearningRoundService:
         return version
 
     def _model_ids(self, project_id: str, requested: list[str]) -> list[str]:
-        model_ids = list(dict.fromkeys(requested))
+        model_ids = sorted(set(requested))
         if not model_ids:
             return []
         models = list(
@@ -150,27 +151,19 @@ class ActiveLearningRoundService:
             signal_weights=weights,
             created_by=request.created_by,
         )
-        if version is None:
-            queue = self.review_queues.create_queue_for_project(project_id, queue_request)
-        else:
-            queue = self.review_queues.create_queue_for_dataset_version(version.id, queue_request)
-
-        queue_items = list(
+        queue = self.review_queues.prepare_acquisition_queue(
+            project_id,
+            version,
+            queue_request,
+            AcquisitionQueueScope(model_ids=model_ids, requested_size=request.requested_size),
+        )
+        selected = list(
             self.session.scalars(
                 select(ReviewQueueItem)
                 .where(ReviewQueueItem.review_queue_id == queue.id)
                 .order_by(ReviewQueueItem.rank_position, ReviewQueueItem.image_id)
             )
         )
-        if model_ids:
-            model_filter = set(model_ids)
-            queue_items = [
-                item for item in queue_items if model_filter.intersection(item.model_ids_json)
-            ]
-        selected = queue_items[: request.requested_size]
-        if not selected:
-            raise ValidationError("The acquisition strategy did not select any review candidates")
-
         stable_items = [
             {
                 "image_id": item.image_id,
@@ -181,7 +174,7 @@ class ActiveLearningRoundService:
             for item in selected
         ]
         identity_payload = {
-            "schema_version": "active-learning-identity-0001",
+            "schema_version": "active-learning-identity-0002",
             "project_id": project_id,
             "dataset_version_id": version.id if version else None,
             "strategy": request.strategy,
@@ -200,15 +193,13 @@ class ActiveLearningRoundService:
             )
         )
         if existing is not None:
-            generated_queue = self.session.get(ReviewQueue, queue.id)
-            if generated_queue is not None:
-                self.session.delete(generated_queue)
-                self.session.commit()
+            self.session.rollback()
             return ActiveLearningRoundResponse.model_validate(existing)
 
         manifest = {
             **identity_payload,
-            "schema_version": "active-learning-0001",
+            "schema_version": "active-learning-0002",
+            "prediction_source": "live_at_acquisition",
             "review_queue_id": queue.id,
             "items": [
                 {
@@ -259,36 +250,39 @@ class ActiveLearningRoundService:
 
     def feedback(self, round_id: str) -> ActiveLearningFeedbackResponse:
         round_record = self._round(round_id)
+        summary = dict(round_record.feedback_summary_json or {})
+        if round_record.status == "complete" and "completion_fraction" in summary:
+            return ActiveLearningFeedbackResponse.model_validate(
+                {
+                    **summary,
+                    "round_id": round_record.id,
+                    "status": round_record.status,
+                    "selected_count": round_record.selected_count,
+                }
+            )
         items = self._selected_items(round_record)
         state_counts = Counter(item.review_state for item in items)
         image_ids = [item.image_id for item in items]
         prediction_counts: Counter[str] = Counter()
         if image_ids:
-            for status in self.session.scalars(
-                select(PredictionProposal.review_status).where(
-                    PredictionProposal.image_id.in_(image_ids)
+            detection_query = select(PredictionProposal.review_status).where(
+                PredictionProposal.image_id.in_(image_ids)
+            )
+            classification_query = select(ClassificationPrediction.status).where(
+                ClassificationPrediction.image_id.in_(image_ids)
+            )
+            if round_record.model_ids_json:
+                detection_query = detection_query.where(
+                    PredictionProposal.model_id.in_(round_record.model_ids_json)
                 )
-            ):
+                classification_query = classification_query.where(
+                    ClassificationPrediction.model_id.in_(round_record.model_ids_json)
+                )
+            for status in self.session.scalars(detection_query):
                 prediction_counts[f"detection_{status}"] += 1
-            for status in self.session.scalars(
-                select(ClassificationPrediction.status).where(
-                    ClassificationPrediction.image_id.in_(image_ids)
-                )
-            ):
+            for status in self.session.scalars(classification_query):
                 prediction_counts[f"classification_{status}"] += 1
         terminal = state_counts["completed"] + state_counts["skipped"]
-        existing_summary = dict(round_record.feedback_summary_json or {})
-        summary = {
-            **existing_summary,
-            "pending_count": state_counts["pending"],
-            "in_progress_count": state_counts["in_progress"],
-            "completed_count": state_counts["completed"],
-            "skipped_count": state_counts["skipped"],
-            "completion_fraction": terminal / max(round_record.selected_count, 1),
-            "prediction_review_counts": dict(sorted(prediction_counts.items())),
-        }
-        round_record.feedback_summary_json = summary
-        self.session.commit()
         return ActiveLearningFeedbackResponse(
             round_id=round_record.id,
             status=round_record.status,
@@ -361,10 +355,12 @@ class ActiveLearningRoundService:
         created = MaskAwareDatasetVersionService(self.session, self.settings).create_version(
             round_record.project_id,
             dataset_request,
+            commit=False,
         )
         return self.session.get(DatasetVersion, created.id)
 
     def complete_round(self, round_id: str) -> ActiveLearningRoundResponse:
+        begin_serialized_review_triage(self.session)
         round_record = self._round(round_id)
         if round_record.status == "complete":
             return ActiveLearningRoundResponse.model_validate(round_record)
@@ -377,7 +373,12 @@ class ActiveLearningRoundService:
         items = self._selected_items(round_record)
         completed_items = [item for item in items if item.review_state == "completed"]
         feedback_dataset = self._feedback_dataset(round_record, completed_items)
-        summary = dict(round_record.feedback_summary_json or {})
+        summary = {
+            **(round_record.feedback_summary_json or {}),
+            **feedback.model_dump(
+                exclude={"round_id", "status", "selected_count"}, exclude_none=True
+            ),
+        }
         if feedback_dataset is not None:
             summary.update(
                 {

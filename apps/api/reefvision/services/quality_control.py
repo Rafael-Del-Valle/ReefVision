@@ -1790,7 +1790,9 @@ class QualityControlService:
         )
         return list(self.session.scalars(statement))
 
-    def _build_project_context(self, project: Project) -> QualityControlContext:
+    def _build_project_context(
+        self, project: Project, *, prediction_model_ids: list[str] | None = None
+    ) -> QualityControlContext:
         image_statement = (
             select(ImageAsset)
             .where(ImageAsset.project_id == project.id)
@@ -1834,16 +1836,47 @@ class QualityControlService:
             )
             for annotation in self._project_annotations(project)
         ]
+        version_statement = (
+            select(DatasetVersion)
+            .where(DatasetVersion.project_id == project.id)
+            .order_by(DatasetVersion.created_at, DatasetVersion.id)
+        )
+        versions = list(self.session.scalars(version_statement))
+        items_by_version = {
+            version.id: self.versions.items_for_version(version.id) for version in versions
+        }
+        return self._context_from_parts(
+            project=project,
+            dataset_version=None,
+            images=images,
+            live_images_by_id=live_images_by_id,
+            annotations=annotations,
+            predictions=self._project_predictions(project.id, model_ids=prediction_model_ids),
+            dataset_versions=versions,
+            items_by_version=items_by_version,
+        )
+
+    def _project_predictions(
+        self, project_id: str, *, model_ids: list[str] | None, image_ids: list[str] | None = None
+    ) -> list[EvaluatedPrediction]:
         prediction_statement = (
             select(PredictionProposal)
-            .where(PredictionProposal.project_id == project.id)
+            .where(PredictionProposal.project_id == project_id)
             .order_by(
                 PredictionProposal.image_id,
                 PredictionProposal.created_at,
                 PredictionProposal.id,
             )
         )
-        predictions = [
+        if image_ids is not None:
+            prediction_statement = prediction_statement.where(
+                PredictionProposal.image_id.in_(image_ids)
+            )
+        if model_ids:
+            prediction_statement = prediction_statement.where(
+                PredictionProposal.model_id.in_(model_ids)
+            )
+        return [
             EvaluatedPrediction(
                 id=prediction.id,
                 project_id=prediction.project_id,
@@ -1873,27 +1906,10 @@ class QualityControlService:
             )
             for prediction in self.session.scalars(prediction_statement)
         ]
-        version_statement = (
-            select(DatasetVersion)
-            .where(DatasetVersion.project_id == project.id)
-            .order_by(DatasetVersion.created_at, DatasetVersion.id)
-        )
-        versions = list(self.session.scalars(version_statement))
-        items_by_version = {
-            version.id: self.versions.items_for_version(version.id) for version in versions
-        }
-        return self._context_from_parts(
-            project=project,
-            dataset_version=None,
-            images=images,
-            live_images_by_id=live_images_by_id,
-            annotations=annotations,
-            predictions=predictions,
-            dataset_versions=versions,
-            items_by_version=items_by_version,
-        )
 
-    def _build_dataset_version_context(self, version: DatasetVersion) -> QualityControlContext:
+    def _build_dataset_version_context(
+        self, version: DatasetVersion, *, acquisition_model_ids: list[str] | None = None
+    ) -> QualityControlContext:
         items = self.versions.items_for_version(version.id)
         image_ids = sorted({item.image_id for item in items})
         image_statement = select(ImageAsset).where(ImageAsset.id.in_(image_ids))
@@ -1950,7 +1966,13 @@ class QualityControlService:
             images=images,
             live_images_by_id=live_images_by_id,
             annotations=annotations,
-            predictions=[],
+            predictions=(
+                self._project_predictions(
+                    version.project_id, model_ids=acquisition_model_ids, image_ids=image_ids
+                )
+                if acquisition_model_ids is not None
+                else []
+            ),
             dataset_versions=[version],
             items_by_version={version.id: items},
         )

@@ -35,6 +35,7 @@ def _seed_detector_proposals(
     client: TestClient,
     project: dict[str, Any],
     confidence_by_image: dict[str, float],
+    checksum: str = "c" * 64,
 ) -> str:
     app = cast(FastAPI, client.app)
     label_class_id = str(project["label_classes"][0]["id"])
@@ -42,10 +43,10 @@ def _seed_detector_proposals(
         model = ModelRegistration(
             project_id=str(project["id"]),
             purpose="detector",
-            display_name="Active-learning detector",
+            display_name=f"Active-learning detector {checksum[:8]}",
             source_filename="active-learning.pt",
-            managed_path=f"{project['storage_root']}/models/active-learning.pt",
-            sha256="c" * 64,
+            managed_path=f"{project['storage_root']}/models/{checksum}.pt",
+            sha256=checksum,
             file_size_bytes=123,
             framework="ultralytics",
             task="detect",
@@ -289,3 +290,139 @@ def test_active_learning_rejects_foreign_models(client: TestClient) -> None:
         },
     )
     assert response.status_code == 400
+
+
+@pytest.mark.parametrize("freeze_pool", [False, True])
+def test_model_filtered_round_ranks_only_its_model_and_opens_only_its_budget(
+    client: TestClient, freeze_pool: bool
+) -> None:
+    project = create_project(client, "Two detector generations")
+    project_url = f"/api/v1/projects/{project['id']}"
+    first, second = _import_images(client, project["id"])
+    version_id = None
+    if freeze_pool:
+        version = client.post(
+            f"{project_url}/dataset-versions",
+            json={
+                "name": "Acquisition pool",
+                "eligible_annotation_statuses": ["unannotated"],
+                "split_method": "none",
+            },
+        )
+        assert version.status_code == 201, version.text
+        version_id = version.json()["id"]
+    third = import_one(
+        client, project["id"], filename="third.png", relative_path="third.png", size=(90, 60)
+    )["successful"][0]["image_id"]
+    model = _seed_detector_proposals(
+        client, project, {first: 0.30, second: 0.45, third: 0.10 if freeze_pool else 0.9}
+    )
+    _seed_detector_proposals(client, project, {first: 0.99, second: 0.01}, "d" * 64)
+    response = client.post(
+        f"{project_url}/active-learning-rounds",
+        json={
+            "name": "Round two",
+            "strategy": "uncertainty",
+            "dataset_version_id": version_id,
+            "requested_size": 1,
+            "model_ids": [model],
+        },
+    )
+    assert response.status_code == 201, response.text
+    round_record = response.json()
+    assert [item["image_id"] for item in round_record["selection_manifest_json"]["items"]] == [
+        first
+    ]
+    queue_url = f"/api/v1/review-queues/{round_record['review_queue_id']}"
+    items = client.get(f"{queue_url}/items").json()["items"]
+    assert [item["image_id"] for item in items] == [first]
+    assert items[0]["model_ids_json"] == [model]
+    assert items[0]["signal_values_json"]["low_mean_confidence"] == pytest.approx(0.70)
+    feedback = client.get(f"/api/v1/active-learning-rounds/{round_record['id']}/feedback").json()
+    assert feedback["prediction_review_counts"] == {"detection_pending": 1}
+    replay = client.post(f"{queue_url}/regenerate")
+    assert replay.status_code == 200, replay.text
+    replay_items = client.get(f"/api/v1/review-queues/{replay.json()['id']}/items").json()["items"]
+    assert [item["input_checksum"] for item in replay_items] == [items[0]["input_checksum"]]
+
+
+def test_empty_model_scope_creates_no_orphan_queue(client: TestClient) -> None:
+    project = create_project(client, "No proposals yet")
+    _import_images(client, project["id"])
+    model = _seed_detector_proposals(client, project, {})
+    project_url = f"/api/v1/projects/{project['id']}"
+    response = client.post(
+        f"{project_url}/active-learning-rounds", json={"name": "Empty", "model_ids": [model]}
+    )
+    assert response.status_code == 400, response.text
+    assert client.get(f"{project_url}/review-queues").json() == []
+
+
+def test_scoped_acquisition_excludes_frozen_holdouts_and_rejects_other_project(
+    client: TestClient,
+) -> None:
+    project = create_project(client, "Independent test groups")
+    other = create_project(client, "Other expedition")
+    project_url = f"/api/v1/projects/{project['id']}"
+    training, validation = _import_images(client, project["id"])
+    test_image = import_one(
+        client, project["id"], filename="test.png", relative_path="test.png", size=(89, 60)
+    )["successful"][0]["image_id"]
+    for image, group in [(training, "training"), (validation, "validation"), (test_image, "test")]:
+        assert client.patch(f"/api/v1/images/{image}", json={"group_key": group}).status_code == 200
+    version = client.post(
+        f"{project_url}/dataset-versions",
+        json={
+            "name": "Frozen split",
+            "eligible_annotation_statuses": ["unannotated"],
+            "split_method": "manual",
+            "manual_assignments": [
+                {"image_id": training, "split": "train"},
+                {"image_id": validation, "split": "validation"},
+                {"image_id": test_image, "split": "test"},
+            ],
+        },
+    )
+    assert version.status_code == 201, version.text
+    model = _seed_detector_proposals(
+        client, project, {training: 0.99, validation: 0.1, test_image: 0.01}
+    )
+    payload = {
+        "name": "Train only",
+        "dataset_version_id": version.json()["id"],
+        "model_ids": [model],
+    }
+    response = client.post(f"{project_url}/active-learning-rounds", json=payload)
+    assert response.status_code == 201, response.text
+    items = response.json()["selection_manifest_json"]["items"]
+    assert [item["image_id"] for item in items] == [training]
+    foreign_url = f"/api/v1/projects/{other['id']}"
+    assert client.post(f"{foreign_url}/active-learning-rounds", json=payload).status_code == 400
+    assert (
+        client.post(
+            f"{foreign_url}/active-learning-rounds", json={"name": "Foreign", "model_ids": [model]}
+        ).status_code
+        == 400
+    )
+    assert client.get(f"{foreign_url}/review-queues").json() == []
+
+
+def test_closed_round_keeps_feedback_at_closure_when_queue_is_revisited(client: TestClient) -> None:
+    project = create_project(client, "Historical feedback")
+    _import_images(client, project["id"])
+    created = client.post(
+        f"/api/v1/projects/{project['id']}/active-learning-rounds",
+        json={"name": "No labels", "requested_size": 1},
+    ).json()
+    item_id = created["selection_manifest_json"]["items"][0]["queue_item_id"]
+    item_url = f"/api/v1/review-queue-items/{item_id}"
+    assert client.post(f"{item_url}/skip", json={"reason": "Ambiguous"}).status_code == 200
+    round_url = f"/api/v1/active-learning-rounds/{created['id']}"
+    closed = client.post(f"{round_url}/complete")
+    assert closed.status_code == 200, closed.text
+    assert client.post(f"{item_url}/return").status_code == 200
+    feedback = client.get(f"{round_url}/feedback").json()
+    assert feedback["status"] == "complete"
+    assert feedback["completion_fraction"] == 1
+    assert feedback["skipped_count"] == 1
+    assert feedback["feedback_dataset_version_id"] is None
