@@ -285,14 +285,15 @@ describe("Gallery pending thumbnail refresh", () => {
 });
 
 describe("Gallery", () => {
-  it("edits image grouping and annotation status", async () => {
+  it("saves the edited group and annotation status after a thumbnail refresh", async () => {
+    let thumbnailPath: string | null = null;
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input, init) => {
         const url = String(input);
         if (url.includes(`/projects/${project.id}/images`)) {
           return jsonResponse({
-            items: [image],
+            items: [{ ...image, thumbnail_path: thumbnailPath }],
             total: 1,
             page: 1,
             page_size: 24,
@@ -322,6 +323,13 @@ describe("Gallery", () => {
       screen.getByLabelText("Image status"),
       "reviewed",
     );
+    thumbnailPath = "thumbnails/completed.jpg";
+    await userEvent.click(
+      screen.getByRole("button", { name: "Refresh pending thumbnails" }),
+    );
+    expect(
+      await screen.findByAltText("Thumbnail of swiftia-01.png"),
+    ).toBeVisible();
     await userEvent.click(
       screen.getByRole("button", { name: "Save metadata" }),
     );
@@ -338,6 +346,79 @@ describe("Gallery", () => {
         }),
       ),
     );
+  });
+
+  it("refreshes server metadata independently of an edit to the other field", async () => {
+    let current = { ...image };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      jsonResponse({
+        items: [current],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      }),
+    );
+    renderGallery();
+    const group = await screen.findByPlaceholderText("e.g. source-image-001");
+    const status = screen.getByLabelText("Image status");
+    const refresh = screen.getByRole("button", {
+      name: "Refresh pending thumbnails",
+    });
+
+    await userEvent.type(group, "unsaved-colony");
+    current = { ...current, annotation_status: "reviewed" };
+    await userEvent.click(refresh);
+    await waitFor(() => expect(status).toHaveValue("reviewed"));
+    expect.soft(group).toHaveValue("unsaved-colony");
+
+    await userEvent.selectOptions(status, "in_progress");
+    current = { ...current, group_key: "server-colony" };
+    await userEvent.click(refresh);
+    await waitFor(() => expect(group).toHaveValue("server-colony"));
+    expect(status).toHaveValue("in_progress");
+  });
+
+  it("keeps card shortcuts on the card and supports typing and saving with the keyboard", async () => {
+    const onOpen = vi.fn();
+    const save = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      if (init?.method === "PATCH") {
+        save(JSON.parse(String(init.body)));
+        return jsonResponse(image);
+      }
+      return jsonResponse({
+        items: [image],
+        total: 1,
+        page: 1,
+        page_size: 24,
+        pages: 1,
+      });
+    });
+    renderGallery(onOpen);
+    const card = await screen.findByRole("article", {
+      name: /swiftia-01\.png/,
+    });
+    await userEvent.click(screen.getByText("Image details"));
+    const group = screen.getByPlaceholderText("e.g. source-image-001");
+    const selected = screen.getByLabelText("Select image");
+    await userEvent.type(group, "north transect");
+    expect.soft(group).toHaveValue("north transect");
+    expect.soft(selected).not.toBeChecked();
+
+    screen.getByRole("button", { name: "Save metadata" }).focus();
+    await userEvent.keyboard("{Enter}");
+    expect.soft(save).toHaveBeenCalledWith({
+      group_key: "north transect",
+      annotation_status: "unannotated",
+    });
+    expect.soft(onOpen).not.toHaveBeenCalled();
+
+    card.focus();
+    await userEvent.keyboard(" ");
+    expect(selected).toBeChecked();
+    await userEvent.keyboard("{Enter}");
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith(image.id);
   });
 
   it("opens the annotation editor for a selected image", async () => {

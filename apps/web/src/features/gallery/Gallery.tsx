@@ -79,8 +79,11 @@ function ImageCard({
 
   useEffect(() => {
     setGroupKey(image.group_key ?? "");
+  }, [image.group_key]);
+
+  useEffect(() => {
     setStatus(image.annotation_status);
-  }, [image]);
+  }, [image.annotation_status]);
 
   // A thumbnail job can finish after an earlier 404. Retry only when its
   // persisted path changes; ordinary query refreshes must not retry a
@@ -108,6 +111,7 @@ function ImageCard({
       aria-label={`${image.original_filename}, ${image.annotation_count} annotations, ${status}`}
       onDoubleClick={() => onOpenAnnotation?.(image.id)}
       onKeyDown={(event: KeyboardEvent<HTMLElement>) => {
+        if (event.target !== event.currentTarget) return;
         if (event.key === "Enter") onOpenAnnotation?.(image.id);
         if (event.key === " ") {
           event.preventDefault();
