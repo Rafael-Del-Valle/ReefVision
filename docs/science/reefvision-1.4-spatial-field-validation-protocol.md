@@ -1174,3 +1174,12 @@ and recovery tests, explicitly mark the JSON request as modified: Python and
 the ORM may otherwise consider equal integer and floating-point values
 unchanged and fail to persist a type-only correction. Refresh the row to
 confirm the restored integer before asserting exact summary recovery.
+
+Before remapping imported Project Exchange records, require the archived parse
+request to retain the exact integer byte count and the managed path of the
+archived original. A recomputed section checksum must not legitimize a float,
+boolean, incorrect size or unrelated path. Inspect and reject such packages
+before import; retain the valid archive round trip and original OBJ bytes.
+This checks internal source binding, not authenticated provenance or biological
+identity. The structural parse still does not substitute for calibrated
+standalone or persisted typed Workflow Builder measurements.
