@@ -1102,3 +1102,17 @@ executions of the persisted typed preview graph; check complete overlap
 and within-selection repetition separately. This is geometric selection
 coverage only, not reviewer agreement, an independence check, or biological
 validation. Partial collinear overlaps of unequal edges remain excluded.
+
+### Imported asset metadata append integrity
+
+Before extending an existing coordinate/calibration metadata history, validate
+the current head with the same source-binding, immediate ancestry, schema and
+content-digest checks used for readback. Reject inconsistent heads before
+inserting a new revision. Test a corrupted head digest and rehashed missing or
+foreign predecessors using disposable database fixtures. After restoring the
+fixture digest, verify the rejected append left no new revision, the original
+OBJ bytes remain unchanged, and a valid append resumes at the next revision.
+
+This is a metadata write-integrity safeguard, not a new measurement or workflow
+analysis node. It does not validate the entire historical chain, authenticate
+reviewers, verify calibration, or alter the existing preview workflow contract.
