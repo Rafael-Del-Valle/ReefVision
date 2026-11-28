@@ -2783,12 +2783,23 @@ export async function deleteModel(modelId: string): Promise<void> {
   await request<void>(`/models/${modelId}`, { method: "DELETE" });
 }
 
+export interface DetectionTiling {
+  width: number;
+  height: number;
+  overlap_x: number;
+  overlap_y: number;
+  batch_size: number;
+  input_size: number | null;
+  merge_iou: number;
+}
+
 export async function createInferenceJob(
   projectId: string,
   payload: {
     model_id: string;
     image_ids: string[];
     image_adjustment?: ImageAdjustmentPin;
+    tiling?: DetectionTiling;
     confidence_threshold?: number;
     iou_threshold?: number;
     device: string;

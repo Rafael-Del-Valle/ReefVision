@@ -66,104 +66,131 @@ afterEach(() => {
 });
 
 describe("ProjectInferenceInspector", () => {
-  it("runs the existing project inference API for the Gallery selection", async () => {
-    const requests: Array<{ url: string; init?: RequestInit }> = [];
+  it.each([false, true])(
+    "queues Gallery inference with tiling enabled = %s",
+    async (tiled) => {
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
 
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const url = String(input);
-      requests.push({ url, init });
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+        const url = String(input);
+        requests.push({ url, init });
 
-      if (url.includes("/projects/project-1/models?purpose=detector")) {
-        return jsonResponse([
-          {
-            ...model,
-            id: "historic-pose",
-            display_name: "Historical SLEAP pose",
-            task: "pose",
-            provider_name: "sleap_nn",
-          },
-          model,
-        ]);
+        if (url.includes("/projects/project-1/models?purpose=detector")) {
+          return jsonResponse([
+            {
+              ...model,
+              id: "historic-pose",
+              display_name: "Historical SLEAP pose",
+              task: "pose",
+              provider_name: "sleap_nn",
+            },
+            model,
+          ]);
+        }
+
+        if (
+          url.endsWith("/projects/project-1/inference-jobs") &&
+          init?.method === "POST"
+        ) {
+          return jsonResponse({
+            id: "job-1",
+            project_id: "project-1",
+            job_type: "inference",
+            status: "queued",
+            progress_current: 0,
+            progress_total: 1,
+            request_json: {},
+            result_json: null,
+            error_message: null,
+            created_at: "2026-10-05T00:00:00Z",
+            started_at: null,
+            completed_at: null,
+          });
+        }
+
+        if (url.includes("/jobs/job-1?poll=")) {
+          return jsonResponse({
+            id: "job-1",
+            project_id: "project-1",
+            job_type: "inference",
+            status: "succeeded",
+            progress_current: 1,
+            progress_total: 1,
+            request_json: {},
+            result_json: {},
+            error_message: null,
+            created_at: "2026-10-05T00:00:00Z",
+            started_at: "2026-10-05T00:00:01Z",
+            completed_at: "2026-10-05T00:00:02Z",
+          });
+        }
+
+        throw new Error(`Unhandled request ${init?.method ?? "GET"} ${url}`);
+      });
+
+      renderInspector(["image-1"]);
+
+      expect(
+        await screen.findByText("1 detector registered"),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText("Detector model")).toHaveValue("model-best");
+      expect(
+        screen.queryByRole("option", { name: "Historical SLEAP pose" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Confidence threshold")).toHaveValue(0.25);
+      expect(screen.getByLabelText("Device")).toHaveValue("cpu");
+      if (tiled) {
+        await userEvent.click(screen.getByText("Advanced inference settings"));
+        await userEvent.click(screen.getByLabelText("Use rectangular tiles"));
+        const width = screen.getByLabelText("Tile width (px)");
+        await userEvent.clear(width);
+        expect(
+          screen.getByRole("button", { name: "Run model on selected images" }),
+        ).toBeDisabled();
+        await userEvent.type(width, "1920");
       }
 
-      if (
-        url.endsWith("/projects/project-1/inference-jobs") &&
-        init?.method === "POST"
-      ) {
-        return jsonResponse({
-          id: "job-1",
-          project_id: "project-1",
-          job_type: "inference",
-          status: "queued",
-          progress_current: 0,
-          progress_total: 1,
-          request_json: {},
-          result_json: null,
-          error_message: null,
-          created_at: "2026-10-05T00:00:00Z",
-          started_at: null,
-          completed_at: null,
-        });
-      }
-
-      if (url.includes("/jobs/job-1?poll=")) {
-        return jsonResponse({
-          id: "job-1",
-          project_id: "project-1",
-          job_type: "inference",
-          status: "succeeded",
-          progress_current: 1,
-          progress_total: 1,
-          request_json: {},
-          result_json: {},
-          error_message: null,
-          created_at: "2026-10-05T00:00:00Z",
-          started_at: "2026-10-05T00:00:01Z",
-          completed_at: "2026-10-05T00:00:02Z",
-        });
-      }
-
-      throw new Error(`Unhandled request ${init?.method ?? "GET"} ${url}`);
-    });
-
-    renderInspector(["image-1"]);
-
-    expect(
-      await screen.findByText("1 detector registered"),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Detector model")).toHaveValue("model-best");
-    expect(
-      screen.queryByRole("option", { name: "Historical SLEAP pose" }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Confidence threshold")).toHaveValue(0.25);
-    expect(screen.getByLabelText("Device")).toHaveValue("cpu");
-
-    await userEvent.click(
-      screen.getByRole("button", {
-        name: "Run model on selected images",
-      }),
-    );
-
-    await waitFor(() => {
-      const request = requests.find(
-        (entry) =>
-          entry.url.endsWith("/projects/project-1/inference-jobs") &&
-          entry.init?.method === "POST",
+      await userEvent.click(
+        screen.getByRole("button", {
+          name: "Run model on selected images",
+        }),
       );
 
-      expect(request).toBeDefined();
+      await waitFor(() => {
+        const request = requests.find(
+          (entry) =>
+            entry.url.endsWith("/projects/project-1/inference-jobs") &&
+            entry.init?.method === "POST",
+        );
 
-      expect(JSON.parse(String(request?.init?.body))).toEqual({
-        model_id: "model-best",
-        image_ids: ["image-1"],
-        confidence_threshold: 0.25,
-        device: "cpu",
+        expect(request).toBeDefined();
+
+        expect(JSON.parse(String(request?.init?.body))).toEqual({
+          model_id: "model-best",
+          image_ids: ["image-1"],
+          confidence_threshold: 0.25,
+          device: "cpu",
+          ...(tiled
+            ? {
+                iou_threshold: 0.45,
+                tiling: {
+                  width: 1920,
+                  height: 1344,
+                  overlap_x: 0.4,
+                  overlap_y: 0.4,
+                  batch_size: 1,
+                  input_size: null,
+                  merge_iou: 0.45,
+                },
+              }
+            : {}),
+        });
       });
-    });
 
-    expect(await screen.findByText("succeeded")).toBeInTheDocument();
-    expect(screen.getByText("1/1")).toBeInTheDocument();
-  });
+      expect(await screen.findByText("succeeded")).toBeInTheDocument();
+      expect(screen.getByText("1/1")).toBeInTheDocument();
+    },
+  );
 
   it("blocks execution until at least one Gallery image is selected", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {

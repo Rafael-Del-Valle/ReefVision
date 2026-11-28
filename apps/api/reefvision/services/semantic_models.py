@@ -729,6 +729,13 @@ class SemanticModelService(SegmentationModelService):
             )
         require_image_inference_provider(model.provider_name, model.task)
         pinned: dict[str, Any] = {}
+        if payload.tiling is not None:
+            if model.provider_name != "ultralytics" or model.task != "detect":
+                raise ValidationError("Rectangular tiling requires an Ultralytics detection model")
+            if payload.runtime_selection_id is not None:
+                raise ConflictError(
+                    "The reviewed runtime selection specifies whole-image inference"
+                )
         if payload.runtime_selection_id is not None:
             selection = ModelRuntimeService(self.session, self.settings).verify(
                 project_id, payload.runtime_selection_id, model_id=model.id
@@ -783,6 +790,7 @@ class SemanticModelService(SegmentationModelService):
                 ),
                 **pinned,
                 **adjusted,
+                **({"tiling": payload.tiling.model_dump()} if payload.tiling is not None else {}),
             },
         )
         self.session.add(job)

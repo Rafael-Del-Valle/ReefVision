@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from io import BytesIO
 from math import isfinite
 from pathlib import Path
@@ -18,6 +18,7 @@ from reefvision.ml.dependencies import (
     provider_spec,
     require_provider_ready,
 )
+from reefvision.schemas.models import DetectionTiling
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class DetectionSettings:
     confidence_threshold: float
     iou_threshold: float
     device: str
+    tiling: DetectionTiling | None = None
 
 
 @dataclass(frozen=True)
@@ -344,19 +346,67 @@ class UltralyticsDetectionProvider:
     def predict(self, image_path: Path, settings: DetectionSettings) -> list[DetectionPrediction]:
         if self._model is None:
             raise ValidationError("The detector model is not loaded")
+        import torch
+
         resolved_device = resolve_torch_device(settings.device)
-        results = self._model.predict(
-            str(image_path),
+        options = dict(
             conf=settings.confidence_threshold,
             iou=settings.iou_threshold,
-            device=resolved_device,
+            # A torch.device prevents Ultralytics from rewriting process-wide GPU visibility.
+            device=torch.device("cuda", resolved_device)
+            if isinstance(resolved_device, int)
+            else torch.device(resolved_device),
             verbose=False,
         )
+        if settings.tiling is None:
+            results = self._model.predict(str(image_path), **options)
+            return [item for result in results for item in self._result_predictions(result)]
+
+        from reefvision.ml.tiled_detection import merge_detections, tile_batches
+
+        tiling = settings.tiling
         predictions: list[DetectionPrediction] = []
-        for result in results:
-            boxes = getattr(result, "boxes", None)
-            if boxes is None:
-                continue
+        with Image.open(image_path) as source:
+            for windows in tile_batches(source.size, tiling):
+                crops = [source.crop(window).convert("RGB") for window in windows]
+                try:
+                    model_size = tiling.input_size or (crops[0].height, crops[0].width)
+                    results = self._model.predict(crops, imgsz=model_size, rect=True, **options)
+                    for (left, top, right, bottom), result in zip(windows, results, strict=True):
+                        for item in self._result_predictions(result):
+                            box = item.box
+                            ensure_finite_box(box)
+                            if not (
+                                0 <= box.x_min < box.x_max <= right - left
+                                and 0 <= box.y_min < box.y_max <= bottom - top
+                            ):
+                                raise ValidationError(
+                                    "Model prediction box extends outside its source tile"
+                                )
+                            if not isfinite(item.confidence) or not 0 <= item.confidence <= 1:
+                                raise ValidationError(
+                                    "Model prediction confidence must be between 0 and 1"
+                                )
+                            predictions.append(
+                                replace(
+                                    item,
+                                    box=PixelBox(
+                                        left + box.x_min,
+                                        top + box.y_min,
+                                        left + box.x_max,
+                                        top + box.y_max,
+                                    ),
+                                )
+                            )
+                finally:
+                    for crop in crops:
+                        crop.close()
+        return merge_detections(predictions, tiling.merge_iou)
+
+    def _result_predictions(self, result: Any) -> list[DetectionPrediction]:
+        predictions: list[DetectionPrediction] = []
+        boxes = getattr(result, "boxes", None)
+        if boxes is not None:
             xyxy = boxes.xyxy.tolist()
             confidences = boxes.conf.tolist()
             classes = boxes.cls.tolist()
