@@ -59,6 +59,10 @@ class SpatialSourceParseResult(SpatialSourceParseSummary):
 
     @model_validator(mode="after")
     def validate_format_kind(self) -> SpatialSourceParseResult:
+        # Stored evidence is emitted with every field, including explicit nulls
+        # and false flags. Defaults must not reconstruct an altered digest.
+        if not type(self).model_fields.keys() <= self.model_fields_set:
+            raise ValueError("Structural parse result must contain all canonical fields")
         if self.source_format in {"obj", "glb"} and self.source_kind_resolved != "mesh":
             raise ValueError("OBJ/GLB structural parses must resolve as meshes")
         return self
