@@ -1205,3 +1205,14 @@ recovery after restoring the fixture. Reject three omitted-field variants in
 Project Exchange inspection and import with a recomputed section checksum.
 This is a completeness check for existing structural evidence, not a new
 measurement node, authenticated review or a calibration verification.
+
+Local asset detail and listing must agree with Project Exchange about job
+state: queued, running, failed, cancellation-requested and cancelled jobs
+must not carry completed structural results, even with a valid result digest.
+Inject each contradictory state in a disposable database, reject both local
+metadata reads, and confirm the original OBJ remains readable. With the result
+absent, confirm the incomplete status is visible without a summary. Restore
+the successful state and original result and compare the full response.
+This protects structural evidence state, not calibrated measurements or
+human verification; standalone and saved-workflow measurement engines are
+unchanged.
