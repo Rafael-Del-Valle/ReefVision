@@ -312,6 +312,45 @@ def test_packaged_16_graph_matches_current_lineage() -> None:
     assert {path: path.read_bytes() for path in root.glob("*.py")} == before
 
 
+def test_packaged_16_graph_matches_runtime_alembic_loader(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Compare static evidence with the trusted packaged Alembic configuration."""
+    config_module = pytest.importorskip("alembic.config")
+    script_module = pytest.importorskip("alembic.script")
+    monkeypatch.setattr(sys, "dont_write_bytecode", True)
+    api = SCRIPT.parents[1] / "apps" / "api"
+    root = api / "migrations" / "versions"
+    before = {path: path.read_bytes() for path in root.glob("*.py")}
+    report = _module().audit([root], verify_parent_graph=True)
+    graph = report["parent_graphs"][str(root)]
+    expected = {
+        row["revision"]: (
+            Path(row["path"]).resolve(),
+            sorted(row["parent_revisions"]),
+        )
+        for row in report["revision_manifests"][str(root)]
+    }
+
+    directory = script_module.ScriptDirectory.from_config(
+        config_module.Config(str(api / "alembic.ini"))
+    )
+    assert sorted(directory.get_bases()) == graph["root_revisions"]
+    assert sorted(directory.get_heads()) == graph["head_revisions"]
+    observed = {}
+    for script in directory.walk_revisions():
+        parents = script.down_revision
+        if isinstance(parents, str):
+            parents = (parents,)
+        assert script.revision not in observed
+        observed[script.revision] = (Path(script.path).resolve(), sorted(parents or ()))
+
+    assert len(observed) == report["revision_count"]
+    assert observed == expected
+    assert {path: path.read_bytes() for path in root.glob("*.py")} == before
+    assert report["safe_to_reconcile_automatically"] is False
+
+
 @pytest.mark.parametrize(
     "invalid_body",
     [

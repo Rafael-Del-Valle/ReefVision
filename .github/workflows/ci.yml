@@ -44,6 +44,7 @@ jobs:
           python -m ruff format --check scripts/audit-alembic-revision-collisions.py scripts/tests/test_audit_alembic_revision_collisions.py scripts/tests/test_audit_alembic_revision_collisions_cli.py scripts/tests/test_audit_alembic_parent_graph_16.py
           python -m pytest scripts/tests/test_audit_alembic_revision_collisions.py scripts/tests/test_audit_alembic_revision_collisions_cli.py -v scripts/tests/test_audit_alembic_parent_graph_16.py
           python scripts/audit-alembic-revision-collisions.py apps/api/migrations/versions
+          python scripts/audit-alembic-revision-collisions.py --verify-parent-graph apps/api/migrations/versions
       - name: Verify 1.6 SQLite lineage and format-header comparison
         run: |
           python -m ruff check tests/test_inspect_sqlite_lineage_16_format_header.py

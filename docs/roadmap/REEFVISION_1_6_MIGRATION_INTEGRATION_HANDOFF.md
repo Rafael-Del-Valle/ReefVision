@@ -737,3 +737,27 @@ nodes or alter saved graphs, units, provenance, retry or approval gates.
 Release HOLD remains for reviewed cross-version migration reconciliation,
 representative biological acceptance, genuine installed Windows GUI/MSI/CAB
 clean installation/upgrade/rollback, new-head CI and researcher approval.
+
+## 2026-11-28 — packaged runtime loader parity
+
+Exact predecessor CI 46122393426 passed frontend and native Windows
+preservation and the database inspection suite; backend stopped at the
+collision auditor Ruff formatting check before its tests. Correct the
+reported line without changing the portable-name policy.
+
+Static ancestry cannot prove that the configured runtime actually discovers
+the same revisions. Compare the trusted packaged Alembic configuration's
+ScriptDirectory roots, heads, revision IDs, resolved source paths and direct
+parent IDs with the strict source manifest. This test loads only the checked-in
+migration modules, never calls upgrade or downgrade, disables bytecode writing
+during the check, and verifies that source bytes are unchanged. Standalone
+Windows tests without Alembic skip this dependency-specific comparison; the
+backend CI installs Alembic and also invokes the strict CLI directly.
+An independent disposable two-revision Alembic loader probe passed locally;
+the full packaged comparison and replacement CI require exact-head evidence.
+
+No cross-version reconciliation or scientific workflow changes are authorized
+by this comparison. Existing typed QC saved graphs, units, provenance, retries
+and human review remain unchanged. Release HOLD remains for reviewed migration
+reconciliation, representative biological validation, installed Windows GUI
+and MSI/CAB clean-install/upgrade/rollback, exact-head CI and owner approval.

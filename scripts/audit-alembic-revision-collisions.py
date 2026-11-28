@@ -462,9 +462,7 @@ def _checked_path_stat(path: Path, *, ancestor: bool = False) -> os.stat_result:
 
 def _portable_entry_name(name: str) -> bool:
     """Conservative Windows checkout rules, independent of the audit host."""
-    if name.endswith((" ", ".")) or any(
-        ord(char) < 32 or char in '<>:"/\\|?*' for char in name
-    ):
+    if name.endswith((" ", ".")) or any(ord(char) < 32 or char in '<>:"/\\|?*' for char in name):
         return False
     stem = name.split(".", 1)[0].rstrip(" ").upper()
     return not (
