@@ -111,6 +111,21 @@ scientific validity.
 
 **Limitations:** The pinned SHA-256 proves consistency with a separately retained digest, not who originally acquired or authorized the capture. Use a dedicated staging directory. Reject filesystem reparse points/symlinks in the staging tree: lexical path checks do not prove physical containment. Preserve the manifest and its SHA-256 separately. This verifies original-file integrity, **not** decoding or GUI compatibility. Record application commit, Windows/WebView2 version, per-file results and decode errors; missing real-camera samples are **BLOCKED**, not PASS.
 
+## Installed WebView2 first-image and camera result record
+
+Use a separate disposable project for each test case and record the exact installed MSI hash and source commit once per evidence bundle. Do not use browser-only or development-server screenshots to fill these rows.
+
+| Case | Required observed action | Outcome (PASS / FAIL / NOT RUN / BLOCKED) | Evidence reference |
+| --- | --- | --- | --- |
+| Cold first image | Launch installed desktop, open a new single-image project without clicking a thumbnail; image and selection agree. | | |
+| Multi-page gallery | Scroll wheel and scrollbar, cross a page boundary, navigate to first and last image, reopen and check selection/viewport agreement. | | |
+| Saved selection | Close and relaunch the installed desktop with a saved non-first selection; verify the selected image renders without refresh. | | |
+| Real camera original | Import each inventoried original; inspect thumbnail, viewport, orientation, annotation overlay and reopen. | | |
+| Extension routing | Repeat the same GUI checks for the separate alias cohorts, including mixed case. | | |
+| Source integrity | Compare post-import inventory against the independently pinned pre-import digest; preserve both reports. | | |
+
+For each physical-camera or alias cohort, record source SHA-256, relative filename, camera-declared make/model (if present), expected native and display dimensions, observed GUI outcome, and the recording or screenshot reference. A successful Pillow decode and matching byte hashes establish neither installed WebView2 rendering nor annotation alignment. If any required case has no available fixture or installation, record the coverage gap explicitly; do not roll up a partial set as PASS.
+
 ## Read-only external training console: process-continuity acceptance
 
 The console is a **viewer**, not a training launcher or controller. Test with an actual locally trained run whose ID is obtained from ReefVision's job UI/API, not a fabricated ID. Record the run ID, exact commit, training process PID, model architecture, local dataset provenance, and the timestamped source of each reported loss. `box`, `cls`, and `dfl` are only required for training architectures that actually emit those components; mark each unavailable component **NOT EMITTED** with the reason, never manufacture zeroes.
@@ -131,7 +146,19 @@ $beforeIdentity = [pscustomobject]@{
 $beforeIdentity | Format-List
 ```
 
-While training is running, launch the application's documented **read-only** monitor command in a separate PowerShell process. Capture its command line with credentials/tokens redacted, exit code, and timestamped stdout/stderr. Confirm the monitor displays real run status and advancing epoch/step, logs and loss values backed by the same persisted job. Close the monitor **without** sending Ctrl+C to the training terminal. Verify a new checkpoint/log entry or advancing step after monitor exit, then recheck process identity:
+While training is running, use the installed desktop application's **Training monitor** card for the active run and click **Open Training Console** (not **Cancel run**). The desktop runtime launches the separate PowerShell observer; the browser-only interface does not expose this launcher. Do not manually reconstruct its session credentials, launch arguments or backend URL. Capture timestamped observer output or a screen recording with credentials/tokens and private dataset paths redacted. Confirm the monitor displays the selected job's real status, epoch/step, logs and loss values backed by that same persisted job.
+
+Record three ordered observations from the real job: immediately before opening the observer, while it is displaying a live run, and after the observer has closed. Choose a sufficiently long disposable training run so it cannot normally finish before the last observation. If it finishes naturally before continuity can be established, repeat the test with a new approved disposable run; do not restart or change a research run merely to obtain evidence.
+
+| Observation | UTC time | Same run ID | PID and creation time | Status / epoch / step | Source log or checkpoint evidence |
+| --- | --- | --- | --- | --- | --- |
+| Before launch | | | | | |
+| Observer open | | | | | |
+| After observer closed | | | | | |
+
+For each emitted standard loss (box, cls, dfl), record the observer value, the corresponding persisted job value or history entry, the source timestamp or observation time, and whether the source is a prior sample or summary fallback. A displayed zero is a measurement only if the persisted source actually contains zero. Do not compare different epochs as though they are synchronized: a history entry index alone does not establish an epoch. Record missing loss components as NOT EMITTED only when the chosen architecture does not emit them; an expected but missing observation is NOT RUN or FAIL, depending on the actual evidence. Record the local dataset manifest hash and architecture once per job, not once per epoch.
+
+Close only the observer window **without** sending Ctrl+C to the training terminal. Verify a new persisted checkpoint/log entry or advancing step after monitor exit, then recheck process identity:
 
 ```powershell
 $after = Get-CimInstance Win32_Process -Filter "ProcessId=$trainingPid"
