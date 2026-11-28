@@ -268,10 +268,21 @@ def test_spatial_metadata_append_rejects_corrupt_ancestor(
             row.content_sha256 = "0" * 64
             session.commit()
 
-        # The head itself has an intact digest and immediate source binding.
+        # A valid head digest cannot hide a corrupted historical ancestor.
         head = client.get(f"{base}/metadata-revisions/{records[-1]['id']}")
-        assert head.status_code == 200, head.text
-        assert head.json() == records[-1]
+        assert head.status_code == 400, head.text
+        assert "integrity" in head.json()["detail"].lower()
+        page = client.get(f"{base}/metadata-revisions?limit=1&offset=2")
+        assert page.status_code == 400, page.text
+        assert "integrity" in page.json()["detail"].lower()
+        # A valid earlier prefix is not invalidated by corruption in the future.
+        if ancestor["revision"] == 2:
+            first = client.get(f"{base}/metadata-revisions/{records[0]['id']}")
+            assert first.status_code == 200, first.text
+            assert first.json() == records[0]
+            first_page = client.get(f"{base}/metadata-revisions?limit=1&offset=0")
+            assert first_page.status_code == 200, first_page.text
+            assert first_page.json() == records[:1]
         rejected = client.post(f"{base}/metadata-revisions", json=payload)
         assert rejected.status_code == 400, rejected.text
         assert "integrity" in rejected.json()["detail"].lower()
@@ -285,6 +296,12 @@ def test_spatial_metadata_append_rejects_corrupt_ancestor(
         listed = client.get(f"{base}/metadata-revisions")
         assert listed.status_code == 200, listed.text
         assert listed.json() == records
+        head = client.get(f"{base}/metadata-revisions/{records[-1]['id']}")
+        assert head.status_code == 200, head.text
+        assert head.json() == records[-1]
+        page = client.get(f"{base}/metadata-revisions?limit=1&offset=2")
+        assert page.status_code == 200, page.text
+        assert page.json() == records[2:]
         assert client.get(f"{base}/content").content == OBJ
 
     appended = client.post(f"{base}/metadata-revisions", json=payload)
