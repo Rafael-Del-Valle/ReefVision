@@ -65,6 +65,8 @@ $report = [ordered]@{
     previous_installer_version = if ($PreviousInstallerHash) { $InitialProductVersion } else { $null }
     initial_schema_revision = $null
     final_schema_revision = $null
+    initial_registered_product_code = $null
+    final_registered_product_code = $null
     windows_version = [Environment]::OSVersion.VersionString
     architecture = $env:PROCESSOR_ARCHITECTURE
     acceptance_root = $AcceptanceRoot
@@ -100,6 +102,28 @@ function Get-VerifiedAcceptanceSchemaRevision([string]$ApiUrl) {
         throw 'Installed backend database is missing or not at its expected Alembic head.'
     }
     return $migration.current_schema_revision
+}
+function Get-VerifiedAcceptanceMsiRegistration([string]$PackagePath, [string]$ExpectedVersion) {
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $installer.OpenDatabase($PackagePath, 0)
+    $view = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductCode''')
+    try {
+        [void]$view.Execute()
+        $record = $view.Fetch()
+        if ($null -eq $record) { throw "Missing MSI ProductCode: $PackagePath" }
+        $productCode = [string]$record.StringData(1)
+    } finally { [void]$view.Close() }
+    $registrations = @(Get-ReefVisionInstalledRegistrations)
+    if ($registrations.Count -ne 1) {
+        throw "Expected exactly one ReefVision uninstall registration after install/upgrade; found $($registrations.Count)."
+    }
+    $registration = $registrations[0]
+    $registeredVersion = $registration.PSObject.Properties['DisplayVersion']
+    if ($registration.PSChildName -ine $productCode -or
+        $null -eq $registeredVersion -or $registeredVersion.Value -cne $ExpectedVersion) {
+        throw "Installed ReefVision registration does not match MSI ProductCode $productCode and ProductVersion $ExpectedVersion."
+    }
+    return $productCode
 }
 function Run-Msi([string]$Action, [string]$PackageOrProduct, [string]$LogName, [string]$TargetRoot = '') {
     $log = Join-Path $EvidenceRoot $LogName
@@ -261,6 +285,7 @@ try {
 
     $initialInstaller = if ($PreviousInstallerPath -and -not $SkipUpgrade) { $PreviousInstallerPath } else { $InstallerPath }
     $exitCode = Run-Msi -Action Install -PackageOrProduct $initialInstaller -LogName 'install.log' -TargetRoot $InstallRoot
+    $report.initial_registered_product_code = Get-VerifiedAcceptanceMsiRegistration -PackagePath $initialInstaller -ExpectedVersion $InitialProductVersion
     if (-not (Test-Path (Join-Path $InstallRoot 'ReefVision.exe'))) { throw 'Installed ReefVision.exe is missing.' }
     if (-not (Test-Path (Join-Path $InstallRoot 'backend\reefvision-api\reefvision-api.exe'))) { throw 'Installed reefvision-api.exe is missing.' }
     $report.install = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "msiexec exit code $exitCode; desktop and sidecar present"
@@ -514,6 +539,9 @@ try {
     $restartedVersion = Invoke-RestMethod "$api/system/version"
     Assert-ReefVisionBackendVersion -Payload $restartedVersion -ExpectedVersion $ProductVersion
     $report.final_schema_revision = Get-VerifiedAcceptanceSchemaRevision -ApiUrl $api
+    # A working backend is not sufficient if the old MSI remains registered or
+    # the target package is absent from Windows' uninstall registry.
+    $report.final_registered_product_code = Get-VerifiedAcceptanceMsiRegistration -PackagePath $InstallerPath -ExpectedVersion $ProductVersion
     if ((-not $PreviousInstallerPath -or $SkipUpgrade) -and $report.final_schema_revision -cne $report.initial_schema_revision) {
         throw 'Database Alembic head changed across a same-version restart.'
     }
@@ -557,7 +585,7 @@ try {
         $report.sam2_live.detail += ' Verified complete accepted mask and source prediction records after restart/upgrade.'
     }
     if ($PreviousInstallerPath -and -not $SkipUpgrade) {
-        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Previous installer $InitialProductVersion upgraded to $ProductVersion; packaged backend version, Alembic head $($report.initial_schema_revision) -> $($report.final_schema_revision), and scientific records verified."
+        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Previous installer $InitialProductVersion upgraded to $ProductVersion; packaged backend version, Alembic head $($report.initial_schema_revision) -> $($report.final_schema_revision), Windows MSI registration $($report.initial_registered_product_code) -> $($report.final_registered_product_code), and scientific records verified."
     }
     $report.restart = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and backend restarted cleanly; API version $($restartedVersion.application_version) matches MSI."
     $report.project_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Project $projectId, image $imageId, and annotation $annotationId persisted; pre-restart database SHA-256 $projectChecksum"
