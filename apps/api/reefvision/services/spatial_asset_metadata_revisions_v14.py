@@ -52,10 +52,19 @@ class SpatialAssetMetadataRevisionService:
     ) -> SpatialAssetMetadataRevisionResponse:
         source = self.sources.get(project_id, asset_id)
         self.sources.read_verified(project_id, asset_id)
+        return self._validated_response(project_id, asset_id, source.sha256, row)
+
+    def _validated_response(
+        self,
+        project_id: str,
+        asset_id: str,
+        source_sha256: str,
+        row: SpatialAssetMetadataRevision,
+    ) -> SpatialAssetMetadataRevisionResponse:
         if (
             row.project_id != project_id
             or row.spatial_source_asset_id != asset_id
-            or row.source_sha256 != source.sha256
+            or row.source_sha256 != source_sha256
             or row.revision <= 0
         ):
             raise ValidationError("Spatial asset metadata source binding is inconsistent")
@@ -72,7 +81,7 @@ class SpatialAssetMetadataRevisionService:
                 predecessor is None
                 or predecessor.project_id != project_id
                 or predecessor.spatial_source_asset_id != asset_id
-                or predecessor.source_sha256 != source.sha256
+                or predecessor.source_sha256 != source_sha256
                 or predecessor.revision != row.revision - 1
             ):
                 raise ValidationError("Spatial asset metadata revision ancestry is inconsistent")
@@ -95,7 +104,7 @@ class SpatialAssetMetadataRevisionService:
         content = spatial_asset_metadata_content(
             project_id=project_id,
             asset_id=asset_id,
-            source_sha256=source.sha256,
+            source_sha256=source_sha256,
             revision=row.revision,
             previous_revision_id=row.previous_revision_id,
             payload=payload,
@@ -109,7 +118,7 @@ class SpatialAssetMetadataRevisionService:
             spatial_source_asset_id=asset_id,
             previous_revision_id=row.previous_revision_id,
             revision=row.revision,
-            source_sha256=source.sha256,
+            source_sha256=source_sha256,
             content_sha256=row.content_sha256,
             created_at=row.created_at,
         )
@@ -122,18 +131,21 @@ class SpatialAssetMetadataRevisionService:
     ) -> SpatialAssetMetadataRevisionResponse:
         source = self.sources.get(project_id, asset_id)
         self.sources.read_verified(project_id, asset_id)
-        previous = self.session.scalar(
+        history = self.session.scalars(
             select(SpatialAssetMetadataRevision)
             .where(
                 SpatialAssetMetadataRevision.project_id == project_id,
                 SpatialAssetMetadataRevision.spatial_source_asset_id == asset_id,
             )
-            .order_by(SpatialAssetMetadataRevision.revision.desc())
-            .limit(1)
-        )
-        if previous is not None:
-            # Do not append to a corrupt or misbound history head.
-            self._response(project_id, asset_id, previous)
+            .order_by(SpatialAssetMetadataRevision.revision, SpatialAssetMetadataRevision.id)
+        ).all()
+        # Validate the entire history, not just the current head. The source
+        # bytes were checked above; avoid reading them again for every revision.
+        for expected_revision, ancestor in enumerate(history, start=1):
+            if ancestor.revision != expected_revision:
+                raise ValidationError("Spatial asset metadata revision ancestry is inconsistent")
+            self._validated_response(project_id, asset_id, source.sha256, ancestor)
+        previous = history[-1] if history else None
         revision = 1 if previous is None else previous.revision + 1
         previous_id = None if previous is None else previous.id
         content_sha256 = canonical_json_sha256(
