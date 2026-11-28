@@ -1418,6 +1418,26 @@ def measure_mesh_preview(
                 }
                 for offset in range(edge_count)
             ]
+            # Weight selection support by geometric length, not mesh edge count.
+            # Repeated passes within one trace cannot increase distinct support.
+            support_lengths: dict[int, Fraction] = {}
+            support_counts: Counter[int] = Counter()
+            for count, (first, last) in zip(
+                distinct_counts, pairwise(chain["source_waypoints_mesh_units"]), strict=True
+            ):
+                start = (first[0], first[1], first[2])
+                end = (last[0], last[1], last[2])
+                length = edge_lengths[frozenset((start, end))]
+                support_lengths[count] = support_lengths.get(count, Fraction(0)) + length
+                support_counts[count] += 1
+            chain["source_arc_length_by_distinct_trace_count"] = [
+                {
+                    "distinct_trace_count": count,
+                    "edge_count": support_counts[count],
+                    "source_length_mesh_units": float(length),
+                }
+                for count, length in sorted(support_lengths.items())
+            ]
         # Component-level provenance aggregates canonical chain support without
         # treating overlapping selections as independent biological observations.
         for component in components:
