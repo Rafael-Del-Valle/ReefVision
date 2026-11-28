@@ -1183,3 +1183,15 @@ before import; retain the valid archive round trip and original OBJ bytes.
 This checks internal source binding, not authenticated provenance or biological
 identity. The structural parse still does not substitute for calibrated
 standalone or persisted typed Workflow Builder measurements.
+
+Structural parse result counts must be exact positive JSON integers, not
+numeric strings, equal-valued floats or booleans. Explicit calibration and
+identity flags must be JSON false, not numeric zero. Otherwise schema
+coercion can normalize an altered stored result back into a previously
+valid digest. Test mesh and point-cloud readback with the original digest
+retained, force persistence of type-only mutations, and verify rejection,
+unchanged source bytes and exact readback after restoring the fixture.
+Project Exchange inspection and import must likewise reject these types
+even when the outer section checksum has been recomputed. This safeguards
+stored structural summaries, not authenticated review or calibrated
+standalone and saved-workflow measurement results.
