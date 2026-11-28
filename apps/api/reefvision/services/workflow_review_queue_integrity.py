@@ -59,7 +59,9 @@ def _finite_scientific_number(value: Any) -> bool:
         return False
 
 
-def _valid_v2_score_explanation(item: Any, weights: dict[str, float]) -> bool:
+def _valid_v2_score_explanation(
+    item: Any, weights: dict[str, float], *, v3: bool = False
+) -> bool:
     """Cross-check saved component explanations against the deterministic formula.
 
     A checksum alone cannot establish that a re-signed saved explanation is
@@ -89,7 +91,13 @@ def _valid_v2_score_explanation(item: Any, weights: dict[str, float]) -> bool:
     # existing compatibility path without invoking this validator.
     # Sum as floats: each valid JSON integer is representable, but their
     # integer total might overflow during a later float conversion.
-    total_weight = sum(float(weight) for weight in weights.values())
+    # V3 uses the producer's schema order, independent of JSON key order.
+    signal_order = tuple(V3_SIGNAL_LABELS) if v3 else tuple(raw)
+    total_weight = (
+        sum(float(weights[signal]) for signal in signal_order)
+        if v3
+        else sum(float(weight) for weight in weights.values())
+    )
     if not isfinite(total_weight) or total_weight <= 0:
         return False
 
@@ -120,10 +128,20 @@ def _valid_v2_score_explanation(item: Any, weights: dict[str, float]) -> bool:
         ):
             return False
 
-    expected_score = round(
-        sum(normalized[signal] * weights[signal] / total_weight * 100.0 for signal in raw),
-        2,
-    )
+    if v3:
+        # The v3 producer adds each contribution sequentially. Python 3.12+
+        # sum(float_iterator) uses compensated summation and can round an
+        # otherwise identical half-cent score to the opposite cent.
+        total_score = 0.0
+        for signal in signal_order:
+            total_score += normalized[signal] * float(weights[signal]) / total_weight * 100.0
+        expected_score = round(total_score, 2)
+    else:
+        # Preserve the historical v2 validation contract.
+        expected_score = round(
+            sum(normalized[signal] * weights[signal] / total_weight * 100.0 for signal in raw),
+            2,
+        )
     return (
         len(seen) == len(raw)
         and item.score == expected_score
@@ -570,7 +588,9 @@ def validate_saved_queue_snapshot(queue: Any, items: Sequence[Any]) -> None:
             # Mapping equality accepts True == 1 and False == 0.
             not isinstance(item.weights_json, dict)
             or any(not _finite_scientific_number(value) for value in item.weights_json.values())
-            or not _valid_v2_score_explanation(item, weights)
+            or not _valid_v2_score_explanation(
+                item, weights, v3=integrity_version == "qc-review-queue-v3"
+            )
         ):
             raise invalid
         if integrity_version == "qc-review-queue-v3" and (

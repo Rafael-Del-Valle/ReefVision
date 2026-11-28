@@ -726,3 +726,78 @@ def test_qc_retry_refuses_malformed_queue_configuration(client: TestClient, shap
         )
         assert replay[0]["payload"] == payload
         session.rollback()
+
+
+def test_half_cent_score_survives_standalone_and_saved_qc_replay(client: TestClient) -> None:
+    project_id, prediction_id = _local_prediction(client)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        proposal = session.get(PredictionProposal, prediction_id)
+        assert proposal is not None
+        proposal.confidence = 0.2
+        session.commit()
+
+    weights = {name: 0.0 for name in ReviewScoreWeights.model_fields}
+    weights.update(
+        low_mean_confidence=29.0,
+        low_min_confidence=28.0,
+        pending_proposals=16.0,
+        unreviewed_state=23.0,
+    )
+    standalone = client.post(
+        f"/api/v1/projects/{project_id}/review-queues", json={"signal_weights": weights}
+    )
+    assert standalone.status_code == 201, standalone.text
+    payload = _payload(_execute(client, project_id, _weighted_graph(weights)))
+    assert payload["priority_score_unit"] == "dimensionless"
+    assert payload["review_status"] == "requires_researcher_review"
+    with app.state.session_factory() as session:
+        for queue_id in (standalone.json()["id"], payload["queue_id"]):
+            queue = session.get(ReviewQueue, queue_id)
+            assert queue is not None
+            items = session.scalars(
+                select(ReviewQueueItem).where(ReviewQueueItem.review_queue_id == queue_id)
+            ).all()
+            assert len(items) == 1
+            item = items[0]
+            assert item.score == 73.12
+            assert item.review_state == "pending"
+            validate_saved_queue_snapshot(queue, items)
+            # Canonical JSON checksums do not depend on object insertion order.
+            item.signal_values_json = dict(reversed(list(item.signal_values_json.items())))
+            item.normalized_signals_json = dict(
+                reversed(list(item.normalized_signals_json.items()))
+            )
+            validate_saved_queue_snapshot(queue, items)
+            session.rollback()
+
+        nodes = session.scalars(
+            select(WorkflowNodeRun).where(
+                WorkflowNodeRun.workflow_run_id == payload["workflow_run_id"]
+            )
+        ).all()
+        node = next(row for row in nodes if row.node_type == "qc_review_queue")
+        source = session.scalar(
+            select(WorkflowArtifact).where(
+                WorkflowArtifact.workflow_run_id == payload["workflow_run_id"],
+                WorkflowArtifact.producer_port_id == "project",
+            )
+        )
+        assert source is not None
+        parameters = {
+            **node.parameters_json,
+            "__workflow_run_id": payload["workflow_run_id"],
+            "__workflow_node_run_id": node.id,
+        }
+        replay = create_review_queue_workflow_artifact(
+            session, app.state.settings, project_id, parameters, {"project": [source]}
+        )
+        assert replay[0]["payload"] == payload
+        session.rollback()
+
+    regenerated = client.post(f"/api/v1/review-queues/{standalone.json()['id']}/regenerate")
+    assert regenerated.status_code == 201, regenerated.text
+    items = client.get(f"/api/v1/review-queues/{regenerated.json()['id']}/items")
+    assert items.status_code == 200, items.text
+    assert items.json()["items"][0]["score"] == 73.12
+    assert items.json()["items"][0]["review_state"] == "pending"

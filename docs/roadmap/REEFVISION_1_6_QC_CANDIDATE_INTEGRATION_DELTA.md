@@ -112,3 +112,25 @@ handoff. No version was accepted, no branches were combined.
 Next: review the selective integration checklist with the owner and
 candidate maintainers rather than repeat already implemented installation
 and migration work on a divergent branch.
+
+## Additional score-rounding regression — 2026-11-28
+
+The producer accumulates v3 contributions sequentially in schema order,
+whereas the validator previously used Python's built-in sum on an iterator.
+Python 3.12+ uses compensated summation for floats. With one pending
+prediction at confidence 0.2 and weights 29, 28, 16, 23 on inverse mean,
+inverse minimum, pending count and unreviewed state respectively, the
+producer stores 73.12 while Python 3.13's iterator sum rounds to 73.13.
+The isolated validator now reproduces the original v3 accumulation order
+without changing the stored formula, tolerating a different cent, or
+rescoring live observations. V2 remains unchanged. JSON key reordering
+does not change v3 signal order. The integrated producer uses the same
+sequential addition; include this regression in selective integration.
+This does not establish arbitrary cross-Python-version compatibility of
+the weight denominator for noninteger custom weights.
+
+An independent Python 3.13 numeric probe reproduced the mismatch and
+verified all 24 permutations of the four nonzero inputs, including a
+negative control for the adjacent cent. The new standalone, regeneration
+and saved-workflow replay regression has not yet executed in repository
+CI. No schema change or researcher approval is implied.
