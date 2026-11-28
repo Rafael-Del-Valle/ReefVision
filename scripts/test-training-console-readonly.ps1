@@ -146,6 +146,11 @@ function Invoke-RestMethod {
         default { throw 'Monitor polled after the selected run completed.' }
       }
     }
+    if ($script:scenario -eq 'malformed-log') {
+      if ($script:pollCount -lt 5) { return $script:active }
+      if ($script:pollCount -eq 5) { return $script:completed }
+      throw 'Monitor polled after the selected run completed.'
+    }
     if ($script:scenario -eq 'transient') {
       if ($script:pollCount -eq 1) {
         throw ('Temporary loopback outage ' + [char]0x001B + ']0;spoofed outage title' + [char]0x0007 + ' reconnecting')
@@ -163,6 +168,15 @@ function Invoke-RestMethod {
     throw 'Monitor polled after the training job ended.'
   }
   if ($Uri -ceq ($url + '/logs/tail')) {
+    if ($script:scenario -eq 'malformed-log') {
+      switch ($script:pollCount) {
+        1 { return [pscustomobject]@{ available = 'false'; text = 'unverified string flag' } }
+        2 { return [pscustomobject]@{ available = $true; text = @('unverified array text') } }
+        3 { return [pscustomobject]@{ available = $true; text = [pscustomobject]@{ line = 'unverified object text' } } }
+        4 { return [pscustomobject]@{ available = 1; text = 'unverified numeric flag' } }
+        5 { return [pscustomobject]@{ available = $true; text = 'verified recovery worker record' } }
+      }
+    }
     if ($script:scenario -eq 'failed') { throw 'Simulated persisted log outage.' }
     if ($script:scenario -eq 'cancelled') {
       return [pscustomobject]@{ available = $false; text = '' }
@@ -185,7 +199,7 @@ function Start-Sleep {
   }
   if ($Seconds -ne 2) { throw "Unexpected polling interval: $Seconds" }
   $script:sleeps++
-  $maxSleeps = if ($script:scenario -eq 'wrong-run') { 4 } elseif ($script:scenario -eq 'transient') { 2 } else { 1 }
+  $maxSleeps = if ($script:scenario -in @('wrong-run', 'malformed-log')) { 4 } elseif ($script:scenario -eq 'transient') { 2 } else { 1 }
   if ($script:sleeps -gt $maxSleeps) { throw 'Monitor failed to stop after completion.' }
 }
 
@@ -446,4 +460,31 @@ if ($identityErrors.Count -ne 4 -or $identityOutput -match 'unrelated job|uniden
   throw 'Monitor displayed unverified run evidence or concealed the selected run.'
 }
 
-Write-Output 'PowerShell training monitor read-only polling, terminal-state, loss, transient-recovery and run-identity regressions passed.'
+# A malformed log payload cannot become a claimed persisted worker record.
+# The selected run's status and structured metrics remain visible, and the
+# observer must recover on the next valid GET without touching training.
+$script:scenario = 'malformed-log'
+$script:requests.Clear()
+$script:messages.Clear()
+$script:pollCount = 0
+$script:sleeps = 0
+$script:holdCount = 0
+Invoke-ReadOnlyMonitor
+$expectedLogRequests = @()
+for ($index = 0; $index -lt 5; $index++) {
+  $expectedLogRequests += "Get $url", "Get $url/logs/tail"
+}
+if (($script:requests -join [char]10) -cne ($expectedLogRequests -join [char]10) -or
+    $script:pollCount -ne 5 -or $script:sleeps -ne 4 -or $script:holdCount -ne 1) {
+  throw 'Malformed log responses interrupted read-only status monitoring.'
+}
+$logOutput = $script:messages -join [char]10
+$logErrors = @($script:messages | Where-Object { $_ -ceq 'Training job log unavailable (status/metrics remain live).' })
+if ($logErrors.Count -ne 4 -or $logOutput -match 'unverified (string flag|array text|object text|numeric flag)' -or
+    $logOutput -notmatch '\[worker log\] verified recovery worker record' -or
+    $logOutput -notmatch 'Status: training' -or $logOutput -notmatch 'Status: completed' -or
+    $logOutput -notmatch 'train/box_loss\s+0\.25') {
+  throw 'Malformed log responses produced false evidence or concealed live status and loss.'
+}
+
+Write-Output 'PowerShell training monitor read-only polling, terminal-state, loss, transient-recovery, run-identity and log-shape regressions passed.'
