@@ -23,6 +23,7 @@ $script:scenario = 'completed'
 # must display the latest actual box/cls/dfl epoch values, not stale summaries.
 $script:active = @'
 {
+  "id": "run-1",
   "run_name": "Coral\u001b]0;spoofed console title\u0007 model",
   "status": "training",
   "stage": "fit",
@@ -47,6 +48,7 @@ $script:active.metrics | Add-Member -NotePropertyName 'metrics/nonfinite_nan' -N
 $script:active.metrics | Add-Member -NotePropertyName 'metrics/nonfinite_infinity' -NotePropertyValue ([double]::PositiveInfinity)
 $script:completed = @'
 {
+  "id": "run-1",
   "run_name": "Coral model",
   "status": "completed",
   "stage": "done",
@@ -65,6 +67,7 @@ $script:completed = @'
 # endpoint is unavailable; cancellation must also terminate monitoring.
 $script:terminalFailures = @{
   failed = [pscustomobject]@{
+    id = 'run-1'
     run_name = 'Coral failure'
     status = 'failed'
     stage = 'fit'
@@ -77,6 +80,7 @@ $script:terminalFailures = @{
     error_message = ('GPU out of memory ' + [char]0x001B + ']0;spoofed error title' + [char]0x0007 + ' training stopped')
   }
   cancelled = [pscustomobject]@{
+    id = 'run-1'
     run_name = 'Coral cancelled'
     status = 'cancelled'
     stage = 'stopping'
@@ -132,6 +136,16 @@ function Invoke-RestMethod {
   [void]$script:requests.Add("$Method $Uri")
   if ($Uri -ceq $url) {
     $script:pollCount++
+    if ($script:scenario -eq 'wrong-run') {
+      switch ($script:pollCount) {
+        1 { return [pscustomobject]@{ id = 'run-2'; status = 'completed'; run_name = 'unrelated job' } }
+        2 { return [pscustomobject]@{ status = 'completed'; run_name = 'unidentified job' } }
+        3 { return [pscustomobject]@{ id = 'RUN-1'; status = 'completed'; run_name = 'case alias job' } }
+        4 { return [pscustomobject]@{ id = 1; status = 'completed'; run_name = 'numeric identity job' } }
+        5 { return $script:completed }
+        default { throw 'Monitor polled after the selected run completed.' }
+      }
+    }
     if ($script:scenario -eq 'transient') {
       if ($script:pollCount -eq 1) {
         throw ('Temporary loopback outage ' + [char]0x001B + ']0;spoofed outage title' + [char]0x0007 + ' reconnecting')
@@ -171,7 +185,7 @@ function Start-Sleep {
   }
   if ($Seconds -ne 2) { throw "Unexpected polling interval: $Seconds" }
   $script:sleeps++
-  $maxSleeps = if ($script:scenario -eq 'transient') { 2 } else { 1 }
+  $maxSleeps = if ($script:scenario -eq 'wrong-run') { 4 } elseif ($script:scenario -eq 'transient') { 2 } else { 1 }
   if ($script:sleeps -gt $maxSleeps) { throw 'Monitor failed to stop after completion.' }
 }
 
@@ -402,4 +416,34 @@ if ($recoveryOutput.Contains('spoofed outage title')) {
   throw 'Untrusted API outage diagnostics escaped console sanitization.'
 }
 
-Write-Output 'PowerShell training monitor read-only polling, terminal-state, loss, and transient-recovery regressions passed.'
+# A mismatched, missing or malformed response ID cannot certify the selected
+# run's status or cause a log request or premature terminal-state exit.
+$script:scenario = 'wrong-run'
+$script:requests.Clear()
+$script:messages.Clear()
+$script:pollCount = 0
+$script:sleeps = 0
+$script:holdCount = 0
+Invoke-ReadOnlyMonitor
+$expectedIdentityRequests = @(
+  "Get $url",
+  "Get $url",
+  "Get $url",
+  "Get $url",
+  "Get $url",
+  "Get $url/logs/tail"
+)
+if (($script:requests -join [char]10) -cne ($expectedIdentityRequests -join [char]10)) {
+  throw 'Monitor fetched logs for an unverified training-run response.'
+}
+if ($script:pollCount -ne 5 -or $script:sleeps -ne 4 -or $script:holdCount -ne 1) {
+  throw 'Monitor did not recover from invalid run identity and hold the correct terminal state.'
+}
+$identityOutput = $script:messages -join [char]10
+$identityErrors = @($script:messages | Where-Object { $_ -like '*Training status response did not identify the selected run.*' })
+if ($identityErrors.Count -ne 4 -or $identityOutput -match 'unrelated job|unidentified job|case alias job|numeric identity job' -or
+    $identityOutput -notmatch 'Status: completed' -or $identityOutput -notmatch 'train/box_loss\s+0\.2(?:0)?(?!\d)') {
+  throw 'Monitor displayed unverified run evidence or concealed the selected run.'
+}
+
+Write-Output 'PowerShell training monitor read-only polling, terminal-state, loss, transient-recovery and run-identity regressions passed.'

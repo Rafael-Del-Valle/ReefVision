@@ -301,10 +301,17 @@ function Test-ValidScientificMetricValue {
   }
   return $true
 }
+# The status response must identify the selected immutable run. A stale or
+# misrouted loopback response must not display another job's losses or stop
+# this observer when that unrelated job has completed.
+$expectedRunId = $url.Substring($url.LastIndexOf('/') + 1)
 Write-Host 'ReefVision training monitor (read-only). Close this window to stop monitoring.'
 while ($true) {
   try {
     $run = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10 -MaximumRedirection 0
+    if ($run -isnot [pscustomobject] -or $run.id -isnot [string] -or $run.id -cne $expectedRunId) {
+      throw 'Training status response did not identify the selected run.'
+    }
     Clear-Host
     Write-Host ('ReefVision - {0}' -f (Format-SafeText $run.run_name))
     Write-Host ('Status: {0} | Stage: {1}' -f (Format-SafeText $run.status), (Format-SafeText $run.stage))
@@ -503,6 +510,9 @@ while ($true) {
       break
     }
   } catch {
+    # Remove the previous successful snapshot rather than leave its losses
+    # on screen as apparently live observations during a failed status poll.
+    Clear-Host
     Write-Host ('Waiting for ReefVision training status: {0}' -f (Format-SafeText $_.Exception.Message))
   }
   Start-Sleep -Seconds 2
