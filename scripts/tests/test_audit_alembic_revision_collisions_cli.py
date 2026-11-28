@@ -8,9 +8,7 @@ from pathlib import Path
 SCRIPT = Path(__file__).resolve().parents[1] / "audit-alembic-revision-collisions.py"
 
 
-def _run(
-    *roots: Path, verify_parent_graph: bool = False
-) -> subprocess.CompletedProcess[str]:
+def _run(*roots: Path, verify_parent_graph: bool = False) -> subprocess.CompletedProcess[str]:
     flags = ["--verify-parent-graph"] if verify_parent_graph else []
     return subprocess.run(
         [sys.executable, str(SCRIPT), *flags, *(str(root) for root in roots)],
@@ -235,9 +233,7 @@ def test_cli_invalid_parent_graph_withholds_ancestry_evidence(tmp_path: Path) ->
         files[source] = source.read_bytes()
         source = root / "0038.py"
         parent = "0037" if root == roots[0] else "missing"
-        source.write_text(
-            f"revision = '0038'\ndown_revision = {parent!r}\n", encoding="utf-8"
-        )
+        source.write_text(f"revision = '0038'\ndown_revision = {parent!r}\n", encoding="utf-8")
         files[source] = source.read_bytes()
 
     result = _run(*roots, verify_parent_graph=True)
@@ -254,6 +250,7 @@ def test_cli_invalid_parent_graph_withholds_ancestry_evidence(tmp_path: Path) ->
         assert len(hashes[str(roots[0] / f"{revision}.py")]) == 64
     assert report["safe_to_reconcile_automatically"] is False
     assert {path: path.read_bytes() for path in files} == files
+
 
 def test_cli_parent_graph_refuses_unverified_dependency_edges(tmp_path: Path) -> None:
     root = tmp_path / "versions"
