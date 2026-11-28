@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from datetime import UTC, datetime
 from typing import Any
 
@@ -40,6 +41,19 @@ def _bounded_source_metadata(
     if len(encoded) > NOAA_SOURCE_METADATA_MAX_BYTES:
         raise ValueError("NOAA source metadata exceeds 16 KiB per observation")
     return evidence
+
+
+def _provider_number(value: Any) -> float:
+    """Accept NOAA numeric strings or numbers, never Boolean measurements."""
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        raise ValueError("NOAA numeric fields require a finite number, not a Boolean or object")
+    try:
+        number = float(value)
+    except (ValueError, OverflowError) as exc:
+        raise ValueError("NOAA numeric fields require a finite number") from exc
+    if not math.isfinite(number):
+        raise ValueError("NOAA numeric fields require a finite number")
+    return number
 
 
 def noaa_request_url(request: NOAAImportRequest) -> str:
@@ -124,14 +138,14 @@ def parse_noaa(
                 ScientificRecordCreate.model_validate(
                     {
                         "variable": "water_temperature",
-                        "value": float(item["v"]),
+                        "value": _provider_number(item["v"]),
                         "unit": "degC",
                         "observed_at": timestamp,
                         "source_kind": "observed",
                         "subject": request.subject.model_dump(mode="json"),
                         "location": {
-                            "latitude": float(metadata["lat"]),
-                            "longitude": float(metadata["lon"]),
+                            "latitude": _provider_number(metadata["lat"]),
+                            "longitude": _provider_number(metadata["lon"]),
                         },
                         "qc": "suspect" if flagged else "unassessed",
                         "qc_flags": [f"noaa_flags:{flags}"] if flags else [],
@@ -194,7 +208,7 @@ def parse_noaa_tides(
             uncertainty = None
             if request.product == "water_level" and item.get("s") not in (None, ""):
                 uncertainty = {
-                    "value": float(item["s"]),
+                    "value": _provider_number(item["s"]),
                     "kind": "standard_deviation",
                     "method": "NOAA CO-OPS supplied sigma",
                 }
@@ -208,14 +222,14 @@ def parse_noaa_tides(
                 ScientificRecordCreate.model_validate(
                     {
                         "variable": variable,
-                        "value": float(item["v"]),
+                        "value": _provider_number(item["v"]),
                         "unit": "m",
                         "observed_at": timestamp,
                         "source_kind": source_kind,
                         "subject": request.subject.model_dump(mode="json"),
                         "location": {
-                            "latitude": float(metadata["lat"]),
-                            "longitude": float(metadata["lon"]),
+                            "latitude": _provider_number(metadata["lat"]),
+                            "longitude": _provider_number(metadata["lon"]),
                         },
                         "uncertainty": uncertainty,
                         "qc": "suspect" if flagged else "unassessed",

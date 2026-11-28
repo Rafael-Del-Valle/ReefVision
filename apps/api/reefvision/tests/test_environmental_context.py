@@ -1017,3 +1017,71 @@ def test_noaa_rejects_non_json_or_non_utf8_provenance_before_persistence(invalid
         parser = parse_noaa_tides
     with pytest.raises(ValidationError, match="NOAA source metadata is not finite"):
         parser(raw, request, now, "https://api.tidesandcurrents.noaa.gov/test")
+
+
+@pytest.mark.parametrize(
+    ("product", "field", "invalid"),
+    [
+        ("water_temperature", "v", True),
+        ("water_temperature", "lat", False),
+        ("water_temperature", "lon", True),
+        ("water_temperature", "v", "Infinity"),
+        ("predictions", "v", False),
+        ("predictions", "lat", True),
+        ("water_level", "v", True),
+        ("water_level", "lon", False),
+        ("water_level", "s", False),
+        ("water_level", "s", "NaN"),
+    ],
+)
+def test_noaa_invalid_numeric_refresh_preserves_offline_snapshot(client, product, field, invalid):
+    """Booleans must not become real zero/one observations or uncertainty."""
+    from reefvision.domain.errors import ValidationError
+    from reefvision.schemas.environmental_context import NOAAImportRequest, NOAATideImportRequest
+    from reefvision.services.environmental_context import EnvironmentalContextService
+
+    project = create_project(client, "NOAA numeric QC")
+    raw = noaa_fixture()
+    # An actual numeric zero is distinct from false and must remain usable.
+    raw["data"][0]["v"] = 0
+    raw["data"][0]["s"] = "0.02"
+    key = "data"
+    if product == "water_temperature":
+        request = NOAAImportRequest(station_id="8665530", day="2026-04-03")
+        method = "import_noaa"
+    else:
+        request = NOAATideImportRequest(
+            station_id="8665530", day="2026-04-03", product=product, datum="MLLW"
+        )
+        method = "import_noaa_tides"
+        if product == "predictions":
+            key = "predictions"
+            raw[key] = raw.pop("data")
+
+    now = datetime(2026, 4, 4, tzinfo=UTC)
+    with (
+        client.app.state.session_factory() as session,
+        httpx.Client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=raw))
+        ) as http,
+    ):
+        service = EnvironmentalContextService(session, http=http, now=now)
+        first = getattr(service, method)(project["id"], request)
+        assert len(first.items) == 2 and first.skipped_missing == 1
+        assert first.items[0].normalized_value == 0
+        original_ids = [item.id for item in first.items]
+        target = raw["metadata"] if field in {"lat", "lon"} else raw[key][0]
+        target[field] = invalid
+        expired = EnvironmentalContextService(session, http=http, now=now + timedelta(days=2))
+        with pytest.raises(ValidationError, match="NOAA numeric fields"):
+            getattr(expired, method)(project["id"], request)
+        cached = getattr(expired, method)(
+            project["id"], request.model_copy(update={"offline": True})
+        )
+        assert cached.cache_status == "stale_offline"
+        assert [item.id for item in cached.items] == original_ids
+        assert cached.items[0].normalized_value == 0
+        assert cached.skipped_missing == 1
+
+    records = client.get(f"/api/v1/projects/{project['id']}/scientific-records").json()
+    assert records["total"] == 2
