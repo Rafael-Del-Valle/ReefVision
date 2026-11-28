@@ -3499,9 +3499,15 @@ export function VideoTrackingWorkspace({
         {benchmarkMutation.data && (
           <>
             <p className="annotation-helper">
-              Winner: <strong>{benchmarkMutation.data.winner}</strong>. Ranking
-              uses MOTA, then recall, precision, identity/fragmentation errors,
-              and center error as deterministic tie-breakers.
+              {benchmarkMutation.data.winner ? (
+                <>
+                  <strong>{benchmarkMutation.data.winner}</strong> ranked first.
+                </>
+              ) : (
+                <strong>Multiple runs tied for first place.</strong>
+              )}{" "}
+              Runs are ranked by MOTA, recall, precision, identity switches,
+              fragmentations, then center error. Equal scores share a rank.
             </p>
             <div style={{ overflowX: "auto" }}>
               <table>

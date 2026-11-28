@@ -489,9 +489,10 @@ export interface VideoTrackingBenchmarkResult {
 }
 
 export interface VideoTrackingBenchmark {
-  schema_version: "video-tracking-benchmark-0001";
+  schema_version:
+    "video-tracking-benchmark-0001" | "video-tracking-benchmark-0002";
   video_id: string;
-  winner: string;
+  winner: string | null;
   ground_truth_track_ids: string[];
   start_frame: number;
   end_frame: number;

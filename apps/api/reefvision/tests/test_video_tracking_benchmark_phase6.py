@@ -106,7 +106,7 @@ def test_tracking_benchmark_ranks_candidates_against_the_same_ground_truth(
     )
     assert response.status_code == 200, response.text
     result = response.json()
-    assert result["schema_version"] == "video-tracking-benchmark-0001"
+    assert result["schema_version"] == "video-tracking-benchmark-0002"
     assert result["winner"] == "ByteTrack"
     assert [item["name"] for item in result["results"]] == ["ByteTrack", "BoT-SORT"]
     assert [item["rank"] for item in result["results"]] == [1, 2]
@@ -142,3 +142,36 @@ def test_tracking_benchmark_requires_unique_candidate_names(
         },
     )
     assert response.status_code == 422
+
+
+def test_identical_tracking_scores_share_rank_independent_of_name_or_order(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = create_project(client, "Tied independent runs")
+    video = _video(client, str(project["id"]), monkeypatch)
+    video_id = str(video["id"])
+    label = str(cast(list[dict[str, object]], project["label_classes"])[0]["id"])
+    matched = [{"frame": 0, "bbox": [10, 10, 20, 20]}]
+    truth = _track(client, video_id, label, matched)
+    candidates = [
+        {"name": name, "prediction_track_ids": [_track(client, video_id, label, frames)["id"]]}
+        for name, frames in [
+            ("Zulu", matched),
+            ("Lower", [{"frame": 0, "bbox": [70, 40, 12, 10]}]),
+            ("Alpha", matched),
+        ]
+    ]
+    for order in (candidates, list(reversed(candidates))):
+        response = client.post(
+            f"/api/v1/videos/{video_id}/tracking-benchmark",
+            json={"ground_truth_track_ids": [truth["id"]], "candidates": order},
+        )
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert result["winner"] is None
+        assert [(row["name"], row["rank"]) for row in result["results"]] == [
+            ("Alpha", 1),
+            ("Zulu", 1),
+            ("Lower", 3),
+        ]
