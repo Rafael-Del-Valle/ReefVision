@@ -138,3 +138,20 @@ CI. No schema change or researcher approval is implied.
 ### Producer-side order guard (2026-11-28)
 
 The v3 QC producer now iterates the same frozen signal order as replay validation. The existing canonical producer order and formula are unchanged; reordering a caller's mapping cannot change a half-cent priority. The regression uses all 24 permutations of four weighted signals and checks the schema order and complete component breakdown. Existing standalone creation, regeneration, saved graph execution and artifact replay coverage remains required. The integrated 1.6 producer at `a580042e84c4d2fa0a646fbf8ec5a3dc90657fa8` still iterates the input map; review this narrow guard with the previous replay fix when selectively integrating, without blending branches. Independent arithmetic probes passed; repository execution and Windows qualification are separate gates.
+
+### Prediction lifecycle integrity (2026-11-28)
+
+SQLite stores prediction review status as a string without an enum constraint.
+The isolated and integrated 1.6 producers previously validated confidence
+but silently omitted unknown review states from both pending and reviewed
+counts. Reject noncanonical states before either standalone or saved QC
+queue creation, even with confidence-based selection. Preserve the four
+existing lifecycle states and historical saved evidence; no migration or
+score formula change. A new saved run may recover after the local source
+record is corrected explicitly; no automatic approval or source mutation.
+The existing confidence regression now covers `approved`, `Pending`, and
+empty status, filtered standalone refusal, failed saved-run artifact absence,
+and recovery with the original pending checksum. Twenty-eight independent
+SQLite state/confidence probes passed; full repository tests remain unrun
+locally because GitHub DNS prevents checkout. Review this narrow shared
+producer guard for selective integration; do not blend branches.

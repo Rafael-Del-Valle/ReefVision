@@ -20,7 +20,7 @@ from reefvision.db.models import (
     ReviewQueueItem,
 )
 from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
-from reefvision.domain.enums import QUALITY_CONTROL_ISSUE_STATUSES
+from reefvision.domain.enums import PREDICTION_REVIEW_STATUSES, QUALITY_CONTROL_ISSUE_STATUSES
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.repositories.review_queues import ReviewQueueRepository
 from reefvision.schemas.review_queues import (
@@ -246,9 +246,15 @@ class ReviewQueueService:
         # value despite the normal inference API validation. Neither a NaN
         # priority nor an out-of-range probability is scientific evidence.
         # Reject all scoped prediction rows before creating a queue or
-        # persisting any workflow-owned review artifact.
+        # persisting any workflow-owned review artifact. Unknown review states
+        # must not disappear from both pending and reviewed proposal counts.
         for image in scoped_images:
             for prediction in project_context.predictions_by_image.get(image.image_id, []):
+                if prediction.review_status not in PREDICTION_REVIEW_STATUSES:
+                    raise ValidationError(
+                        "Review queue prediction has an invalid review status; "
+                        "correct local prediction evidence before QC review"
+                    )
                 confidence = prediction.confidence
                 if (
                     not isinstance(confidence, (int, float))

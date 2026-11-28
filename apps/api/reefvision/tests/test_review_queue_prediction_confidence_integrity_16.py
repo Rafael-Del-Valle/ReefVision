@@ -1,4 +1,4 @@
-"""Invalid local model confidence must not become QC priority or saved workflow truth."""
+"""Invalid local prediction evidence must not become QC priority or saved workflow truth."""
 
 from __future__ import annotations
 
@@ -90,9 +90,11 @@ def _local_prediction(client: TestClient, *, additional_pending: bool = False) -
     return project_id, prediction_id
 
 
-@pytest.mark.parametrize("bad_confidence", [-0.01, 1.01, float("inf"), float("-inf")])
+@pytest.mark.parametrize(
+    "bad_evidence", [-0.01, 1.01, float("inf"), float("-inf"), "approved", "Pending", ""]
+)
 def test_standalone_qc_rejects_corrupt_model_confidence_without_writes(
-    client: TestClient, bad_confidence: float
+    client: TestClient, bad_evidence: float | str
 ) -> None:
     project_id, prediction_id = _local_prediction(client)
     url = f"/api/v1/projects/{project_id}/review-queues"
@@ -105,12 +107,24 @@ def test_standalone_qc_rejects_corrupt_model_confidence_without_writes(
     with app.state.session_factory() as session:
         proposal = session.get(PredictionProposal, prediction_id)
         assert proposal is not None
-        proposal.confidence = bad_confidence
+        if isinstance(bad_evidence, str):
+            proposal.review_status = bad_evidence
+        else:
+            proposal.confidence = bad_evidence
         session.commit()
 
     invalid = client.post(url, json={})
     assert invalid.status_code == 400, invalid.text
-    assert "confidence must be finite and within" in invalid.text
+    expected_error = (
+        "invalid review status"
+        if isinstance(bad_evidence, str)
+        else "confidence must be finite and within"
+    )
+    assert expected_error in invalid.text
+    if isinstance(bad_evidence, str):
+        filtered = client.post(url, json={"review_below_confidence": 1.0})
+        assert filtered.status_code == 400, filtered.text
+        assert expected_error in filtered.text
     queues = client.get(url)
     assert queues.status_code == 200, queues.text
     assert len(queues.json()) == 1
@@ -120,9 +134,11 @@ def test_standalone_qc_rejects_corrupt_model_confidence_without_writes(
     )
 
 
-@pytest.mark.parametrize("bad_confidence", [-0.01, 1.01, float("inf"), float("-inf")])
+@pytest.mark.parametrize(
+    "bad_evidence", [-0.01, 1.01, float("inf"), float("-inf"), "approved", "Pending", ""]
+)
 def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_approval(
-    client: TestClient, bad_confidence: float
+    client: TestClient, bad_evidence: float | str
 ) -> None:
     project_id, prediction_id = _local_prediction(client)
     baseline_id = _saved_workflow_queue(client, project_id, f"qc-finite-before-{uuid4()}")
@@ -156,7 +172,10 @@ def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_appr
     with app.state.session_factory() as session:
         proposal = session.get(PredictionProposal, prediction_id)
         assert proposal is not None
-        proposal.confidence = bad_confidence
+        if isinstance(bad_evidence, str):
+            proposal.review_status = bad_evidence
+        else:
+            proposal.confidence = bad_evidence
         session.commit()
 
     endpoint = f"/api/v1/projects/{project_id}/workflow-runs"
@@ -171,7 +190,12 @@ def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_appr
     # not produce a review-queue artifact or implicitly approve predictions.
     failed_detail = failed.json()
     assert failed_detail["run"]["status"] == "failed"
-    assert "confidence must be finite and within" in (failed_detail["run"]["error_message"] or "")
+    expected_error = (
+        "invalid review status"
+        if isinstance(bad_evidence, str)
+        else "confidence must be finite and within"
+    )
+    assert expected_error in (failed_detail["run"]["error_message"] or "")
     assert any(
         node["node_type"] == "qc_review_queue" and node["status"] == "failed"
         for node in failed_detail["nodes"]
@@ -198,6 +222,7 @@ def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_appr
         proposal = session.get(PredictionProposal, prediction_id)
         assert proposal is not None
         proposal.confidence = 0.75
+        proposal.review_status = "pending"
         session.commit()
 
     recovered = client.post(endpoint, json={"graph_record_id": saved.json()["id"]})
