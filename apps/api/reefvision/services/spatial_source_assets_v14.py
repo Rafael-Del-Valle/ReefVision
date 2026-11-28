@@ -136,7 +136,23 @@ class SpatialSourceAssetService:
     def response(self, asset: SpatialSourceAsset) -> SpatialSourceAssetResponse:
         job = self.latest_parse_job(asset)
         summary: SpatialSourceParseSummary | None = None
-        if job is not None and job.status == "succeeded" and job.result_json is not None:
+        if job is not None and job.status == "succeeded":
+            # A result digest alone cannot establish that this was the request
+            # executed for the immutable source. A successful job must also
+            # have a result and retain the original request binding.
+            request = job.request_json
+            if (
+                job.result_json is None
+                or request.get("schema_version") != SPATIAL_PARSE_SCHEMA
+                or request.get("project_id") != asset.project_id
+                or request.get("spatial_source_asset_id") != asset.id
+                or request.get("expected_source_sha256") != asset.sha256
+                or request.get("source_format") != asset.source_format
+                or request.get("managed_path") != asset.managed_path
+                or type(request.get("size_bytes")) is not int
+                or request.get("size_bytes") != asset.size_bytes
+            ):
+                raise ValidationError("Spatial source parse result failed integrity validation")
             try:
                 result = SpatialSourceParseResult.model_validate(job.result_json)
             except (PydanticValidationError, ValueError) as exc:
