@@ -14,9 +14,10 @@ Phase 7 turns ReefVision's explainable review ranking into reproducible acquisit
   - `uncertainty`
   - `rare_class`
   - `quality`
-- Optional model scoping limits acquisition to images carrying proposals from selected registered models.
+- Optional model scoping restricts the scored proposals to the selected registered models. A frozen input supplies the image roster and annotation evidence. Detection proposals are sampled at acquisition time and fingerprinted in the round. Validation and test splits are excluded from snapshot-scoped acquisition.
 - Feedback summaries report pending, in-progress, completed, and skipped selections plus detection and classification prediction-review counts.
 - A round can close only after every selected item is completed or skipped.
+- The automatic feedback snapshot uses current reviewed project images. To preserve an independent training parent across acquisition pools, follow the [detector walkthrough](DETECTOR_ACTIVE_LEARNING.md).
 
 ## Safety and scientific constraints
 
@@ -32,6 +33,5 @@ Phase 7 turns ReefVision's explainable review ranking into reproducible acquisit
 - Ensemble disagreement using synchronized inference from multiple models.
 - Per-class acquisition quotas.
 - Cost-aware acquisition using historical annotation time.
-- Automatic creation of a new immutable dataset version after a round closes.
-- Training-run comparison before and after a round.
-- Installed desktop and real-model validation.
+- Automatic before/after training-run comparison from the round workspace.
+- Installed desktop and representative field-data validation of the complete multi-round workflow.
