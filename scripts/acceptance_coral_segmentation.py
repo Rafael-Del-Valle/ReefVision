@@ -77,6 +77,27 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def source_files_unchanged(records: list[dict[str, Any]]) -> bool:
+    return all(
+        sha256(Path(record["source_path"])) == record["source_sha256"]
+        and sha256(Path(record["source_label_path"])) == record["label_sha256"]
+        for record in records
+    )
+
+
+def execution_results(
+    *, training_completed: bool, checkpoint_size: int, valid_polygons: bool
+) -> dict[str, str]:
+    """Record the software observations that this harness can establish."""
+    return {
+        "training_lifecycle": "PASS" if training_completed else "FAIL",
+        "checkpoint_registration": "PASS" if checkpoint_size > 0 else "FAIL",
+        "held_out_polygon_generation": "PASS" if valid_polygons else "FAIL",
+        "dataset_representativeness": "UNVERIFIED",
+        "scientific_segmentation_acceptance": "UNVERIFIED",
+    }
+
+
 def generate_synthetic_dataset(
     destination: Path,
     *,
@@ -776,9 +797,7 @@ def main() -> int:
         and persisted_mask_after_restart.source_type == "accepted_prediction"
     )
     checkpoint_hash, checkpoint_size = hash_model_file(checkpoint)
-    source_bytes_unchanged = all(
-        sha256(Path(record["source_path"])) == record["source_sha256"] for record in source_records
-    )
+    source_bytes_unchanged = source_files_unchanged(source_records)
 
     acceptance = (
         "PASS"
@@ -806,18 +825,13 @@ def main() -> int:
             if args.dataset_kind == "synthetic"
             else "Representative biological instance-segmentation software execution acceptance"
         ),
-        "results": {
-            "training_lifecycle": "PASS" if training_ok else "FAIL",
-            "checkpoint_registration": "PASS" if checkpoint_size > 0 else "FAIL",
-            "held_out_polygon_generation": "PASS" if valid_polygons else "FAIL",
-            "dataset_representativeness": (
-                "UNVERIFIED" if args.dataset_kind == "synthetic" else "PASS"
-            ),
-            "scientific_segmentation_acceptance": (
-                "UNVERIFIED" if args.dataset_kind == "synthetic" else acceptance
-            ),
-        },
+        "results": execution_results(
+            training_completed=training_ok,
+            checkpoint_size=checkpoint_size,
+            valid_polygons=valid_polygons,
+        ),
         "dataset": {
+            "declared_kind": args.dataset_kind,
             "source": str(source),
             "biological_context": args.biological_context,
             "classes": [class_names[index] for index in sorted(class_names)],

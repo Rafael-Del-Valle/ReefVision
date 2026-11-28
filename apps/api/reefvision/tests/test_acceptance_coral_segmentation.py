@@ -194,3 +194,31 @@ def test_failed_image_import_reports_source_and_api_detail() -> None:
         match=r"sample\.png.*managed staging path could not be created",
     ):
         module.require_imported_image_id(report, Path("sample.png"))
+
+
+def test_successful_execution_leaves_scientific_approval_open() -> None:
+    module = load_module()
+    results = module.execution_results(
+        training_completed=True, checkpoint_size=1024, valid_polygons=True
+    )
+    assert results["training_lifecycle"] == "PASS"
+    assert results["held_out_polygon_generation"] == "PASS"
+    assert results["dataset_representativeness"] == "UNVERIFIED"
+    assert results["scientific_segmentation_acceptance"] == "UNVERIFIED"
+
+
+def test_segmentation_lineage_detects_a_changed_source_label(tmp_path: Path) -> None:
+    module = load_module()
+    image = tmp_path / "image.png"
+    label = tmp_path / "image.txt"
+    image.write_bytes(b"image bytes")
+    label.write_text("reviewed polygon", encoding="utf-8")
+    record = {
+        "source_path": str(image),
+        "source_label_path": str(label),
+        "source_sha256": file_hash(image),
+        "label_sha256": file_hash(label),
+    }
+    assert module.source_files_unchanged([record])
+    label.write_text("changed reference geometry", encoding="utf-8")
+    assert not module.source_files_unchanged([record])
