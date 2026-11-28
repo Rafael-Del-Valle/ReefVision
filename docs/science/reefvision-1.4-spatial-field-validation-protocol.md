@@ -1166,3 +1166,11 @@ This is an audit of completed background job metadata, not a reparse of the
 original, a signature, a calibration verification or a new measurement node.
 Standalone and persisted typed previews continue to resolve the original
 bytes independently of the background summary.
+
+The worker must also reject a floating-point byte count even when numerically
+equal to the actual length, booleans and incorrect integers before parsing.
+Require a failed job with no summary and unchanged original bytes. In corruption
+and recovery tests, explicitly mark the JSON request as modified: Python and
+the ORM may otherwise consider equal integer and floating-point values
+unchanged and fail to persist a type-only correction. Refresh the row to
+confirm the restored integer before asserting exact summary recovery.
