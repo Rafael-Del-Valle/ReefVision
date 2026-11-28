@@ -138,14 +138,15 @@ function Get-ReefVisionMsiProductVersion {
     $database = $installer.OpenDatabase($InstallerPath, 0)
     $view = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
     try {
-        $view.Execute()
+        # COM calls may emit pipeline output in PowerShell; return only the version.
+        [void]$view.Execute()
         $record = $view.Fetch()
         if ($null -eq $record) { throw "Missing MSI ProductVersion: $InstallerPath" }
         $version = [string]$record.StringData(1)
         if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid MSI ProductVersion: $version" }
         return $version
     } finally {
-        $view.Close()
+        [void]$view.Close()
     }
 }
 
