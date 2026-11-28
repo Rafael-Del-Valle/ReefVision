@@ -790,3 +790,44 @@ provenance, units, retries and researcher approval gates remain unchanged.
 Release HOLD: reconciliation, representative biological checks, genuine
 installed Windows MSI/CAB clean/upgrade/rollback and GUI, exact-head CI,
 and explicit researcher approval.
+
+
+## 2026-11-28 — runtime source isolation and existing integrated evidence
+
+The packaged runtime graph comparison previously disabled bytecode writes,
+but that alone still permits Python to read a timestamp-valid stale cache.
+An independent Alembic 1.18.4 pytest reproduction on Linux demonstrated
+that the runtime reported 0001 after a same-size, same-timestamp source
+change to 0002. An empty private pycache prefix plus disabled writes
+returned the actual source revision and preserved both source and existing
+cache bytes. The packaged parity regression now uses this isolated cache
+prefix and asserts it remains absent. This is verification of trusted
+source imports, not a production cache cleanup or a sandbox for untrusted
+migration code. No migration files or research records change.
+
+**Cross-candidate evidence:** separate Codex integrated draft #98
+(source 83b0a98b) and corrective draft #102 (product source a580042e)
+already implement a unified `b16_integrated_0001` lineage and the
+class/QC saved-workflow and native Windows journeys. The actual GitHub
+Actions jobs for corrected candidate 44779080692 all report success
+(nine jobs, including historical science/QC migration, predecessor
+upgrades, backup/rollback, and clean installation). Corrected offline
+original MSI job 44779273302 also reports success. Draft #102 records
+22 standard-account desktop journeys and 5,917 Windows backend passes
+with 12 named skips. These are evidence for that integrated source, not
+for this isolated branch. Its independent scientific acceptance and
+owner release approval remain open. Do not recreate or blend its
+unmerged migration implementation here. Coordinate adoption with the
+owner; preserve this branch's unique post-divergence changes for review.
+
+See https://github.com/Rafael-Del-Valle/ReefVision/pull/98 and
+https://github.com/Rafael-Del-Valle/ReefVision/pull/102 and the exact
+candidate job results:
+https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44779080692
+and https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/44779273302.
+The separate integrated 1.7 and 1.8 drafts #107 and #119 also have
+substantial existing acquisition/monitoring and revised research
+workflows; do not assume these are missing or mark them accepted.
+The isolated 1.6 exact-head CI and integrated scientific/approval gates
+remain HOLD. Existing standalone and saved typed QC workflow contracts
+are unchanged.
