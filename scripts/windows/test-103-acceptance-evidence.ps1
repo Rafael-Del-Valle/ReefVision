@@ -196,6 +196,32 @@ try {
     if ($restoredManifest.provenance.status -cne 'matched_complete' -or $restoredManifest.provenance.verifiedArtifacts -ne 7) {
         throw 'A valid object manifest failed after invalid root and size checks.'
     }
+    # Nested singleton arrays expose their object's properties through
+    # PowerShell member-access enumeration. Reject the shape even when all
+    # six CAB names and hashes otherwise match the supplied payloads.
+    $originalEntry = $candidateManifest.files[0]
+    $candidateManifest.files[0] = ,$originalEntry
+    $candidateManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    $nestedHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash
+    $nestedRejected = $false
+    try {
+        $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $sixCabPaths -ProvenancePath $manifestPath
+    } catch {
+        if ($_.Exception.Message -notmatch 'entries must be individual JSON objects') { throw }
+        $nestedRejected = $true
+    } finally {
+        $candidateManifest.files[0] = $originalEntry
+    }
+    if (-not $nestedRejected -or
+        (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash -cne $nestedHash) {
+        throw 'Nested artifact record was accepted or its manifest bytes changed.'
+    }
+    $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    $flatManifest = (& $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $sixCabPaths -ProvenancePath $manifestPath |
+        Out-String | ConvertFrom-Json)
+    if ($flatManifest.provenance.status -cne 'matched_complete' -or $flatManifest.provenance.verifiedArtifacts -ne 7) {
+        throw 'Valid flat manifest failed after nested entry rejection.'
+    }
     # JSON array values must not exploit PowerShell's array comparison or
     # string conversion semantics to masquerade as scalar build identity.
     foreach ($field in @('version', 'source_commit')) {
