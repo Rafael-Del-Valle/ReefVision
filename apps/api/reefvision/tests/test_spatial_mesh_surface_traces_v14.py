@@ -1956,6 +1956,9 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         )
         total = sum(lengths, Fraction(0))
         weights = [length / total for length in lengths]
+        expected_offset = max(range(len(weights)), key=weights.__getitem__)
+        assert chain["source_longest_edge_chain_offset"] == expected_offset
+        assert chain["source_longest_edge_arc_fraction"] == float(weights[expected_offset])
         expected_centroid = []
         for coordinates in zip(*waypoints, strict=True):
             midpoints = [(Fraction(a) + Fraction(b)) / 2 for a, b in pairwise(coordinates)]
@@ -2989,6 +2992,8 @@ def test_chain_arc_midpoint_is_source_bound_and_direction_invariant(scale: float
             [fraction, 1 - fraction, 0.0]
         )
         assert chain["source_arc_midpoint_chain_edge_offset"] == 1
+        assert chain["source_longest_edge_chain_offset"] == 1
+        assert chain["source_longest_edge_arc_fraction"] == pytest.approx(sqrt(2) / (1 + sqrt(2)))
         assert chain["source_arc_centroid_mesh_units"] == pytest.approx(
             [sqrt(2) / (2 * (1 + sqrt(2))), 0.5, 0.0]
         )
@@ -3007,6 +3012,8 @@ def test_chain_arc_midpoint_at_shared_vertex_uses_earlier_edge() -> None:
     assert chain["source_arc_midpoint_mesh_units"] == [1.0, 0.0, 0.0]
     assert chain["source_arc_midpoint_chain_edge_offset"] == 0
     assert chain["source_arc_midpoint_edge_fraction"] == {"numerator": "1", "denominator": "1"}
+    assert chain["source_longest_edge_chain_offset"] == 0
+    assert chain["source_longest_edge_arc_fraction"] == 0.5
     assert chain["biological_validation_status"] == "not_verified_anatomical_centerline"
 
 
