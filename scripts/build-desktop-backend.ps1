@@ -44,11 +44,19 @@ $BundledRuntimeLibraries = foreach ($library in $RequiredRuntimeLibraries) {
     }
 }
 
-$OutputRoot = Join-Path $Root ".desktop\release-1.0.2\pyinstaller\$TargetTriple"
+$TauriConfigPath = Join-Path $Root "apps\web\src-tauri\tauri.conf.json"
+$TauriConfig = Get-Content -LiteralPath $TauriConfigPath -Raw | ConvertFrom-Json
+$ReleaseVersion = $TauriConfig.version
+if ($ReleaseVersion -isnot [string] -or $ReleaseVersion -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+$') {
+    throw 'Expected a three-component numeric Tauri installer version.'
+}
+$ReleaseStagingRoot = Join-Path $Root ".desktop\release-$ReleaseVersion"
+
+$OutputRoot = Join-Path $ReleaseStagingRoot "pyinstaller\$TargetTriple"
 $DistPath = Join-Path $OutputRoot "dist"
 $WorkPath = Join-Path $OutputRoot "work"
 $SpecPath = Join-Path $OutputRoot "spec"
-$BinariesPath = Join-Path $Root ".desktop\release-1.0.2\backend"
+$BinariesPath = Join-Path $ReleaseStagingRoot "backend"
 $PackagedBackendPath = Join-Path $BinariesPath "reefvision-api"
 $ProviderRuntimePath = Join-Path $Root ".desktop\provider-runtime"
 $VdaRuntimeRoot = Join-Path $ProviderRuntimePath "video-depth-anything"
@@ -542,11 +550,11 @@ if (Test-Path $TorchLibPath -PathType Container) {
 
 if (Test-Path $PackagedBackendPath) {
     $ResolvedBackendPath = [System.IO.Path]::GetFullPath($PackagedBackendPath)
-    $ExpectedBackendPath = [System.IO.Path]::GetFullPath((Join-Path $Root ".desktop\release-1.0.2\backend\reefvision-api"))
+    $ExpectedBackendPath = [System.IO.Path]::GetFullPath((Join-Path $ReleaseStagingRoot "backend\reefvision-api"))
     if ($ResolvedBackendPath -ne $ExpectedBackendPath) { throw "Unsafe backend staging path: $ResolvedBackendPath" }
     # Preserve prior staged files rather than deleting a possible researcher model.
     # Keep preserved builds outside the Tauri resource directory.
-    $ArchiveRoot = Join-Path $Root ".desktop\release-1.0.2\previous-backends"
+    $ArchiveRoot = Join-Path $ReleaseStagingRoot "previous-backends"
     New-Item -ItemType Directory -Path $ArchiveRoot -Force | Out-Null
     $ArchiveDestination = Join-Path $ArchiveRoot ([Guid]::NewGuid().ToString('N'))
     $ResolvedArchive = [System.IO.Path]::GetFullPath($ArchiveDestination)

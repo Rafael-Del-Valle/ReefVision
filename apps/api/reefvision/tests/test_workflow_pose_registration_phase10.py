@@ -301,6 +301,48 @@ def test_trained_pose_registration_reuses_exact_frozen_schema_revision(
         assert binding.schema_id == frozen.pose_schema_id
 
 
+def test_pose_registration_preserves_frozen_workflow_training_lineage(
+    client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Exercise the existing verified-dataset -> completed child-training
+    # fixture, then reject altered result artifacts before model registration.
+    project, dataset, training = _training_result(client, test_settings, monkeypatch)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        for field, altered_value in (
+            ("result_checkpoint_sha256", None),
+            ("training_job_id", "substituted-job"),
+            ("pose_training_dataset_id", "substituted-dataset"),
+            ("pose_schema_revision", True),
+        ):
+            tampered = {**training, field: altered_value}
+            with pytest.raises(ValidationError, match="frozen training lineage"):
+                register_workflow_trained_model(
+                    session,
+                    test_settings,
+                    project_id=str(project["id"]),
+                    training_payload=tampered,
+                    parameters={},
+                    model_service_factory=_fake_pose_model_factory,
+                )
+
+        # The original reviewed lineage must still register successfully,
+        # including its immutable landmark-schema binding.
+        registered = register_workflow_trained_model(
+            session,
+            test_settings,
+            project_id=str(project["id"]),
+            training_payload=training,
+            parameters={},
+            model_service_factory=_fake_pose_model_factory,
+        )
+        assert registered["source_training_run_id"] == training["training_run_id"]
+        assert registered["source_pose_training_dataset_id"] == dataset["id"]
+        assert registered["pose_schema_content_hash"] == dataset["pose_schema_content_hash"]
+
+
 def test_pose_registration_fails_closed_if_training_schema_provenance_changes(
     client: TestClient,
     test_settings: Settings,

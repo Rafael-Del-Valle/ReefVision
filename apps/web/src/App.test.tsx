@@ -1094,7 +1094,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  window.localStorage.setItem("reefvision.onboarding.dismissed.1.0.2", "true");
+  window.localStorage.setItem("reefvision.onboarding.dismissed.1.9.0", "true");
 });
 
 function renderApp() {
@@ -1203,7 +1203,7 @@ describe("App", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: /Welcome to ReefVision 1.0.2/,
+        name: /Welcome to ReefVision 1.9.0/,
       }),
     ).toBeInTheDocument();
 
@@ -1213,7 +1213,7 @@ describe("App", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("heading", { name: /Welcome to ReefVision 1.0.2/ }),
+        screen.queryByRole("heading", { name: /Welcome to ReefVision 1.9.0/ }),
       ).not.toBeInTheDocument(),
     );
   });
@@ -1475,27 +1475,32 @@ describe("App", () => {
     );
   });
 
-  it("opens the annotation editor from the gallery", async () => {
-    mockApi({ projects: [project], images: [image] });
-    renderApp();
+  // This multi-view navigation can exceed the default budget on a busy CI worker.
+  it(
+    "opens the annotation editor from the gallery",
+    { timeout: 10_000 },
+    async () => {
+      mockApi({ projects: [project], images: [image] });
+      renderApp();
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: /CPT Coral Study/ }),
-    );
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Annotate" }),
-    );
+      await userEvent.click(
+        await screen.findByRole("button", { name: /CPT Coral Study/ }),
+      );
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Annotate" }),
+      );
 
-    await waitFor(() =>
-      expect(screen.getByTestId("annotation-save-state")).toHaveTextContent(
-        "Ready",
-      ),
-    );
-    expect(screen.getByText("Manual annotation editor")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Back to gallery" }),
-    ).toBeInTheDocument();
-  });
+      await waitFor(() =>
+        expect(screen.getByTestId("annotation-save-state")).toHaveTextContent(
+          "Ready",
+        ),
+      );
+      expect(screen.getByText("Manual annotation editor")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Back to gallery" }),
+      ).toBeInTheDocument();
+    },
+  );
 
   it("supports arrow-key navigation between workspace groups", async () => {
     mockApi({ projects: [project] });

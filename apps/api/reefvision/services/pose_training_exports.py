@@ -38,7 +38,7 @@ from reefvision.schemas.pose_training_datasets import (
 from reefvision.services.pose_interoperability import (
     PoseInteroperabilityService,
 )
-from reefvision.storage.datasets import canonical_json_sha256
+from reefvision.services.pose_training_datasets import PoseTrainingDatasetService
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.results_packages import sha256_file
 
@@ -89,9 +89,9 @@ class PoseTrainingExportService:
         if dataset.status != "complete":
             raise ValidationError("Only complete immutable pose training datasets may be exported")
 
-        actual_manifest_sha = canonical_json_sha256(dict(dataset.manifest_json))
-        if actual_manifest_sha != dataset.manifest_sha256:
-            raise ConflictError("Pose training dataset manifest checksum failed")
+        # External exports must enforce the same frozen review and item lineage
+        # as native packages and manifest reads, not only the manifest checksum.
+        PoseTrainingDatasetService(self.session).manifest(dataset.id)
 
         return dataset
 
@@ -696,6 +696,11 @@ class PoseTrainingExportService:
         if export_format == "ultralytics_pose":
             return {
                 "lossy_native_artifact": True,
+                "validation_split": {
+                    "included": False,
+                    "required_path": "images/val",
+                    "independent_validation_required": True,
+                },
                 "preserved_natively": [
                     "source image",
                     "normalized bounding box",
@@ -706,6 +711,7 @@ class PoseTrainingExportService:
                 "transformed": [
                     ("uncertain visibility is represented as visible"),
                     ("repeated semantic landmarks are represented by fixed keypoint order"),
+                    "independent validation split must be supplied before training",
                 ],
                 "manifest_only": [
                     *common_manifest_only,
@@ -1135,7 +1141,8 @@ class PoseTrainingExportService:
         yaml_lines = [
             "path: .",
             "train: images/train",
-            "val: images/train",
+            "# Supply independent reviewed validation images and labels before training.",
+            "val: images/val",
             (f"kpt_shape: [{len(schema.external_node_names)}, 3]"),
             "names:",
         ]
@@ -1540,7 +1547,27 @@ class PoseTrainingExportService:
             b"training dataset.\n"
         )
 
+        if export_format == "ultralytics_pose":
+            files["README.txt"] += (
+                b"\nThis bundle contains training data only. Before training, add an\n"
+                b"independently reviewed, non-overlapping validation dataset in\n"
+                b"images/val and labels/val with matching class and keypoint order.\n"
+                b"Never point val at images/train; metrics would not be held-out.\n"
+            )
+
         bundle = self._write_zip(files)
+
+        # Decoding reviewed frames and building a native artifact can take
+        # minutes. Do not issue a bundle claiming the frozen source checksum
+        # if the managed video changed or disappeared during that interval.
+        try:
+            final_source_hash = sha256_file(source)
+        except OSError as exc:
+            raise ConflictError(
+                "Managed source video became unavailable during pose export"
+            ) from exc
+        if final_source_hash != source_hash:
+            raise ConflictError("Managed source video bytes changed during pose export")
 
         return PoseTrainingExportArtifact(
             filename=(f"pose-training-{dataset.id}.{export_format}.zip"),

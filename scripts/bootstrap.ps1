@@ -120,7 +120,8 @@ Write-Host "This step installs many small files and may be quiet for a while." -
 Repair-ReefVisionPackageLock -LockFilePath "apps\web\package-lock.json"
 Assert-ReefVisionPublicLockfile -NodeTools $NodeTools
 if (Test-Path "apps\web\package-lock.json" -PathType Leaf) {
-    Invoke-ReefVisionNpm -NodeTools $NodeTools -Arguments @("--prefix", "apps/web", "ci", "--no-audit", "--no-fund", "--registry", "https://registry.npmjs.org/")
+    # npm retries transient registry transport errors (for example ECONNRESET) without changing the lockfile.
+    Invoke-ReefVisionNpm -NodeTools $NodeTools -Arguments @("--prefix", "apps/web", "ci", "--no-audit", "--no-fund", "--registry", "https://registry.npmjs.org/", "--fetch-retries=5", "--fetch-retry-mintimeout=10000", "--fetch-retry-maxtimeout=120000")
 } else {
     Invoke-ReefVisionNpm -NodeTools $NodeTools -Arguments @("--prefix", "apps/web", "install", "--no-audit", "--no-fund", "--registry", "https://registry.npmjs.org/")
 }

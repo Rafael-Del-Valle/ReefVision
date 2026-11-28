@@ -39,8 +39,19 @@ $DataRoot = Join-Path $RunRoot 'data'
 $EvidenceRoot = Join-Path $RepositoryRoot ".artifacts\windows-clean-acceptance-$Token"
 $ReportPath = Join-Path $EvidenceRoot 'report.json'
 $InstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
-$Version = (New-Object -ComObject WindowsInstaller.Installer).OpenDatabase($InstallerPath, 0).OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductVersion'")
-$Version.Execute(); $VersionRecord = $Version.Fetch(); $ProductVersion = $VersionRecord.StringData(1)
+$ProductVersion = Get-ReefVisionMsiProductVersion -InstallerPath $InstallerPath
+$InitialProductVersion = if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+    Get-ReefVisionMsiProductVersion -InstallerPath $PreviousInstallerPath
+} else { $ProductVersion }
+$PreviousInstallerHash = $null
+if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+    # Reinstalling the same ProductVersion or downgrading cannot establish
+    # cross-version upgrade acceptance, even when the backend starts.
+    if ([version]$InitialProductVersion -ge [version]$ProductVersion) {
+        throw "Upgrade acceptance requires an older MSI ProductVersion; got $InitialProductVersion -> $ProductVersion."
+    }
+    $PreviousInstallerHash = (Get-FileHash -LiteralPath $PreviousInstallerPath -Algorithm SHA256).Hash
+}
 
 $report = [ordered]@{
     schema_version = 'reefvision-windows-clean-acceptance-1'
@@ -50,6 +61,12 @@ $report = [ordered]@{
     installer_path = $InstallerPath
     installer_sha256 = $InstallerHash
     previous_installer_path = if ($PreviousInstallerPath) { $PreviousInstallerPath } else { $null }
+    previous_installer_sha256 = $PreviousInstallerHash
+    previous_installer_version = if ($PreviousInstallerHash) { $InitialProductVersion } else { $null }
+    initial_schema_revision = $null
+    final_schema_revision = $null
+    initial_registered_product_code = $null
+    final_registered_product_code = $null
     windows_version = [Environment]::OSVersion.VersionString
     architecture = $env:PROCESSOR_ARCHITECTURE
     acceptance_root = $AcceptanceRoot
@@ -73,6 +90,41 @@ $report = [ordered]@{
 }
 
 function Save-Report { Write-ReefVisionEvidenceReport -Report $report -Path $ReportPath }
+function Get-VerifiedAcceptanceSchemaRevision([string]$ApiUrl) {
+    $migration = Invoke-RestMethod "$ApiUrl/system/migrations/status"
+    if ($migration.schema_status -cne 'up_to_date' -or
+        $migration.database_exists -ne $true -or
+        $migration.current_schema_revision -isnot [string] -or
+        [string]::IsNullOrWhiteSpace($migration.current_schema_revision) -or
+        $migration.current_schema_revision -cne $migration.expected_schema_revision -or
+        $null -eq $migration.pending_revisions -or
+        @($migration.pending_revisions).Count -ne 0) {
+        throw 'Installed backend database is missing or not at its expected Alembic head.'
+    }
+    return $migration.current_schema_revision
+}
+function Get-VerifiedAcceptanceMsiRegistration([string]$PackagePath, [string]$ExpectedVersion) {
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $installer.OpenDatabase($PackagePath, 0)
+    $view = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductCode''')
+    try {
+        [void]$view.Execute()
+        $record = $view.Fetch()
+        if ($null -eq $record) { throw "Missing MSI ProductCode: $PackagePath" }
+        $productCode = [string]$record.StringData(1)
+    } finally { [void]$view.Close() }
+    $registrations = @(Get-ReefVisionInstalledRegistrations)
+    if ($registrations.Count -ne 1) {
+        throw "Expected exactly one ReefVision uninstall registration after install/upgrade; found $($registrations.Count)."
+    }
+    $registration = $registrations[0]
+    $registeredVersion = $registration.PSObject.Properties['DisplayVersion']
+    if ($registration.PSChildName -ine $productCode -or
+        $null -eq $registeredVersion -or $registeredVersion.Value -cne $ExpectedVersion) {
+        throw "Installed ReefVision registration does not match MSI ProductCode $productCode and ProductVersion $ExpectedVersion."
+    }
+    return $productCode
+}
 function Run-Msi([string]$Action, [string]$PackageOrProduct, [string]$LogName, [string]$TargetRoot = '') {
     $log = Join-Path $EvidenceRoot $LogName
     $arguments = New-ReefVisionMsiArguments -Action $Action -PackageOrProduct $PackageOrProduct -InstallRoot $TargetRoot -LogPath $log
@@ -144,16 +196,15 @@ function Stop-AcceptanceDesktop($Process) {
 }
 function Import-AcceptanceImage(
     [string]$Url,
-    [byte[]]$ImageBytes = $null,
+    [Parameter(Mandatory = $true)][byte[]]$ImageBytes,
     [string]$Filename = 'acceptance.png',
     [string]$RelativePath = 'synthetic/acceptance.png'
 ) {
     Add-Type -AssemblyName System.Net.Http
-    $png = if ($null -ne $ImageBytes) { $ImageBytes } else { [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=') }
     $client = New-Object System.Net.Http.HttpClient
     $form = New-Object System.Net.Http.MultipartFormDataContent
     try {
-        $file = New-Object System.Net.Http.ByteArrayContent -ArgumentList (,$png)
+        $file = New-Object System.Net.Http.ByteArrayContent -ArgumentList (,$ImageBytes)
         $file.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse('image/png')
         $form.Add($file, 'files', $Filename)
         $form.Add((New-Object System.Net.Http.StringContent($RelativePath)), 'relative_paths')
@@ -234,6 +285,7 @@ try {
 
     $initialInstaller = if ($PreviousInstallerPath -and -not $SkipUpgrade) { $PreviousInstallerPath } else { $InstallerPath }
     $exitCode = Run-Msi -Action Install -PackageOrProduct $initialInstaller -LogName 'install.log' -TargetRoot $InstallRoot
+    $report.initial_registered_product_code = Get-VerifiedAcceptanceMsiRegistration -PackagePath $initialInstaller -ExpectedVersion $InitialProductVersion
     if (-not (Test-Path (Join-Path $InstallRoot 'ReefVision.exe'))) { throw 'Installed ReefVision.exe is missing.' }
     if (-not (Test-Path (Join-Path $InstallRoot 'backend\reefvision-api\reefvision-api.exe'))) { throw 'Installed reefvision-api.exe is missing.' }
     $report.install = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "msiexec exit code $exitCode; desktop and sidecar present"
@@ -251,9 +303,10 @@ try {
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
     $versionPayload = Invoke-RestMethod "$api/system/version"
-    $migrationPayload = Invoke-RestMethod "$api/system/migrations/status"
+    Assert-ReefVisionBackendVersion -Payload $versionPayload -ExpectedVersion $InitialProductVersion
+    $report.initial_schema_revision = Get-VerifiedAcceptanceSchemaRevision -ApiUrl $api
     $report.first_launch = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and packaged backend started; database initialized; API version $($versionPayload.application_version)"
-    $report.frontend_backend_connectivity = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop-published loopback API responded; migration status: $($migrationPayload.schema_status)"
+    $report.frontend_backend_connectivity = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop-published loopback API responded; verified Alembic head: $($report.initial_schema_revision)"
 
     # Project templates were intentionally reduced to 'blank' in 1.0.
     # The acceptance fixture must explicitly create its class instead of
@@ -276,7 +329,11 @@ try {
     })
     if ($CachedWeights.Count -gt 0) { throw 'Fresh profile contains unexpected model weights.' }
     $report.model_policy = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "$($Architectures.Count) architectures; zero pretrained/downloadable models; zero cached weights; isolated provider caches."
-    $import = Import-AcceptanceImage "$api/projects/$projectId/imports/images"
+    # Capture an independent digest of the actual upload, before the API stores it.
+    $originalImageBytes = [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=')
+    $originalImageStream = [IO.MemoryStream]::new([byte[]]$originalImageBytes)
+    try { $originalImageHash = (Get-FileHash -InputStream $originalImageStream -Algorithm SHA256).Hash } finally { $originalImageStream.Dispose() }
+    $import = Import-AcceptanceImage -Url "$api/projects/$projectId/imports/images" -ImageBytes $originalImageBytes
     $imageId = $import.successful[0].image_id
     $session = Invoke-RestMethod "$api/images/$imageId/annotations"
     $annotationId = [guid]::NewGuid().ToString()
@@ -351,7 +408,22 @@ try {
     if (@($yoloSession.annotations).Count -ne 1) {
         throw 'YOLO import did not create a native image annotation.'
     }
-    $report.external_annotation_imports = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed backend COCO box/mask, unused class, idempotence; YOLO boxes and all data.yaml class names; project $interopId."
+    # Snapshot the imported scientific records after all imports have finished.
+    # Restart/upgrade must retain their identities, geometry, labels and review
+    # metadata, not merely leave the project directory or row counts intact.
+    $interopBefore = @{}
+    foreach ($importedImageId in @($cocoImageId, $yoloImageId)) {
+        $importedSession = Invoke-RestMethod "$api/images/$importedImageId/annotations"
+        $interopBefore[$importedImageId] = ConvertTo-Json -InputObject ([ordered]@{
+            boxes = @($importedSession.annotations | Sort-Object id)
+            masks = @($importedSession.mask_annotations | Sort-Object id)
+        }) -Depth 40 -Compress
+    }
+    $interopClassesBefore = ConvertTo-Json -InputObject @(
+        (Invoke-RestMethod "$api/projects/$interopId").label_classes |
+            Sort-Object id | Select-Object id, class_index, name
+    ) -Depth 10 -Compress
+    # Report PASS only after the persisted records have also been checked.
 
     # Real online acquisition uses only the installed backend, not a developer
     # Python process. The default offline installer smoke test is unchanged.
@@ -433,6 +505,24 @@ try {
         if ($reviewAfterAccept.item_count -ne 0) {
             throw 'Confidence review incorrectly includes a researcher-accepted prediction.'
         }
+        # Capture the durable accepted prediction and mask before stopping the
+        # desktop. IDs alone cannot establish that review status, source model
+        # provenance or raster geometry survived a migration or restart.
+        $acceptedSession = Invoke-RestMethod "$api/images/$samImageId/annotations"
+        $acceptedMasks = @($acceptedSession.mask_annotations | Where-Object id -eq $samAcceptedMaskId)
+        $acceptedPredictions = Invoke-RestMethod "$api/images/$samImageId/prediction-proposals"
+        $acceptedProposals = @($acceptedPredictions.items | Where-Object id -eq $samProposalId)
+        if ($acceptedMasks.Count -ne 1 -or $acceptedMasks[0].status -ne 'verified' -or
+            $acceptedProposals.Count -ne 1 -or
+            $acceptedProposals[0].review_status -notin @('accepted','edited_and_accepted') -or
+            $acceptedProposals[0].accepted_mask_annotation_id -ne $samAcceptedMaskId -or
+            $acceptedProposals[0].model_checksum -ne $samReady[0].weight_sha256) {
+            throw 'Accepted SAM prediction, verified mask or source model lineage was not durably saved.'
+        }
+        $samReviewBefore = ConvertTo-Json -InputObject ([ordered]@{
+            mask = $acceptedMasks[0]
+            proposal = $acceptedProposals[0]
+        }) -Depth 40 -Compress
         $report.confidence_review = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Packaged API included pending SAM prediction at confidence cutoff 1.0, excluded it after explicit acceptance; queue $($reviewQueue.id)."
         $report.sam2_live = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed app's backend downloaded SAM 2.1 Tiny, verified revision $($samReady[0].revision) and SHA256 $($samReady[0].weight_sha256), inferred image $samImageId (area $($samInference.result.area_pixels)), persisted pending proposal $samProposalId and accepted verified mask $samAcceptedMaskId; GUI hotkeys not exercised."
     }
@@ -441,39 +531,180 @@ try {
 
     if ($PreviousInstallerPath -and -not $SkipUpgrade) {
         Run-Msi -Action Install -PackageOrProduct $InstallerPath -LogName 'upgrade.log' -TargetRoot $InstallRoot | Out-Null
-        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Previous installer upgraded to current installer.'
     }
 
     $desktop = Start-AcceptanceDesktop
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
+    $restartedVersion = Invoke-RestMethod "$api/system/version"
+    Assert-ReefVisionBackendVersion -Payload $restartedVersion -ExpectedVersion $ProductVersion
+    $report.final_schema_revision = Get-VerifiedAcceptanceSchemaRevision -ApiUrl $api
+    # A working backend is not sufficient if the old MSI remains registered or
+    # the target package is absent from Windows' uninstall registry.
+    $report.final_registered_product_code = Get-VerifiedAcceptanceMsiRegistration -PackagePath $InstallerPath -ExpectedVersion $ProductVersion
+    if ((-not $PreviousInstallerPath -or $SkipUpgrade) -and $report.final_schema_revision -cne $report.initial_schema_revision) {
+        throw 'Database Alembic head changed across a same-version restart.'
+    }
     $persisted = Invoke-RestMethod "$api/projects/$projectId"
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
     if (-not ($persistedAnnotations.annotations | Where-Object id -eq $annotationId)) { throw 'Acceptance annotation did not persist across restart.' }
-    if ($LiveSam2Acceptance) {
-        $persistedSamSession = Invoke-RestMethod "$api/images/$samImageId/annotations"
-        if (-not ($persistedSamSession.mask_annotations | Where-Object id -eq $samAcceptedMaskId)) {
-            throw 'Accepted SAM 2.1 mask did not persist across packaged Windows desktop restart.'
+    foreach ($importedImageId in @($cocoImageId, $yoloImageId)) {
+        $importedSession = Invoke-RestMethod "$api/images/$importedImageId/annotations"
+        $persistedImport = ConvertTo-Json -InputObject ([ordered]@{
+            boxes = @($importedSession.annotations | Sort-Object id)
+            masks = @($importedSession.mask_annotations | Sort-Object id)
+        }) -Depth 40 -Compress
+        if ($persistedImport -cne $interopBefore[$importedImageId]) {
+            throw "Imported scientific annotation records changed across restart/upgrade: $importedImageId"
         }
     }
-    $report.restart = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Desktop and backend restarted cleanly.'
+    $interopClassesAfter = ConvertTo-Json -InputObject @(
+        (Invoke-RestMethod "$api/projects/$interopId").label_classes |
+            Sort-Object id | Select-Object id, class_index, name
+    ) -Depth 10 -Compress
+    if ($interopClassesAfter -cne $interopClassesBefore) {
+        throw 'Imported class identities, indices or names changed across restart/upgrade.'
+    }
+    $report.external_annotation_imports = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed backend COCO box/mask, unused class, idempotence; YOLO boxes and all data.yaml class names; persisted imported records and class identities after restart/upgrade; project $interopId."
+    if ($LiveSam2Acceptance) {
+        $persistedSamSession = Invoke-RestMethod "$api/images/$samImageId/annotations"
+        $persistedMasks = @($persistedSamSession.mask_annotations | Where-Object id -eq $samAcceptedMaskId)
+        $persistedPredictions = Invoke-RestMethod "$api/images/$samImageId/prediction-proposals"
+        $persistedProposals = @($persistedPredictions.items | Where-Object id -eq $samProposalId)
+        if ($persistedMasks.Count -ne 1 -or $persistedProposals.Count -ne 1) {
+            throw 'Accepted SAM 2.1 mask or prediction did not persist across packaged Windows desktop restart.'
+        }
+        $samReviewAfter = ConvertTo-Json -InputObject ([ordered]@{
+            mask = $persistedMasks[0]
+            proposal = $persistedProposals[0]
+        }) -Depth 40 -Compress
+        if ($samReviewAfter -cne $samReviewBefore) {
+            throw 'Accepted SAM 2.1 mask or prediction provenance changed across restart/upgrade.'
+        }
+        $report.sam2_live.detail += ' Verified complete accepted mask and source prediction records after restart/upgrade.'
+    }
+    if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Previous installer $InitialProductVersion upgraded to $ProductVersion; packaged backend version, Alembic head $($report.initial_schema_revision) -> $($report.final_schema_revision), Windows MSI registration $($report.initial_registered_product_code) -> $($report.final_registered_product_code), and scientific records verified."
+    }
+    $report.restart = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and backend restarted cleanly; API version $($restartedVersion.application_version) matches MSI."
     $report.project_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Project $projectId, image $imageId, and annotation $annotationId persisted; pre-restart database SHA-256 $projectChecksum"
 
     $exchange = Invoke-RestMethod "$api/projects/$projectId/exchange-packages" -Method Post -ContentType 'application/json' -Body (@{include_media=$true;include_model_weights=$false;include_generated_artifacts=$true;notes='clean install acceptance'} | ConvertTo-Json)
     $jobId = $exchange.job_id
     $deadline = [DateTime]::UtcNow.AddSeconds(60)
-    do { Start-Sleep -Milliseconds 500; $job = Invoke-RestMethod "$api/jobs/$jobId" } while ($job.status -in @('queued','running') -and [DateTime]::UtcNow -lt $deadline)
+    $job = $null
+    $pollServerErrors = 0
+    $lastPollError = ''
+    do {
+        Start-Sleep -Milliseconds 500
+        try {
+            $job = Invoke-RestMethod "$api/jobs/$jobId" -ErrorAction Stop
+        } catch {
+            $statusCode = try { [int]$_.Exception.Response.StatusCode } catch { 0 }
+            # A freshly restarted packaged SQLite backend can briefly return
+            # HTTP 500 under writer contention. Retry only transient server
+            # responses within the existing deadline; never infer job success.
+            if ($statusCode -notin @(500, 502, 503, 504)) { throw }
+            $job = $null
+            $pollServerErrors++
+            $lastPollError = "HTTP ${statusCode}: $($_.Exception.Message)"
+            Write-Warning "Project Exchange status poll $pollServerErrors failed ($lastPollError); retrying within 60-second deadline."
+        }
+    } while (($null -eq $job -or $job.status -in @('queued','running')) -and [DateTime]::UtcNow -lt $deadline)
+    if ($null -eq $job) { throw "Project Exchange status remained unavailable after $pollServerErrors transient server errors: $lastPollError" }
     if ($job.status -ne 'succeeded') { throw "Project Exchange export job ended as $($job.status)." }
     $archive = Join-Path $EvidenceRoot 'project-exchange.reefvision.zip'
     Invoke-WebRequest "$api/exchange-packages/$($exchange.package.id)/download" -OutFile $archive
     if ((Get-Item $archive).Length -le 0) { throw 'Project Exchange archive is empty.' }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $zip = [IO.Compression.ZipFile]::OpenRead($archive); try { if (-not ($zip.Entries | Where-Object FullName -eq 'reefvision-exchange-manifest.json')) { throw 'Project Exchange archive has no reefvision-exchange-manifest.json.' } } finally { $zip.Dispose() }
-    $report.project_exchange = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Exported inspectable archive: $archive"
+    # A manifest filename alone does not prove a usable scientific backup.
+    # Verify the actual packaged export without unpacking or modifying user data.
+    $zip = [IO.Compression.ZipFile]::OpenRead($archive)
+    try {
+        $manifestEntry = @($zip.Entries | Where-Object FullName -ceq 'reefvision-exchange-manifest.json')
+        if ($manifestEntry.Count -ne 1) { throw 'Project Exchange must contain exactly one manifest.' }
+        $reader = [IO.StreamReader]::new($manifestEntry[0].Open())
+        try { $manifest = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+        if ($manifest.format_name -cne 'reefvision-project-exchange' -or
+            $manifest.application_version -cne $ProductVersion -or
+            $manifest.project.id -cne $projectId) {
+            throw 'Project Exchange manifest does not identify the installed version and saved project.'
+        }
+
+        $requiredRecords = @{
+            project = $projectId
+            label_classes = $testClass.id
+            images = $imageId
+            annotations = $annotationId
+        }
+        $verifiedSections = 0
+        foreach ($section in $manifest.sections.PSObject.Properties) {
+            $descriptor = $section.Value
+            $members = @($zip.Entries | Where-Object FullName -ceq $descriptor.path)
+            if ($members.Count -ne 1) { throw "Missing or duplicate Project Exchange section: $($section.Name)" }
+            $stream = $members[0].Open()
+            try {
+                $digest = (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash
+            } finally { $stream.Dispose() }
+            if ($digest -ine $descriptor.sha256) { throw "Project Exchange section digest mismatch: $($section.Name)" }
+            $reader = [IO.StreamReader]::new($members[0].Open())
+            $rowCount = 0
+            $requiredMatches = 0
+            try {
+                while ($null -ne ($line = $reader.ReadLine())) {
+                    $record = $line | ConvertFrom-Json
+                    $rowCount++
+                    if ($requiredRecords.ContainsKey($section.Name) -and
+                        $record.id -ceq $requiredRecords[$section.Name]) { $requiredMatches++ }
+                }
+            } finally { $reader.Dispose() }
+            if ($rowCount -ne $descriptor.count) { throw "Project Exchange section count mismatch: $($section.Name)" }
+            if ($requiredRecords.ContainsKey($section.Name)) {
+                if ($requiredMatches -ne 1) { throw "Project Exchange lost a saved scientific record: $($section.Name)" }
+                $requiredRecords.Remove($section.Name)
+            }
+            $verifiedSections++
+        }
+        if ($requiredRecords.Count -ne 0) { throw 'Project Exchange is missing required scientific record sections.' }
+
+        $exportedImage = @($manifest.media | Where-Object { $_.kind -eq 'image' -and $_.record_id -ceq $imageId })
+        if ($exportedImage.Count -ne 1) { throw 'Project Exchange did not include the original acceptance image.' }
+        # An internally consistent archive can still contain the wrong image.
+        # Tie its manifest to the bytes uploaded before the restart or upgrade.
+        if ($exportedImage[0].sha256 -ine $originalImageHash -or $exportedImage[0].size_bytes -ne $originalImageBytes.Length) {
+            throw 'Project Exchange original image does not match the pre-restart uploaded bytes.'
+        }
+        foreach ($media in $manifest.media) {
+            $members = @($zip.Entries | Where-Object FullName -ceq $media.path)
+            if ($members.Count -ne 1 -or $members[0].Length -ne $media.size_bytes) {
+                throw "Project Exchange media missing, duplicated or wrong size: $($media.path)"
+            }
+            $stream = $members[0].Open()
+            try {
+                $digest = (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash
+            } finally { $stream.Dispose() }
+            if ($digest -ine $media.sha256) { throw "Project Exchange media digest mismatch: $($media.path)" }
+        }
+    } finally { $zip.Dispose() }
+    $archiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
+    $report.project_exchange = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Verified $verifiedSections record sections, saved project/class/image/annotation identities, original uploaded image SHA-256 $originalImageHash, and all included media sizes and digests; archive SHA-256 $archiveHash"
     Stop-AcceptanceDesktop $desktop
 
     if (-not $SkipUninstall) {
+        # Capture the final database after the desktop and sidecar have stopped.
+        # A retained directory alone does not prove that project data survived.
+        $retainedDatabase = Join-Path $DataRoot 'reefvision.db'
+        $beforeUninstallHash = (Get-FileHash -LiteralPath $retainedDatabase -Algorithm SHA256).Hash
+        # WAL and rollback journals can contain committed or recoverable data
+        # not represented in the main database hash. Preserve them if present.
+        $beforeSidecarHashes = @{}
+        foreach ($suffix in @('-wal', '-journal')) {
+            $sidecar = "$retainedDatabase$suffix"
+            if (Test-Path -LiteralPath $sidecar -PathType Leaf) {
+                $beforeSidecarHashes[$suffix] = (Get-FileHash -LiteralPath $sidecar -Algorithm SHA256).Hash
+            }
+        }
         $installer = New-Object -ComObject WindowsInstaller.Installer
         $database = $installer.OpenDatabase($InstallerPath, 0); $view = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductCode'"); $view.Execute(); $productCode = $view.Fetch().StringData(1)
         Run-Msi -Action Uninstall -PackageOrProduct $productCode -LogName 'uninstall.log' | Out-Null
@@ -481,8 +712,20 @@ try {
         if (@($shortcutCandidates | Where-Object { Test-Path -LiteralPath $_ }).Count -gt 0) { throw 'A ReefVision shortcut remains after uninstall.' }
         if (@(Get-ReefVisionInstalledRegistrations).Count -gt 0) { throw 'ReefVision uninstall registration remains after uninstall.' }
         $report.uninstall = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Program binaries removed.'
-        if (-not (Test-Path $DataRoot)) { throw 'Isolated user data was removed by uninstall.' }
-        $report.data_retention = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Isolated project data remained after uninstall.'
+        if (-not (Test-Path -LiteralPath $retainedDatabase -PathType Leaf)) { throw 'Isolated project database was removed by uninstall.' }
+        $afterUninstallHash = (Get-FileHash -LiteralPath $retainedDatabase -Algorithm SHA256).Hash
+        if ($afterUninstallHash -ne $beforeUninstallHash) { throw 'Isolated project database bytes changed during uninstall.' }
+        foreach ($suffix in @('-wal', '-journal')) {
+            $sidecar = "$retainedDatabase$suffix"
+            $exists = Test-Path -LiteralPath $sidecar -PathType Leaf
+            if ($exists -ne $beforeSidecarHashes.ContainsKey($suffix)) {
+                throw "Isolated database sidecar presence changed during uninstall: $suffix"
+            }
+            if ($exists -and (Get-FileHash -LiteralPath $sidecar -Algorithm SHA256).Hash -ne $beforeSidecarHashes[$suffix]) {
+                throw "Isolated database sidecar bytes changed during uninstall: $suffix"
+            }
+        }
+        $report.data_retention = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Isolated project database and existing WAL/journal retained byte-for-byte; database SHA-256 $afterUninstallHash"
     } else {
         $report.data_retention = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'Uninstall was skipped.'
     }
@@ -511,7 +754,8 @@ try {
     }
     $report.completed_at_utc = [DateTime]::UtcNow.ToString('o')
     Save-Report
-    if (-not $KeepArtifacts -and (Test-Path (Join-Path $RunRoot '.reefvision-acceptance-run')) -and $report.uninstall.status -eq 'PASS') {
+    # Do not destroy the evidence of a failed data-retention check.
+    if (-not $KeepArtifacts -and (Test-Path (Join-Path $RunRoot '.reefvision-acceptance-run')) -and $report.uninstall.status -eq 'PASS' -and $report.data_retention.status -eq 'PASS' -and -not $report.failure_reason) {
         $ExpectedRunRoot = [System.IO.Path]::GetFullPath((Join-Path $AcceptanceRoot "reefvision-clean-$Token"))
         if ([System.IO.Path]::GetFullPath($RunRoot) -ne $ExpectedRunRoot) { throw 'Refusing cleanup outside the generated acceptance run.' }
         Remove-Item -LiteralPath $RunRoot -Recurse -Force

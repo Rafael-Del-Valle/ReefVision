@@ -22,6 +22,10 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev,interoperability]"
+      - name: Smoke-check actual-dataset acceptance CLI
+        run: |
+          python -m py_compile scripts/audit-saved-pose-workflow-19.py
+          python scripts/audit-saved-pose-workflow-19.py --help
       - run: python -m ruff check apps/api
       - run: python -m ruff format --check apps/api
       - run: python -m mypy -p reefvision
@@ -29,9 +33,127 @@ jobs:
       - name: Verify migrations
         shell: bash
         run: |
-          export REEFVISION_DATA_DIR="$RUNNER_TEMP/reefvision-migration-test"
+          export REEFVISION_DATA_DIR="$(mktemp -d "$RUNNER_TEMP/reefvision-migration.XXXXXX")"
+          # The migration environment honors DATABASE_URL over DATA_DIR.
+          # Explicitly pin both so downgrade base can only target the scratch DB.
+          export REEFVISION_DATABASE_URL="sqlite:///$REEFVISION_DATA_DIR/reefvision.db"
+          verify_revision() {
+            python - "$1" <<'PY'
+          import difflib
+          import json
+          import os
+          import re
+          import sqlite3
+          import sys
+          from pathlib import Path
+
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
+
+          def canonical_table_sql(sql):
+              # SQLAlchemy batch reflection can reorder trailing table constraints
+              # across processes. Preserve column order and each full constraint,
+              # and leave unfamiliar SQL and conflict policies untouched.
+              lines = sql.split("\n")
+              if lines[-1] != ")":
+                  return sql
+              start = len(lines) - 1
+              while start > 0 and re.match(
+                  r"\t(?:CONSTRAINT \S+ (?:CHECK|UNIQUE|FOREIGN KEY)\b|FOREIGN KEY\(|UNIQUE \()",
+                  lines[start - 1],
+              ):
+                  start -= 1
+              tail = lines[start:-1]
+              if (
+                  start == 0
+                  or len(tail) < 2
+                  or not lines[start - 1].endswith(", ")
+                  or any(not line.endswith(", ") for line in tail[:-1])
+                  or tail[-1].endswith(",")
+                  or any("ON CONFLICT" in line.upper() for line in tail)
+              ):
+                  return sql
+              constraints = sorted([line[:-2] for line in tail[:-1]] + tail[-1:])
+              return "\n".join(lines[:start] + [", \n".join(constraints), ")"])
+
+          expected = sys.argv[1]
+          database = Path(os.environ["REEFVISION_DATA_DIR"]) / "reefvision.db"
+          with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True) as conn:
+              revisions = conn.execute("SELECT version_num FROM alembic_version").fetchall()
+              integrity = conn.execute("PRAGMA integrity_check").fetchall()
+              schema = conn.execute(
+                  "SELECT type, name, tbl_name, sql FROM sqlite_schema "
+                  "ORDER BY type, name"
+              ).fetchall()
+              violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+          schema = [
+              (kind, name, table, canonical_table_sql(sql)
+               if kind == "table" and sql is not None else sql)
+              for kind, name, table, sql in schema
+          ]
+          if expected in ("head", "reupgraded"):
+              head = ScriptDirectory.from_config(
+                  Config("apps/api/alembic.ini")
+              ).get_current_head()
+              assert head is not None, "Migration graph has no head"
+              assert revisions == [(head,)], revisions
+          else:
+              assert expected == "base" and not revisions, revisions
+          assert integrity == [("ok",)], integrity
+          assert not violations, violations
+          # Compare the real migrated schema before and after the full roundtrip.
+          snapshot = database.parent / "initial-schema.json"
+          if expected == "head":
+              snapshot.write_text(json.dumps(schema), encoding="utf-8")
+          elif expected == "reupgraded":
+              before = json.loads(snapshot.read_text(encoding="utf-8"))
+              after = [list(row) for row in schema]
+              if before != after:
+                  diff = "\n".join(difflib.unified_diff(
+                      json.dumps(before, indent=2).splitlines(),
+                      json.dumps(after, indent=2).splitlines(),
+                      fromfile="initial head",
+                      tofile="re-upgraded head",
+                      lineterm="",
+                  ))
+                  raise AssertionError(
+                      f"Re-upgraded schema differs from the initial head:\n{diff}"
+                  )
+          print(f"Verified scratch database at {expected}: {revisions}")
+          PY
+          }
+          # Fail before touching even the scratch database if revision IDs
+          # collide (Alembic otherwise warns and can overwrite a map entry).
+          python - <<'PY'
+          import warnings
+
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
+
+          with warnings.catch_warnings():
+              warnings.filterwarnings(
+                  "error", message=r"Revision .* is present more than once"
+              )
+              scripts = ScriptDirectory.from_config(Config("apps/api/alembic.ini"))
+              heads = scripts.get_heads()
+              bases = scripts.get_bases()
+              assert len(heads) == len(bases) == 1, (heads, bases)
+              revisions = list(scripts.walk_revisions())
+              assert revisions and revisions[0].revision == heads[0], heads
+              assert revisions[-1].revision == bases[0], bases
+              for current, parent in zip(revisions, revisions[1:]):
+                  assert current.down_revision == parent.revision, (
+                      current.revision, current.down_revision, parent.revision
+                  )
+              assert revisions[-1].down_revision is None, bases
+          print(f"Verified linear migration graph: {len(revisions)} revisions, head {heads[0]}")
+          PY
           alembic -c apps/api/alembic.ini upgrade head
+          verify_revision head
           alembic -c apps/api/alembic.ini downgrade base
+          verify_revision base
+          alembic -c apps/api/alembic.ini upgrade head
+          verify_revision reupgraded
 
   frontend:
     runs-on: ubuntu-latest

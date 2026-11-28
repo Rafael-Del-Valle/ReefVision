@@ -12,7 +12,10 @@ fn main() {
         // resource. It is NOT a Tauri sidecar under src-tauri/binaries.
         // Keep this check aligned with tauri.conf.json's backend/ mapping.
         let release_backend = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../.desktop/release-1.0.2/backend/reefvision-api");
+            .join(format!(
+                "../../../.desktop/release-{}/backend/reefvision-api",
+                env!("CARGO_PKG_VERSION")
+            ));
         let packaged_backend = release_backend.join(executable_name);
         let model_catalog = release_backend.join("_internal/config/model_catalog.json");
         if !packaged_backend.is_file() || !model_catalog.is_file() {

@@ -16,6 +16,12 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
     $script:passed++
 }
 
+# A stale backend can answer HTTP successfully while running a different release.
+Assert-ReefVisionBackendVersion -Payload ([pscustomobject]@{application_version='1.9.0'}) -ExpectedVersion '1.9.0'
+Assert-Throws { Assert-ReefVisionBackendVersion -Payload ([pscustomobject]@{application_version='1.0.2'}) -ExpectedVersion '1.9.0' } 'Old backend must not certify a newer MSI.'
+Assert-Throws { Assert-ReefVisionBackendVersion -Payload ([pscustomobject]@{unrelated='1.9.0'}) -ExpectedVersion '1.9.0' } 'Missing API version must fail.'
+Assert-Throws { Assert-ReefVisionBackendVersion -Payload ([pscustomobject]@{application_version=1}) -ExpectedVersion '1' } 'Non-string API version must fail.'
+
 $defaultData = Join-Path $env:APPDATA 'org.reefvision.desktop'
 $OldConfig = $env:REEFVISION_CONFIG_DIR
 $HadConfig = Test-Path Env:REEFVISION_CONFIG_DIR
@@ -95,8 +101,8 @@ Assert-True ($acceptanceScript.Contains('samAcceptedMaskId')) 'Live SAM acceptan
 Assert-True ($acceptanceScript.Contains("'api.log', 'api.log.1'")) 'Failed SAM2 acceptance must archive API logs, not only startup backend.log.'
 Assert-True ($acceptanceScript.Contains('api.log.tail.log') -or $acceptanceScript.Contains('$logName.tail.log')) 'SAM2 API log archive name must match the uploaded *.log evidence pattern.'
 Assert-True ($acceptanceScript -match 'Stop-AcceptanceDesktop\s+\$desktop\s*\r?\n\s*\$projectChecksum\s*=\s*\(Get-FileHash\s+-LiteralPath\s+\(Join-Path\s+\$DataRoot\s+''reefvision\.db''\)') 'Desktop shutdown must occur before hashing reefvision.db.'
-Assert-True ($acceptanceScript -match 'Where-Object\s+FullName\s+-eq\s+''reefvision-exchange-manifest\.json''') 'Project Exchange validation does not require the canonical manifest name.'
-Assert-True ($acceptanceScript -notmatch 'Where-Object\s+FullName\s+-eq\s+''manifest\.json''') 'Project Exchange validation still accepts the incorrect manifest.json name.'
+Assert-True ($acceptanceScript -match 'Where-Object\s+FullName\s+-ceq\s+''reefvision-exchange-manifest\.json''') 'Project Exchange validation does not require the canonical manifest name.'
+Assert-True ($acceptanceScript -notmatch 'Where-Object\s+FullName\s+-c?eq\s+''manifest\.json''') 'Project Exchange validation still accepts the incorrect manifest.json name.'
 
 $reportPath = Join-Path $env:TEMP ('reefvision-evidence-' + [guid]::NewGuid().ToString('N') + '.json')
 $report = [ordered]@{ upgrade = New-ReefVisionEvidenceResult -Status 'SKIPPED' -Detail 'previous installer not supplied'; failure_reason = $null }

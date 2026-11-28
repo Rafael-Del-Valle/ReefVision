@@ -132,6 +132,32 @@ function New-ReefVisionMsiArguments {
     return $arguments
 }
 
+function Get-ReefVisionMsiProductVersion {
+    param([Parameter(Mandatory = $true)][string]$InstallerPath)
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $installer.OpenDatabase($InstallerPath, 0)
+    $view = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
+    try {
+        # COM calls may emit pipeline output in PowerShell; return only the version.
+        [void]$view.Execute()
+        $record = $view.Fetch()
+        if ($null -eq $record) { throw "Missing MSI ProductVersion: $InstallerPath" }
+        $version = [string]$record.StringData(1)
+        if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid MSI ProductVersion: $version" }
+        return $version
+    } finally {
+        [void]$view.Close()
+    }
+}
+
+function Assert-ReefVisionBackendVersion {
+    param([Parameter(Mandatory = $true)]$Payload, [Parameter(Mandatory = $true)][string]$ExpectedVersion)
+    $property = $Payload.PSObject.Properties['application_version']
+    if ($null -eq $property -or $property.Value -isnot [string] -or $property.Value -cne $ExpectedVersion) {
+        throw "Packaged backend application_version does not match MSI ProductVersion $ExpectedVersion."
+    }
+}
+
 function New-ReefVisionEvidenceResult {
     param([string]$Status = 'NOT RUN', [string]$Detail = '')
     return [ordered]@{ status = $Status; detail = $Detail; timestamp_utc = [DateTime]::UtcNow.ToString('o') }
