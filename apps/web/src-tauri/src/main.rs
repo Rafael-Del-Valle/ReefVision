@@ -466,6 +466,12 @@ while ($true) {
     # bounded tail. This console never opens a training process or writes logs.
     try {
       $tail = Invoke-RestMethod -Uri ($url + '/logs/tail') -Method Get -TimeoutSec 5 -MaximumRedirection 0
+      # JSON truthiness is not evidence of availability: PowerShell treats
+      # the string "false" as true and coerces arrays/objects to text.
+      if ($tail -isnot [pscustomobject] -or $tail.available -isnot [bool] -or
+          ($tail.available -and $tail.text -isnot [string])) {
+        throw 'Malformed training log response.'
+      }
       if ($tail.available -and $tail.text) {
         Write-Host ''
         Write-Host 'Training job log (last 20 lines, read-only)'
