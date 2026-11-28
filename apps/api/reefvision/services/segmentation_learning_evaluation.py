@@ -62,7 +62,10 @@ class SegmentationLearningEvaluationService:
             or model.task != "segment"
         ):
             raise NotFoundError("Registered project segmentation model not found")
-        verified_registered_checkpoint(self.settings, model)
+        try:
+            verified_registered_checkpoint(self.settings, model)
+        except ConflictError as exc:
+            raise ValidationError(str(exc)) from exc
         run_id = (model.metadata_json or {}).get("source_training_run_id")
         if not isinstance(run_id, str) or not run_id:
             raise ValidationError("Segmentation model is missing verified training lineage")

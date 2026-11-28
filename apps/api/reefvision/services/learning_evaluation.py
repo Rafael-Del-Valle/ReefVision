@@ -51,7 +51,10 @@ class LearningEvaluationService:
             raise NotFoundError("Project detector model not found")
         if model.task != "detect":
             raise ValidationError("Learning evaluation currently supports detection models only")
-        verified_registered_checkpoint(self.settings, model)
+        try:
+            verified_registered_checkpoint(self.settings, model)
+        except ConflictError as exc:
+            raise ValidationError(str(exc)) from exc
         return model
 
     def _validate_lineage(
