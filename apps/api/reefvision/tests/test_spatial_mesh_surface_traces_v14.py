@@ -2656,6 +2656,7 @@ def _assert_chain_traversals(
         assert chain["selected_trace_traversals"] == expected
         # Compare each canonical edge independently against the original
         # directed selections, including repeated traversals in one trace.
+        source_lengths_by_support: dict[int, list[Fraction]] = {}
         for offset, (first, last) in enumerate(chain_pairs):
             forward_count = 0
             reverse_count = 0
@@ -2676,7 +2677,18 @@ def _assert_chain_traversals(
                 "forward_traversal_count": forward_count,
                 "reverse_traversal_count": reverse_count,
             }
+            source_lengths_by_support.setdefault(trace_count, []).append(
+                Fraction(dist(first, last))
+            )
         assert len(chain["selected_chain_edge_support"]) == len(chain_pairs)
+        assert chain["source_arc_length_by_distinct_trace_count"] == [
+            {
+                "distinct_trace_count": count,
+                "edge_count": len(lengths),
+                "source_length_mesh_units": float(sum(lengths, Fraction(0))),
+            }
+            for count, lengths in sorted(source_lengths_by_support.items())
+        ]
     assert sum(len(chain["selected_trace_traversals"]) for chain in chains) == sum(
         vertices[a] != vertices[b] for path in paths for a, b in pairwise(path)
     )
@@ -2726,6 +2738,19 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
     _assert_chain_traversals(chains, vertices, paths)
     _assert_endpoint_components(union, vertices, paths)
     assert [chain["edge_count"] for chain in chains] == [3, 1]
+    support = chains[0]["source_arc_length_by_distinct_trace_count"]
+    assert len(support) == (2 if shared else 1)
+    assert support[0]["distinct_trace_count"] == 1
+    assert support[0]["edge_count"] == (2 if shared else 3)
+    assert support[0]["source_length_mesh_units"] == pytest.approx(
+        3 + sqrt(13) if shared else 5 + sqrt(13)
+    )
+    if shared:
+        assert support[1] == {
+            "distinct_trace_count": 2,
+            "edge_count": 1,
+            "source_length_mesh_units": 2.0,
+        }
     first_trace, last_trace = (2, 0) if reverse_order else (0, 2)
     loop_memberships = [
         {"trace_index": first_trace, "chain_edge_offsets": [0, 2]},
@@ -2885,6 +2910,10 @@ def test_shared_trace_pairs_count_distinct_edges_not_repeated_traversals() -> No
     chains = union["endpoint_graph_chains"]
     _assert_chain_traversals(chains, params["vertices"], params["surface_trace_vertex_paths"])
     assert len(chains) == 1
+    assert chains[0]["source_arc_length_by_distinct_trace_count"] == [
+        {"distinct_trace_count": 2, "edge_count": 1, "source_length_mesh_units": sqrt(2)},
+        {"distinct_trace_count": 3, "edge_count": 1, "source_length_mesh_units": 1.0},
+    ]
     assert chains[0]["selected_trace_memberships"] == [
         {"trace_index": 0, "chain_edge_offsets": [0, 1]},
         {"trace_index": 1, "chain_edge_offsets": [0, 1]},
