@@ -110,6 +110,48 @@ afterEach(() => {
 });
 
 describe("TrainingWorkspace launch", () => {
+  it("persists an explicit optimizer learning rate and clears the override on Auto", async () => {
+    vi.mocked(api.updateTrainingDraft).mockImplementation(
+      async (_id, patch) =>
+        ({
+          ...draft,
+          ...patch,
+        }) as api.TrainingDraft,
+    );
+    renderWorkspace();
+    fireEvent.click(
+      await screen.findByRole("tab", { name: "Hyperparameters" }),
+    );
+    expect(
+      await screen.findByLabelText("Initial learning rate (lr0)"),
+    ).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Optimizer"), {
+      target: { value: "AdamW" },
+    });
+    fireEvent.change(screen.getByLabelText("Initial learning rate (lr0)"), {
+      target: { value: "0.0025" },
+    });
+    await waitFor(() =>
+      expect(api.updateTrainingDraft).toHaveBeenCalledWith(draft.id, {
+        training_config: { epochs: 3, optimizer: "AdamW", lr0: 0.0025 },
+      }),
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "New Run" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Hyperparameters" }));
+    expect(screen.getByLabelText("Initial learning rate (lr0)")).toHaveValue(
+      0.0025,
+    );
+    fireEvent.change(screen.getByLabelText("Optimizer"), {
+      target: { value: "auto" },
+    });
+    await waitFor(() =>
+      expect(api.updateTrainingDraft).toHaveBeenCalledWith(draft.id, {
+        training_config: { epochs: 3, optimizer: "auto" },
+      }),
+    );
+    expect(screen.getByLabelText("Initial learning rate (lr0)")).toBeDisabled();
+  });
+
   it("selects an available architecture with explicit random initialization and no checkpoint", async () => {
     const architecture = {
       catalog_id: "ultralytics/yolo11/detect/n",

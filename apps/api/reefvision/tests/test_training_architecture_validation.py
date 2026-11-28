@@ -46,6 +46,39 @@ def test_imported_detector_checkpoint_seeds_a_run_without_scratch_yaml(
     assert run.json()["initial_checkpoint_model_id"] == model.json()["id"]
 
 
+def test_manual_detector_rate_requires_an_explicit_optimizer_and_survives_launch(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_training_foundation(monkeypatch)
+    project, version = _seed_training_dataset(client)
+    prefix = f"/api/v1/projects/{project['id']}"
+    config = {"epochs": 2, "optimizer": "auto", "lr0": 0.0025}
+    payload = {
+        "name": "Fixed step",
+        "task": "detect",
+        "dataset_version_id": version["id"],
+        "architecture": "yolo11n.yaml",
+        "training_config": config,
+    }
+    draft = client.post(f"{prefix}/training-drafts", json=payload).json()
+    assert draft["validation_state"]["status"] == "blocked"
+    launch = client.post(f"{prefix}/training-runs", json={"draft_id": draft["id"]})
+    assert launch.status_code == 400, launch.text
+    assert "optimizer" in launch.json()["detail"].lower()
+    config["optimizer"] = "AdamW"
+    change = client.patch(
+        f"/api/v1/training-drafts/{draft['id']}", json={"training_config": config}
+    )
+    assert change.status_code == 200, change.text
+    persisted = client.get(f"/api/v1/training-drafts/{draft['id']}").json()
+    assert persisted["training_config"]["lr0"] == 0.0025
+    run = client.post(f"{prefix}/training-runs", json={"draft_id": draft["id"]})
+    assert run.status_code == 200, run.text
+    assert run.json()["training_config"]["optimizer"] == "AdamW"
+    assert run.json()["training_config"]["lr0"] == 0.0025
+
+
 def test_scaled_yolo_catalog_architectures_match_base_ultralytics_yaml() -> None:
     available = {"yolo11.yaml", "yolov8.yaml"}
 

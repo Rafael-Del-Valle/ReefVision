@@ -242,6 +242,12 @@ test("runs the ordinary local detector from grouped stills through reviewed resu
       await page.getByLabel("Batch", { exact: true }).fill("2");
       await page.getByLabel("Image size", { exact: true }).fill("96");
       await page.getByLabel("Workers", { exact: true }).fill("0");
+      const rate = page.getByLabel("Initial learning rate (lr0)");
+      await expect(rate).toBeDisabled();
+      await page
+        .getByRole("combobox", { name: /^Optimizer/ })
+        .selectOption("AdamW");
+      await rate.fill("0.0025");
       await page.getByRole("tab", { name: "New Run", exact: true }).click();
       const queue = writing(page, `${root}/training-runs`);
       await page
@@ -256,6 +262,7 @@ test("runs the ordinary local detector from grouped stills through reviewed resu
         architecture: "yolo11n.yaml",
         initial_checkpoint_source: "scratch",
         initial_checkpoint_model_id: null,
+        training_config: { optimizer: "AdamW", lr0: 0.0025 },
       });
       const run = await completed(
         () => get<TrainingRun>(`${api}/training-runs/${queued.id}`),
