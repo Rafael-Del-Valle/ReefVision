@@ -308,3 +308,66 @@ def test_spatial_metadata_append_rejects_corrupt_ancestor(
     assert appended.status_code == 201, appended.text
     assert appended.json()["revision"] == 4
     assert appended.json()["previous_revision_id"] == records[-1]["id"]
+
+
+def test_spatial_metadata_history_rejects_misbound_tail(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Spatial metadata owner")["id"])
+    other_id = str(create_project(client, "Other metadata owner")["id"])
+    asset = _import_asset(client, project_id)
+    asset_id = str(asset["id"])
+    base = f"/api/v1/projects/{project_id}/spatial/assets/{asset_id}"
+    other_base = f"/api/v1/projects/{other_id}/spatial/assets/{asset_id}"
+    payload = {"coordinate_unit": "unknown", "created_by_identity": "local_user"}
+    first = client.post(f"{base}/metadata-revisions", json=payload)
+    second = client.post(f"{base}/metadata-revisions", json=payload)
+    assert first.status_code == second.status_code == 201
+    record = second.json()
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        row = session.get(SpatialAssetMetadataRevision, record["id"])
+        assert row is not None
+        row.project_id = other_id
+        row.content_sha256 = canonical_json_sha256(
+            spatial_asset_metadata_content(
+                project_id=other_id,
+                asset_id=asset_id,
+                source_sha256=str(asset["sha256"]),
+                revision=2,
+                previous_revision_id=first.json()["id"],
+                payload=SpatialAssetMetadataRevisionCreate.model_validate(payload),
+            )
+        )
+        session.commit()
+
+    for suffix in ("", f"/{record['id']}", "?limit=1&offset=1"):
+        response = client.get(f"{base}/metadata-revisions{suffix}")
+        assert response.status_code == 400, response.text
+        assert "source binding" in response.json()["detail"].lower()
+    rejected = client.post(f"{base}/metadata-revisions", json=payload)
+    assert rejected.status_code == 400, rejected.text
+    assert "source binding" in rejected.json()["detail"].lower()
+    # The foreign project still has no access to the asset or its revisions.
+    assert client.get(f"{other_base}/metadata-revisions").status_code == 404
+    assert client.get(f"{other_base}/metadata-revisions/{record['id']}").status_code == 404
+    prefix = client.get(f"{base}/metadata-revisions?limit=1&offset=0")
+    assert prefix.status_code == 200, prefix.text
+    assert prefix.json() == [first.json()]
+
+    with app.state.session_factory() as session:
+        row = session.get(SpatialAssetMetadataRevision, record["id"])
+        assert row is not None
+        row.project_id = project_id
+        row.content_sha256 = record["content_sha256"]
+        session.commit()
+
+    restored = client.get(f"{base}/metadata-revisions")
+    assert restored.status_code == 200, restored.text
+    assert restored.json() == [first.json(), record]
+    assert client.get(f"{base}/content").content == OBJ
+    appended = client.post(f"{base}/metadata-revisions", json=payload)
+    assert appended.status_code == 201, appended.text
+    assert appended.json()["revision"] == 3
+    assert appended.json()["previous_revision_id"] == record["id"]
