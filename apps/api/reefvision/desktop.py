@@ -50,6 +50,8 @@ class DesktopLaunchOptions:
     provider_hardware_acceptance: bool = False
     video_tracking_job: str | None = None
     annotated_video_export_job: str | None = None
+    detector_training_job: str | None = None
+    worker_parent: int | None = None
 
 
 def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
@@ -91,7 +93,13 @@ def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
         default=None,
         help="Process one queued annotated-video export job and exit",
     )
+    parser.add_argument(
+        "--detector-training-job", help="Process one scheduled detector fit and exit"
+    )
+    parser.add_argument("--worker-parent", type=int, help=argparse.SUPPRESS)
     namespace = parser.parse_args(argv)
+    if (namespace.detector_training_job is None) != (namespace.worker_parent is None):
+        parser.error("--detector-training-job and --worker-parent must be used together")
     return DesktopLaunchOptions(
         host=namespace.host,
         port=namespace.port,
@@ -104,6 +112,8 @@ def parse_args(argv: Sequence[str] | None = None) -> DesktopLaunchOptions:
         provider_hardware_acceptance=namespace.provider_hardware_acceptance,
         video_tracking_job=namespace.video_tracking_job,
         annotated_video_export_job=namespace.annotated_video_export_job,
+        detector_training_job=namespace.detector_training_job,
+        worker_parent=namespace.worker_parent,
     )
 
 
@@ -587,6 +597,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
 
             return run_packaged_provider_acceptance(settings)
+        if options.detector_training_job is not None and options.worker_parent is not None:
+            from reefvision.jobs.detector_training_process import run_child
+
+            return run_child(settings, options.detector_training_job, options.worker_parent)
         if options.video_tracking_job is not None:
             LOGGER.info(
                 "Running isolated video-tracking worker for job %s",

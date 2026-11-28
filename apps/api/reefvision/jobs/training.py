@@ -42,6 +42,7 @@ from reefvision.ml.ultralytics_tuning import (
     effective_search_space,
     normalize_tuning_csv,
 )
+from reefvision.repositories.jobs import JobRepository
 from reefvision.storage.checkpoint_approvals import verified_registered_checkpoint
 from reefvision.storage.datasets import write_yolo_detection_export
 from reefvision.storage.models import hash_model_file
@@ -90,7 +91,9 @@ def _complete_training_run(session: Session, run: TrainingRun, job: Job) -> None
         )
 
 
-def recover_training_run(session: Session, settings: Settings | None, job: Job) -> None:
+def recover_training_run(
+    session: Session, settings: Settings | None, job: Job, *, interruption_reason: str | None = None
+) -> None:
     """Finalize interrupted training conservatively; never execute or remove output."""
     run = session.scalar(select(TrainingRun).where(TrainingRun.job_id == job.id))
     if run is not None and run.status == "completed":
@@ -110,7 +113,8 @@ def recover_training_run(session: Session, settings: Settings | None, job: Job) 
     message = (
         "Training cancellation finalized after application restart."
         if cancelled
-        else "Training was interrupted by an application restart; complete final artifacts "
+        else interruption_reason
+        or "Training was interrupted by an application restart; complete final artifacts "
         "could not be verified. Training was not restarted."
     ) + " Existing checkpoints, metrics, logs and artifacts were preserved."
     now = datetime.now(UTC)
@@ -184,7 +188,7 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
     dataset_archive_path: str | None = None
     run_id: str | None = None
     with factory() as session:
-        job = session.get(Job, job_id)
+        job = JobRepository(session).get_for_update(job_id)
         if job is None or job.job_type != "training" or job.status != "queued":
             return False
         run_id = str(job.request_json["training_run_id"])
