@@ -59,9 +59,7 @@ def _finite_scientific_number(value: Any) -> bool:
         return False
 
 
-def _valid_v2_score_explanation(
-    item: Any, weights: dict[str, float], *, v3: bool = False
-) -> bool:
+def _valid_v2_score_explanation(item: Any, weights: dict[str, float], *, v3: bool = False) -> bool:
     """Cross-check saved component explanations against the deterministic formula.
 
     A checksum alone cannot establish that a re-signed saved explanation is
