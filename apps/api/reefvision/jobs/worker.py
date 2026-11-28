@@ -30,6 +30,7 @@ from reefvision.db.models.job import LocalComputeLease
 from reefvision.jobs.backups import process_backup_job
 from reefvision.jobs.classification_inference import process_classification_inference_job
 from reefvision.jobs.classification_training import process_classification_training_job
+from reefvision.jobs.detector_training_process import is_detector_fit, run_scheduled_detector
 from reefvision.jobs.diagnostics import process_diagnostics_job
 from reefvision.jobs.export import process_export_job
 from reefvision.jobs.inference import process_inference_job
@@ -933,6 +934,10 @@ async def _run_claim(
             await process_isolated_video_tracking_job(settings, factory, claim.job_id, stop)
         elif claim.job_type == "video_annotated_export":
             await process_isolated_annotated_video_export_job(settings, factory, claim.job_id, stop)
+        elif claim.job_type == "training" and await asyncio.to_thread(
+            is_detector_fit, factory, claim.job_id
+        ):
+            await run_scheduled_detector(settings, factory, claim.job_id, stop)
         else:
             await asyncio.to_thread(_dispatch_job, settings, factory, claim.job_id, claim.job_type)
     except Exception:
