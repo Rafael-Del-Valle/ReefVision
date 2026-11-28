@@ -131,6 +131,9 @@ class SpatialAssetMetadataRevisionService:
             .order_by(SpatialAssetMetadataRevision.revision.desc())
             .limit(1)
         )
+        if previous is not None:
+            # Do not append to a corrupt or misbound history head.
+            self._response(project_id, asset_id, previous)
         revision = 1 if previous is None else previous.revision + 1
         previous_id = None if previous is None else previous.id
         content_sha256 = canonical_json_sha256(
