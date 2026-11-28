@@ -10,12 +10,15 @@ from pydantic import BaseModel, ConfigDict, Field
 ActiveLearningStrategy = Literal["hybrid", "uncertainty", "rare_class", "quality"]
 
 
-class ActiveLearningRoundCreateRequest(BaseModel):
+class AcquisitionQueueScope(BaseModel):
+    requested_size: int = Field(default=50, ge=1, le=5000)
+    model_ids: list[str] = Field(default_factory=list, max_length=20)
+
+
+class ActiveLearningRoundCreateRequest(AcquisitionQueueScope):
     name: str = Field(min_length=1, max_length=200)
     dataset_version_id: str | None = Field(default=None, max_length=36)
     strategy: ActiveLearningStrategy = "hybrid"
-    requested_size: int = Field(default=50, ge=1, le=5000)
-    model_ids: list[str] = Field(default_factory=list, max_length=20)
     created_by: str | None = Field(default=None, max_length=100)
 
 

@@ -102,6 +102,7 @@ The distinction between model predictions and reviewed annotations is intentiona
 - [Feature reference](docs/FEATURE_REFERENCE.md)
 - [Quality-control guide](docs/QUALITY_CONTROL_GUIDE.md)
 - [Review queue guide](docs/REVIEW_QUEUE_GUIDE.md)
+- [Improve a detector from a local best.pt](docs/DETECTOR_ACTIVE_LEARNING.md)
 - [Known issues](docs/KNOWN_ISSUES.md)
 - [1.0.1 release notes](docs/RELEASE_1.0.1.md)
 - [1.0.2 release notes](docs/RELEASE_1.0.2.md)

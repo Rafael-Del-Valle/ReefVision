@@ -2,13 +2,48 @@ import pytest
 from fastapi.testclient import TestClient
 
 from reefvision.schemas.training import TrainingProviderArchitectureResponse
+from reefvision.services.models import ModelService
 from reefvision.services.segmentation_training import SegmentationTrainingService
 from reefvision.services.training import TrainingService, _ultralytics_architecture_available
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_training_workspace import (
+    FakeTrainingRegistrationProvider,
     _patch_training_foundation,
     _seed_training_dataset,
 )
+
+
+def test_imported_detector_checkpoint_seeds_a_run_without_scratch_yaml(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_training_foundation(monkeypatch)
+    monkeypatch.setattr(
+        ModelService, "_provider_for_registration", lambda *args: FakeTrainingRegistrationProvider()
+    )
+    project, version = _seed_training_dataset(client)
+    prefix = f"/api/v1/projects/{project['id']}"
+    model = client.post(
+        f"{prefix}/models/register",
+        data={"purpose": "detector", "provider_name": "ultralytics"},
+        files={"file": ("best.pt", b"test detector checkpoint", "application/octet-stream")},
+    )
+    assert model.status_code == 200, model.text
+    draft = client.post(
+        f"{prefix}/training-drafts",
+        json={
+            "name": "Second round",
+            "dataset_version_id": version["id"],
+            "task": "detect",
+            "provider_id": "ultralytics",
+            "initial_checkpoint_source": "registered_model",
+            "initial_checkpoint_model_id": model.json()["id"],
+        },
+    )
+    assert draft.status_code == 200, draft.text
+    assert draft.json()["validation_state"]["status"] != "blocked"
+    run = client.post(f"{prefix}/training-runs", json={"draft_id": draft.json()["id"]})
+    assert run.status_code == 200, run.text
+    assert run.json()["initial_checkpoint_model_id"] == model.json()["id"]
 
 
 def test_scaled_yolo_catalog_architectures_match_base_ultralytics_yaml() -> None:
