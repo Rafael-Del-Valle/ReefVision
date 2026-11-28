@@ -63,6 +63,8 @@ $report = [ordered]@{
     previous_installer_path = if ($PreviousInstallerPath) { $PreviousInstallerPath } else { $null }
     previous_installer_sha256 = $PreviousInstallerHash
     previous_installer_version = if ($PreviousInstallerHash) { $InitialProductVersion } else { $null }
+    initial_schema_revision = $null
+    final_schema_revision = $null
     windows_version = [Environment]::OSVersion.VersionString
     architecture = $env:PROCESSOR_ARCHITECTURE
     acceptance_root = $AcceptanceRoot
@@ -86,6 +88,19 @@ $report = [ordered]@{
 }
 
 function Save-Report { Write-ReefVisionEvidenceReport -Report $report -Path $ReportPath }
+function Get-VerifiedAcceptanceSchemaRevision([string]$ApiUrl) {
+    $migration = Invoke-RestMethod "$ApiUrl/system/migrations/status"
+    if ($migration.schema_status -cne 'up_to_date' -or
+        $migration.database_exists -ne $true -or
+        $migration.current_schema_revision -isnot [string] -or
+        [string]::IsNullOrWhiteSpace($migration.current_schema_revision) -or
+        $migration.current_schema_revision -cne $migration.expected_schema_revision -or
+        $null -eq $migration.pending_revisions -or
+        @($migration.pending_revisions).Count -ne 0) {
+        throw 'Installed backend database is missing or not at its expected Alembic head.'
+    }
+    return $migration.current_schema_revision
+}
 function Run-Msi([string]$Action, [string]$PackageOrProduct, [string]$LogName, [string]$TargetRoot = '') {
     $log = Join-Path $EvidenceRoot $LogName
     $arguments = New-ReefVisionMsiArguments -Action $Action -PackageOrProduct $PackageOrProduct -InstallRoot $TargetRoot -LogPath $log
@@ -264,9 +279,9 @@ try {
     $api = "http://127.0.0.1:$port/api/v1"
     $versionPayload = Invoke-RestMethod "$api/system/version"
     Assert-ReefVisionBackendVersion -Payload $versionPayload -ExpectedVersion $InitialProductVersion
-    $migrationPayload = Invoke-RestMethod "$api/system/migrations/status"
+    $report.initial_schema_revision = Get-VerifiedAcceptanceSchemaRevision -ApiUrl $api
     $report.first_launch = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and packaged backend started; database initialized; API version $($versionPayload.application_version)"
-    $report.frontend_backend_connectivity = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop-published loopback API responded; migration status: $($migrationPayload.schema_status)"
+    $report.frontend_backend_connectivity = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop-published loopback API responded; verified Alembic head: $($report.initial_schema_revision)"
 
     # Project templates were intentionally reduced to 'blank' in 1.0.
     # The acceptance fixture must explicitly create its class instead of
@@ -498,6 +513,10 @@ try {
     $api = "http://127.0.0.1:$port/api/v1"
     $restartedVersion = Invoke-RestMethod "$api/system/version"
     Assert-ReefVisionBackendVersion -Payload $restartedVersion -ExpectedVersion $ProductVersion
+    $report.final_schema_revision = Get-VerifiedAcceptanceSchemaRevision -ApiUrl $api
+    if ((-not $PreviousInstallerPath -or $SkipUpgrade) -and $report.final_schema_revision -cne $report.initial_schema_revision) {
+        throw 'Database Alembic head changed across a same-version restart.'
+    }
     $persisted = Invoke-RestMethod "$api/projects/$projectId"
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
@@ -538,7 +557,7 @@ try {
         $report.sam2_live.detail += ' Verified complete accepted mask and source prediction records after restart/upgrade.'
     }
     if ($PreviousInstallerPath -and -not $SkipUpgrade) {
-        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Previous installer $InitialProductVersion upgraded to $ProductVersion; packaged backend version and scientific records verified."
+        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Previous installer $InitialProductVersion upgraded to $ProductVersion; packaged backend version, Alembic head $($report.initial_schema_revision) -> $($report.final_schema_revision), and scientific records verified."
     }
     $report.restart = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and backend restarted cleanly; API version $($restartedVersion.application_version) matches MSI."
     $report.project_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Project $projectId, image $imageId, and annotation $annotationId persisted; pre-restart database SHA-256 $projectChecksum"
