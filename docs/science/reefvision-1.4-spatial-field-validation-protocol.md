@@ -1048,3 +1048,16 @@ standalone preview and persisted typed workflow artifact/hash replay.
 This is a source-frame geometric descriptor, not a coral mass centroid,
 registered displacement, verified anatomical centerline, or positional
 uncertainty estimate.
+
+Selected-chain sampling dominance is reported as
+`source_longest_edge_arc_fraction`, the largest binary64 source segment
+length divided by the sum of all source segment lengths, rounded only after
+the rational division. The zero-based `source_longest_edge_chain_offset`
+identifies the first canonical edge attaining that maximum. One edge gives
+a fraction of one; equally long edges select the earlier canonical edge.
+Check the unequal right-triangle path and its reversal at three calibration
+scales, the equal-length shared-vertex path, and independently normalized
+source lengths in standalone and twice-replayed persisted typed workflows.
+This descriptor can help a reviewer locate a dominant sampling gap, but
+depends on the selected mesh tessellation and is not an anatomical sampling
+resolution estimate, confidence score, or verified branch measurement.
