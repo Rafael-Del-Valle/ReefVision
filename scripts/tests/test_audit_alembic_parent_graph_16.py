@@ -463,3 +463,79 @@ def test_strict_graph_refuses_case_colliding_migration_names(tmp_path: Path) -> 
     assert not result.stdout
     assert "case-colliding migration source name" in result.stderr
     assert {path: path.read_bytes() for path in before} == before
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "NUL.py",
+        "con.backup.py",
+        "COM1.py",
+        "lpt9.py",
+        "COM\u00b9.py",
+        "AUX .py",
+        "CONOUT$.py",
+        "0001.py ",
+        "0001.py.",
+        "0001.py:stream",
+        "bad?.py",
+        "bad\x01.py",
+    ],
+)
+def test_nonportable_migration_entry_name_contract(name: str) -> None:
+    assert not _module()._portable_entry_name(name)
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["0001.py", "COM10.py", "normal.py", "__pycache__", "nulled.py", "reef.notes.py"],
+)
+def test_portable_migration_entry_name_contract(name: str) -> None:
+    assert _module()._portable_entry_name(name)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="requires non-Windows filename creation")
+@pytest.mark.parametrize("name", ["NUL.py", "0001.py ", "0001.py.", "0001.py:stream"])
+def test_strict_graph_refuses_windows_aliases_and_devices(tmp_path: Path, name: str) -> None:
+    root = tmp_path / "versions"
+    first = _migration(root, "0001.py", "0001", "None")
+    second = _migration(root, name, "0002", '"0001"')
+    before = {path: path.read_bytes() for path in (first, second)}
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--verify-parent-graph", str(root)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert not result.stdout
+    assert "nonportable migration tree entry name" in result.stderr
+    assert {path: path.read_bytes() for path in before} == before
+    assert _module().audit([root])["safe_to_reconcile_automatically"] is False
+
+
+def test_strict_graph_refuses_normalization_colliding_sources(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    first = _migration(root, "caf\u00e9.py", "0001", "None")
+    second = _migration(root, "cafe\u0301.py", "0002", '"0001"')
+    if first.samefile(second):
+        pytest.skip("requires a filesystem that distinguishes Unicode normalization forms")
+    before = {path: path.read_bytes() for path in (first, second)}
+    assert _module().audit([root])["revision_count"] == 2
+    with pytest.raises(ValueError, match="case-colliding migration source name"):
+        _module().audit([root], verify_parent_graph=True)
+    assert {path: path.read_bytes() for path in before} == before
+
+
+def test_strict_graph_refuses_case_colliding_directories(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    first = _migration(root, "0001.py", "0001", "None")
+    (root / "Cache").mkdir()
+    (root / "cache").mkdir(exist_ok=True)
+    if (root / "Cache").samefile(root / "cache"):
+        pytest.skip("requires a case-sensitive filesystem")
+    before = first.read_bytes()
+    assert _module().audit([root])["revision_count"] == 1
+    with pytest.raises(ValueError, match="case-colliding migration source name"):
+        _module().audit([root], verify_parent_graph=True)
+    assert first.read_bytes() == before

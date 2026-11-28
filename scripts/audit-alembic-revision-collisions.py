@@ -8,6 +8,7 @@ import json
 import os
 import re
 import stat
+import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
@@ -459,6 +460,19 @@ def _checked_path_stat(path: Path, *, ancestor: bool = False) -> os.stat_result:
     return info
 
 
+def _portable_entry_name(name: str) -> bool:
+    """Conservative Windows checkout rules, independent of the audit host."""
+    if name.endswith((" ", ".")) or any(
+        ord(char) < 32 or char in '<>:"/\\|?*' for char in name
+    ):
+        return False
+    stem = name.split(".", 1)[0].rstrip(" ").upper()
+    return not (
+        stem in {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
+        or re.fullmatch(r"(?:COM|LPT)[1-9\u00b9\u00b2\u00b3]", stem)
+    )
+
+
 def _migration_sources(root: Path, *, verify_parent_graph: bool = False) -> list[Path]:
     """Inventory ordinary Python files without following directory redirects."""
     pending = [root]
@@ -468,14 +482,14 @@ def _migration_sources(root: Path, *, verify_parent_graph: bool = False) -> list
         portable_names: set[str] = set()
         for entry in directory.iterdir():
             info = _checked_path_stat(entry)
-            if verify_parent_graph and entry.name.casefold().endswith(".py"):
-                # Alembic's source extension is case-sensitive; Windows path
-                # matching and case-insensitive checkout can disagree with Linux.
-                if not entry.name.endswith(".py"):
+            if verify_parent_graph:
+                if not _portable_entry_name(entry.name):
+                    raise ValueError(f"{entry}: nonportable migration tree entry name")
+                if entry.name.casefold().endswith(".py") and not entry.name.endswith(".py"):
                     raise ValueError(f"{entry}: nonportable migration source extension")
-                portable_name = entry.name.casefold()
+                portable_name = unicodedata.normalize("NFC", entry.name.casefold())
                 if portable_name in portable_names:
-                    raise ValueError(f"{entry}: case-colliding migration source name")
+                    raise ValueError(f"{entry}: case-colliding migration source name or tree entry")
                 portable_names.add(portable_name)
             if entry.match("*.py"):
                 if not stat.S_ISREG(info.st_mode):

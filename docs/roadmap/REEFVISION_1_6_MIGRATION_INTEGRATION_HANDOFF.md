@@ -711,3 +711,29 @@ units, provenance, retry behavior and researcher approval are preserved.
 Release HOLD remains for coordinated cross-version migration
 reconciliation, representative biological validation, genuine installed
 Windows MSI/CAB GUI clean-install/upgrade/rollback and owner approval.
+
+## 2026-11-28 — Windows device names and normalized tree aliases
+
+Predecessor CI 46117280524 completed backend, frontend and native Windows
+preservation successfully. Existing isolated 1.6 scope and earlier integration
+plans remain intact. Main e94dad6a, 1.1 3e595379, 1.2 28ab58b9,
+1.4 ed417e3d and 1.5 bd8602a0 remain separate refs at inspection.
+
+Case-only source checks are insufficient for portable migration evidence:
+Windows device names (including names with extensions), trailing spaces/dots,
+forbidden characters and alternate-stream delimiters can prevent checkout or
+alias a different entry. Strict mode now checks every entry's name using a
+host-independent conservative Windows contract, and detects sibling collisions
+using NFC plus case folding, including directories. Legacy diagnostics remain
+unchanged. This is not an exhaustive emulation of every filesystem or proof
+of migration runtime compatibility. No source or research data is renamed.
+
+Added 24 parameterized and filesystem regression cases. Twenty-four independent
+Linux probes of the proposed name and inventory helpers passed; full repository
+and native Windows execution of the new tests require exact-head CI. This
+read-only packaging preflight does not duplicate scientific Workflow Builder
+nodes or alter saved graphs, units, provenance, retry or approval gates.
+
+Release HOLD remains for reviewed cross-version migration reconciliation,
+representative biological acceptance, genuine installed Windows GUI/MSI/CAB
+clean installation/upgrade/rollback, new-head CI and researcher approval.
