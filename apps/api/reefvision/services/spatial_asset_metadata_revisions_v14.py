@@ -133,10 +133,9 @@ class SpatialAssetMetadataRevisionService:
     ) -> list[SpatialAssetMetadataRevisionResponse]:
         query = (
             select(SpatialAssetMetadataRevision)
-            .where(
-                SpatialAssetMetadataRevision.project_id == project_id,
-                SpatialAssetMetadataRevision.spatial_source_asset_id == asset_id,
-            )
+            # The caller has already verified asset ownership. Do not filter
+            # out a corrupted project binding on a revision of this asset.
+            .where(SpatialAssetMetadataRevision.spatial_source_asset_id == asset_id)
             .order_by(SpatialAssetMetadataRevision.revision, SpatialAssetMetadataRevision.id)
         )
         if limit is not None:
@@ -208,7 +207,7 @@ class SpatialAssetMetadataRevisionService:
     ) -> SpatialAssetMetadataRevisionResponse:
         source = self.sources.get(project_id, asset_id)
         row = self.session.get(SpatialAssetMetadataRevision, revision_id)
-        if row is None or row.project_id != project_id or row.spatial_source_asset_id != asset_id:
+        if row is None or row.spatial_source_asset_id != asset_id:
             raise NotFoundError("Spatial asset metadata revision not found")
         self.sources.read_verified(project_id, asset_id)
         if row.revision <= 0:
