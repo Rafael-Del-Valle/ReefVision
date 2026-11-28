@@ -133,8 +133,9 @@ def _trace_endpoint_chains(
         # loss of a short segment when accumulating widely differing lengths.
         remaining_to_midpoint = source_length / 2
         midpoint_edge_offset = 0
-        for midpoint_edge_offset, segment_length in enumerate(segment_lengths):
+        for edge_offset, segment_length in enumerate(segment_lengths):
             if remaining_to_midpoint <= segment_length:
+                midpoint_edge_offset = edge_offset
                 break
             remaining_to_midpoint -= segment_length
         midpoint_start = path[midpoint_edge_offset]
@@ -199,6 +200,10 @@ def _trace_endpoint_chains(
                 "is_closed": path[0] == path[-1],
                 "source_arc_midpoint_mesh_units": source_midpoint,
                 "source_arc_midpoint_chain_edge_offset": midpoint_edge_offset,
+                "source_arc_midpoint_edge_fraction": {
+                    "numerator": str(midpoint_fraction.numerator),
+                    "denominator": str(midpoint_fraction.denominator),
+                },
                 "source_endpoint_chord_mesh_units": float(chord),
                 "endpoint_chord_length_m": None if chord > 0 and chord_m == 0 else chord_m,
                 "endpoint_chord_length_scale_only_interval_m": chord_interval,
