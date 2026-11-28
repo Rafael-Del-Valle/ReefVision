@@ -1089,3 +1089,16 @@ Check no overlap, a shared trunk, repeated within-selection passes and
 three selections sharing the unit edge, with standalone API and twice
 replayed persisted typed workflow parity. These are geometric redundancy
 descriptors, not independent biological replicates or anatomical lengths.
+
+The dimensionless `cross_trace_shared_source_length_fraction` divides
+the unique source length supported by at least two distinct selections by
+the exact nonzero-edge union length. Compute the ratio before rounding,
+not from calibrated or rounded display values. A nonempty union with no
+shared edges yields zero; a fully shared union yields one regardless of
+additional traversals. An empty union yields null, not zero coverage.
+For the shared two-unit trunk reference the fraction is 2/(9 + sqrt(13)).
+Verify the partial and disjoint cases through the standalone API and two
+executions of the persisted typed preview graph; check complete overlap
+and within-selection repetition separately. This is geometric selection
+coverage only, not reviewer agreement, an independence check, or biological
+validation. Partial collinear overlaps of unequal edges remain excluded.
