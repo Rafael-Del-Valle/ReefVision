@@ -494,6 +494,7 @@ def test_cli_strict_manifest_retains_duplicate_sources_without_ancestry(tmp_path
     assert report["safe_to_reconcile_automatically"] is False
     assert {path: path.read_bytes() for path in files} == files
 
+
 def test_cli_pairwise_history_reports_divergent_successors_and_merge_frontier(
     tmp_path: Path,
 ) -> None:
@@ -542,6 +543,7 @@ def test_cli_pairwise_history_reports_divergent_successors_and_merge_frontier(
         assert comparison["divergent_history_revisions"] is None
         assert comparison["common_ancestry_frontier"] is None
     forward = _run(left, right, invalid, verify_parent_graph=True)
+    assert forward.returncode == 2, forward.stderr
     assert json.loads(forward.stdout)["root_comparisons"] == comparisons
     assert "root_comparisons" not in json.loads(_run(left, right).stdout)
     assert report["safe_to_reconcile_automatically"] is False
@@ -568,4 +570,3 @@ def test_cli_pairwise_history_distinguishes_empty_frontier_from_unverified(
     single = _run(left, verify_parent_graph=True)
     assert single.returncode == 0, single.stderr
     assert json.loads(single.stdout)["root_comparisons"] == []
-
