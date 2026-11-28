@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/latest/download/ReefVision_Windows_Downloader.exe">
-    <img alt="Download ReefVision 1.0.2 for Windows" src="https://img.shields.io/badge/Download-ReefVision_1.0.2_for_Windows-2165ac?style=for-the-badge&logo=windows11&logoColor=white">
+    <img alt="Download the latest stable ReefVision for Windows" src="https://img.shields.io/badge/Download-ReefVision_for_Windows-2165ac?style=for-the-badge&logo=windows11&logoColor=white">
   </a>
 </p>
 
