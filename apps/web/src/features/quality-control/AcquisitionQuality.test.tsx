@@ -13,6 +13,56 @@ import { QualityControlDashboard } from "./QualityControlDashboard";
 
 afterEach(() => vi.restoreAllMocks());
 
+test("screens the chosen frozen dataset for similar images across splits", async () => {
+  const user = userEvent.setup();
+  const project = { id: "field", label_classes: [] } as unknown as Project;
+  const version = {
+    id: "frozen",
+    name: "Site split",
+    version_number: 1,
+    status: "complete",
+  } as api.DatasetVersionRecord;
+  vi.spyOn(api, "getDatasetVersions").mockResolvedValue([version]);
+  vi.spyOn(api, "getQualityControlRuns").mockResolvedValue([]);
+  vi.spyOn(api, "getDatasetVersionQualityControlRuns").mockResolvedValue([]);
+  const queue = vi
+    .spyOn(api, "createDatasetVersionQualityControlRun")
+    .mockRejectedValue(new Error("Could not queue the similarity screen"));
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <QualityControlDashboard project={project} onOpenImage={vi.fn()} />
+    </QueryClientProvider>,
+  );
+  expect(
+    screen.queryByRole("button", {
+      name: "Check for similar images across splits",
+    }),
+  ).toBeNull();
+  await user.selectOptions(screen.getByLabelText("Scope"), "dataset_version");
+  await user.selectOptions(screen.getByLabelText("Dataset version"), "frozen");
+  await user.click(
+    screen.getByRole("button", {
+      name: "Check for similar images across splits",
+    }),
+  );
+  await waitFor(() =>
+    expect(queue).toHaveBeenCalledWith(
+      "frozen",
+      expect.objectContaining({
+        rule_categories: ["dataset_versions"],
+        selected_rule_ids: ["cross_split_similar_images"],
+      }),
+    ),
+  );
+  expect(
+    await screen.findByText("Could not queue the similarity screen"),
+  ).toBeInTheDocument();
+});
+
 test("queues configured acquisition thresholds and reopens flagged image evidence", async () => {
   const user = userEvent.setup();
   const project = { id: "project", label_classes: [] } as unknown as Project;

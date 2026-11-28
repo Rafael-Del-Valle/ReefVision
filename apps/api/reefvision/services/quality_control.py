@@ -48,6 +48,7 @@ from reefvision.schemas.quality_control import (
     QualityControlRunResponse,
     QualityControlThresholdConfig,
 )
+from reefvision.services import split_image_similarity as similarity
 from reefvision.services.acquisition_quality import (
     METHOD as ACQUISITION_METHOD,
 )
@@ -1431,7 +1432,87 @@ class AcquisitionQualityRule(QualityControlRule):
 
 
 ACQUISITION_RULE = AcquisitionQualityRule()
-RULE_REGISTRY += (ACQUISITION_RULE,)
+
+
+class CrossSplitImageRule(QualityControlRule):
+    rule_id = similarity.RULE_ID
+    rule_version = "1.0.0"
+    category: QualityControlRuleCategory = "dataset_versions"
+
+    def screen(
+        self, context: QualityControlContext, check_cancelled: Callable[[], None]
+    ) -> list[PendingIssue]:
+        version = context.dataset_version
+        if version is None or version.status != "complete":
+            raise ValidationError(
+                "Select a completed frozen dataset for cross-split image screening"
+            )
+        root = resolve_managed_project_path(context.settings, context.project.storage_root)
+        images = []
+        for item in sorted(context.images, key=lambda entry: entry.image_id):
+            if item.split not in {"train", "validation", "test"}:
+                continue
+            path = resolve_managed_project_path(context.settings, item.managed_path or "")
+            if not path.is_relative_to(root) or not item.sha256:
+                raise ValidationError(
+                    f"Missing project-owned source or frozen digest: {item.original_filename}"
+                )
+            images.append(
+                similarity.SplitImage(
+                    item.image_id,
+                    item.split,
+                    item.original_filename,
+                    path,
+                    item.sha256,
+                    item.width_px,
+                    item.height_px,
+                )
+            )
+        if len({item.split for item in images}) < 2:
+            raise ValidationError(
+                "Cross-split image screening requires images in at least two assigned splits"
+            )
+        return [
+            _issue(
+                rule=self,
+                severity="warning",
+                title="Similar images in different dataset splits",
+                explanation=(
+                    f"Compare {left.filename} ({left.split}) and {right.filename} ({right.split}). "
+                    "If they show the same sampling unit, group the originals and freeze a new "
+                    "dataset."
+                ),
+                project_id=context.project.id,
+                dataset_version_id=version.id,
+                image_id=left.id,
+                measured_values={
+                    "image_ids": [left.id, right.id],
+                    "filenames": [left.filename, right.filename],
+                    "splits": [left.split, right.split],
+                    "source_sha256": [left.digest, right.digest],
+                    "hash_distance": distance,
+                    "mean_rgb_difference": round(color_difference, 4),
+                    "manifest_sha256": version.manifest_sha256,
+                },
+                thresholds={
+                    "max_hash_distance": similarity.MAX_HASH_DISTANCE,
+                    "max_mean_rgb_difference": similarity.MAX_MEAN_RGB_DIFFERENCE,
+                    "max_relative_aspect_ratio_change": similarity.MAX_ASPECT_RATIO_CHANGE,
+                },
+                fingerprint_payload={
+                    "dataset_version_id": version.id,
+                    "image_ids": [left.id, right.id],
+                    "sha256": [left.digest, right.digest],
+                },
+            )
+            for left, right, distance, color_difference in similarity.similar_pairs(
+                images, check_cancelled
+            )
+        ]
+
+
+CROSS_SPLIT_IMAGE_RULE = CrossSplitImageRule()
+RULE_REGISTRY += (ACQUISITION_RULE, CROSS_SPLIT_IMAGE_RULE)
 RULES_BY_ID: dict[str, QualityControlRule] = {rule.rule_id: rule for rule in RULE_REGISTRY}
 
 
@@ -1474,6 +1555,8 @@ class QualityControlService:
         if request.selected_rule_ids:
             requested_ids = set(request.selected_rule_ids)
             selected = [rule for rule in selected if rule.rule_id in requested_ids]
+        else:
+            selected = [rule for rule in selected if rule is not CROSS_SPLIT_IMAGE_RULE]
         if not selected:
             raise ValidationError("Choose at least one applicable quality-control rule")
         return selected
@@ -1487,6 +1570,12 @@ class QualityControlService:
         workflow_context: dict[str, str] | None = None,
     ) -> QualityControlRun:
         rules = self._selected_rules(request)
+        if CROSS_SPLIT_IMAGE_RULE in rules and (
+            dataset_version is None or dataset_version.status != "complete"
+        ):
+            raise ValidationError(
+                "Select a completed frozen dataset for cross-split image screening"
+            )
         run = QualityControlRun(
             project_id=project.id,
             dataset_version_id=dataset_version.id if dataset_version else None,
@@ -2196,6 +2285,12 @@ class QualityControlService:
                         )
                         for image, finding in findings
                     )
+                elif rule is CROSS_SPLIT_IMAGE_RULE:
+                    pending_issues.extend(
+                        CROSS_SPLIT_IMAGE_RULE.screen(
+                            context, lambda: self._check_cancelled(run.id)
+                        )
+                    )
                 else:
                     pending_issues.extend(rule.evaluate(context, thresholds))
                 if job is not None:
@@ -2252,6 +2347,21 @@ class QualityControlService:
         self.quality_control.add_issues(issue_rows)
         run.issue_count = len(issue_rows)
         run.summary_json = self._summarize_issues(issue_rows)
+        if CROSS_SPLIT_IMAGE_RULE in selected_rules:
+            counts = Counter(
+                image.split
+                for image in context.images
+                if image.split in {"train", "validation", "test"}
+            )
+            run.summary_json = {
+                **run.summary_json,
+                similarity.RULE_ID: {
+                    "method": "dhash64-rgb16-v1",
+                    "checked_images": sum(counts.values()),
+                    "images_by_split": dict(counts),
+                    "flagged_pairs": sum(row.rule_id == similarity.RULE_ID for row in issue_rows),
+                },
+            }
         if acquisition is not None:
             run.summary_json = {**run.summary_json, "acquisition": acquisition}
             run.input_checksums_json = {
