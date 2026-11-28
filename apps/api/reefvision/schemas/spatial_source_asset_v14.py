@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class SpatialSourceParseSummary(BaseModel):
@@ -13,14 +13,23 @@ class SpatialSourceParseSummary(BaseModel):
 
     schema_version: Literal["spatial-source-parse-0001"]
     source_kind_resolved: Literal["mesh", "point_cloud"]
-    vertex_count: int | None = Field(default=None, ge=1)
-    face_count: int | None = Field(default=None, ge=1)
-    point_count: int | None = Field(default=None, ge=1)
+    vertex_count: int | None = Field(default=None, ge=1, strict=True)
+    face_count: int | None = Field(default=None, ge=1, strict=True)
+    point_count: int | None = Field(default=None, ge=1, strict=True)
     geometry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     qc_warnings: list[str]
     calibration_applied: Literal[False] = False
     calibration_verified: Literal[False] = False
     specimen_identity_verified: Literal[False] = False
+
+    @field_validator(
+        "calibration_applied", "calibration_verified", "specimen_identity_verified", mode="before"
+    )
+    @classmethod
+    def validate_unverified_flag(cls, value: object) -> object:
+        if value is not False:
+            raise ValueError("Structural parse verification flags must be JSON false")
+        return value
 
     @model_validator(mode="after")
     def validate_structural_counts_and_qc(self) -> SpatialSourceParseSummary:
