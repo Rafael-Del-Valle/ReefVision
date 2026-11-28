@@ -71,6 +71,9 @@ try {
     if (-not @($record.limitations | Where-Object { $_ -match 'does not prove installation' }).Count) {
         throw 'Evidence must explicitly disclaim installation acceptance.'
     }
+    if ($null -ne $record.provenance.manifestSha256 -or $null -ne $record.provenance.manifestBytes) {
+        throw 'Unprovided build manifest must not have a fingerprint or byte count.'
+    }
     # Both installer artifact kinds must be independently hashed; neither implies install success.
     $cabSample = Join-Path $fixture 'camera cabinet.cab'
     $cabBytes = [byte[]](77, 83, 67, 70, 255, 0, 17, 34, 51)
@@ -123,6 +126,22 @@ try {
         @($matched.provenance.unverifiedArtifactNames | Where-Object { $null -ne $_ }).Count -ne 0) {
         throw 'Five-CAB manifest did not produce complete, separately hashed installer evidence.'
     }
+    $expectedManifestHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($matched.provenance.manifestSha256 -cne $expectedManifestHash -or
+        $matched.provenance.manifestBytes -ne (Get-Item -LiteralPath $manifestPath).Length) {
+        throw 'Complete evidence lost the exact manifest fingerprint or byte count.'
+    }
+    # The same artifact set can match a byte-different manifest. Preserve the
+    # distinction even if the only change is insignificant JSON whitespace.
+    Add-Content -LiteralPath $manifestPath -Value ' ' -Encoding UTF8
+    $reformatted = (& $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $candidateCabPaths -ProvenancePath $manifestPath |
+        Out-String | ConvertFrom-Json)
+    if ($reformatted.provenance.status -cne 'matched_complete' -or
+        $reformatted.provenance.manifestSha256 -ceq $expectedManifestHash -or
+        $reformatted.provenance.manifestSha256 -cne (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant() -or
+        $reformatted.provenance.manifestBytes -ne (Get-Item -LiteralPath $manifestPath).Length) {
+        throw 'Changed manifest bytes did not produce distinct complete provenance evidence.'
+    }
     $candidateManifest.files += [ordered]@{ name = 'rv6.cab'; sha256 = ('a' * 64) }
     $candidateManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
     $partial = (& $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $candidateCabPaths -ProvenancePath $manifestPath |
@@ -130,6 +149,8 @@ try {
     if ($partial.provenance.status -cne 'matched_subset' -or
         $partial.provenance.verifiedArtifacts -ne 6 -or
         $partial.provenance.declaredArtifacts -ne 7 -or
+        $partial.provenance.manifestSha256 -cne (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant() -or
+        $partial.provenance.manifestBytes -ne (Get-Item -LiteralPath $manifestPath).Length -or
         @($partial.provenance.unverifiedArtifactNames).Count -ne 1 -or
         $partial.provenance.unverifiedArtifactNames[0] -cne 'rv6.cab') {
         throw 'A missing sixth CAB was incorrectly accepted as complete installer provenance.'

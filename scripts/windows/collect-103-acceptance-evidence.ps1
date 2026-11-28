@@ -143,6 +143,8 @@ $provenanceEvidence = [pscustomobject]@{
     declaredArtifacts = 0
     verifiedArtifacts = 0
     unverifiedArtifactNames = @()
+    manifestSha256 = $null
+    manifestBytes = $null
 }
 if (-not [string]::IsNullOrWhiteSpace($ProvenancePath)) {
     if ($artifactRecords[0].status -ne 'hashed') {
@@ -166,6 +168,16 @@ if (-not [string]::IsNullOrWhiteSpace($ProvenancePath)) {
         [IO.FileShare]::Read
     )
     try {
+        # Fingerprint the exact locked manifest snapshot used for parsing.
+        # This records consistency, not publisher authenticity or MSI validity.
+        $manifestBytes = $manifestStream.Length
+        $manifestHasher = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $manifestSha256 = ([BitConverter]::ToString($manifestHasher.ComputeHash($manifestStream))).Replace('-', '').ToLowerInvariant()
+        } finally {
+            $manifestHasher.Dispose()
+        }
+        $manifestStream.Position = 0
         $manifestReader = [IO.StreamReader]::new($manifestStream)
         try {
             $manifest = $manifestReader.ReadToEnd() | ConvertFrom-Json
@@ -238,6 +250,8 @@ if (-not [string]::IsNullOrWhiteSpace($ProvenancePath)) {
         declaredArtifacts = $declared.Count
         verifiedArtifacts = $verified.Count
         unverifiedArtifactNames = $unverified
+        manifestSha256 = $manifestSha256
+        manifestBytes = $manifestBytes
     }
 }
 $gpu = $null
