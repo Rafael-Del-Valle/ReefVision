@@ -15,6 +15,7 @@ from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.services.project_exchange_models import remap_model_registration
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.tests.test_model_inference import approve_generated_checkpoint
 from reefvision.tests.test_reefpose_validation import freeze_fixture
 from reefvision.tests.test_scientific_project_exchange import (
     export_archive,
@@ -72,6 +73,8 @@ def scored_workflow(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> dict
         session.add(model)
         session.commit()
         model_id = model.id
+        model_digest = model.sha256
+    approve_generated_checkpoint(client, project_id, model_id, model_digest)
 
     class NoDetections:
         provider_id = "ultralytics"
@@ -153,7 +156,14 @@ def scored_workflow(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> dict
     graph_id = saved.json()["id"]
     run = _execute(client, project_id, graph_id)
     assert run["run"]["status"] == "succeeded", run["run"]["error_message"]
-    return {"project_id": project_id, "graph_id": graph_id, "frozen": frozen, "run": run}
+    return {
+        "project_id": project_id,
+        "graph_id": graph_id,
+        "model_id": model_id,
+        "model_sha256": model_digest,
+        "frozen": frozen,
+        "run": run,
+    }
 
 
 def _report_artifact(run: dict[str, Any]) -> dict[str, Any]:
@@ -204,6 +214,9 @@ def test_pinned_workflow_and_report_artifact_reopen_after_exchange(
     reference = client.get(f"/api/v1/projects/{project_id}/reefpose-references/{frozen_id}")
     assert reference.status_code == 200, reference.text
     assert pinned_node["parameters_json"]["manifest_sha256"] == reference.json()["manifest_sha256"]
+    approve_generated_checkpoint(
+        client, project_id, mapping[scored_workflow["model_id"]], scored_workflow["model_sha256"]
+    )
     replay = _execute(client, project_id, mapping[scored_workflow["graph_id"]])
     assert replay["run"]["status"] == "succeeded", replay["run"]["error_message"]
 

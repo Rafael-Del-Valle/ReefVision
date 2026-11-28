@@ -251,6 +251,7 @@ def _fake_pose_processor(
         run.artifact_manifest_json = {
             **dict(run.artifact_manifest_json or {}),
             "best_checkpoint_path": (checkpoint_relative),
+            "result_checkpoint_sha256": hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
             "native_results_rows": [
                 {
                     "epoch": 1,
