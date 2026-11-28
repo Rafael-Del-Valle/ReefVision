@@ -8,6 +8,7 @@ from typing import cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.orm.attributes import flag_modified
 
 from reefvision.db.models import Job
 from reefvision.jobs.spatial_source_parse_v14 import process_spatial_source_parse_job
@@ -236,6 +237,8 @@ def test_successful_parse_requires_intact_request_and_result(client: TestClient)
             job = session.get(Job, asset["parse_job_id"])
             assert job is not None
             job.request_json = request if overrides is None else {**request, **overrides}
+            # JSON equality treats equal ints and floats as the same value.
+            flag_modified(job, "request_json")
             job.result_json = None if overrides is None else result
             session.commit()
 
@@ -251,8 +254,50 @@ def test_successful_parse_requires_intact_request_and_result(client: TestClient)
         job = session.get(Job, asset["parse_job_id"])
         assert job is not None
         job.request_json = request
+        flag_modified(job, "request_json")
         job.result_json = result
         session.commit()
+        session.refresh(job)
+        assert type(job.request_json["size_bytes"]) is int
     restored = client.get(detail)
     assert restored.status_code == 200, restored.text
     assert restored.json() == good.json()
+
+
+@pytest.mark.parametrize(
+    "invalid_size",
+    [float(len(OBJ)), True, len(OBJ) + 1],
+    ids=["equal-float", "boolean", "wrong-integer"],
+)
+def test_worker_rejects_invalid_request_byte_count(
+    client: TestClient, invalid_size: int | float
+) -> None:
+    project_id = str(create_project(client, "Spatial parse invalid byte count")["id"])
+    asset = _import(client, project_id, "coral.obj", OBJ)
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        job = session.get(Job, asset["parse_job_id"])
+        assert job is not None
+        job.request_json = {**job.request_json, "size_bytes": invalid_size}
+        flag_modified(job, "request_json")
+        session.commit()
+        session.refresh(job)
+        assert type(job.request_json["size_bytes"]) is type(invalid_size)
+
+    assert process_spatial_source_parse_job(
+        app.state.settings,
+        app.state.session_factory,
+        asset["parse_job_id"],
+    )
+    detail = f"/api/v1/projects/{project_id}/spatial/assets/{asset['id']}"
+    reopened = client.get(detail)
+    assert reopened.status_code == 200, reopened.text
+    assert reopened.json()["parse_status"] == "failed"
+    assert reopened.json()["parse_summary"] is None
+    with app.state.session_factory() as session:
+        job = session.get(Job, asset["parse_job_id"])
+        assert job is not None and job.result_json is None
+        assert "immutable asset" in str(job.error_message)
+    original = client.get(f"{detail}/content")
+    assert original.status_code == 200
+    assert original.content == OBJ
