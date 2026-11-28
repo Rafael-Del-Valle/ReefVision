@@ -114,7 +114,7 @@ class VideoTrackingBenchmarkService:
     @staticmethod
     def _ranking_key(
         item: _CandidateEvaluation,
-    ) -> tuple[float, float, float, int, int, float, str]:
+    ) -> tuple[float, float, float, int, int, float]:
         evaluation = item.evaluation
         center_error = evaluation.mean_center_error_pixels
         return (
@@ -124,7 +124,6 @@ class VideoTrackingBenchmarkService:
             evaluation.id_switches,
             evaluation.fragmentations,
             center_error if center_error is not None else float("inf"),
-            item.candidate.name.casefold(),
         )
 
     def benchmark(
@@ -153,10 +152,15 @@ class VideoTrackingBenchmarkService:
                 )
             )
 
-        ranked = sorted(evaluations, key=self._ranking_key)
+        ranked = sorted(
+            evaluations, key=lambda item: (self._ranking_key(item), item.candidate.name.casefold())
+        )
+        ranks: dict[tuple[float, float, float, int, int, float], int] = {}
+        for position, item in enumerate(ranked, start=1):
+            ranks.setdefault(self._ranking_key(item), position)
         results = [
             VideoTrackingBenchmarkResult(
-                rank=index,
+                rank=ranks[self._ranking_key(item)],
                 name=item.candidate.name,
                 source_job_id=item.candidate.source_job_id,
                 prediction_track_ids=item.candidate.prediction_track_ids,
@@ -166,13 +170,13 @@ class VideoTrackingBenchmarkService:
                 tracking_settings=item.candidate.tracking_settings,
                 evaluation=item.evaluation,
             )
-            for index, item in enumerate(ranked, start=1)
+            for item in ranked
         ]
         first_evaluation = results[0].evaluation
         return VideoTrackingBenchmarkResponse(
-            schema_version="video-tracking-benchmark-0001",
+            schema_version="video-tracking-benchmark-0002",
             video_id=video_id,
-            winner=results[0].name,
+            winner=results[0].name if results[1].rank > 1 else None,
             ground_truth_track_ids=first_evaluation.ground_truth_track_ids,
             start_frame=first_evaluation.start_frame,
             end_frame=first_evaluation.end_frame,

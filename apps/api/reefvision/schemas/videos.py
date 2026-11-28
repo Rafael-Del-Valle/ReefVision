@@ -485,9 +485,9 @@ class VideoTrackingBenchmarkResult(BaseModel):
 
 
 class VideoTrackingBenchmarkResponse(BaseModel):
-    schema_version: Literal["video-tracking-benchmark-0001"]
+    schema_version: Literal["video-tracking-benchmark-0002"]
     video_id: str
-    winner: str
+    winner: str | None
     ground_truth_track_ids: list[str]
     start_frame: int
     end_frame: int

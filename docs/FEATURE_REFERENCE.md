@@ -28,6 +28,7 @@ This is a technical inventory of the features described on the repository's defa
 ## Video and analysis
 
 - Import video, run ByteTrack or BoT-SORT tracking, inspect run histories, and exchange tracks.
+- Compare completed tracking runs against the same reference tracks and frame range. Runs with identical ranking metrics share their rank in the table and CSV. Version 2 benchmark JSON records a null winner when multiple runs rank first.
 - Export annotated review videos from saved tracking observations without rerunning detection.
 - Work with activity and occupancy analysis and the supported depth and 3D workflows.
 

@@ -427,12 +427,7 @@ def main() -> int:
     restart_duration = time.perf_counter() - restart_started
     restart_app.state.engine.dispose()
 
-    benchmark_stable = (
-        restart_benchmark["winner"] == benchmark["winner"]
-        and restart_benchmark["ground_truth_track_ids"] == benchmark["ground_truth_track_ids"]
-        and [item["name"] for item in restart_benchmark["results"]]
-        == [item["name"] for item in benchmark["results"]]
-    )
+    benchmark_stable = restart_benchmark == benchmark
     acceptance = "PASS" if benchmark_stable else "FAIL"
     peak_vram = torch.cuda.max_memory_allocated() if torch.cuda.is_available() else 0
     report = {
