@@ -657,3 +657,30 @@ Release HOLD: reviewed migration reconciliation (including all earlier
 integration branches), representative biological acceptance, actual
 Windows MSI/CAB installed-GUI clean/upgrade/rollback and investigator
 approval. Never infer an automatic remapping from this report.
+
+## 2026-11-27 — Migration source filesystem boundary
+
+Previous exact-head Actions run 46108824658 completed all three jobs
+successfully (backend, frontend, native Windows preservation). The source
+auditor previously checked symbolic links using pathlib alone; NTFS
+junctions are not symbolic links, and recursive glob discovery can omit
+redirected directories or walk a substituted tree. It could also block
+reading a POSIX FIFO named as a Python migration.
+
+The read-only auditor now checks absolute-root ancestors with lstat and
+rejects Windows reparse points and symbolic links before resolving the root.
+Explicit directory inventory checks entries before descending and only
+accepts regular Python migration files. Both legacy and strict reports
+retain ordinary source discovery and refuse redirected or nonregular
+sources. This is a static path-safety check, not a guarantee against
+concurrent malicious filesystem mutation or an authorization to upgrade.
+
+Eight independent helper probes passed on Linux, including real symlinks,
+a FIFO, normal recursive discovery and simulated Windows reparse metadata.
+Added real NTFS junction regressions (root, ancestor and nested) to the
+existing Windows parent-graph CI suite and bounded POSIX FIFO CLI
+regressions in both modes. Native NTFS execution and full exact-head CI
+remain to be verified. No migration revision, data, executable saved QC
+workflow or review gate is changed. Release HOLD remains for reviewed
+cross-version migration reconciliation, representative biology, genuine
+installed Windows MSI/CAB GUI upgrade/rollback and researcher approval.

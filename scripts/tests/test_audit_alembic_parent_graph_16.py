@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -356,3 +357,65 @@ def test_strict_compile_check_never_executes_migration(tmp_path: Path) -> None:
     assert report["parent_graph_consistent"] is True
     assert report["safe_to_reconcile_automatically"] is False
     assert path.read_bytes() == before
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires a real NTFS junction")
+@pytest.mark.parametrize("location", ["root", "ancestor", "nested"])
+def test_migration_junction_is_refused_before_reading_target(
+    tmp_path: Path, location: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    outside = tmp_path / "outside"
+    external_root = outside / "versions" if location == "ancestor" else outside
+    external = _migration(external_root, "external.py", "external", "None")
+    before = external.read_bytes()
+    local = tmp_path / "local"
+    local.mkdir()
+    local_file = _migration(local, "local.py", "local", "None")
+    local_before = local_file.read_bytes()
+    alias = local / "junction" if location == "nested" else tmp_path / "junction"
+    result = subprocess.run(
+        ["cmd.exe", "/d", "/c", "mklink", "/J", str(alias), str(outside)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    try:
+        root = local if location == "nested" else alias
+        if location == "ancestor":
+            root = alias / "versions"
+        module = _module()
+
+        def unexpected_read(path: Path) -> bytes:
+            raise AssertionError(f"Migration source was read before path refusal: {path}")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(Path, "read_bytes", unexpected_read)
+            for strict in (False, True):
+                with pytest.raises(ValueError, match="Windows reparse point"):
+                    module.audit([root], verify_parent_graph=strict)
+        assert external.read_bytes() == before
+        assert local_file.read_bytes() == local_before
+    finally:
+        alias.rmdir()
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="requires POSIX FIFO support")
+@pytest.mark.parametrize("strict", [False, True])
+def test_nonregular_python_source_is_refused_without_blocking(tmp_path: Path, strict: bool) -> None:
+    root = tmp_path / "versions"
+    ordinary = _migration(root, "0001.py", "0001", "None")
+    before = ordinary.read_bytes()
+    os.mkfifo(root / "blocked.py")
+    flags = ["--verify-parent-graph"] if strict else []
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), *flags, str(root)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    assert result.returncode == 2
+    assert not result.stdout
+    assert "not a regular file" in result.stderr
+    assert ordinary.read_bytes() == before

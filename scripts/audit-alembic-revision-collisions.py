@@ -5,7 +5,9 @@ import argparse
 import ast
 import hashlib
 import json
+import os
 import re
+import stat
 from collections import defaultdict
 from pathlib import Path
 
@@ -445,6 +447,35 @@ def compare_revision_manifests(
     return comparisons
 
 
+def _checked_path_stat(path: Path, *, ancestor: bool = False) -> os.stat_result:
+    """Reject filesystem redirects before resolving or walking a migration root."""
+    info = path.lstat()
+    if stat.S_ISLNK(info.st_mode):
+        if ancestor:
+            raise ValueError(f"Migration directory has a symbolic-link ancestor: {path}")
+        raise ValueError(f"Migration tree contains a symbolic link: {path}")
+    if getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        raise ValueError(f"Migration tree contains a Windows reparse point: {path}")
+    return info
+
+
+def _migration_sources(root: Path) -> list[Path]:
+    """Inventory ordinary Python files without following directory redirects."""
+    pending = [root]
+    sources = []
+    while pending:
+        directory = pending.pop()
+        for entry in directory.iterdir():
+            info = _checked_path_stat(entry)
+            if entry.match("*.py"):
+                if not stat.S_ISREG(info.st_mode):
+                    raise ValueError(f"Migration source is not a regular file: {entry}")
+                sources.append(entry)
+            elif stat.S_ISDIR(info.st_mode):
+                pending.append(entry)
+    return sorted(sources)
+
+
 def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
     by_revision: dict[str, list[str]] = defaultdict(list)
     source_sha256: dict[str, str] = {}
@@ -457,8 +488,12 @@ def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
         # A repeated directory must not manufacture a revision collision.
         # Check each path component before resolving so symlinked ancestors
         # cannot silently redirect the audit outside the requested tree.
-        if any(part.is_symlink() for part in (root, *root.parents)):
-            raise ValueError(f"Migration directory has a symbolic-link ancestor: {root}")
+        absolute_root = root.absolute()
+        try:
+            for part in reversed((absolute_root, *absolute_root.parents)):
+                _checked_path_stat(part, ancestor=True)
+        except (FileNotFoundError, NotADirectoryError) as exc:
+            raise ValueError(f"Migration directory missing: {root}") from exc
         canonical_root = root.resolve(strict=False)
         if canonical_root in seen_roots:
             raise ValueError(f"Migration directory specified more than once: {root}")
@@ -470,19 +505,15 @@ def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
         seen_roots.add(canonical_root)
         if not root.is_dir():
             raise ValueError(f"Migration directory missing: {root}")
-        if root.is_symlink():
-            raise ValueError(f"Migration directory is a symbolic link: {root}")
-        # rglob may silently omit symlinked directories; fail closed rather than
-        # reporting a misleading collision-free audit of an incomplete tree.
-        for entry in root.rglob("*"):
-            if entry.is_symlink():
-                raise ValueError(f"Migration tree contains a symbolic link: {entry}")
+        # Inventory every entry before reading migration bytes. pathlib.rglob
+        # can omit redirected directories; Windows junctions are not symlinks.
+        sources = _migration_sources(root)
         root_entries: list[tuple[str, tuple[str, ...]]] = []
         root_paths: dict[str, str] = {}
         root_manifest_entries: list[tuple[str, str, tuple[str, ...]]] = []
-        for path in sorted(root.rglob("*.py")):
-            if path.is_symlink():
-                raise ValueError(f"Migration file is a symbolic link: {path}")
+        for path in sources:
+            if not stat.S_ISREG(_checked_path_stat(path).st_mode):
+                raise ValueError(f"Migration source is not a regular file: {path}")
             if path.name == "__init__.py":
                 continue
             # Match the packaged Alembic configuration: nonrecursive source
