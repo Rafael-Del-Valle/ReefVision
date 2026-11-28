@@ -12,7 +12,7 @@ from reefvision.domain.errors import ConflictError, ValidationError
 from reefvision.ml.model_bundles import checkpoint_requires_trust, require_checkpoint_trust
 from reefvision.schemas.models import ModelRegistrationResponse
 from reefvision.storage.models import hash_model_file
-from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.projects import filesystem_io_path, resolve_managed_project_path
 
 Checkpoint = ModelRegistration | ModelRegistrationResponse
 
@@ -29,7 +29,7 @@ def _approval_path(settings: Settings, model: Checkpoint) -> Path:
         model.sha256,
     ]
     key = hashlib.sha256(json.dumps(identity).encode("utf-8")).hexdigest()
-    return settings.resolved_data_dir / "checkpoint-approvals" / key
+    return filesystem_io_path(settings.resolved_data_dir / "checkpoint-approvals" / key)
 
 
 def remember_checkpoint_approval(settings: Settings, model: Checkpoint) -> None:
