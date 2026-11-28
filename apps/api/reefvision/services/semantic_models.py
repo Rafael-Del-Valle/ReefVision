@@ -473,9 +473,7 @@ class SemanticModelService(SegmentationModelService):
         manifest = run.artifact_manifest_json or {}
         expected = manifest.get("result_checkpoint_sha256") or manifest.get("bundle_sha256")
         if expected and actual != expected:
-            raise ValidationError(
-                "The training checkpoint checksum changed after completion"
-            )
+            raise ValidationError("The training checkpoint checksum changed after completion")
         if approved_sha256 == actual:
             return actual
         job = self.session.get(Job, run.job_id) if run.job_id else None
