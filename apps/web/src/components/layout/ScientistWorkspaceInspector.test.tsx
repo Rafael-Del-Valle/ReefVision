@@ -35,7 +35,8 @@ function renderInspector({
 
 describe("ScientistWorkspaceInspector", () => {
   it("defines context for every current project workspace", () => {
-    expect(WORKSPACE_INSPECTOR_VIEWS).toHaveLength(28);
+    expect(WORKSPACE_INSPECTOR_VIEWS).toHaveLength(29);
+    expect(WORKSPACE_INSPECTOR_VIEWS).toContain("compute");
     expect(WORKSPACE_INSPECTOR_VIEWS).toContain("multimodal");
     expect(WORKSPACE_INSPECTOR_VIEWS).toContain("project_assets");
     expect(WORKSPACE_INSPECTOR_VIEWS).toContain("research_ecology");

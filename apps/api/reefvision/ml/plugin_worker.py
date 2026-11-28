@@ -94,7 +94,7 @@ def run_plugin(module: bytes, arguments: Arguments | None = None) -> float | Non
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 timeout=WORKER_TIMEOUT_SECONDS,
                 check=True,
             )
