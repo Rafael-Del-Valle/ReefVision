@@ -354,9 +354,14 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
     await expect
       .poll(
         async () => {
-          target = (await history(schedule.id)).find(
-            (item) => item.id !== previousId,
-          );
+          const chronological = (await history(schedule.id)).reverse();
+          const previousIndex = previousId
+            ? chronological.findIndex((item) => item.id === previousId)
+            : -1;
+          target =
+            previousId && previousIndex === -1
+              ? undefined
+              : chronological[previousIndex + 1];
           return target?.status ?? "no occurrence yet";
         },
         { timeout: 50_000 },
@@ -469,10 +474,21 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
     }),
   );
 
-  const list = await history(schedule.id);
-  expect(list.map(({ id }) => id).sort()).toEqual(
-    (preceding ? [occurrence.id, preceding.first.id] : [occurrence.id]).sort(),
-  );
+  if (phase !== "before-restart") await pause(schedule);
+  const list = (await history(schedule.id)).reverse();
+  if (preceding) {
+    expect(list[0].id).toBe(preceding.first.id);
+    expect(list[1].id).toBe(occurrence.id);
+    // The browser can attach after additional live slots have already run.
+    for (const [index, current] of list.slice(1).entries()) {
+      expect(Date.parse(current.scheduled_at)).toBe(
+        Date.parse(list[index].scheduled_at) +
+          (1 + current.missed_intervals) * schedule.interval_seconds * 1_000,
+      );
+    }
+  } else {
+    expect(list.map(({ id }) => id)).toEqual([occurrence.id]);
+  }
   expect(
     new Set(list.map(({ scheduled_at }) => Date.parse(scheduled_at))).size,
   ).toBe(list.length);
@@ -497,7 +513,6 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
       ),
     );
   } else {
-    await pause(schedule);
     await openSchedules();
     await select(schedule.name);
     await expect(
@@ -677,7 +692,7 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
     }
     expect(replays[0].id).not.toBe(replays[1].id);
     expect(replays[0].payloadSha256).toBe(replays[1].payloadSha256);
-    expect((await history(schedule.id)).map(({ id }) => id)).toEqual(
+    expect((await history(schedule.id)).reverse().map(({ id }) => id)).toEqual(
       list.map(({ id }) => id),
     );
     expect((await current(schedule.id)).enabled).toBe(false);
@@ -710,6 +725,11 @@ test("schedules a frozen QC workflow and follows its durable occurrence to revie
         originalHashes,
         schedule: await current(schedule.id),
         occurrence,
+        observedSlots: list.map(({ id, scheduled_at, missed_intervals }) => ({
+          id,
+          scheduled_at,
+          missed_intervals,
+        })),
         job: { id: job.id, project_id: job.project_id, status: job.status },
         queueId,
         artifactSha256: artifact.payload_sha256,

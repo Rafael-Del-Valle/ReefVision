@@ -248,3 +248,46 @@ def parse_noaa_tides(
     if not records:
         raise ValidationError("NOAA returned no usable tidal values; no values were fabricated")
     return records, missing
+
+
+def acquire_noaa_tides(
+    http: httpx.Client, request: NOAATideImportRequest, acquired_at: datetime, source_url: str
+) -> tuple[dict[str, Any], list[ScientificRecordCreate], int]:
+    response = fetch_noaa(http, source_url)
+    evidence = response
+    if (
+        request.product == "predictions"
+        and "metadata" not in response
+        and "error" not in response
+        and response.get("predictions")
+    ):
+        # CO-OPS returns predicted levels without the station block supplied with observations.
+        station_url = f"https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/{request.station_id}.json"
+        station_response = fetch_noaa(http, station_url)
+        stations = station_response.get("stations")
+        if (
+            not isinstance(stations, list)
+            or len(stations) != 1
+            or not isinstance(stations[0], dict)
+        ):
+            raise ValidationError("NOAA metadata must identify exactly one tide prediction station")
+        station = stations[0]
+        if station.get("id") != request.station_id:
+            raise ValidationError(
+                "NOAA metadata station does not match the requested prediction station"
+            )
+        metadata = {
+            "id": station["id"],
+            "name": station.get("name"),
+            "lat": station.get("lat"),
+            "lon": station.get("lng"),
+            "source_url": station_url,
+        }
+        evidence = {
+            "predictions_response": response,
+            "station_metadata_url": station_url,
+            "station_metadata_response": station_response,
+        }
+        response = {**response, "metadata": metadata}
+    items, missing = parse_noaa_tides(response, request, acquired_at, source_url)
+    return evidence, items, missing

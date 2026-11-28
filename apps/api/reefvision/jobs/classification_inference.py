@@ -17,7 +17,7 @@ from reefvision.db.models import (
 from reefvision.domain.errors import ReefVisionError, ValidationError
 from reefvision.ml.classification import classification_provider_for_name
 from reefvision.storage.checkpoint_approvals import verified_registered_checkpoint
-from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.projects import filesystem_io_path, resolve_managed_project_path
 
 
 def _fail(factory: sessionmaker[Session], job_id: str, message: str) -> None:
@@ -74,7 +74,7 @@ def process_classification_inference_job(
         try:
             if model.project_id != job.project_id:
                 raise ValidationError("The classifier must belong to the job project")
-            checkpoint = verified_registered_checkpoint(settings, model)
+            checkpoint = filesystem_io_path(verified_registered_checkpoint(settings, model))
         except ReefVisionError as exc:
             job.status = "failed"
             job.error_message = str(exc)
@@ -96,7 +96,7 @@ def process_classification_inference_job(
         created = 0
 
         for progress, image in enumerate(images, start=1):
-            source = resolve_managed_project_path(settings, image.managed_path)
+            source = filesystem_io_path(resolve_managed_project_path(settings, image.managed_path))
             scores = provider.predict(
                 checkpoint,
                 source,

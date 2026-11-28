@@ -12,7 +12,7 @@ from reefvision.db.models import ClassificationDataset, Job, ModelRegistration, 
 from reefvision.ml.classification import classification_provider_for_name
 from reefvision.storage.checkpoint_approvals import remember_checkpoint_approval
 from reefvision.storage.models import copy_model_file
-from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.projects import filesystem_io_path, resolve_managed_project_path
 
 
 def _fail(factory: sessionmaker[Session], job_id: str, message: str) -> None:
@@ -79,9 +79,9 @@ def process_classification_training_job(
 
     try:
         provider = classification_provider_for_name("ultralytics")
-        dataset_root = resolve_managed_project_path(settings, dataset_path)
+        dataset_root = filesystem_io_path(resolve_managed_project_path(settings, dataset_path))
         run_relative = f"{project_storage_root}/classification/runs/{job_id}"
-        run_root = resolve_managed_project_path(settings, run_relative)
+        run_root = filesystem_io_path(resolve_managed_project_path(settings, run_relative))
         result = provider.train(
             dataset_root,
             run_root,
@@ -93,7 +93,7 @@ def process_classification_training_job(
         )
         model_id = str(uuid4())
         managed_relative = f"{project_storage_root}/models/{model_id}.pt"
-        managed_path = resolve_managed_project_path(settings, managed_relative)
+        managed_path = filesystem_io_path(resolve_managed_project_path(settings, managed_relative))
         checksum, size = copy_model_file(result.checkpoint_path, managed_path)
         run_name = str(request.get("run_name", "classification")).strip() or "classification"
         display_name = f"{run_name}-{job_id[:8]}"

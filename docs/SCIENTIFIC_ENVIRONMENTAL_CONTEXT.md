@@ -95,13 +95,16 @@ sample or changes its QC to suspect. This avoids reusing an obsolete value
 after a provider correction. Offline mode never makes a
 network request; it returns a matching cache with `fresh` or `stale_offline`
 status, or a missing-cache error. A failed online refresh leaves the prior
-cache intact. No authentication is required for this NOAA endpoint. Copernicus
-credentials, currents, salinity grids and local CSV import remain future work.
+cache intact. The NOAA public endpoints accept requests without credentials.
+The Copernicus section below covers its separate modeled-data provider.
 
-Protocol references:
-
-- https://api.tidesandcurrents.noaa.gov/api/prod/
-- https://api.tidesandcurrents.noaa.gov/api/prod/responseHelp.html
+For tide predictions and observed water levels, choose the same station, UTC day and vertical
+datum in Environmental Context. NOAA's prediction product can omit station coordinates.
+ReefVision then retrieves the matching station record from NOAA's metadata service. The local
+cache retains both original responses, and each predicted level names the station metadata URL.
+A missing or mismatched station prevents the import. After a successful import, select offline
+mode to reopen the saved records. Observed levels retain the sensor flags and reported uncertainty.
+[NOAA data products](https://api.tidesandcurrents.noaa.gov/api/prod/) · [Station metadata](https://api.tidesandcurrents.noaa.gov/mdapi/prod/)
 
 ## Lookup and scientific limits
 
