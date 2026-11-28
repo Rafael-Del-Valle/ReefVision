@@ -535,3 +535,17 @@ No existing scientific workflows, migrations, observations or reviewer
 approvals change. Release HOLD pending replacement exact-head CI, reviewed
 cross-version reconciliation, representative biological and persisted workflow
 acceptance, installed Windows upgrade/rollback and explicit researcher approval.
+
+## 2026-11-27 — Exact-head collision-audit CI recovery
+
+CI #46089098488 on 7cd62c21 passed frontend and native Windows preservation
+and all 322 inspector tests. Collision-audit Ruff lint passed, but its format
+check stopped on four exact formatting hunks in the auditor and CLI tests.
+Apply those logged formatting changes only; no production logic changes.
+Extend the real packaged-lineage test to require that the strict CLI returns
+zero, emits no stderr and reproduces the in-process report exactly while
+preserving migration source bytes. The CLI must not authorize reconciliation.
+The current main/1.6 comparison is diverged (2556 ahead, 358 behind at audit);
+1.1 still contains distinct 0038–0042 scientific migrations. Do not merge or
+renumber either branch automatically. New tests require exact-head CI; local
+checkout is blocked by github.com DNS. Release HOLD remains unchanged.
