@@ -313,9 +313,15 @@ def test_worker_rejects_invalid_request_byte_count(
         ("coral.obj", OBJ, "calibration_applied", 0),
         ("coral.obj", OBJ, "calibration_verified", 0),
         ("coral.obj", OBJ, "specimen_identity_verified", 0),
+        ("coral.obj", OBJ, "point_count", None),
+        ("cloud.ply", POINT_PLY, "vertex_count", None),
+        ("cloud.ply", POINT_PLY, "face_count", None),
+        ("coral.obj", OBJ, "calibration_applied", None),
+        ("coral.obj", OBJ, "calibration_verified", None),
+        ("coral.obj", OBJ, "specimen_identity_verified", None),
     ],
 )
-def test_parse_result_rejects_type_only_tampering(
+def test_parse_result_rejects_noncanonical_fields(
     client: TestClient, filename: str, payload: bytes, field: str, invalid: object
 ) -> None:
     project_id = str(create_project(client, "Structural parse JSON types")["id"])
@@ -335,12 +341,20 @@ def test_parse_result_rejects_type_only_tampering(
         job = session.get(Job, asset["parse_job_id"])
         assert job is not None and job.result_json is not None
         original = dict(job.result_json)
-        # Keep the valid digest: coercion must not conceal the altered JSON type.
-        job.result_json = {**original, field: invalid}
+        # Keep the valid digest: neither coercion nor defaults may hide changes.
+        altered = dict(original)
+        if invalid is None:
+            del altered[field]
+        else:
+            altered[field] = invalid
+        job.result_json = altered
         flag_modified(job, "result_json")
         session.commit()
         session.refresh(job)
-        assert type(job.result_json[field]) is type(invalid)
+        if invalid is None:
+            assert field not in job.result_json
+        else:
+            assert type(job.result_json[field]) is type(invalid)
 
     for url in (detail, base):
         rejected = client.get(url)
