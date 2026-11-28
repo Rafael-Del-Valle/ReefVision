@@ -175,6 +175,8 @@ def test_release_version_checker_rejects_disagreement(tmp_path: Path) -> None:
         "apps/web/package-lock.json",
         "apps/web/src-tauri/Cargo.toml",
         "apps/web/src-tauri/Cargo.lock",
+        "apps/windows-automation/Cargo.toml",
+        "apps/windows-automation/Cargo.lock",
         "apps/web/src-tauri/tauri.conf.json",
         "apps/api/reefvision/__init__.py",
         "scripts/lib/reefvision-commands.ps1",
