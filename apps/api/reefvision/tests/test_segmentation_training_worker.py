@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -77,9 +78,15 @@ def _seed_run(client: TestClient) -> str:
         return job.id
 
 
+@pytest.mark.parametrize(
+    ("checkpoint_filename", "checkpoint_bytes"),
+    [("best.pt", b"best"), ("last.pt", b"last"), ("best.pt", b""), (None, b"")],
+)
 def test_segment_worker_exports_polygons_and_preserves_mask_metrics(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
+    checkpoint_filename: str | None,
+    checkpoint_bytes: bytes,
 ) -> None:
     job_id = _seed_run(client)
     captured: dict[str, Any] = {}
@@ -128,7 +135,8 @@ def test_segment_worker_exports_polygons_and_preserves_mask_metrics(
             self.trainer.epoch = 1
             for callback in self.callbacks.get("on_fit_epoch_end", []):
                 callback(self.trainer)
-            (weights / "best.pt").write_bytes(b"best")
+            if checkpoint_filename:
+                (weights / checkpoint_filename).write_bytes(checkpoint_bytes)
             for callback in self.callbacks.get("on_train_end", []):
                 callback(self.trainer)
 
@@ -142,6 +150,11 @@ def test_segment_worker_exports_polygons_and_preserves_mask_metrics(
     )
     with app.state.session_factory() as debug_session:
         debug_job = debug_session.get(Job, job_id)
+        if not checkpoint_bytes:
+            assert not result
+            assert debug_job is not None and debug_job.status == "failed"
+            assert "checkpoint" in (debug_job.error_message or "").lower()
+            return
         assert result, (
             f"Segmentation training worker failed: "
             f"{debug_job.error_message if debug_job else 'job missing'}"
@@ -155,6 +168,13 @@ def test_segment_worker_exports_polygons_and_preserves_mask_metrics(
         run = session.get(TrainingRun, job.request_json["training_run_id"])
         assert run is not None
         assert run.status == "completed"
+        assert checkpoint_filename is not None and run.result_checkpoint_path is not None
+        assert Path(run.result_checkpoint_path).name == checkpoint_filename
+        assert (
+            run.artifact_manifest_json["result_checkpoint_sha256"]
+            == hashlib.sha256(checkpoint_bytes).hexdigest()
+        )
+        assert run.artifact_manifest_json["result_checkpoint_size_bytes"] == len(checkpoint_bytes)
         assert run.artifact_manifest_json["dataset_format"] == "yolo_segmentation"
         assert run.artifact_manifest_json["dataset_export_result"]["polygon_count"] == 1
         assert run.artifact_manifest_json["mask_metrics"] == {
