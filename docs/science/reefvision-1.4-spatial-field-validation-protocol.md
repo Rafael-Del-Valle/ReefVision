@@ -1136,5 +1136,15 @@ digest is corrupted. A valid earlier prefix remains readable when only a
 later revision is corrupted. After fixture restoration, require identical
 readback and page content before appending revision four.
 
+A revision whose project binding is corrupted must not disappear from the
+asset's history merely because the listing query filters by project. Verify
+ownership of the original first, then validate each revision associated with
+that asset ID. In a two-revision fixture, change the tail project binding to
+another existing project and recompute its digest. Require owner list, direct
+tail retrieval, tail page and append to fail with a source-binding error,
+while the earlier prefix remains readable and the other project receives
+not-found responses. Restore the disposable fixture and require identical
+records, unchanged original bytes and a successful third revision.
+
 These operations are not cryptographic signatures, authenticated human review,
 or proof of biological calibration. No measurement node contract changes.
