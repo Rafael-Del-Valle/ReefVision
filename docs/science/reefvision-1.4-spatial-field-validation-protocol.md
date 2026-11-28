@@ -1195,3 +1195,13 @@ Project Exchange inspection and import must likewise reject these types
 even when the outer section checksum has been recomputed. This safeguards
 stored structural summaries, not authenticated review or calibrated
 standalone and saved-workflow measurement results.
+
+Stored structural parse results must also explicitly contain every canonical
+field emitted by the worker. Omitted null counts or false verification flags
+must not be silently restored from schema defaults before digest comparison.
+Check six omitted-field cases across mesh and point-cloud API readback, retain
+the original result digest and original source bytes, and verify exact summary
+recovery after restoring the fixture. Reject three omitted-field variants in
+Project Exchange inspection and import with a recomputed section checksum.
+This is a completeness check for existing structural evidence, not a new
+measurement node, authenticated review or a calibration verification.
