@@ -301,3 +301,59 @@ def test_worker_rejects_invalid_request_byte_count(
     original = client.get(f"{detail}/content")
     assert original.status_code == 200
     assert original.content == OBJ
+
+
+@pytest.mark.parametrize(
+    "filename,payload,field,invalid",
+    [
+        ("coral.obj", OBJ, "vertex_count", 3.0),
+        ("coral.obj", OBJ, "vertex_count", "3"),
+        ("coral.obj", OBJ, "face_count", True),
+        ("cloud.ply", POINT_PLY, "point_count", 2.0),
+        ("coral.obj", OBJ, "calibration_applied", 0),
+        ("coral.obj", OBJ, "calibration_verified", 0),
+        ("coral.obj", OBJ, "specimen_identity_verified", 0),
+    ],
+)
+def test_parse_result_rejects_type_only_tampering(
+    client: TestClient, filename: str, payload: bytes, field: str, invalid: object
+) -> None:
+    project_id = str(create_project(client, "Structural parse JSON types")["id"])
+    asset = _import(client, project_id, filename, payload)
+    app = cast(FastAPI, client.app)
+    assert process_spatial_source_parse_job(
+        app.state.settings,
+        app.state.session_factory,
+        asset["parse_job_id"],
+    )
+    base = f"/api/v1/projects/{project_id}/spatial/assets"
+    detail = f"{base}/{asset['id']}"
+    good = client.get(detail)
+    assert good.status_code == 200, good.text
+    assert good.json()["parse_status"] == "succeeded"
+    with app.state.session_factory() as session:
+        job = session.get(Job, asset["parse_job_id"])
+        assert job is not None and job.result_json is not None
+        original = dict(job.result_json)
+        # Keep the valid digest: coercion must not conceal the altered JSON type.
+        job.result_json = {**original, field: invalid}
+        flag_modified(job, "result_json")
+        session.commit()
+        session.refresh(job)
+        assert type(job.result_json[field]) is type(invalid)
+
+    for url in (detail, base):
+        rejected = client.get(url)
+        assert rejected.status_code == 400, rejected.text
+        assert "integrity" in rejected.json()["detail"].lower()
+    assert client.get(f"{detail}/content").content == payload
+
+    with app.state.session_factory() as session:
+        job = session.get(Job, asset["parse_job_id"])
+        assert job is not None
+        job.result_json = original
+        flag_modified(job, "result_json")
+        session.commit()
+    restored = client.get(detail)
+    assert restored.status_code == 200, restored.text
+    assert restored.json() == good.json()
