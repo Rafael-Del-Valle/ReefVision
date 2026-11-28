@@ -1061,3 +1061,17 @@ source lengths in standalone and twice-replayed persisted typed workflows.
 This descriptor can help a reviewer locate a dominant sampling gap, but
 depends on the selected mesh tessellation and is not an anatomical sampling
 resolution estimate, confidence score, or verified branch measurement.
+
+For each selected chain, `source_arc_length_by_distinct_trace_count`
+partitions its exact nonzero source edges into ascending distinct-trace
+support counts. Each bin reports the number of edges and the sum of their
+binary64 source lengths (rational accumulation before final rounding).
+A trace traversing the same edge repeatedly contributes only one support
+membership; separate trace selections are not necessarily separate people
+or independent biological measurements. Unequal collinear overlap is not
+merged in these bins. The lengths are in source units, not calibrated
+anatomical branch lengths or evidence of reviewer agreement.
+Check the two-unit shared trunk against the remaining 3 + sqrt(13) units,
+reverse trace order, split seam indices, and repeat passes within one trace.
+Verify the independent directed-scan oracle and identical standalone API
+and twice-replayed saved typed workflow payloads/hashes.
