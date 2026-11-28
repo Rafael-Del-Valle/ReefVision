@@ -29,6 +29,7 @@ from reefvision.domain.errors import ValidationError
 from reefvision.ml.provider_hub import assist_provider_for_name
 from reefvision.ml.providers import AnnotationAssistProvider, PixelBox
 from reefvision.ml.sam2_provider import TransformersSam2AssistProvider
+from reefvision.storage.checkpoint_approvals import verified_registered_checkpoint
 from reefvision.storage.projects import resolve_managed_project_path
 
 AssistProviderFactory = Callable[[str], AnnotationAssistProvider]
@@ -189,7 +190,7 @@ def create_prompt_assist_mask_proposals(
     job_id = job.id
 
     provider = provider_factory(model.provider_name)
-    model_path = resolve_managed_project_path(settings, model.managed_path)
+    model_path = verified_registered_checkpoint(settings, model)
     written_paths: list[Path] = []
     proposals: list[PredictionProposal] = []
     prepared_by_image: dict[str, Any] = {}

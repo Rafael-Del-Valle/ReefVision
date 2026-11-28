@@ -2784,6 +2784,20 @@ export async function registerModelFromRun(
   }
 }
 
+export async function approveModelCheckpoint(
+  projectId: string,
+  modelId: string,
+  sha256: string,
+): Promise<ModelRegistration> {
+  return request<ModelRegistration>(
+    `/projects/${encodeURIComponent(projectId)}/models/${encodeURIComponent(modelId)}/approve-checkpoint`,
+    {
+      method: "POST",
+      body: JSON.stringify({ sha256 }),
+    },
+  );
+}
+
 export async function deleteModel(modelId: string): Promise<void> {
   await request<void>(`/models/${modelId}`, { method: "DELETE" });
 }

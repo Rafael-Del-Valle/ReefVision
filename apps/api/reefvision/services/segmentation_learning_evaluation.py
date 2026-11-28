@@ -33,7 +33,7 @@ from reefvision.services.segmentation_scoring import (
     ScoredSegmentationHoldout,
     score_segmentation_holdout,
 )
-from reefvision.storage.learning_evaluation import verify_learning_content
+from reefvision.storage.checkpoint_approvals import verified_registered_checkpoint
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.segmentation_metric_masks import MAX_MASK_PNG_BYTES
 
@@ -62,7 +62,7 @@ class SegmentationLearningEvaluationService:
             or model.task != "segment"
         ):
             raise NotFoundError("Registered project segmentation model not found")
-        verify_learning_content(self.settings, model.managed_path, model.sha256)
+        verified_registered_checkpoint(self.settings, model)
         run_id = (model.metadata_json or {}).get("source_training_run_id")
         if not isinstance(run_id, str) or not run_id:
             raise ValidationError("Segmentation model is missing verified training lineage")

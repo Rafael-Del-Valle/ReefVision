@@ -29,6 +29,7 @@ from reefvision.services.model_runtime import verify_queued_selection
 from reefvision.services.pose_temporal_tracking import PoseTemporalTrackingService
 from reefvision.services.video_georeferencing import VideoGeoreferencingService
 from reefvision.services.video_georeferencing_readiness import VideoGeoreferencingReadinessService
+from reefvision.storage.checkpoint_approvals import verified_registered_checkpoint
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.results_packages import sha256_file
@@ -308,15 +309,6 @@ def process_video_tracking_job(
             session.commit()
             return False
 
-        try:
-            verify_queued_selection(session, settings, video.project_id, request)
-        except ReefVisionError as exc:
-            job.status = "failed"
-            job.error_message = str(exc)
-            job.completed_at = datetime.now(UTC)
-            session.commit()
-            return False
-
         if model.purpose not in {"detector", "segmenter"} or model.task not in {
             "detect",
             "segment",
@@ -346,6 +338,20 @@ def process_video_tracking_job(
             job.error_message = (
                 "Hybrid tracking requires a same-project Ultralytics detector and segmenter"
             )
+            job.completed_at = datetime.now(UTC)
+            session.commit()
+            return False
+
+        try:
+            verify_queued_selection(session, settings, video.project_id, request)
+            if job.project_id != video.project_id:
+                raise ValidationError("Video tracking inputs must belong to the job project")
+            verified_registered_checkpoint(settings, model)
+            if secondary is not None:
+                verified_registered_checkpoint(settings, secondary)
+        except ReefVisionError as exc:
+            job.status = "failed"
+            job.error_message = str(exc)
             job.completed_at = datetime.now(UTC)
             session.commit()
             return False

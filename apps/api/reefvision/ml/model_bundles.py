@@ -42,8 +42,13 @@ def checkpoint_requires_trust(path: Path, *, purpose: str, provider_name: str | 
         # Only this specific project-owned adapter enforces weights_only=True.
         return (purpose, provider) != ("detector", "reefpose")
     if suffix != ".zip":
-        return False
-    if purpose in {"semantic_segment", "semantic_segmenter"}:
+        return True
+    # These two adapters validate a bounded Transformers archive and select its
+    # declared weights. Other loaders cannot establish safe contents by extension.
+    if not (
+        (purpose == "assist" and provider == "sam2")
+        or (purpose == "depth" and provider in {"", "depth_anything_v2"})
+    ):
         return True
     try:
         with zipfile.ZipFile(path) as archive:

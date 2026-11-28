@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
   ApiRequestError,
+  approveModelCheckpoint,
   createPoseEvaluation,
   deleteModel,
   getModelProviderPreflight,
@@ -52,6 +53,13 @@ function ModelRow({
   onEvaluate: (modelId: string, datasetId: string) => void;
 }) {
   const [evaluationDatasetId, setEvaluationDatasetId] = useState("");
+  const [reviewTrust, setReviewTrust] = useState(false);
+  const [reviewedSha, setReviewedSha] = useState<string | null>(null);
+  const approval = useMutation({
+    mutationFn: () =>
+      approveModelCheckpoint(model.project_id, model.id, model.sha256),
+  });
+
   const labelEntries = useMemo(() => {
     const labels = Array.isArray(model.class_map_json.labels)
       ? (model.class_map_json.labels as string[])
@@ -126,6 +134,58 @@ function ModelRow({
         </small>
         <small>Project: {model.project_id}</small>
         <small>Registered: {new Date(model.created_at).toLocaleString()}</small>
+        {model.provider_name !== "reefpose" &&
+          /\.(pt|pth|zip)$/i.test(model.source_filename) && (
+            <div>
+              <button
+                type="button"
+                className="secondary"
+                aria-expanded={reviewTrust}
+                onClick={() => {
+                  setReviewTrust(!reviewTrust);
+                  setReviewedSha(null);
+                }}
+              >
+                Review checkpoint trust
+              </button>
+              {reviewTrust && (
+                <div>
+                  <p>
+                    Approval is local to this device. A legacy checkpoint can
+                    execute code when loaded.
+                  </p>
+                  <code>SHA-256: {model.sha256}</code>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={reviewedSha === model.sha256}
+                      onChange={(event) =>
+                        setReviewedSha(
+                          event.target.checked ? model.sha256 : null,
+                        )
+                      }
+                    />
+                    I trust the source of {model.source_filename}.
+                  </label>
+                  <button
+                    type="button"
+                    disabled={
+                      approval.isPending || reviewedSha !== model.sha256
+                    }
+                    onClick={() => approval.mutate()}
+                  >
+                    Approve checkpoint on this device
+                  </button>
+                  {approval.isSuccess && (
+                    <p role="status">Checkpoint approved on this device.</p>
+                  )}
+                  {approval.error && (
+                    <p role="alert">{approval.error.message}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         {labelEntries.length > 0 && (
           <div className="annotation-selection-list">
             {labelEntries.map((entry) => (

@@ -48,6 +48,7 @@ from reefvision.services.image_adjustments_v18 import (
 )
 from reefvision.services.inference_pins import verify_inference_pins
 from reefvision.services.model_runtime import verify_checkpoint, verify_queued_selection
+from reefvision.storage.checkpoint_approvals import verified_registered_checkpoint
 from reefvision.storage.projects import resolve_managed_project_path
 
 
@@ -369,6 +370,9 @@ def process_inference_job(
         model_task = str(request.get("model_task") or model.task or "detect")
         try:
             require_image_inference_provider(model.provider_name, model_task)
+            if model.project_id != job.project_id:
+                raise ValidationError("The inference checkpoint must belong to the job project")
+            model_path = verified_registered_checkpoint(settings, model)
             tiling = (
                 DetectionTiling.model_validate(request["tiling"]) if "tiling" in request else None
             )
@@ -415,7 +419,6 @@ def process_inference_job(
             job.completed_at = _utc_now()
             session.commit()
             return False
-        model_path = resolve_managed_project_path(settings, model.managed_path)
         inference_settings = DetectionSettings(
             confidence_threshold=float(request["confidence_threshold"]),
             iou_threshold=float(request["iou_threshold"]),

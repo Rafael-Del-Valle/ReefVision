@@ -18,6 +18,7 @@ from reefvision.ml.depth_anything_v2_provider import (
     DepthRegistrationProvider,
     TransformersDepthAnythingV2Provider,
 )
+from reefvision.storage.checkpoint_approvals import verified_registered_checkpoint
 from reefvision.storage.projects import resolve_managed_project_path
 
 DepthProviderFactory = Callable[[str], DepthRegistrationProvider]
@@ -110,7 +111,7 @@ def create_depth_map_artifacts(
     outputs: list[dict[str, object]] = []
     try:
         provider = provider_factory(model.provider_name)
-        model_path = resolve_managed_project_path(settings, model.managed_path)
+        model_path = verified_registered_checkpoint(settings, model)
         provider.load_model(model_path, device)
         job.result_json = {
             "stage": "inference",
