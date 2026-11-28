@@ -619,3 +619,41 @@ standalone or typed saved QC Workflow Builder, review gate or user asset
 is altered. Release HOLD remains for coordinated migration reconciliation,
 representative biology, installed Windows MSI/CAB and GUI upgrade/rollback,
 full new-head CI and explicit researcher approval.
+
+## 2026-11-27 — Pairwise verified common-ancestry frontier
+
+Predecessor exact-head Actions run [46103842099](https://github.com/Rafael-Del-Valle/ReefVision/actions/runs/46103842099)
+on f06278ed passed all three jobs (backend, frontend including E2E/build,
+and native Windows preservation). This is not installed-GUI acceptance.
+
+Rechecked the complete migration Git trees: main e94dad6a, 1.1 a3ea9c78,
+1.2 28ab58b9, 1.4 38c00303, 1.5 bd8602a0 and 1.6 f06278ed still
+retain the same 38 original blobs. The isolated 1.6 has four QC-only
+files; the scientific 1.1 has five separate science files, four of
+which reuse the QC revision IDs. The 1.4/1.5 inventories have 63 files
+each, including the earlier integration lineages. Do not merge branches.
+
+Strict mode now emits deterministic `root_comparisons` for each pair
+of input directories: left/right-only revision IDs, shared revision IDs,
+verified identical and divergent history IDs and the maximal common
+ancestry frontier (which can contain multiple parents). The frontier
+is a source-level review aid, not a database stamp or instruction to
+run migrations. A byte-identical successor after a divergent ancestor
+remains divergent; invalid graphs retain inventory but return null for
+all three ancestry classifications. An empty verified frontier means
+no common source history, not missing evidence. Single-directory mode
+returns an empty pair list and legacy mode remains unchanged.
+
+Two CLI regressions cover divergent ancestry of identical successors,
+multi-parent common frontier, unique IDs, three-way comparison with
+a duplicate-ID invalid graph, order independence, empty versus unknown
+frontier and source preservation. Four independent helper-level tests
+passed locally; new repository CI still requires verification. Local
+GitHub checkout is DNS-blocked. No new scientific operation or Workflow
+Builder node is introduced; existing saved typed QC workflows, review
+gates, provenance and units are preserved.
+
+Release HOLD: reviewed migration reconciliation (including all earlier
+integration branches), representative biological acceptance, actual
+Windows MSI/CAB installed-GUI clean/upgrade/rollback and investigator
+approval. Never infer an automatic remapping from this report.

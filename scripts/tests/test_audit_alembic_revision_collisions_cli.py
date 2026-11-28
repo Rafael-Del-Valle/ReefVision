@@ -493,3 +493,79 @@ def test_cli_strict_manifest_retains_duplicate_sources_without_ancestry(tmp_path
         assert row["ancestry_sha256"] is None
     assert report["safe_to_reconcile_automatically"] is False
     assert {path: path.read_bytes() for path in files} == files
+
+def test_cli_pairwise_history_reports_divergent_successors_and_merge_frontier(
+    tmp_path: Path,
+) -> None:
+    left, right, invalid = (tmp_path / name for name in ("a", "b", "c"))
+    files = {}
+    for root, suffix in ((left, "qc"), (right, "science"), (invalid, "invalid")):
+        root.mkdir()
+        entries = [
+            ("root", None, ""),
+            ("north", "root", ""),
+            ("south", "root", ""),
+            ("joined", ("north", "south"), suffix),
+            ("successor", "joined", ""),
+            (suffix, "successor", ""),
+        ]
+        if root == invalid:
+            entries.append(("joined", None, "duplicate"))
+        for index, (revision, parents, comment) in enumerate(entries):
+            path = root / f"{index}.py"
+            path.write_text(
+                f"revision = {revision!r}\ndown_revision = {parents!r}\n# {comment}\n",
+                encoding="utf-8",
+            )
+            files[path] = path.read_bytes()
+
+    result = _run(invalid, right, left, verify_parent_graph=True)
+    assert result.returncode == 2, result.stderr
+    report = json.loads(result.stdout)
+    comparisons = report["root_comparisons"]
+    assert len(comparisons) == 3
+    assert comparisons[0] == {
+        "left_root": str(left),
+        "right_root": str(right),
+        "ancestry_verified": True,
+        "left_only_revisions": ["qc"],
+        "right_only_revisions": ["science"],
+        "shared_revision_ids": ["joined", "north", "root", "south", "successor"],
+        "identical_history_revisions": ["north", "root", "south"],
+        "divergent_history_revisions": ["joined", "successor"],
+        "common_ancestry_frontier": ["north", "south"],
+    }
+    for comparison in comparisons[1:]:
+        assert comparison["right_root"] == str(invalid)
+        assert comparison["ancestry_verified"] is False
+        assert comparison["identical_history_revisions"] is None
+        assert comparison["divergent_history_revisions"] is None
+        assert comparison["common_ancestry_frontier"] is None
+    forward = _run(left, right, invalid, verify_parent_graph=True)
+    assert json.loads(forward.stdout)["root_comparisons"] == comparisons
+    assert "root_comparisons" not in json.loads(_run(left, right).stdout)
+    assert report["safe_to_reconcile_automatically"] is False
+    assert {path: path.read_bytes() for path in files} == files
+
+
+def test_cli_pairwise_history_distinguishes_empty_frontier_from_unverified(
+    tmp_path: Path,
+) -> None:
+    left, right = tmp_path / "a", tmp_path / "b"
+    for root in (left, right):
+        root.mkdir()
+        (root / "root.py").write_text(
+            f"revision = 'root'\ndown_revision = None\n# {root.name}\n",
+            encoding="utf-8",
+        )
+    result = _run(left, right, verify_parent_graph=True)
+    assert result.returncode == 2, result.stderr
+    comparison = json.loads(result.stdout)["root_comparisons"][0]
+    assert comparison["ancestry_verified"] is True
+    assert comparison["identical_history_revisions"] == []
+    assert comparison["divergent_history_revisions"] == ["root"]
+    assert comparison["common_ancestry_frontier"] == []
+    single = _run(left, verify_parent_graph=True)
+    assert single.returncode == 0, single.stderr
+    assert json.loads(single.stdout)["root_comparisons"] == []
+

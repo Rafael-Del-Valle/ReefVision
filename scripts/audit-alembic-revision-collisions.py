@@ -404,6 +404,47 @@ def revision_manifest(
     ]
 
 
+def compare_revision_manifests(
+    manifests: dict[str, list[dict]], graphs: dict[str, dict]
+) -> list[dict]:
+    """Summarize pairwise overlap without inferring an automatic remapping."""
+    comparisons = []
+    roots = sorted(manifests)
+    for index, left_root in enumerate(roots):
+        for right_root in roots[index + 1 :]:
+            left = {row["revision"]: row for row in manifests[left_root]}
+            right = {row["revision"]: row for row in manifests[right_root]}
+            shared = left.keys() & right.keys()
+            verified = graphs[left_root]["consistent"] and graphs[right_root]["consistent"]
+            identical = divergent = frontier = None
+            if verified:
+                common = {
+                    revision
+                    for revision in shared
+                    if left[revision]["ancestry_sha256"] == right[revision]["ancestry_sha256"]
+                }
+                common_parents = {
+                    parent for revision in common for parent in left[revision]["parent_revisions"]
+                }
+                identical = sorted(common)
+                divergent = sorted(shared - common)
+                frontier = sorted(common - common_parents)
+            comparisons.append(
+                {
+                    "left_root": left_root,
+                    "right_root": right_root,
+                    "ancestry_verified": verified,
+                    "left_only_revisions": sorted(left.keys() - right.keys()),
+                    "right_only_revisions": sorted(right.keys() - left.keys()),
+                    "shared_revision_ids": sorted(shared),
+                    "identical_history_revisions": identical,
+                    "divergent_history_revisions": divergent,
+                    "common_ancestry_frontier": frontier,
+                }
+            )
+    return comparisons
+
+
 def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
     by_revision: dict[str, list[str]] = defaultdict(list)
     source_sha256: dict[str, str] = {}
@@ -529,6 +570,7 @@ def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
         }
         report["parent_graphs"] = parent_graphs
         report["revision_manifests"] = revision_manifests
+        report["root_comparisons"] = compare_revision_manifests(revision_manifests, parent_graphs)
         report["parent_graph_consistent"] = all(
             graph["consistent"] for graph in parent_graphs.values()
         )
