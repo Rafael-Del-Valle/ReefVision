@@ -748,3 +748,45 @@ it("does not aggregate incompatible current times or depth datums", () => {
     ]),
   ).toBeNull();
 });
+
+it("rejects overlapping current selections without reweighting immutable records", () => {
+  const otherLocation = {
+    latitude: 32.6,
+    longitude: -79.5,
+    crs: "EPSG:4326" as const,
+  };
+  const vectors = currentVectors([
+    component("current_eastward_velocity", 3, { id: "east-a" }),
+    component("current_northward_velocity", 4, { id: "north-a" }),
+    component("current_eastward_velocity", 0, {
+      id: "east-b",
+      location: otherLocation,
+    }),
+    component("current_northward_velocity", 2, {
+      id: "north-b",
+      location: otherLocation,
+    }),
+  ]);
+  expect(vectors).toHaveLength(2);
+  const [first, second] = vectors;
+  expect(summarizeCurrentSlice(vectors)).toMatchObject({
+    count: 2,
+    meanSpeed: 3.5,
+  });
+  expect(summarizeCurrentSlice([first, second, first])).toBeNull();
+  expect(
+    summarizeCurrentSlice([
+      first,
+      { ...second, recordIds: ["east-b", "north-a"] },
+    ]),
+  ).toBeNull();
+  for (const recordIds of [
+    [],
+    ["east-a"],
+    ["east-a", "east-a"],
+    ["", "north-a"],
+  ]) {
+    expect(summarizeCurrentSlice([{ ...first, recordIds }])).toBeNull();
+  }
+  expect(summarizeCurrentSlice(vectors)).toMatchObject({ count: 2 });
+});
