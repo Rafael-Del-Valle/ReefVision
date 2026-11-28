@@ -94,7 +94,11 @@ def _tamper_parse_with_consistent_section_checksum(
     if request_overrides is not None:
         parse_job["request_json"].update(request_overrides)
     elif result_overrides is not None:
-        parse_job["result_json"].update(result_overrides)
+        for key, value in result_overrides.items():
+            if value is None:
+                del parse_job["result_json"][key]
+            else:
+                parse_job["result_json"][key] = value
     else:
         parse_job["result_json"]["geometry_sha256"] = "0" * 64
     records = "".join(
@@ -404,6 +408,9 @@ def test_spatial_original_and_review_round_trip_and_reject_tampering(
         {"vertex_count": 3.0},
         {"face_count": True},
         {"calibration_verified": 0},
+        {"point_count": None},
+        {"calibration_verified": None},
+        {"specimen_identity_verified": None},
     ):
         altered_result = _tamper_parse_with_consistent_section_checksum(
             archive_bytes, result_overrides=result_overrides
