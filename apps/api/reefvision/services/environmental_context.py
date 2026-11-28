@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from operator import ge, gt, le, lt
 from typing import Any
@@ -41,11 +42,11 @@ from reefvision.schemas.environmental_context import (
 from reefvision.schemas.scientific_data import ScientificRecordCreate
 from reefvision.services.geographic_movement_analytics import geographic_distance_m
 from reefvision.services.noaa_environment import (
+    acquire_noaa_tides,
     fetch_noaa,
     noaa_request_url,
     noaa_tide_request_url,
     parse_noaa,
-    parse_noaa_tides,
 )
 from reefvision.services.scientific_data import ScientificDataService, content_hash
 
@@ -197,12 +198,8 @@ class EnvironmentalContextService:
             raise NotFoundError(
                 "No cached NOAA tidal dataset matches this station, product, datum and day"
             )
-        if self.http is None:
-            with httpx.Client() as http:
-                raw = fetch_noaa(http, source_url)
-        else:
-            raw = fetch_noaa(self.http, source_url)
-        items, missing = parse_noaa_tides(raw, request, self.now, source_url)
+        with nullcontext(self.http) if self.http is not None else httpx.Client() as http:
+            raw, items, missing = acquire_noaa_tides(http, request, self.now, source_url)
         return self.store_dataset(
             project_id,
             identity=identity,

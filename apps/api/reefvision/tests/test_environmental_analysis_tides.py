@@ -129,6 +129,63 @@ def test_noaa_predictions_and_observations_are_distinct_cached_records(
     assert [item.id for item in offline.items] == [item.id for item in predicted.items]
 
 
+@pytest.mark.parametrize("station_id", ["8665530", "1234567"])
+def test_prediction_only_response_uses_verified_metadata_and_reopens_offline(client, station_id):
+    from sqlalchemy import select
+
+    from reefvision.db.models.scientific_record import EnvironmentalCacheEntry
+    from reefvision.domain.errors import ValidationError
+
+    project = create_project(client, "Prediction-only station response")
+    payload = {"predictions": prediction_fixture()["predictions"]}
+    station_url = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/8665530.json"
+    station = {"id": station_id, "name": "Charleston", "lat": 32.780834, "lng": -79.923615}
+    metadata = {"stations": [station], "count": 1}
+    calls = []
+
+    def transport(request):
+        calls.append(str(request.url))
+        if str(request.url) == station_url:
+            return httpx.Response(200, json=metadata)
+        assert request.url.params["product"] == "predictions"
+        return httpx.Response(200, json=payload)
+
+    request = NOAATideImportRequest(
+        station_id="8665530", day="2026-04-03", product="predictions", datum="MLLW"
+    )
+    with (
+        client.app.state.session_factory() as session,
+        httpx.Client(transport=httpx.MockTransport(transport)) as http,
+    ):
+        service = EnvironmentalContextService(session, http=http)
+        if station_id != request.station_id:
+            with pytest.raises(ValidationError, match="station"):
+                service.import_noaa_tides(project["id"], request)
+            assert session.scalar(select(EnvironmentalCacheEntry)) is None
+            assert session.scalar(select(ScientificRecord)) is None
+            assert len(calls) == 2
+            return
+        imported = service.import_noaa_tides(project["id"], request)
+        cached = session.scalar(select(EnvironmentalCacheEntry))
+        assert cached.payload_json["provider_response"] == {
+            "predictions_response": payload,
+            "station_metadata_url": station_url,
+            "station_metadata_response": metadata,
+        }
+    assert [record.value for record in imported.items] == [0.50, 0.55, 0.62]
+    for item in imported.items:
+        assert item.source_kind == "modeled"
+        assert item.location.longitude == station["lng"]
+        assert item.location.latitude == station["lat"]
+        assert item.provenance.source_metadata["station"]["source_url"] == station_url
+    with client.app.state.session_factory() as session:
+        offline = EnvironmentalContextService(session).import_noaa_tides(
+            project["id"], request.model_copy(update={"offline": True})
+        )
+    assert offline.items == imported.items
+    assert len(calls) == 2
+
+
 def test_tidal_context_keeps_observed_and_predicted_evidence_separate(
     client: TestClient,
 ) -> None:
