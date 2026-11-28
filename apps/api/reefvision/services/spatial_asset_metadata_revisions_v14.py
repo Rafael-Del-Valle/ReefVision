@@ -123,6 +123,33 @@ class SpatialAssetMetadataRevisionService:
             created_at=row.created_at,
         )
 
+    def _validated_history(
+        self,
+        project_id: str,
+        asset_id: str,
+        source_sha256: str,
+        *,
+        limit: int | None = None,
+    ) -> list[SpatialAssetMetadataRevisionResponse]:
+        query = (
+            select(SpatialAssetMetadataRevision)
+            .where(
+                SpatialAssetMetadataRevision.project_id == project_id,
+                SpatialAssetMetadataRevision.spatial_source_asset_id == asset_id,
+            )
+            .order_by(SpatialAssetMetadataRevision.revision, SpatialAssetMetadataRevision.id)
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        history: list[SpatialAssetMetadataRevisionResponse] = []
+        # Validate the complete prefix, not just the returned page or head.
+        # Callers have already verified the original source bytes.
+        for expected_revision, ancestor in enumerate(self.session.scalars(query), start=1):
+            if ancestor.revision != expected_revision:
+                raise ValidationError("Spatial asset metadata revision ancestry is inconsistent")
+            history.append(self._validated_response(project_id, asset_id, source_sha256, ancestor))
+        return history
+
     def create(
         self,
         project_id: str,
@@ -131,20 +158,7 @@ class SpatialAssetMetadataRevisionService:
     ) -> SpatialAssetMetadataRevisionResponse:
         source = self.sources.get(project_id, asset_id)
         self.sources.read_verified(project_id, asset_id)
-        history = self.session.scalars(
-            select(SpatialAssetMetadataRevision)
-            .where(
-                SpatialAssetMetadataRevision.project_id == project_id,
-                SpatialAssetMetadataRevision.spatial_source_asset_id == asset_id,
-            )
-            .order_by(SpatialAssetMetadataRevision.revision, SpatialAssetMetadataRevision.id)
-        ).all()
-        # Validate the entire history, not just the current head. The source
-        # bytes were checked above; avoid reading them again for every revision.
-        for expected_revision, ancestor in enumerate(history, start=1):
-            if ancestor.revision != expected_revision:
-                raise ValidationError("Spatial asset metadata revision ancestry is inconsistent")
-            self._validated_response(project_id, asset_id, source.sha256, ancestor)
+        history = self._validated_history(project_id, asset_id, source.sha256)
         previous = history[-1] if history else None
         revision = 1 if previous is None else previous.revision + 1
         previous_id = None if previous is None else previous.id
@@ -192,11 +206,17 @@ class SpatialAssetMetadataRevisionService:
         asset_id: str,
         revision_id: str,
     ) -> SpatialAssetMetadataRevisionResponse:
-        self.sources.get(project_id, asset_id)
+        source = self.sources.get(project_id, asset_id)
         row = self.session.get(SpatialAssetMetadataRevision, revision_id)
         if row is None or row.project_id != project_id or row.spatial_source_asset_id != asset_id:
             raise NotFoundError("Spatial asset metadata revision not found")
-        return self._response(project_id, asset_id, row)
+        self.sources.read_verified(project_id, asset_id)
+        if row.revision <= 0:
+            raise ValidationError("Spatial asset metadata revision ancestry is inconsistent")
+        history = self._validated_history(project_id, asset_id, source.sha256, limit=row.revision)
+        if not history or history[-1].id != revision_id:
+            raise ValidationError("Spatial asset metadata revision ancestry is inconsistent")
+        return history[-1]
 
     def list(
         self,
@@ -208,15 +228,7 @@ class SpatialAssetMetadataRevisionService:
     ) -> list[SpatialAssetMetadataRevisionResponse]:
         if not 1 <= limit <= 100 or offset < 0:
             raise ValidationError("Spatial asset metadata pagination is invalid")
-        self.sources.get(project_id, asset_id)
-        rows = self.session.scalars(
-            select(SpatialAssetMetadataRevision)
-            .where(
-                SpatialAssetMetadataRevision.project_id == project_id,
-                SpatialAssetMetadataRevision.spatial_source_asset_id == asset_id,
-            )
-            .order_by(SpatialAssetMetadataRevision.revision, SpatialAssetMetadataRevision.id)
-            .limit(limit)
-            .offset(offset)
-        )
-        return [self._response(project_id, asset_id, row) for row in rows]
+        source = self.sources.get(project_id, asset_id)
+        self.sources.read_verified(project_id, asset_id)
+        history = self._validated_history(project_id, asset_id, source.sha256, limit=offset + limit)
+        return history[offset:]
