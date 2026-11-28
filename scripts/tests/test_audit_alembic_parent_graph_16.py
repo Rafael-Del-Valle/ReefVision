@@ -298,4 +298,14 @@ def test_packaged_16_graph_matches_current_lineage() -> None:
     assert graph["missing_parent_revisions"] == []
     assert graph["cycle_revisions"] == []
     assert graph["duplicate_revision_ids"] == []
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--verify-parent-graph", str(root)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert not result.stderr
+    assert json.loads(result.stdout) == report
     assert {path: path.read_bytes() for path in root.glob("*.py")} == before
