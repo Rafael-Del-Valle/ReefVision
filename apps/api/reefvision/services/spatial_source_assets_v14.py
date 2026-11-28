@@ -136,6 +136,10 @@ class SpatialSourceAssetService:
     def response(self, asset: SpatialSourceAsset) -> SpatialSourceAssetResponse:
         job = self.latest_parse_job(asset)
         summary: SpatialSourceParseSummary | None = None
+        # Match Project Exchange: a non-successful job cannot carry completed
+        # structural evidence, even if the stored result digest is valid.
+        if job is not None and job.status != "succeeded" and job.result_json is not None:
+            raise ValidationError("Spatial source parse result failed integrity validation")
         if job is not None and job.status == "succeeded":
             # A result digest alone cannot establish that this was the request
             # executed for the immutable source. A successful job must also
