@@ -155,3 +155,23 @@ and recovery with the original pending checksum. Twenty-eight independent
 SQLite state/confidence probes passed; full repository tests remain unrun
 locally because GitHub DNS prevents checkout. Review this narrow shared
 producer guard for selective integration; do not blend branches.
+
+### Prediction project/image ownership integrity (2026-11-28)
+
+Independent SQLite foreign keys permit a proposal belonging to one project
+to reference an existing image in another. The previous scoped-image loop
+silently dropped such evidence. Check every context prediction against the
+requested project and complete image scope before scoring or confidence
+selection. Frozen dataset contexts contain no live predictions; their
+existing validation is unchanged. The integrated 1.6 candidate at
+`a580042e84c4d2fa0a646fbf8ec5a3dc90657fa8` has the same gap.
+No automatic repair, schema change or review approval.
+
+Added a foreign-image case to both existing standalone and saved-workflow
+database tests, including filtered refusal, preserved original checksum,
+absent failed-run artifact and explicit recovery to the original image.
+Three independent SQLite probes with foreign keys enabled reproduced the
+loss and verified refusal and recovery; full repository execution remains
+unverified. Corrected the precise predecessor Ruff formatting diagnostic
+in the score permutation regression (CI #46155411232: frontend and native
+Windows success, backend format failure). Local checkout DNS is unavailable.

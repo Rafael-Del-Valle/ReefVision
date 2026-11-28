@@ -836,8 +836,11 @@ def test_qc_producer_uses_frozen_signal_order(client: TestClient) -> None:
         assert expected[1] == 73.12
         for order in permutations(active):
             reordered = {signal: raw[signal] for signal in (*order, *inactive)}
-            assert service._signal_breakdown(
-                signal_values=reordered,
-                normalized_signals=normalized,
-                weights=weight_model,
-            ) == expected
+            assert (
+                service._signal_breakdown(
+                    signal_values=reordered,
+                    normalized_signals=normalized,
+                    weights=weight_model,
+                )
+                == expected
+            )

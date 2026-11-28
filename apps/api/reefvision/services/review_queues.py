@@ -242,6 +242,18 @@ class ReviewQueueService:
         if not scoped_images:
             raise ValidationError("No images are available in the requested review-queue scope")
 
+        # Separate SQLite foreign keys for project and image do not enforce
+        # their ownership relationship. Checking only predictions indexed by
+        # scoped images would silently omit a mislinked local proposal.
+        if any(
+            prediction.project_id != project.id or prediction.image_id not in scoped_image_ids
+            for prediction in project_context.predictions
+        ):
+            raise ValidationError(
+                "Review queue prediction has inconsistent project/image scope; "
+                "correct local prediction evidence before QC review"
+            )
+
         # Models imported from local tools may contain an invalid confidence
         # value despite the normal inference API validation. Neither a NaN
         # priority nor an out-of-range probability is scientific evidence.

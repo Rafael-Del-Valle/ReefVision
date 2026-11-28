@@ -90,8 +90,23 @@ def _local_prediction(client: TestClient, *, additional_pending: bool = False) -
     return project_id, prediction_id
 
 
+def _foreign_image_id(client: TestClient) -> str:
+    foreign_project = create_project(client, "Independent QC project")
+    imported = import_one(client, foreign_project["id"], filename="foreign-coral.png")
+    return str(imported["successful"][0]["image_id"])
+
+
+def _expected_error(bad_evidence: float | str) -> str:
+    if bad_evidence == "foreign_image":
+        return "inconsistent project/image scope"
+    if isinstance(bad_evidence, str):
+        return "invalid review status"
+    return "confidence must be finite and within"
+
+
 @pytest.mark.parametrize(
-    "bad_evidence", [-0.01, 1.01, float("inf"), float("-inf"), "approved", "Pending", ""]
+    "bad_evidence",
+    [-0.01, 1.01, float("inf"), float("-inf"), "approved", "Pending", "", "foreign_image"],
 )
 def test_standalone_qc_rejects_corrupt_model_confidence_without_writes(
     client: TestClient, bad_evidence: float | str
@@ -104,10 +119,13 @@ def test_standalone_qc_rejects_corrupt_model_confidence_without_writes(
     assert original_item["review_state"] == "pending"
 
     app = cast(FastAPI, client.app)
+    foreign_image_id = _foreign_image_id(client) if bad_evidence == "foreign_image" else None
     with app.state.session_factory() as session:
         proposal = session.get(PredictionProposal, prediction_id)
         assert proposal is not None
-        if isinstance(bad_evidence, str):
+        if foreign_image_id is not None:
+            proposal.image_id = foreign_image_id
+        elif isinstance(bad_evidence, str):
             proposal.review_status = bad_evidence
         else:
             proposal.confidence = bad_evidence
@@ -115,11 +133,7 @@ def test_standalone_qc_rejects_corrupt_model_confidence_without_writes(
 
     invalid = client.post(url, json={})
     assert invalid.status_code == 400, invalid.text
-    expected_error = (
-        "invalid review status"
-        if isinstance(bad_evidence, str)
-        else "confidence must be finite and within"
-    )
+    expected_error = _expected_error(bad_evidence)
     assert expected_error in invalid.text
     if isinstance(bad_evidence, str):
         filtered = client.post(url, json={"review_below_confidence": 1.0})
@@ -135,7 +149,8 @@ def test_standalone_qc_rejects_corrupt_model_confidence_without_writes(
 
 
 @pytest.mark.parametrize(
-    "bad_evidence", [-0.01, 1.01, float("inf"), float("-inf"), "approved", "Pending", ""]
+    "bad_evidence",
+    [-0.01, 1.01, float("inf"), float("-inf"), "approved", "Pending", "", "foreign_image"],
 )
 def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_approval(
     client: TestClient, bad_evidence: float | str
@@ -172,7 +187,15 @@ def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_appr
     with app.state.session_factory() as session:
         proposal = session.get(PredictionProposal, prediction_id)
         assert proposal is not None
-        if isinstance(bad_evidence, str):
+        original_image_id = proposal.image_id
+
+    foreign_image_id = _foreign_image_id(client) if bad_evidence == "foreign_image" else None
+    with app.state.session_factory() as session:
+        proposal = session.get(PredictionProposal, prediction_id)
+        assert proposal is not None
+        if foreign_image_id is not None:
+            proposal.image_id = foreign_image_id
+        elif isinstance(bad_evidence, str):
             proposal.review_status = bad_evidence
         else:
             proposal.confidence = bad_evidence
@@ -190,11 +213,7 @@ def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_appr
     # not produce a review-queue artifact or implicitly approve predictions.
     failed_detail = failed.json()
     assert failed_detail["run"]["status"] == "failed"
-    expected_error = (
-        "invalid review status"
-        if isinstance(bad_evidence, str)
-        else "confidence must be finite and within"
-    )
+    expected_error = _expected_error(bad_evidence)
     assert expected_error in (failed_detail["run"]["error_message"] or "")
     assert any(
         node["node_type"] == "qc_review_queue" and node["status"] == "failed"
@@ -223,6 +242,7 @@ def test_saved_workflow_qc_rejects_corrupt_confidence_then_recovers_without_appr
         assert proposal is not None
         proposal.confidence = 0.75
         proposal.review_status = "pending"
+        proposal.image_id = original_image_id
         session.commit()
 
     recovered = client.post(endpoint, json={"graph_record_id": saved.json()["id"]})
