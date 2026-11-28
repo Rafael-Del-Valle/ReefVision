@@ -790,3 +790,42 @@ it("rejects overlapping current selections without reweighting immutable records
   }
   expect(summarizeCurrentSlice(vectors)).toMatchObject({ count: 2 });
 });
+
+it("rejects repeated geographic cells even with distinct component IDs", () => {
+  const first = currentVectors([
+    component("current_eastward_velocity", 3, { id: "east-a" }),
+    component("current_northward_velocity", 4, { id: "north-a" }),
+  ])[0];
+  const second = currentVectors([
+    component("current_eastward_velocity", 0, { id: "east-b" }),
+    component("current_northward_velocity", 2, { id: "north-b" }),
+  ])[0];
+  expect(summarizeCurrentSlice([first, second])).toBeNull();
+  expect(
+    summarizeCurrentSlice([
+      { ...first, longitude: 180 },
+      { ...second, longitude: -180 },
+    ]),
+  ).toBeNull();
+  expect(
+    summarizeCurrentSlice([
+      first,
+      { ...second, latitude: first.latitude + 0.000001 },
+    ]),
+  ).toMatchObject({ count: 2, meanSpeed: 3.5 });
+  expect(
+    summarizeCurrentSlice([
+      { ...first, longitude: 180 },
+      { ...second, longitude: -179.999999 },
+    ]),
+  ).toMatchObject({ count: 2, meanSpeed: 3.5 });
+  for (const location of [
+    { latitude: Number.NaN },
+    { latitude: 91 },
+    { longitude: Number.POSITIVE_INFINITY },
+    { longitude: -181 },
+  ]) {
+    expect(summarizeCurrentSlice([{ ...first, ...location }])).toBeNull();
+  }
+  expect(summarizeCurrentSlice([first])).toMatchObject({ count: 1 });
+});
