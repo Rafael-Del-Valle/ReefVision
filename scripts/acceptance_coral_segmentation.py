@@ -77,6 +77,27 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def source_files_unchanged(records: list[dict[str, Any]]) -> bool:
+    return all(
+        sha256(Path(record["source_path"])) == record["source_sha256"]
+        and sha256(Path(record["source_label_path"])) == record["label_sha256"]
+        for record in records
+    )
+
+
+def execution_results(
+    *, training_completed: bool, checkpoint_size: int, valid_polygons: bool
+) -> dict[str, str]:
+    """Record the software observations that this harness can establish."""
+    return {
+        "training_lifecycle": "PASS" if training_completed else "FAIL",
+        "checkpoint_registration": "PASS" if checkpoint_size > 0 else "FAIL",
+        "held_out_polygon_generation": "PASS" if valid_polygons else "FAIL",
+        "dataset_representativeness": "UNVERIFIED",
+        "scientific_segmentation_acceptance": "UNVERIFIED",
+    }
+
+
 def generate_synthetic_dataset(
     destination: Path,
     *,
@@ -701,28 +722,26 @@ def main() -> int:
             )
             for item in proposals
         )
-        if not valid_polygons:
-            raise RuntimeError(
-                "Held-out segmentation inference produced no valid pending polygon-mask proposals"
+        if inference_ok and valid_polygons:
+            review = require(
+                client.post(
+                    f"/api/v1/prediction-proposals/{proposals[0].id}/accept",
+                    json={},
+                ),
+                200,
             )
-
-        review = require(
-            client.post(
-                f"/api/v1/prediction-proposals/{proposals[0].id}/accept",
-                json={},
-            ),
-            200,
-        )
-        accepted_mask = review.get("mask_annotation")
-        if not isinstance(accepted_mask, dict) or not accepted_mask.get("id"):
-            raise RuntimeError("Accepting a segmentation proposal did not create a mask annotation")
-        reviewed_mask_id = str(accepted_mask["id"])
-        with app.state.session_factory() as session:
-            persisted_mask = session.get(MaskAnnotation, reviewed_mask_id)
-            if persisted_mask is None or persisted_mask.source_type != "accepted_prediction":
+            accepted_mask = review.get("mask_annotation")
+            if not isinstance(accepted_mask, dict) or not accepted_mask.get("id"):
                 raise RuntimeError(
-                    "Accepted segmentation proposal was not persisted as verified mask"
+                    "Accepting a segmentation proposal did not create a mask annotation"
                 )
+            reviewed_mask_id = str(accepted_mask["id"])
+            with app.state.session_factory() as session:
+                persisted_mask = session.get(MaskAnnotation, reviewed_mask_id)
+                if persisted_mask is None or persisted_mask.source_type != "accepted_prediction":
+                    raise RuntimeError(
+                        "Accepted segmentation proposal was not persisted as verified mask"
+                    )
 
     app.state.engine.dispose()
 
@@ -776,9 +795,7 @@ def main() -> int:
         and persisted_mask_after_restart.source_type == "accepted_prediction"
     )
     checkpoint_hash, checkpoint_size = hash_model_file(checkpoint)
-    source_bytes_unchanged = all(
-        sha256(Path(record["source_path"])) == record["source_sha256"] for record in source_records
-    )
+    source_bytes_unchanged = source_files_unchanged(source_records)
 
     acceptance = (
         "PASS"
@@ -806,18 +823,13 @@ def main() -> int:
             if args.dataset_kind == "synthetic"
             else "Representative biological instance-segmentation software execution acceptance"
         ),
-        "results": {
-            "training_lifecycle": "PASS" if training_ok else "FAIL",
-            "checkpoint_registration": "PASS" if checkpoint_size > 0 else "FAIL",
-            "held_out_polygon_generation": "PASS" if valid_polygons else "FAIL",
-            "dataset_representativeness": (
-                "UNVERIFIED" if args.dataset_kind == "synthetic" else "PASS"
-            ),
-            "scientific_segmentation_acceptance": (
-                "UNVERIFIED" if args.dataset_kind == "synthetic" else acceptance
-            ),
-        },
+        "results": execution_results(
+            training_completed=training_ok,
+            checkpoint_size=checkpoint_size,
+            valid_polygons=valid_polygons,
+        ),
         "dataset": {
+            "declared_kind": args.dataset_kind,
             "source": str(source),
             "biological_context": args.biological_context,
             "classes": [class_names[index] for index in sorted(class_names)],
@@ -870,7 +882,8 @@ def main() -> int:
             "all_pending_polygon_geometry_valid": valid_polygons,
         },
         "review": {
-            "accepted_proposal_id": proposals[0].id,
+            "method": "Scripted acceptance of a pending proposal in the disposable study",
+            "accepted_proposal_id": proposals[0].id if reviewed_mask_id else None,
             "accepted_mask_annotation_id": reviewed_mask_id,
             "persisted_as_verified_mask": review_persisted,
         },
