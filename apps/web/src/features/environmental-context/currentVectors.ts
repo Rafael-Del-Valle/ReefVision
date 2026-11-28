@@ -280,6 +280,17 @@ export function summarizeCurrentSlice(
       vector.speed !== Math.hypot(vector.east, vector.north)
     )
       return null;
+    // Cached vectors must meet the same QC and depth requirements as newly
+    // paired components. A shared invalid depth or QC state is not evidence
+    // that the slice is scientifically compatible.
+    if (
+      !Number.isFinite(vector.depthM) ||
+      vector.depthM < 0 ||
+      !vector.depthReference ||
+      !["accepted", "unassessed"].includes(vector.eastQc) ||
+      !["accepted", "unassessed"].includes(vector.northQc)
+    )
+      return null;
     // Distinct record IDs can still describe the same grid cell in overlapping
     // selections. With the shared provenance above, that is not a second cell.
     // Treat +180 and -180 as the same WGS84 longitude without rounding nearby
