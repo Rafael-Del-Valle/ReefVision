@@ -16,6 +16,12 @@ function Assert-Throws([scriptblock]$Action, [string]$Message) {
     $script:passed++
 }
 
+# A stale backend can answer HTTP successfully while running a different release.
+Assert-ReefVisionBackendVersion -Payload ([pscustomobject]@{application_version='1.9.0'}) -ExpectedVersion '1.9.0'
+Assert-Throws { Assert-ReefVisionBackendVersion -Payload ([pscustomobject]@{application_version='1.0.2'}) -ExpectedVersion '1.9.0' } 'Old backend must not certify a newer MSI.'
+Assert-Throws { Assert-ReefVisionBackendVersion -Payload ([pscustomobject]@{unrelated='1.9.0'}) -ExpectedVersion '1.9.0' } 'Missing API version must fail.'
+Assert-Throws { Assert-ReefVisionBackendVersion -Payload ([pscustomobject]@{application_version=1}) -ExpectedVersion '1' } 'Non-string API version must fail.'
+
 $defaultData = Join-Path $env:APPDATA 'org.reefvision.desktop'
 $OldConfig = $env:REEFVISION_CONFIG_DIR
 $HadConfig = Test-Path Env:REEFVISION_CONFIG_DIR

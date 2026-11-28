@@ -39,8 +39,10 @@ $DataRoot = Join-Path $RunRoot 'data'
 $EvidenceRoot = Join-Path $RepositoryRoot ".artifacts\windows-clean-acceptance-$Token"
 $ReportPath = Join-Path $EvidenceRoot 'report.json'
 $InstallerHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
-$Version = (New-Object -ComObject WindowsInstaller.Installer).OpenDatabase($InstallerPath, 0).OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductVersion'")
-$Version.Execute(); $VersionRecord = $Version.Fetch(); $ProductVersion = $VersionRecord.StringData(1)
+$ProductVersion = Get-ReefVisionMsiProductVersion -InstallerPath $InstallerPath
+$InitialProductVersion = if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+    Get-ReefVisionMsiProductVersion -InstallerPath $PreviousInstallerPath
+} else { $ProductVersion }
 
 $report = [ordered]@{
     schema_version = 'reefvision-windows-clean-acceptance-1'
@@ -251,6 +253,7 @@ try {
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
     $versionPayload = Invoke-RestMethod "$api/system/version"
+    Assert-ReefVisionBackendVersion -Payload $versionPayload -ExpectedVersion $InitialProductVersion
     $migrationPayload = Invoke-RestMethod "$api/system/migrations/status"
     $report.first_launch = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and packaged backend started; database initialized; API version $($versionPayload.application_version)"
     $report.frontend_backend_connectivity = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop-published loopback API responded; migration status: $($migrationPayload.schema_status)"
@@ -456,12 +459,13 @@ try {
 
     if ($PreviousInstallerPath -and -not $SkipUpgrade) {
         Run-Msi -Action Install -PackageOrProduct $InstallerPath -LogName 'upgrade.log' -TargetRoot $InstallRoot | Out-Null
-        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Previous installer upgraded to current installer.'
     }
 
     $desktop = Start-AcceptanceDesktop
     $port = Wait-BackendPort -Path (Join-Path $DataRoot 'runtime\backend-port.txt') -DesktopProcess $desktop -BackendLogPath (Join-Path $DataRoot 'logs\backend.log')
     $api = "http://127.0.0.1:$port/api/v1"
+    $restartedVersion = Invoke-RestMethod "$api/system/version"
+    Assert-ReefVisionBackendVersion -Payload $restartedVersion -ExpectedVersion $ProductVersion
     $persisted = Invoke-RestMethod "$api/projects/$projectId"
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
@@ -490,7 +494,10 @@ try {
             throw 'Accepted SAM 2.1 mask did not persist across packaged Windows desktop restart.'
         }
     }
-    $report.restart = New-ReefVisionEvidenceResult -Status 'PASS' -Detail 'Desktop and backend restarted cleanly.'
+    if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+        $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Previous installer $InitialProductVersion upgraded to $ProductVersion; packaged backend version and scientific records verified."
+    }
+    $report.restart = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Desktop and backend restarted cleanly; API version $($restartedVersion.application_version) matches MSI."
     $report.project_persistence = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Project $projectId, image $imageId, and annotation $annotationId persisted; pre-restart database SHA-256 $projectChecksum"
 
     $exchange = Invoke-RestMethod "$api/projects/$projectId/exchange-packages" -Method Post -ContentType 'application/json' -Body (@{include_media=$true;include_model_weights=$false;include_generated_artifacts=$true;notes='clean install acceptance'} | ConvertTo-Json)
