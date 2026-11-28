@@ -900,3 +900,23 @@ it("rejects inconsistent or nonfinite current magnitudes before aggregation", ()
     summarizeCurrentSlice([{ ...first, east: 0, north: 0, speed: 0 }]),
   ).toMatchObject({ count: 1, meanSpeed: 0, vectorMeanBearing: null });
 });
+
+it("rejects cached current summaries with invalid depths or component QC", () => {
+  const first = currentVectors([
+    component("current_eastward_velocity", 3),
+    component("current_northward_velocity", 4),
+  ])[0];
+  for (const depthM of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    expect(summarizeCurrentSlice([{ ...first, depthM }])).toBeNull();
+  }
+  expect(summarizeCurrentSlice([{ ...first, depthReference: "" }])).toBeNull();
+  for (const qc of ["suspect", "rejected"] as const) {
+    expect(summarizeCurrentSlice([{ ...first, eastQc: qc }])).toBeNull();
+    expect(summarizeCurrentSlice([{ ...first, northQc: qc }])).toBeNull();
+  }
+  expect(
+    summarizeCurrentSlice([
+      { ...first, depthM: 0, eastQc: "accepted", northQc: "unassessed" },
+    ]),
+  ).toMatchObject({ count: 1, meanSpeed: 5 });
+});
