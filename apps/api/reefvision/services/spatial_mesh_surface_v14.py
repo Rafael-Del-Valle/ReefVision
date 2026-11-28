@@ -128,6 +128,10 @@ def _trace_endpoint_chains(
             path.append(next_point)
         segment_lengths = [edge_lengths[frozenset(pair)] for pair in pairwise(path)]
         source_length = sum(segment_lengths, Fraction(0))
+        # Describe sampling along the canonical chain, not anatomical resolution.
+        longest_edge = max(segment_lengths)
+        longest_edge_offset = segment_lengths.index(longest_edge)
+        longest_edge_fraction = float(longest_edge / source_length)
         # Locate half of the selected chain's arc length before calibration.
         # Exact rational interpolation avoids overflow in coordinate sums and
         # loss of a short segment when accumulating widely differing lengths.
@@ -150,7 +154,8 @@ def _trace_endpoint_chains(
         weighted_coordinates = [Fraction(0) for _ in range(3)]
         for (first, last), length in zip(pairwise(path), segment_lengths, strict=True):
             for axis in range(3):
-                weighted_coordinates[axis] += length * (Fraction(first[axis]) + Fraction(last[axis]))
+                endpoint_sum = Fraction(first[axis]) + Fraction(last[axis])
+                weighted_coordinates[axis] += length * endpoint_sum
         source_arc_centroid = [float(value / (2 * source_length)) for value in weighted_coordinates]
         calibrated = source_length * Fraction(scale)
         nominal = float(calibrated)
@@ -207,6 +212,8 @@ def _trace_endpoint_chains(
                 "is_closed": path[0] == path[-1],
                 "source_arc_midpoint_mesh_units": source_midpoint,
                 "source_arc_centroid_mesh_units": source_arc_centroid,
+                "source_longest_edge_chain_offset": longest_edge_offset,
+                "source_longest_edge_arc_fraction": longest_edge_fraction,
                 "source_arc_midpoint_chain_edge_offset": midpoint_edge_offset,
                 "source_arc_midpoint_edge_fraction": {
                     "numerator": str(midpoint_fraction.numerator),
