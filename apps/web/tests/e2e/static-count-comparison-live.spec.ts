@@ -29,6 +29,7 @@ test("runs a registered detector against reviewed counts and reopens the saved f
         mimeType: "application/octet-stream",
         buffer: await readFile(checkpoint!),
       },
+      trust_checkpoint: "true",
       purpose: "detector",
       provider_name: "ultralytics",
       display_name: "Synthetic local detector",

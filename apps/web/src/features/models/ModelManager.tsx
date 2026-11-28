@@ -527,6 +527,7 @@ export function ModelManager({
 }) {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
+  const [trustedFile, setTrustedFile] = useState<File | null>(null);
   const [providerFile, setProviderFile] = useState<File | null>(null);
   const [optionalProviderId, setOptionalProviderId] =
     useState("grounding_dino");
@@ -623,6 +624,8 @@ export function ModelManager({
     registerableProviders.find((item) => item.provider_id === providerName) ??
     registerableProviders[0] ??
     null;
+  const requiresTrust =
+    file !== null && selectedProvider?.provider_id !== "reefpose";
   const selectedProviderPreflight = selectedProvider
     ? (preflightByName.get(selectedProvider.provider_id) ?? null)
     : null;
@@ -766,12 +769,14 @@ export function ModelManager({
         file,
         purpose,
         providerName: selectedProvider?.provider_id,
+        trustCheckpoint: requiresTrust && trustedFile === file,
         displayName: displayName.trim() || undefined,
         notes: notes.trim() || undefined,
       });
     },
     onSuccess: async () => {
       setFile(null);
+      setTrustedFile(null);
       setDisplayName("");
       setNotes("");
       await Promise.all([
@@ -1516,9 +1521,26 @@ export function ModelManager({
             <input
               type="file"
               accept=".pt,.pth"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              onChange={(event) => {
+                setFile(event.target.files?.[0] ?? null);
+                setTrustedFile(null);
+              }}
             />
           </label>
+          {file && requiresTrust && (
+            <label>
+              <input
+                type="checkbox"
+                checked={trustedFile === file}
+                onChange={(event) =>
+                  setTrustedFile(event.target.checked ? file : null)
+                }
+              />
+              I trust the source of {file.name} and approve loading this
+              checkpoint. A legacy PyTorch model can execute code during
+              inspection.
+            </label>
+          )}
           <p className="annotation-helper">
             Register a local trained checkpoint. ReefVision preserves its
             source, checksum, provider and class mapping. Pose checkpoints use
@@ -1542,6 +1564,8 @@ export function ModelManager({
             type="submit"
             disabled={
               registerMutation.isPending ||
+              !file ||
+              (requiresTrust && trustedFile !== file) ||
               !selectedProvider ||
               Boolean(
                 selectedProviderPreflight && !selectedProviderPreflight.ready,

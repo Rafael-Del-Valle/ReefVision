@@ -46,7 +46,7 @@ def test_model_registration_creates_missing_project_classes(
     response = client.post(
         f"/api/v1/projects/{project_id}/models/register",
         files={"file": ("coral-best.pt", b"test-model", "application/octet-stream")},
-        data={"purpose": "detector", "display_name": "Coral model"},
+        data={"purpose": "detector", "display_name": "Coral model", "trust_checkpoint": "true"},
     )
     assert response.status_code == 200, response.text
     registered = response.json()
@@ -65,7 +65,7 @@ def test_model_registration_creates_missing_project_classes(
     second = client.post(
         f"/api/v1/projects/{project_id}/models/register",
         files={"file": ("coral-other.pt", b"different-test-model", "application/octet-stream")},
-        data={"purpose": "detector", "display_name": "Coral model 2"},
+        data={"purpose": "detector", "display_name": "Coral model 2", "trust_checkpoint": "true"},
     )
     assert second.status_code == 200, second.text
     assert second.json()["class_map_json"]["mapping"] == mapping

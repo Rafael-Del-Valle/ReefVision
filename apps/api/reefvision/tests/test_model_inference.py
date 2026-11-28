@@ -185,7 +185,7 @@ def register_model(
     response = client.post(
         f"/api/v1/projects/{project_id}/models/register",
         files={"file": (filename, b"fixture-model", "application/octet-stream")},
-        data={"purpose": purpose, "display_name": display_name},
+        data={"purpose": purpose, "display_name": display_name, "trust_checkpoint": "true"},
     )
     assert response.status_code == 200, response.text
     return cast(dict[str, Any], response.json())
@@ -596,7 +596,7 @@ def test_assist_box_prompt_accepts_selected_prediction_as_provenance_source(
                 "application/octet-stream",
             )
         },
-        data={"purpose": "assist", "display_name": "Fixture SAM"},
+        data={"purpose": "assist", "display_name": "Fixture SAM", "trust_checkpoint": "true"},
     )
     assert assist_response.status_code == 200, assist_response.text
     assist_model = cast(dict[str, Any], assist_response.json())

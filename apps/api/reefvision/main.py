@@ -21,6 +21,7 @@ from reefvision.api.router import api_router
 from reefvision.config import Settings, get_settings
 from reefvision.db.session import create_database_engine, create_session_factory
 from reefvision.domain.errors import (
+    CheckpointApprovalRequired,
     ConflictError,
     NotFoundError,
     StorageCapacityError,
@@ -192,6 +193,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             content={
                 "code": "storage_full",
                 "detail": "ReefVision storage is full. Free space and retry this operation.",
+            },
+        )
+
+    @app.exception_handler(CheckpointApprovalRequired)
+    async def handle_checkpoint_approval(
+        _: Request, exc: CheckpointApprovalRequired
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "code": "checkpoint_approval_required",
+                "detail": {"reason": str(exc), "filename": exc.filename, "sha256": exc.sha256},
             },
         )
 

@@ -2744,6 +2744,7 @@ export async function registerModel(
     file: File;
     purpose: "detector" | "assist";
     providerName?: string;
+    trustCheckpoint?: boolean;
     displayName?: string;
     notes?: string;
   },
@@ -2751,6 +2752,7 @@ export async function registerModel(
   const formData = new FormData();
   formData.append("file", payload.file, payload.file.name);
   formData.append("purpose", payload.purpose);
+  if (payload.trustCheckpoint) formData.append("trust_checkpoint", "true");
   if (payload.providerName) {
     formData.append("provider_name", payload.providerName);
   }
@@ -2770,13 +2772,39 @@ export async function registerModelFromRun(
     notes?: string;
   },
 ): Promise<ModelRegistration> {
-  return request<ModelRegistration>(
-    `/projects/${projectId}/models/register-from-run`,
-    {
+  const path = `/projects/${projectId}/models/register-from-run`;
+  const register = (approvedCheckpointSha256?: string) =>
+    request<ModelRegistration>(path, {
       method: "POST",
-      body: JSON.stringify(payload),
-    },
-  );
+      body: JSON.stringify({
+        ...payload,
+        approved_checkpoint_sha256: approvedCheckpointSha256,
+      }),
+    });
+  try {
+    return await register();
+  } catch (error) {
+    if (
+      !(error instanceof ApiRequestError) ||
+      error.code !== "checkpoint_approval_required"
+    )
+      throw error;
+    const digest = error.details?.sha256;
+    const filename = error.details?.filename;
+    if (
+      typeof digest !== "string" ||
+      !/^[0-9a-f]{64}$/.test(digest) ||
+      typeof filename !== "string"
+    )
+      throw error;
+    if (
+      !window.confirm(
+        `Trust the source of ${filename} and load this checkpoint? A legacy PyTorch checkpoint can execute code during inspection.\n\nSHA-256: ${digest}`,
+      )
+    )
+      throw error;
+    return register(digest);
+  }
 }
 
 export async function deleteModel(modelId: string): Promise<void> {

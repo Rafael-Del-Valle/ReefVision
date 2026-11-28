@@ -592,6 +592,62 @@ describe("ModelManager catalog", () => {
     expect(detectorTraining).not.toHaveBeenCalled();
   });
 
+  it("requires separate trust for each external checkpoint", async () => {
+    const fixture = bootstrap(catalog("Model Required"));
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        if (String(input).includes("/model-hub/bootstrap"))
+          return jsonResponse({
+            ...fixture,
+            providers: [
+              {
+                provider_id: "ultralytics",
+                display_name: "Ultralytics",
+                registerable: true,
+                capabilities: { image_detection: true },
+                known_limitations: [],
+                supported_model_families: ["YOLO"],
+                default_registration_purpose: "detector",
+                supported_tasks: ["detect"],
+                supported_execution_runtimes: ["pytorch"],
+              },
+            ],
+          });
+        if (String(input).includes("/model-catalog"))
+          return jsonResponse(fixture.catalog);
+        if (String(input).endsWith("/models/register")) return jsonResponse({});
+        return new Promise<Response>(() => undefined);
+      });
+    renderManager();
+    await userEvent.click(
+      screen.getByText("Register Existing Model", { selector: "summary" }),
+    );
+    const input = await screen.findByLabelText("Checkpoint file");
+    const submit = within(input.closest("form")!).getByRole("button", {
+      name: "Register Existing Model",
+      exact: true,
+    });
+    await userEvent.upload(input, new File(["a"], "first.pt"));
+    expect(submit).toBeDisabled();
+    await userEvent.click(
+      screen.getByLabelText(/trust the source of first.pt/i),
+    );
+    expect(submit).toBeEnabled();
+    await userEvent.upload(input, new File(["b"], "best.pt"));
+    expect(submit).toBeDisabled();
+    await userEvent.click(
+      screen.getByLabelText(/trust the source of best.pt/i),
+    );
+    await userEvent.click(submit);
+    const registration = fetchSpy.mock.calls.find(([url]) =>
+      String(url).endsWith("/models/register"),
+    );
+    expect((registration?.[1]?.body as FormData).get("trust_checkpoint")).toBe(
+      "true",
+    );
+  });
+
   it("registers a researcher provider bundle locally and displays its provenance", async () => {
     const modelCatalog = catalog("Model Required");
     Object.assign(modelCatalog.models[0], {

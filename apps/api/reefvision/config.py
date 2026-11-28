@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     assist_session_ttl_seconds: int = Field(default=900, ge=60, le=86_400)
     assist_cache_max_items: int = Field(default=4, ge=1, le=64)
     smart_mask_sample_spacing: float = Field(default=14.0, gt=1, le=512)
-    allow_unsafe_pickled_models: bool = True
+    allow_unsafe_pickled_models: bool | None = None
     cloud_inference_enabled: bool = False
     cloud_request_timeout_seconds: float = Field(default=90.0, gt=1, le=600)
     cloud_max_inline_image_bytes: int = Field(default=15_000_000, ge=65_536, le=20_000_000)
