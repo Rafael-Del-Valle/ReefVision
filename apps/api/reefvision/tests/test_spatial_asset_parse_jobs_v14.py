@@ -371,3 +371,54 @@ def test_parse_result_rejects_noncanonical_fields(
     restored = client.get(detail)
     assert restored.status_code == 200, restored.text
     assert restored.json() == good.json()
+
+
+@pytest.mark.parametrize("status", ["queued", "running", "failed", "cancel_requested", "cancelled"])
+def test_non_successful_parse_cannot_carry_completed_evidence(
+    client: TestClient, status: str
+) -> None:
+    project_id = str(create_project(client, "Spatial parse state integrity")["id"])
+    asset = _import(client, project_id, "coral.obj", OBJ)
+    app = cast(FastAPI, client.app)
+    assert process_spatial_source_parse_job(
+        app.state.settings,
+        app.state.session_factory,
+        asset["parse_job_id"],
+    )
+    base = f"/api/v1/projects/{project_id}/spatial/assets"
+    detail = f"{base}/{asset['id']}"
+    good = client.get(detail)
+    assert good.status_code == 200, good.text
+
+    with app.state.session_factory() as session:
+        job = session.get(Job, asset["parse_job_id"])
+        assert job is not None and job.result_json is not None
+        original = dict(job.result_json)
+        job.status = status
+        session.commit()
+
+    for url in (detail, base):
+        rejected = client.get(url)
+        assert rejected.status_code == 400, rejected.text
+        assert "integrity" in rejected.json()["detail"].lower()
+    assert client.get(f"{detail}/content").content == OBJ
+
+    with app.state.session_factory() as session:
+        job = session.get(Job, asset["parse_job_id"])
+        assert job is not None
+        job.result_json = None
+        session.commit()
+    incomplete = client.get(detail)
+    assert incomplete.status_code == 200, incomplete.text
+    assert incomplete.json()["parse_status"] == status
+    assert incomplete.json()["parse_summary"] is None
+
+    with app.state.session_factory() as session:
+        job = session.get(Job, asset["parse_job_id"])
+        assert job is not None
+        job.status = "succeeded"
+        job.result_json = original
+        session.commit()
+    restored = client.get(detail)
+    assert restored.status_code == 200, restored.text
+    assert restored.json() == good.json()
