@@ -2,6 +2,19 @@ name: Build Windows Desktop
 
 on:
   workflow_dispatch:
+    inputs:
+      previous_installer_run_id:
+        description: "Optional prior Windows build run ID (same repository)"
+        type: string
+        required: false
+      previous_installer_sha256:
+        description: "Independently verified SHA-256 of the older MSI"
+        type: string
+        required: false
+      previous_installer_supports_isolation:
+        description: "Confirm prior desktop honors marker-gated disposable data root"
+        type: boolean
+        default: false
   pull_request:
     paths:
       - "apps/api/**"
@@ -110,6 +123,9 @@ jobs:
     name: Install, launch, persist and uninstall source version on fresh Windows
     runs-on: windows-latest
     needs: build-windows-installer
+    permissions:
+      contents: read
+      actions: read
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
@@ -123,6 +139,83 @@ jobs:
             throw 'Expected a three-component numeric Tauri installer version.'
           }
           "REEFVISION_EXPECTED_MSI_VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Validate optional upgrade evidence inputs
+        shell: pwsh
+        env:
+          PRIOR_RUN: ${{ inputs.previous_installer_run_id }}
+          PRIOR_SHA: ${{ inputs.previous_installer_sha256 }}
+          PRIOR_ISOLATION: ${{ inputs.previous_installer_supports_isolation }}
+        run: |
+          if (-not $env:PRIOR_RUN -and -not $env:PRIOR_SHA -and $env:PRIOR_ISOLATION -ne 'true') { return }
+          if ($env:PRIOR_RUN -notmatch '^[1-9][0-9]*$' -or
+              $env:PRIOR_SHA -notmatch '^[0-9a-fA-F]{64}$' -or
+              $env:PRIOR_ISOLATION -ne 'true') {
+            throw 'Upgrade acceptance requires a prior run ID, independently verified MSI SHA-256, and explicit isolation confirmation.'
+          }
+
+      - name: Retrieve older installer and its external CABs
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.previous_installer_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ReefVision-Windows-Installer
+          run-id: ${{ inputs.previous_installer_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/reefvision-prior-installer
+
+      - name: Verify older installer payload before upgrade
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.previous_installer_run_id != '' }}
+        shell: pwsh
+        env:
+          PRIOR_SHA: ${{ inputs.previous_installer_sha256 }}
+          PRIOR_RUN: ${{ inputs.previous_installer_run_id }}
+        run: |
+          . ./scripts/lib/windows-clean-acceptance.ps1
+          $folder = Join-Path $env:RUNNER_TEMP 'reefvision-prior-installer'
+          $msi = @(Get-ChildItem -LiteralPath $folder -Filter '*.msi' -File)
+          $cabs = @(Get-ChildItem -LiteralPath $folder -Filter '*.cab' -File)
+          if ($msi.Count -ne 1 -or $cabs.Count -eq 0) { throw 'Prior artifact must contain one MSI and its CABs.' }
+          $priorVersion = Get-ReefVisionMsiProductVersion -InstallerPath $msi[0].FullName
+          if ([version]$priorVersion -ge [version]$env:REEFVISION_EXPECTED_MSI_VERSION) {
+            throw 'Prior installer must have a strictly older ProductVersion.'
+          }
+          if ((Get-FileHash -LiteralPath $msi[0].FullName -Algorithm SHA256).Hash -ine $env:PRIOR_SHA) {
+            throw 'Prior MSI does not match the independently supplied SHA-256.'
+          }
+          $provenance = Get-Content -LiteralPath (Join-Path $folder 'build-provenance.json') -Raw | ConvertFrom-Json
+          $payload = @($msi) + $cabs
+          $records = @($provenance.files)
+          if ($provenance.source_commit -notmatch '^[0-9a-f]{40}$' -or
+              $provenance.source_tree_clean -ne $true -or $provenance.msi_verified -ne $true -or
+              $provenance.version -cne $priorVersion -or $records.Count -ne $payload.Count) {
+            throw 'Prior installer provenance is missing or inconsistent.'
+          }
+          foreach ($item in $payload) {
+            $matching = @($records | Where-Object { $_.name -ceq $item.Name })
+            $hash = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash
+            if ($item.Length -le 0 -or $matching.Count -ne 1 -or $matching[0].sha256 -ine $hash) {
+              throw "Prior installer payload SHA-256 mismatch: $($item.Name)"
+            }
+          }
+          $installer = New-Object -ComObject WindowsInstaller.Installer
+          $database = $installer.OpenDatabase($msi[0].FullName, 0)
+          $view = $database.OpenView('SELECT `Cabinet` FROM `Media`')
+          $view.Execute()
+          $required = @()
+          while ($record = $view.Fetch()) {
+            $name = [string]$record.StringData(1)
+            if (-not $name -or $name.StartsWith('#')) { continue }
+            if ($name -notmatch '^[^\\/:]+\.cab$') { throw "Unsafe prior cabinet name: $name" }
+            $required += $name
+          }
+          $view.Close()
+          $required = @($required | Sort-Object -Unique)
+          $actual = @($cabs | ForEach-Object { $_.Name })
+          if ($required.Count -ne $actual.Count -or @($required | Where-Object { $_ -notin $actual }).Count -ne 0) {
+            throw 'Prior MSI Media table and external CAB payload differ.'
+          }
+          Write-Host "Verified prior build $env:PRIOR_RUN source $($provenance.source_commit), version $priorVersion, MSI SHA256=$env:PRIOR_SHA."
+          "REEFVISION_PREVIOUS_INSTALLER=$($msi[0].FullName)" >> $env:GITHUB_ENV
 
       - name: Retrieve exact MSI and its external CABs
         uses: actions/download-artifact@v4
@@ -228,10 +321,18 @@ jobs:
               throw "Unexpected developer runtime on isolated PATH: $cmd"
             }
           }
+          $upgrade = if ($env:REEFVISION_PREVIOUS_INSTALLER) {
+            @{
+              PreviousInstallerPath = $env:REEFVISION_PREVIOUS_INSTALLER
+              PreviousInstallerSupportsIsolatedAcceptance = $true
+            }
+          } else {
+            @{ SkipUpgrade = $true }
+          }
           & ./scripts/acceptance-windows-clean-install.ps1 `
             -InstallerPath $msi `
             -AcceptanceRoot 'C:\reefvision-source-disposable-acceptance' `
-            -SkipUpgrade -DisposableTest -KeepArtifacts -LiveSam2Acceptance
+            -DisposableTest -KeepArtifacts -LiveSam2Acceptance @upgrade
 
       - name: Upload isolated Windows acceptance report and MSI logs
         if: always()
