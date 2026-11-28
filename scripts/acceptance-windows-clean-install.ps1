@@ -497,6 +497,15 @@ try {
         # A retained directory alone does not prove that project data survived.
         $retainedDatabase = Join-Path $DataRoot 'reefvision.db'
         $beforeUninstallHash = (Get-FileHash -LiteralPath $retainedDatabase -Algorithm SHA256).Hash
+        # WAL and rollback journals can contain committed or recoverable data
+        # not represented in the main database hash. Preserve them if present.
+        $beforeSidecarHashes = @{}
+        foreach ($suffix in @('-wal', '-journal')) {
+            $sidecar = "$retainedDatabase$suffix"
+            if (Test-Path -LiteralPath $sidecar -PathType Leaf) {
+                $beforeSidecarHashes[$suffix] = (Get-FileHash -LiteralPath $sidecar -Algorithm SHA256).Hash
+            }
+        }
         $installer = New-Object -ComObject WindowsInstaller.Installer
         $database = $installer.OpenDatabase($InstallerPath, 0); $view = $database.OpenView("SELECT `Value` FROM `Property` WHERE `Property`='ProductCode'"); $view.Execute(); $productCode = $view.Fetch().StringData(1)
         Run-Msi -Action Uninstall -PackageOrProduct $productCode -LogName 'uninstall.log' | Out-Null
@@ -507,7 +516,17 @@ try {
         if (-not (Test-Path -LiteralPath $retainedDatabase -PathType Leaf)) { throw 'Isolated project database was removed by uninstall.' }
         $afterUninstallHash = (Get-FileHash -LiteralPath $retainedDatabase -Algorithm SHA256).Hash
         if ($afterUninstallHash -ne $beforeUninstallHash) { throw 'Isolated project database bytes changed during uninstall.' }
-        $report.data_retention = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Isolated project database retained byte-for-byte; SHA-256 $afterUninstallHash"
+        foreach ($suffix in @('-wal', '-journal')) {
+            $sidecar = "$retainedDatabase$suffix"
+            $exists = Test-Path -LiteralPath $sidecar -PathType Leaf
+            if ($exists -ne $beforeSidecarHashes.ContainsKey($suffix)) {
+                throw "Isolated database sidecar presence changed during uninstall: $suffix"
+            }
+            if ($exists -and (Get-FileHash -LiteralPath $sidecar -Algorithm SHA256).Hash -ne $beforeSidecarHashes[$suffix]) {
+                throw "Isolated database sidecar bytes changed during uninstall: $suffix"
+            }
+        }
+        $report.data_retention = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Isolated project database and existing WAL/journal retained byte-for-byte; database SHA-256 $afterUninstallHash"
     } else {
         $report.data_retention = New-ReefVisionEvidenceResult -Status 'NOT RUN' -Detail 'Uninstall was skipped.'
     }
@@ -536,7 +555,8 @@ try {
     }
     $report.completed_at_utc = [DateTime]::UtcNow.ToString('o')
     Save-Report
-    if (-not $KeepArtifacts -and (Test-Path (Join-Path $RunRoot '.reefvision-acceptance-run')) -and $report.uninstall.status -eq 'PASS') {
+    # Do not destroy the evidence of a failed data-retention check.
+    if (-not $KeepArtifacts -and (Test-Path (Join-Path $RunRoot '.reefvision-acceptance-run')) -and $report.uninstall.status -eq 'PASS' -and $report.data_retention.status -eq 'PASS' -and -not $report.failure_reason) {
         $ExpectedRunRoot = [System.IO.Path]::GetFullPath((Join-Path $AcceptanceRoot "reefvision-clean-$Token"))
         if ([System.IO.Path]::GetFullPath($RunRoot) -ne $ExpectedRunRoot) { throw 'Refusing cleanup outside the generated acceptance run.' }
         Remove-Item -LiteralPath $RunRoot -Recurse -Force
