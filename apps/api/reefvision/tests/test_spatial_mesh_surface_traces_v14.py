@@ -2103,6 +2103,7 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         assert union["within_trace_redundant_source_length_mesh_units"] == 1.0
         assert union["cross_trace_redundant_source_length_mesh_units"] == 0.0
         assert union["cross_trace_shared_source_length_mesh_units"] == 0.0
+        assert union["cross_trace_shared_source_length_fraction"] == 0.0
     if case == "uncertainty_missing":
         assert union["length_scale_only_interval_m"] is None
         assert union["qc_warnings"] == []
@@ -2811,6 +2812,9 @@ def test_cross_trace_shared_edges_are_not_independent_branch_lengths(
     assert union["within_trace_redundant_source_length_mesh_units"] == 0.0
     assert union["cross_trace_redundant_source_length_mesh_units"] == (2.0 if shared else 0.0)
     assert union["cross_trace_shared_source_length_mesh_units"] == (2.0 if shared else 0.0)
+    assert union["cross_trace_shared_source_length_fraction"] == pytest.approx(
+        2 / source_length if shared else 0.0
+    )
     assert union["source_length_mesh_units"] == pytest.approx(source_length)
     assert union["length_m"] == pytest.approx(source_length * 0.01)
     assert union["length_scale_only_interval_m"] == pytest.approx(
@@ -2917,6 +2921,7 @@ def test_shared_trace_pairs_count_distinct_edges_not_repeated_traversals() -> No
     assert union["within_trace_redundant_source_length_mesh_units"] == pytest.approx(1 + sqrt(2))
     assert union["cross_trace_redundant_source_length_mesh_units"] == pytest.approx(2 + sqrt(2))
     assert union["cross_trace_shared_source_length_mesh_units"] == pytest.approx(1 + sqrt(2))
+    assert union["cross_trace_shared_source_length_fraction"] == 1.0
     assert union["source_length_mesh_units"] == pytest.approx(1 + sqrt(2))
     chains = union["endpoint_graph_chains"]
     _assert_chain_traversals(chains, params["vertices"], params["surface_trace_vertex_paths"])
