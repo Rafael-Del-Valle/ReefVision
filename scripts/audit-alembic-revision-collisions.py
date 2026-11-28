@@ -379,10 +379,11 @@ def classify_ancestry(values: list[str | None]) -> str:
 
 def _canonical_graph_revision(value: str) -> bool:
     """Limit strict ancestry evidence to ReefVision's durable revision tokens."""
-    return (
-        re.fullmatch(r"[A-Za-z0-9_]{1,32}", value) is not None
-        and value not in {"base", "head", "heads"}
-    )
+    return re.fullmatch(r"[A-Za-z0-9_]{1,32}", value) is not None and value not in {
+        "base",
+        "head",
+        "heads",
+    }
 
 
 def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
