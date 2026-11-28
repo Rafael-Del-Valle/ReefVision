@@ -261,6 +261,18 @@ export function summarizeCurrentSlice(
   )
     return null;
 
+  // A caller may combine overlapping selections or cached slices. Reusing an
+  // immutable component would give that observation extra statistical weight.
+  // Reject the ambiguous summary rather than silently deduplicating records.
+  const seenComponents = new Set<string>();
+  for (const vector of vectors) {
+    if (vector.recordIds.length !== 2) return null;
+    for (const id of vector.recordIds) {
+      if (!id || seenComponents.has(id)) return null;
+      seenComponents.add(id);
+    }
+  }
+
   let meanSpeed = 0;
   let meanEast = 0;
   let meanNorth = 0;
