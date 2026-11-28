@@ -7,6 +7,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'lib/artifact-sha256.ps1')
 
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 if (-not $InstallerDirectory) {
@@ -198,7 +199,7 @@ try {
             if ($RuntimeFile.PSIsContainer -or $RuntimeFile.Length -le 0) {
                 throw "Packaged Wasmtime runtime file is missing or empty: $relativePath"
             }
-            $RuntimeHash = (Get-FileHash -LiteralPath $RuntimeFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            $RuntimeHash = Get-ReefVisionArtifactSha256 -Path $RuntimeFile.FullName
             Write-Host "Wasmtime $relativePath SHA-256: $RuntimeHash"
         }
         $AutomationConsole = Join-Path $DesktopExe.DirectoryName 'automation\reefvision.exe'

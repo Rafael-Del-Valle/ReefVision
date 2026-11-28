@@ -8,6 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
+. (Join-Path $PSScriptRoot 'lib/artifact-sha256.ps1')
 
 function Test-ReefVisionSourceTreeClean {
     git diff --quiet --ignore-submodules --
@@ -203,17 +204,8 @@ foreach ($GeneratedCab in $GeneratedCabFiles) {
     $DestinationCab = Join-Path $InstallerDirectory $GeneratedCab.Name
 
     if (Test-Path -LiteralPath $DestinationCab -PathType Leaf) {
-        $SourceHash = (
-            Get-FileHash `
-                -LiteralPath $GeneratedCab.FullName `
-                -Algorithm SHA256
-        ).Hash
-
-        $DestinationHash = (
-            Get-FileHash `
-                -LiteralPath $DestinationCab `
-                -Algorithm SHA256
-        ).Hash
+        $SourceHash = Get-ReefVisionArtifactSha256 -Path $GeneratedCab.FullName
+        $DestinationHash = Get-ReefVisionArtifactSha256 -Path $DestinationCab
 
         if ($SourceHash -ne $DestinationHash) {
             throw "Generated CAB conflicts with MSI output: $($GeneratedCab.Name)"
@@ -284,10 +276,10 @@ if ((git rev-parse HEAD) -ne $BuildCommit -or -not (Test-ReefVisionSourceTreeCle
         backend = 'Bundled PyInstaller runtime; Python installation is not required'
         automation = [ordered]@{
             console = 'automation/reefvision.exe'
-            console_sha256 = (Get-FileHash -LiteralPath $AutomationConsole -Algorithm SHA256).Hash.ToLowerInvariant()
+            console_sha256 = Get-ReefVisionArtifactSha256 -Path $AutomationConsole
             sdk_wheel = "automation/sdk/$([IO.Path]::GetFileName($AutomationSdk))"
-            sdk_wheel_sha256 = (Get-FileHash -LiteralPath $AutomationSdk -Algorithm SHA256).Hash.ToLowerInvariant()
-            sdk_source_sha256 = (Get-FileHash -LiteralPath (Join-Path $Root 'apps/api/reefvision_sdk/__init__.py') -Algorithm SHA256).Hash.ToLowerInvariant()
+            sdk_wheel_sha256 = Get-ReefVisionArtifactSha256 -Path $AutomationSdk
+            sdk_source_sha256 = Get-ReefVisionArtifactSha256 -Path (Join-Path $Root 'apps/api/reefvision_sdk/__init__.py')
         }
         webview2_install_mode = $TauriConfig.bundle.windows.webviewInstallMode.type
         gpu = 'Compatible NVIDIA driver for CUDA inference; CPU supported'
