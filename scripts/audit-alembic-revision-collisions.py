@@ -459,14 +459,24 @@ def _checked_path_stat(path: Path, *, ancestor: bool = False) -> os.stat_result:
     return info
 
 
-def _migration_sources(root: Path) -> list[Path]:
+def _migration_sources(root: Path, *, verify_parent_graph: bool = False) -> list[Path]:
     """Inventory ordinary Python files without following directory redirects."""
     pending = [root]
     sources = []
     while pending:
         directory = pending.pop()
+        portable_names: set[str] = set()
         for entry in directory.iterdir():
             info = _checked_path_stat(entry)
+            if verify_parent_graph and entry.name.casefold().endswith(".py"):
+                # Alembic's source extension is case-sensitive; Windows path
+                # matching and case-insensitive checkout can disagree with Linux.
+                if not entry.name.endswith(".py"):
+                    raise ValueError(f"{entry}: nonportable migration source extension")
+                portable_name = entry.name.casefold()
+                if portable_name in portable_names:
+                    raise ValueError(f"{entry}: case-colliding migration source name")
+                portable_names.add(portable_name)
             if entry.match("*.py"):
                 if not stat.S_ISREG(info.st_mode):
                     raise ValueError(f"Migration source is not a regular file: {entry}")
@@ -507,7 +517,7 @@ def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
             raise ValueError(f"Migration directory missing: {root}")
         # Inventory every entry before reading migration bytes. pathlib.rglob
         # can omit redirected directories; Windows junctions are not symlinks.
-        sources = _migration_sources(root)
+        sources = _migration_sources(root, verify_parent_graph=verify_parent_graph)
         root_entries: list[tuple[str, tuple[str, ...]]] = []
         root_paths: dict[str, str] = {}
         root_manifest_entries: list[tuple[str, str, tuple[str, ...]]] = []

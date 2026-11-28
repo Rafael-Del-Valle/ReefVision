@@ -419,3 +419,47 @@ def test_nonregular_python_source_is_refused_without_blocking(tmp_path: Path, st
     assert not result.stdout
     assert "not a regular file" in result.stderr
     assert ordinary.read_bytes() == before
+
+
+@pytest.mark.parametrize("name", ["0002.PY", "0002.Py", "0002.pY"])
+def test_strict_graph_refuses_nonportable_source_extension(tmp_path: Path, name: str) -> None:
+    root = tmp_path / "versions"
+    first = _migration(root, "0001.py", "0001", "None")
+    second = _migration(root, name, "0002", '"0001"')
+    before = {path: path.read_bytes() for path in (first, second)}
+
+    with pytest.raises(ValueError, match="nonportable migration source extension"):
+        _module().audit([root], verify_parent_graph=True)
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--verify-parent-graph", str(root)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert not result.stdout
+    assert "nonportable migration source extension" in result.stderr
+    assert {path: path.read_bytes() for path in before} == before
+
+
+def test_strict_graph_refuses_case_colliding_migration_names(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    first = _migration(root, "Base.py", "0001", "None")
+    second = _migration(root, "base.py", "0002", '"0001"')
+    if first.samefile(second):
+        pytest.skip("requires a case-sensitive filesystem to reproduce the checkout collision")
+    before = {path: path.read_bytes() for path in (first, second)}
+
+    assert _module().audit([root])["revision_count"] == 2
+    with pytest.raises(ValueError, match="case-colliding migration source name"):
+        _module().audit([root], verify_parent_graph=True)
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--verify-parent-graph", str(root)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert not result.stdout
+    assert "case-colliding migration source name" in result.stderr
+    assert {path: path.read_bytes() for path in before} == before

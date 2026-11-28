@@ -684,3 +684,30 @@ remain to be verified. No migration revision, data, executable saved QC
 workflow or review gate is changed. Release HOLD remains for reviewed
 cross-version migration reconciliation, representative biology, genuine
 installed Windows MSI/CAB GUI upgrade/rollback and researcher approval.
+
+## 2026-11-28 — Cross-platform migration source filename parity
+
+Strict source evidence must be usable in the Windows desktop package.
+On a case-sensitive filesystem, Alembic 1.18.4 accepts two migration
+sources named Base.py and base.py as distinct revisions, although a
+case-insensitive checkout cannot reliably preserve both. Alembic also
+ignores uppercase .PY extensions, while Windows pathlib matching can
+include them. The strict inventory now rejects case-folded duplicate
+source names and non-lowercase Python source extensions before reading
+migration bytes. Legacy inventory behavior remains unchanged.
+
+Five isolated Linux helper probes passed (three extension cases,
+case-colliding filenames and an ordinary source control). Two additional
+actual Alembic 1.18.4 reproductions confirmed the loader differences.
+Added four CLI regression cases with source preservation; the
+case-collision fixture skips on case-insensitive filesystems. The
+previous exact-head run 46112724068 succeeded. Full new-head CI and
+native Windows qualification remain unverified because local GitHub
+checkout is DNS-blocked.
+
+This is read-only packaging preflight, not a scientific operation or
+new Workflow Builder node. Existing typed executable saved QC graphs,
+units, provenance, retry behavior and researcher approval are preserved.
+Release HOLD remains for coordinated cross-version migration
+reconciliation, representative biological validation, genuine installed
+Windows MSI/CAB GUI clean-install/upgrade/rollback and owner approval.
