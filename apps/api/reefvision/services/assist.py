@@ -38,6 +38,7 @@ from reefvision.schemas.assist import (
     AssistSessionResponse,
 )
 from reefvision.services.annotations import annotation_snapshot, mask_annotation_snapshot
+from reefvision.storage.checkpoint_approvals import verified_registered_checkpoint
 from reefvision.storage.masks import write_mask_png
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -139,7 +140,7 @@ class AssistService:
                 payload.source_prediction_id,
             ).id
         image_path = resolve_managed_project_path(self.settings, image.managed_path)
-        model_path = resolve_managed_project_path(self.settings, model.managed_path)
+        model_path = verified_registered_checkpoint(self.settings, model)
         session_state = self.runtime.create_session(
             project_id=image.project_id,
             image_id=image.id,

@@ -41,6 +41,7 @@ from reefvision.services.workflow_pose_sources import (
     resolve_frozen_pose_dataset,
     verify_pose_dataset_separation,
 )
+from reefvision.storage.checkpoint_approvals import require_local_execution_approval
 from reefvision.storage.datasets import (
     canonical_json_sha256,
 )
@@ -241,6 +242,7 @@ def _seed_pose_model(
 
     if actual_sha != model.sha256:
         raise ValidationError("Pose retraining seed checkpoint checksum changed")
+    require_local_execution_approval(settings, model, checkpoint)
 
     return model
 

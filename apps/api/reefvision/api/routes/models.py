@@ -31,6 +31,7 @@ from reefvision.schemas.bootstrap import (
 )
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.models import (
+    CheckpointApprovalRequest,
     InferenceJobCreateRequest,
     ModelProviderCapabilityMatrixResponse,
     ModelProviderResponse,
@@ -199,6 +200,20 @@ def get_model(
     session: DbSession,
 ) -> ModelRegistrationResponse:
     return service(request, session).get_model(model_id)
+
+
+@router.post(
+    "/projects/{project_id}/models/{model_id}/approve-checkpoint",
+    response_model=ModelRegistrationResponse,
+)
+def approve_model_checkpoint(
+    project_id: str,
+    model_id: str,
+    payload: CheckpointApprovalRequest,
+    request: Request,
+    session: DbSession,
+) -> ModelRegistrationResponse:
+    return service(request, session).approve_checkpoint(project_id, model_id, payload.sha256)
 
 
 @router.post(

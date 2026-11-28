@@ -48,6 +48,10 @@ from reefvision.schemas.models import (
     ModelRegistrationResponse,
     RegisterModelFromRunRequest,
 )
+from reefvision.storage.checkpoint_approvals import (
+    remember_checkpoint_approval,
+    verified_registered_checkpoint,
+)
 from reefvision.storage.models import (
     copy_model_file,
     ensure_supported_model_extension,
@@ -183,6 +187,15 @@ class ModelService:
     def get_model(self, model_id: str) -> ModelRegistrationResponse:
         return ModelRegistrationResponse.model_validate(self._model(model_id))
 
+    def approve_checkpoint(
+        self, project_id: str, model_id: str, sha256: str
+    ) -> ModelRegistrationResponse:
+        model = self._model(model_id)
+        if model.project_id != project_id:
+            raise NotFoundError("Model not found in this project")
+        verified_registered_checkpoint(self.settings, model, approving_sha256=sha256)
+        return ModelRegistrationResponse.model_validate(model)
+
     def _register_model_path(
         self,
         project_id: str,
@@ -262,6 +275,8 @@ class ModelService:
                 },
                 notes=notes.strip() if notes else None,
             )
+            if upload_approval is True:
+                remember_checkpoint_approval(self.settings, model)
             self.models.add(model)
             self.session.commit()
             self.session.refresh(model)

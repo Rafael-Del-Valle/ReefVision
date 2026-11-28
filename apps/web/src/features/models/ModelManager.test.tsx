@@ -323,19 +323,23 @@ describe("ModelManager catalog", () => {
       framework: "ultralytics",
       task: "detect",
       provider_name: "ultralytics",
-      sha256: "abcdef123456".repeat(5),
+      sha256: "abcdef123456".repeat(5) + "1234",
       class_map_json: { labels: ["Coral"], mapping: { Coral: "class-1" } },
       metadata_json: {},
       created_at: "2026-10-07T12:00:00Z",
       notes: "Researcher-provided checkpoint",
     };
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      if (String(input).includes("/model-hub/bootstrap"))
-        return jsonResponse({ ...response, models: [registered] });
-      if (String(input).includes("/model-catalog"))
-        return jsonResponse(response.catalog);
-      return new Promise<Response>(() => undefined);
-    });
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        if (String(input).endsWith("/approve-checkpoint"))
+          return jsonResponse(registered);
+        if (String(input).includes("/model-hub/bootstrap"))
+          return jsonResponse({ ...response, models: [registered] });
+        if (String(input).includes("/model-catalog"))
+          return jsonResponse(response.catalog);
+        return new Promise<Response>(() => undefined);
+      });
     renderManager();
     const card = (
       await screen.findByRole("heading", { name: registered.display_name })
@@ -348,6 +352,25 @@ describe("ModelManager catalog", () => {
       within(card).getByText(`Project: ${project.id}`),
     ).toBeInTheDocument();
     expect(within(card).getByText(/Registered: /)).toBeInTheDocument();
+    const review = within(card).getByText("Review checkpoint trust");
+    await userEvent.click(review);
+    const approve = within(card).getByRole("button", {
+      name: "Approve checkpoint on this device",
+    });
+    expect(approve).toBeDisabled();
+    await userEvent.click(
+      within(card).getByLabelText(/trust the source of coral-custom.pt/i),
+    );
+    await userEvent.click(approve);
+    expect(
+      await within(card).findByText("Checkpoint approved on this device."),
+    ).toBeInTheDocument();
+    const call = fetchSpy.mock.calls.find(([url]) =>
+      String(url).endsWith("/approve-checkpoint"),
+    );
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+      sha256: registered.sha256,
+    });
   });
 
   it("shows ReefPose anatomy and training provenance and offers pose inference", async () => {
@@ -626,7 +649,6 @@ describe("ModelManager catalog", () => {
     const input = await screen.findByLabelText("Checkpoint file");
     const submit = within(input.closest("form")!).getByRole("button", {
       name: "Register Existing Model",
-      exact: true,
     });
     await userEvent.upload(input, new File(["a"], "first.pt"));
     expect(submit).toBeDisabled();

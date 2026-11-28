@@ -88,6 +88,10 @@ class InferenceJobCreateRequest(BaseModel):
     device: str = Field(default="auto", min_length=1, max_length=20)
 
 
+class CheckpointApprovalRequest(BaseModel):
+    sha256: Digest
+
+
 class RegisterModelFromRunRequest(BaseModel):
     approved_checkpoint_sha256: Digest | None = None
     training_run_id: str = Field(min_length=1, max_length=36)

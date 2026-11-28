@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from reefvision.config import Settings
 from reefvision.db.models import ClassificationDataset, Job, ModelRegistration, Project
 from reefvision.ml.classification import classification_provider_for_name
+from reefvision.storage.checkpoint_approvals import remember_checkpoint_approval
 from reefvision.storage.models import copy_model_file
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -128,6 +129,7 @@ def process_classification_training_job(
                 },
                 notes="Automatically registered from ReefVision classification training",
             )
+            remember_checkpoint_approval(settings, registration)
             session.add(registration)
             job.status = "succeeded"
             job.progress_current = max(1, int(request.get("epochs", 50)))

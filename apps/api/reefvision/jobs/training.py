@@ -42,6 +42,7 @@ from reefvision.ml.ultralytics_tuning import (
     effective_search_space,
     normalize_tuning_csv,
 )
+from reefvision.storage.checkpoint_approvals import verified_registered_checkpoint
 from reefvision.storage.datasets import write_yolo_detection_export
 from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
@@ -501,10 +502,8 @@ def _resolve_model_source(settings: Settings, session: Session, run: TrainingRun
             raise ValidationError(
                 "The selected registered checkpoint does not match this project/task"
             )
-        checksum, _ = hash_model_file(path)
-        if checksum != model.sha256 or (
-            run.resolved_model_checksum and checksum != run.resolved_model_checksum
-        ):
+        verified_registered_checkpoint(settings, model)
+        if run.resolved_model_checksum and model.sha256 != run.resolved_model_checksum:
             raise ValidationError("The selected registered checkpoint checksum changed")
         return str(path)
     if resolved_asset_id.startswith("builtin_architecture:"):
@@ -526,10 +525,8 @@ def _resolve_model_source(settings: Settings, session: Session, run: TrainingRun
             raise ValidationError(
                 "The selected registered checkpoint does not match this project/task"
             )
-        checksum, _ = hash_model_file(path)
-        if checksum != model.sha256 or (
-            run.resolved_model_checksum and checksum != run.resolved_model_checksum
-        ):
+        verified_registered_checkpoint(settings, model)
+        if run.resolved_model_checksum and model.sha256 != run.resolved_model_checksum:
             raise ValidationError("The selected registered checkpoint checksum changed")
         return str(path)
     if run.architecture:

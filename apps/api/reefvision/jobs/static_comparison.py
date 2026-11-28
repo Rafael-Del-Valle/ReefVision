@@ -24,6 +24,7 @@ from reefvision.schemas.static_comparison import (
     StaticReferenceImage,
 )
 from reefvision.services.static_comparison import STATIC_COMPARISON_JOB, build_snapshot
+from reefvision.storage.checkpoint_approvals import require_local_execution_approval
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.static_comparison import verify_static_content
 
@@ -100,6 +101,7 @@ def _evaluate_model(
             checkpoint = verify_static_content(
                 settings, registration.managed_path, model.checkpoint_sha256, fresh=True
             )
+            require_local_execution_approval(settings, registration, checkpoint)
         provider = detection_provider_for_name(model.provider_name)
         provider.load_model(checkpoint, inference.device)
         runtime_version = provider.provider_version
