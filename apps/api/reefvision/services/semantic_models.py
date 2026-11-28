@@ -474,7 +474,7 @@ class SemanticModelService(SegmentationModelService):
         expected = manifest.get("result_checkpoint_sha256") or manifest.get("bundle_sha256")
         if expected and actual != expected:
             raise ValidationError(
-                "The completed training checkpoint checksum changed before registration"
+                "The training checkpoint checksum changed after completion"
             )
         if approved_sha256 == actual:
             return actual
@@ -804,7 +804,6 @@ class SemanticModelService(SegmentationModelService):
                 "or semantic segmenter from the same project"
             )
         require_image_inference_provider(model.provider_name, model.task)
-        verified_registered_checkpoint(self.settings, model)
         pinned: dict[str, Any] = {}
         if payload.runtime_selection_id is not None:
             selection = ModelRuntimeService(self.session, self.settings).verify(
@@ -826,6 +825,7 @@ class SemanticModelService(SegmentationModelService):
 
             verify_inference_pins(self.settings, model, images, payload.source_pins)
             pinned["source_pins"] = payload.source_pins.model_dump(mode="json")
+        verified_registered_checkpoint(self.settings, model)
         adjusted = (
             adjusted_inference_binding(
                 self.session,
