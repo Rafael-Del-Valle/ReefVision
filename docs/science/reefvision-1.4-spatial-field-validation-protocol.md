@@ -1034,3 +1034,17 @@ source endpoints using the exact fraction reproduces the rounded midpoint,
 including standalone and persisted typed workflow replay. This representation
 preserves numerical provenance only, not anatomical validation or precision
 beyond the imported source coordinates and binary64 segment lengths.
+
+The `source_arc_centroid_mesh_units` is the length-weighted mean position
+along each canonical selected chain: sum each edge midpoint multiplied by
+its binary64 source length, then divide by total source length. Accumulate
+and divide with rational arithmetic before rounding each coordinate.
+Unlike the arc midpoint, the centroid need not lie on a selected edge;
+unlike a vertex average, it weights long and short edges by their length.
+For the open path (0,0,0) -> (0,1,0) -> (1,0,0), the centroid is
+(sqrt(2)/(2*(1+sqrt(2))), 0.5, 0). Check reversed input, three calibration
+scales, and an independent length-normalized edge-midpoint oracle in the
+standalone preview and persisted typed workflow artifact/hash replay.
+This is a source-frame geometric descriptor, not a coral mass centroid,
+registered displacement, verified anatomical centerline, or positional
+uncertainty estimate.
