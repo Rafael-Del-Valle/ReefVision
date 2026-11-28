@@ -143,6 +143,7 @@ class ActiveLearningRoundService:
         project_id: str,
         request: ActiveLearningRoundCreateRequest,
     ) -> ActiveLearningRoundResponse:
+        begin_serialized_review_triage(self.session)
         self._project(project_id)
         version = self._dataset_version(project_id, request.dataset_version_id)
         model_ids = self._model_ids(project_id, request.model_ids)
@@ -334,28 +335,34 @@ class ActiveLearningRoundService:
             )
 
         parent = self._dataset_version(round_record.project_id, round_record.dataset_version_id)
-        requested_ratios = None
-        if parent is not None and parent.requested_ratios_json:
-            requested_ratios = SplitRatios.model_validate(parent.requested_ratios_json)
         dataset_request = DatasetVersionCreateRequest(
             name=f"{round_record.name[:160]} — feedback",
             notes=(
                 "Immutable post-review dataset produced by active-learning round "
                 f"{round_record.id}. Completed queue items were required to have reviewed "
-                "image annotation status before inclusion."
+                "image annotation status before inclusion. Project test groups and matching "
+                "source files are excluded. Newly allocated groups are training feedback."
             ),
             creator=round_record.created_by,
             parent_version_id=round_record.dataset_version_id,
             eligible_annotation_statuses=["reviewed"],
             split_method="group_random",
-            requested_ratios=requested_ratios,
+            requested_ratios=SplitRatios(train=1.0, validation=0.0, test=0.0),
             split_seed=parent.split_seed if parent is not None else 0,
             reuse_parent_assignments=parent is not None,
         )
-        created = MaskAwareDatasetVersionService(self.session, self.settings).create_version(
+        versions = MaskAwareDatasetVersionService(self.session, self.settings)
+        historical_test_ids = versions.versions.project_test_image_ids(round_record.project_id)
+        if historical_test_ids.intersection(completed_image_ids):
+            raise ConflictError(
+                "A completed selection has since been reserved for testing. "
+                "Create a new acquisition round with the remaining eligible images."
+            )
+        created = versions.create_version(
             round_record.project_id,
             dataset_request,
             commit=False,
+            excluded_image_ids=historical_test_ids,
         )
         return self.session.get(DatasetVersion, created.id)
 

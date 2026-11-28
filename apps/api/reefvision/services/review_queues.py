@@ -237,10 +237,16 @@ class ReviewQueueService:
                 if issue.status not in {"open", "acknowledged"} or issue.image_id is None:
                     continue
                 issues_by_image[issue.image_id].append(issue)
+        historical_test_ids = (
+            self.quality_control.versions.project_test_image_ids(project_id)
+            if acquisition is not None
+            else set()
+        )
         scoped_images = [
             image
             for image in project_context.images
             if image.image_id in scoped_image_ids
+            and image.image_id not in historical_test_ids
             and (
                 acquisition is None
                 or split_by_image_id.get(image.image_id) not in {"validation", "test"}
