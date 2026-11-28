@@ -1023,3 +1023,14 @@ and a tiny source segment whose calibrated length underflows. Exercise the
 standalone API and two saved typed workflow executions with artifact/hash
 parity; retain provisional review status and do not infer position
 uncertainty or biological identity from the rounded locator.
+
+The `source_arc_midpoint_edge_fraction` locator preserves the reduced exact
+fraction of the canonical edge as decimal integer strings `numerator` and
+`denominator` (not JSON floating-point numbers). Reconstruct it from the
+binary64 source segment lengths: preceding lengths plus the fraction times
+the selected edge length must equal half the total chain length. A midpoint
+at the end of the earlier edge has fraction 1/1. Verify that interpolating
+source endpoints using the exact fraction reproduces the rounded midpoint,
+including standalone and persisted typed workflow replay. This representation
+preserves numerical provenance only, not anatomical validation or precision
+beyond the imported source coordinates and binary64 segment lengths.
