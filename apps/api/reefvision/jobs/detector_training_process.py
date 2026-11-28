@@ -1,4 +1,4 @@
-"""Process boundary for scheduled Ultralytics detector fits."""
+"""Process boundary for scheduled Ultralytics detection and instance segmentation fits."""
 
 from __future__ import annotations
 
@@ -19,21 +19,23 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from reefvision.config import Settings
 from reefvision.db.models import TrainingRun
-from reefvision.jobs.training import process_training_job, recover_training_run
+from reefvision.jobs.training import recover_training_run
+from reefvision.jobs.training_dispatch import process_task_aware_training_job
 from reefvision.repositories.jobs import JobRepository
 
 LOGGER = logging.getLogger("reefvision.detector_training")
 
 
-def is_detector_fit(factory: sessionmaker[Session], job_id: str) -> bool:
+def isolated_fit_name(factory: sessionmaker[Session], job_id: str) -> str | None:
     with factory() as session:
         run = session.scalar(select(TrainingRun).where(TrainingRun.job_id == job_id))
-        return bool(
-            run is not None
-            and run.task == "detect"
-            and run.provider_id == "ultralytics"
-            and run.tuning_config_json.get("mode", "disabled") == "disabled"
-        )
+        if (
+            run is None
+            or run.provider_id != "ultralytics"
+            or run.tuning_config_json.get("mode", "disabled") != "disabled"
+        ):
+            return None
+        return {"detect": "detector", "segment": "instance-segmentation"}.get(run.task)
 
 
 def _exit_with_parent(parent: psutil.Process) -> None:
@@ -59,17 +61,20 @@ def run_child(settings: Settings, job_id: str, parent_pid: int) -> int:
     engine = create_database_engine(settings)
     try:
         factory = create_session_factory(engine)
-        if not is_detector_fit(factory, job_id):
+        fit_name = isolated_fit_name(factory, job_id)
+        if fit_name is None:
             return 1
-        LOGGER.info("Starting isolated detector training for job %s", job_id)
-        processed = process_training_job(settings, factory, job_id)
-        LOGGER.info("Isolated detector training exited for job %s, processed=%s", job_id, processed)
+        LOGGER.info("Starting isolated %s training for job %s", fit_name, job_id)
+        processed = process_task_aware_training_job(settings, factory, job_id)
+        LOGGER.info(
+            "Isolated %s training exited for job %s, processed=%s", fit_name, job_id, processed
+        )
         return 0 if processed else 1
     finally:
         engine.dispose()
 
 
-def _start_child(settings: Settings, job_id: str) -> subprocess.Popen[bytes]:
+def _start_child(settings: Settings, job_id: str, fit_name: str) -> subprocess.Popen[bytes]:
     argv = [sys.executable]
     if not getattr(sys, "frozen", False):
         argv.extend(["-m", "reefvision.desktop"])
@@ -79,8 +84,8 @@ def _start_child(settings: Settings, job_id: str) -> subprocess.Popen[bytes]:
             str(settings.resolved_data_dir),
             "--skip-migrations",
             "--log-file",
-            str(settings.resolved_data_dir / "logs" / f"detector-training-{job_id}.log"),
-            "--detector-training-job",
+            str(settings.resolved_data_dir / "logs" / f"{fit_name}-training-{job_id}.log"),
+            "--ultralytics-training-job",
             job_id,
             "--worker-parent",
             str(os.getpid()),
@@ -139,20 +144,24 @@ def _terminate_child(process: subprocess.Popen[bytes]) -> None:
         process.wait()
 
 
-async def run_scheduled_detector(
-    settings: Settings, factory: sessionmaker[Session], job_id: str, stop: asyncio.Event
+async def run_scheduled_fit(
+    settings: Settings,
+    factory: sessionmaker[Session],
+    job_id: str,
+    stop: asyncio.Event,
+    fit_name: str,
 ) -> None:
     if stop.is_set():
         return
     try:
-        process = _start_child(settings, job_id)
+        process = _start_child(settings, job_id, fit_name)
     except Exception as exc:
         await asyncio.to_thread(
             _finalize_interruption,
             settings,
             factory,
             job_id,
-            f"Could not start the detector training process: {exc}",
+            f"Could not start the {fit_name} training process: {exc}",
             False,
         )
         return
@@ -164,9 +173,10 @@ async def run_scheduled_detector(
         if process.poll() is None:
             await asyncio.to_thread(_terminate_child, process)
         reason = (
-            "The desktop shut down during detector training."
+            f"The desktop shut down during {fit_name} training."
             if stop.is_set()
-            else f"The detector process exited with code {process.returncode} before finalization."
+            else f"The {fit_name} process exited with code {process.returncode} "
+            "before finalization."
         )
         await asyncio.to_thread(
             _finalize_interruption, settings, factory, job_id, reason, stop.is_set()
