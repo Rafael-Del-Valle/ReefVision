@@ -312,12 +312,72 @@ def test_packaged_16_graph_matches_current_lineage() -> None:
     assert {path: path.read_bytes() for path in root.glob("*.py")} == before
 
 
+def _alembic_modules():
+    if os.environ.get("REEFVISION_REQUIRE_ALEMBIC_RUNTIME") == "1":
+        return (
+            importlib.import_module("alembic.config"),
+            importlib.import_module("alembic.script"),
+        )
+    return pytest.importorskip("alembic.config"), pytest.importorskip("alembic.script")
+
+
+def _runtime_parent_manifest(directory):
+    observed = {}
+    for script in directory.walk_revisions():
+        assert not script.branch_labels, f"{script.revision}: runtime branch_labels"
+        assert script.dependencies is None, f"{script.revision}: runtime depends_on"
+        parents = script.down_revision
+        if isinstance(parents, str):
+            parents = (parents,)
+        assert script.revision not in observed
+        observed[script.revision] = (Path(script.path).resolve(), sorted(parents or ()))
+    return observed
+
+
+@pytest.mark.parametrize(
+    ("extra", "message"),
+    [
+        ('branch_labels = "review"\n', "runtime branch_labels"),
+        ('depends_on = "0001"\n', "runtime depends_on"),
+        ("", None),
+    ],
+)
+def test_runtime_manifest_requires_dependency_free_unlabeled_graph(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, extra: str, message: str | None
+) -> None:
+    config_module, script_module = _alembic_modules()
+    monkeypatch.setattr(sys, "dont_write_bytecode", True)
+    root = tmp_path / "versions"
+    first = _migration(root, "0001.py", "0001", "None")
+    second = _migration(root, "0002.py", "0002", '"0001"')
+    third = _migration(root, "0003.py", "0003", '"0002"')
+    third.write_text(third.read_text(encoding="utf-8") + extra, encoding="utf-8")
+    before = {path: path.read_bytes() for path in (first, second, third)}
+    config = config_module.Config()
+    config.set_main_option("script_location", str(tmp_path))
+    directory = script_module.ScriptDirectory.from_config(config)
+
+    # Neither extra metadata field changes this fixture's roots or heads.
+    assert directory.get_bases() == ["0001"]
+    assert directory.get_heads() == ["0003"]
+    if message is None:
+        assert _runtime_parent_manifest(directory) == {
+            "0001": (first.resolve(), []),
+            "0002": (second.resolve(), ["0001"]),
+            "0003": (third.resolve(), ["0002"]),
+        }
+    else:
+        with pytest.raises(AssertionError, match=message):
+            _runtime_parent_manifest(directory)
+    assert {path: path.read_bytes() for path in before} == before
+    assert not (root / "__pycache__").exists()
+
+
 def test_packaged_16_graph_matches_runtime_alembic_loader(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Compare static evidence with the trusted packaged Alembic configuration."""
-    config_module = pytest.importorskip("alembic.config")
-    script_module = pytest.importorskip("alembic.script")
+    config_module, script_module = _alembic_modules()
     monkeypatch.setattr(sys, "dont_write_bytecode", True)
     api = SCRIPT.parents[1] / "apps" / "api"
     root = api / "migrations" / "versions"
@@ -337,13 +397,7 @@ def test_packaged_16_graph_matches_runtime_alembic_loader(
     )
     assert sorted(directory.get_bases()) == graph["root_revisions"]
     assert sorted(directory.get_heads()) == graph["head_revisions"]
-    observed = {}
-    for script in directory.walk_revisions():
-        parents = script.down_revision
-        if isinstance(parents, str):
-            parents = (parents,)
-        assert script.revision not in observed
-        observed[script.revision] = (Path(script.path).resolve(), sorted(parents or ()))
+    observed = _runtime_parent_manifest(directory)
 
     assert len(observed) == report["revision_count"]
     assert observed == expected

@@ -761,3 +761,32 @@ by this comparison. Existing typed QC saved graphs, units, provenance, retries
 and human review remain unchanged. Release HOLD remains for reviewed migration
 reconciliation, representative biological validation, installed Windows GUI
 and MSI/CAB clean-install/upgrade/rollback, exact-head CI and owner approval.
+
+## 2026-11-28 — required native Windows Alembic runtime parity
+
+Exact predecessor CI 46126598926 completed successfully: backend lint,
+strict source/runtime parity, mypy, tests, real migrations, frontend
+format/type/unit/E2E/build and native Windows preservation. The Windows
+job previously installed only pytest, so the real Alembic loader check
+could skip there despite the green job.
+
+Install only pytest, Alembic and SQLAlchemy (within the project dependency
+ranges) in that existing lightweight Windows job. Both backend and Windows
+CI require the actual Alembic runtime; missing imports fail instead of
+skipping. Optional standalone script-test environments still may skip.
+The runtime manifest also rejects nonempty branch labels and dependencies,
+matching the existing static parent-only contract. Two disposable negative
+fixtures have identical roots and heads to the positive control yet carry
+extra ordering or label metadata; all three independent local Alembic
+1.18.4 pytest probes passed. Full repository and native Windows checks
+require new exact-head CI. No model downloads, database writes or migration
+source changes are involved.
+
+Fresh branch inventories retain 38 identical shared migration blobs in
+main, 1.0.3, 1.1, 1.2, the 1.3 scientific branch, 1.4, 1.5 and 1.6.
+The four divergent 0038–0041 IDs still require coordinated reconciliation.
+The existing class/QC editor and executable typed saved QC workflows,
+provenance, units, retries and researcher approval gates remain unchanged.
+Release HOLD: reconciliation, representative biological checks, genuine
+installed Windows MSI/CAB clean/upgrade/rollback and GUI, exact-head CI,
+and explicit researcher approval.

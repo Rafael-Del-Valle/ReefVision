@@ -39,6 +39,8 @@ jobs:
       - name: Test read-only Alembic lineage preflight (strict and informational)
         run: python -m pytest scripts/tests/test_inspect_alembic_lineage_cli.py scripts/tests/test_live_wal_preflight_16.py scripts/tests/test_inspect_alembic_sidecar_boundaries_16.py -v
       - name: Lint and test non-destructive Alembic collision audit
+        env:
+          REEFVISION_REQUIRE_ALEMBIC_RUNTIME: "1"
         run: |
           python -m ruff check scripts/audit-alembic-revision-collisions.py scripts/tests/test_audit_alembic_revision_collisions.py scripts/tests/test_audit_alembic_revision_collisions_cli.py scripts/tests/test_audit_alembic_parent_graph_16.py
           python -m ruff format --check scripts/audit-alembic-revision-collisions.py scripts/tests/test_audit_alembic_revision_collisions.py scripts/tests/test_audit_alembic_revision_collisions_cli.py scripts/tests/test_audit_alembic_parent_graph_16.py
@@ -121,9 +123,9 @@ jobs:
         with:
           python-version: "3.12"
       # Lightweight filesystem/SQLite tests: no desktop build or model download.
-      - name: Install standalone test runner
+      - name: Install standalone test runner and migration runtime
         shell: pwsh
-        run: python -m pip install pytest==8.3.5
+        run: python -m pip install pytest==8.3.5 "alembic>=1.14,<2" "sqlalchemy>=2.0,<3"
       - name: Inspect synthetic Windows file-handle identity metadata
         shell: pwsh
         run: |
@@ -147,6 +149,8 @@ jobs:
         shell: pwsh
         run: python -m pytest scripts/tests/test_verify_research_row_preservation_16.py scripts/tests/test_verify_research_view_preservation_16.py scripts/tests/test_verify_research_foreign_key_timing_16.py scripts/tests/test_verify_research_conflict_policy_16.py -v
       - name: Check read-only Alembic parent-graph regressions on Windows
+        env:
+          REEFVISION_REQUIRE_ALEMBIC_RUNTIME: "1"
         shell: pwsh
         run: python -m pytest scripts/tests/test_audit_alembic_parent_graph_16.py -v
       - name: Reject reserved Win32 installer cabinet names before file access
