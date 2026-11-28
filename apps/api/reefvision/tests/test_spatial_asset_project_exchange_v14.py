@@ -77,7 +77,10 @@ def _tamper_metadata_frame_with_consistent_section_checksum(
 
 
 def _tamper_parse_with_consistent_section_checksum(
-    archive_bytes: bytes, *, request_overrides: dict[str, object] | None = None
+    archive_bytes: bytes,
+    *,
+    request_overrides: dict[str, object] | None = None,
+    result_overrides: dict[str, object] | None = None,
 ) -> bytes:
     source = io.BytesIO(archive_bytes)
     target = io.BytesIO()
@@ -88,10 +91,12 @@ def _tamper_parse_with_consistent_section_checksum(
     section = manifest["sections"]["jobs"]
     rows = [json.loads(line) for line in members[section["path"]].splitlines()]
     parse_job = next(row for row in rows if row["job_type"] == "spatial_source_parse")
-    if request_overrides is None:
-        parse_job["result_json"]["geometry_sha256"] = "0" * 64
-    else:
+    if request_overrides is not None:
         parse_job["request_json"].update(request_overrides)
+    elif result_overrides is not None:
+        parse_job["result_json"].update(result_overrides)
+    else:
+        parse_job["result_json"]["geometry_sha256"] = "0" * 64
     records = "".join(
         json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in rows
     ).encode()
@@ -394,6 +399,25 @@ def test_spatial_original_and_review_round_trip_and_reject_tampering(
         ), request_inspection.json()["errors"]
         rejected_request = client.post("/api/v1/exchange-packages/import", files=files)
         assert rejected_request.status_code == 400, rejected_request.text
+
+    for result_overrides in (
+        {"vertex_count": 3.0},
+        {"face_count": True},
+        {"calibration_verified": 0},
+    ):
+        altered_result = _tamper_parse_with_consistent_section_checksum(
+            archive_bytes, result_overrides=result_overrides
+        )
+        files = {"file": ("altered-result.reefvision.zip", altered_result, "application/zip")}
+        result_inspection = client.post("/api/v1/exchange-packages/inspect", files=files)
+        assert result_inspection.status_code == 200, result_inspection.text
+        assert result_inspection.json()["compatible"] is False
+        assert any(
+            "parse result is invalid" in error.lower()
+            for error in result_inspection.json()["errors"]
+        ), result_inspection.json()["errors"]
+        rejected_result = client.post("/api/v1/exchange-packages/import", files=files)
+        assert rejected_result.status_code == 400, rejected_result.text
 
     original = client.get(f"{base}/spatial/assets/{asset['id']}/content")
     assert original.status_code == 200, original.text
