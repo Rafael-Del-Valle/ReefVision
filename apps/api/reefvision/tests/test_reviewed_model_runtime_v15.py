@@ -399,13 +399,14 @@ def test_historical_receipt_keeps_original_digest_and_requires_a_new_execution_r
     )
     assert fresh.status_code == 201 and fresh.json()["requires_re_review"] is False, fresh.text
     assert client.get(f"{address}/{selection_id}").json()["snapshot"] == snapshot
-    ready = client.post(
-        f"{base}/inference-jobs",
-        json={
-            "model_id": local_model,
-            "image_ids": [image],
-            "runtime_selection_id": fresh.json()["id"],
-        },
-    )
+    request = {
+        "model_id": local_model,
+        "image_ids": [image],
+        "runtime_selection_id": fresh.json()["id"],
+    }
+    pending = client.post(f"{base}/inference-jobs", json=request)
+    assert pending.status_code == 400 and "approve" in pending.json()["detail"].lower()
+    approve_generated_checkpoint(client, row["project_id"], local_model, model["sha256"])
+    ready = client.post(f"{base}/inference-jobs", json=request)
     assert ready.status_code == 200, ready.text
     assert process_inference_job(app.state.settings, app.state.session_factory, ready.json()["id"])
