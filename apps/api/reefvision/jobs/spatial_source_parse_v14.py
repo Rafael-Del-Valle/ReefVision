@@ -138,6 +138,7 @@ def process_spatial_source_parse_job(
                 asset.sha256 != expected_sha256
                 or asset.source_format != source_format
                 or asset.managed_path != request.get("managed_path")
+                or type(request.get("size_bytes")) is not int
                 or asset.size_bytes != request.get("size_bytes")
             ):
                 raise ValueError("Spatial source parse job no longer matches the immutable asset")
