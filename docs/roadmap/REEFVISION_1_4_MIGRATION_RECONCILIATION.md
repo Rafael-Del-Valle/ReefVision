@@ -53,9 +53,11 @@ transaction before relabeling a proven draft-spatial head:
   ambiguous-schema, and failure-rollback lineage tests.
 - Downgrade to the shared pre-branch `0037` and upgrade again.
 
-Installed Windows upgrade, Project Exchange, and verified pre-upgrade backup
-rollback remain open until an installer built from the final candidate SHA and
-representative 1.3/legacy-draft-1.4 profiles are available.
+Exact-head installed Windows engineering acceptance has exercised deterministic
+validated-1.3, legacy `0038`, and legacy `0039` profiles through upgrade,
+Project Exchange, and verified pre-upgrade backup restore. Representative
+prior-user acceptance remains open until authorized real validated-1.3 and
+legacy draft-1.4 profiles, each with a verified backup, are available.
 
 ## Metadata ancestry integrity
 
@@ -71,3 +73,24 @@ The digest is an integrity check, **not a cryptographic signature**. Coordinated
 rewriting of a complete history by a database administrator is outside this
 check's threat model; do not equate this with authenticated human review or
 scientifically verified calibration.
+
+## Generating disposable profiles for installed acceptance
+
+From the repository root with the ReefVision development environment installed,
+run `python scripts/create_windows_lineage_fixtures.py <new-output-directory>`.
+This creates profiles at `b13_temporal_0001` and at both legacy spatial heads
+(`0038` and `0039`). The manifest identifies each database, its project ID,
+and the SHA-256 of its integrity-checked pre-upgrade SQLite backup. Copy the
+whole selected profile, including its project files, into the isolated data
+directory used for the candidate's installed acceptance run. Keep the
+generated pre-upgrade database backup and the original project files outside
+the installation under test. The generator refuses to overwrite a directory.
+
+On Windows, launch the exact candidate in a disposable acceptance environment
+and check the migration status, the seeded project and records, and the Project
+Exchange export. Shut down the application before restoring the database backup
+and the original project files into a separate disposable data directory.
+Check the restored schema revision and project evidence. Source-level upgrade
+tests cover the generated profiles. Installed launch, exchange, and rollback
+still require execution on Windows. These synthetic profiles cover historical
+schemas and do not stand in for an acceptance run on representative projects.
