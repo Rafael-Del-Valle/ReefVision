@@ -146,6 +146,16 @@ function Invoke-RestMethod {
         default { throw 'Monitor polled after the selected run completed.' }
       }
     }
+    if ($script:scenario -eq 'malformed-status') {
+      switch ($script:pollCount) {
+        1 { return [pscustomobject]@{ id = 'run-1'; status = @('completed'); run_name = 'array status job' } }
+        2 { return [pscustomobject]@{ id = 'run-1'; status = 1; run_name = 'numeric status job' } }
+        3 { return [pscustomobject]@{ id = 'run-1'; status = 'COMPLETED'; run_name = 'case alias status job' } }
+        4 { return [pscustomobject]@{ id = 'run-1'; status = ('completed' + [char]0x001B); run_name = 'control status job' } }
+        5 { return $script:completed }
+        default { throw 'Monitor polled after the selected run completed.' }
+      }
+    }
     if ($script:scenario -eq 'malformed-log') {
       if ($script:pollCount -lt 5) { return $script:active }
       if ($script:pollCount -eq 5) { return $script:completed }
@@ -199,7 +209,7 @@ function Start-Sleep {
   }
   if ($Seconds -ne 2) { throw "Unexpected polling interval: $Seconds" }
   $script:sleeps++
-  $maxSleeps = if ($script:scenario -in @('wrong-run', 'malformed-log')) { 4 } elseif ($script:scenario -eq 'transient') { 2 } else { 1 }
+  $maxSleeps = if ($script:scenario -in @('wrong-run', 'malformed-log', 'malformed-status')) { 4 } elseif ($script:scenario -eq 'transient') { 2 } else { 1 }
   if ($script:sleeps -gt $maxSleeps) { throw 'Monitor failed to stop after completion.' }
 }
 
@@ -458,6 +468,24 @@ $identityErrors = @($script:messages | Where-Object { $_ -like '*Training status
 if ($identityErrors.Count -ne 4 -or $identityOutput -match 'unrelated job|unidentified job|case alias job|numeric identity job' -or
     $identityOutput -notmatch 'Status: completed' -or $identityOutput -notmatch 'train/box_loss\s+0\.2(?:0)?(?!\d)') {
   throw 'Monitor displayed unverified run evidence or concealed the selected run.'
+}
+
+# A valid identity alone cannot make malformed status or terminal aliases
+# authoritative. Reject the entire snapshot and resume GET-only monitoring.
+$script:scenario = 'malformed-status'
+$script:requests.Clear()
+$script:messages.Clear()
+$script:pollCount = 0
+$script:sleeps = 0
+$script:holdCount = 0
+Invoke-ReadOnlyMonitor
+$statusOutput = $script:messages -join [char]10
+$statusErrors = @($script:messages | Where-Object { $_ -like '*Training status response contained an invalid status token.*' })
+if (($script:requests -join [char]10) -cne ($expectedIdentityRequests -join [char]10) -or
+    $script:pollCount -ne 5 -or $script:sleeps -ne 4 -or $script:holdCount -ne 1 -or
+    $statusErrors.Count -ne 4 -or $statusOutput -match 'array status job|numeric status job|case alias status job|control status job' -or
+    $statusOutput -notmatch 'Status: completed') {
+  throw 'Malformed status responses were displayed or interrupted monitoring.'
 }
 
 # A malformed log payload cannot become a claimed persisted worker record.

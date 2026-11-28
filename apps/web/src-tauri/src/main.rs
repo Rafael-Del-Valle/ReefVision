@@ -312,6 +312,11 @@ while ($true) {
     if ($run -isnot [pscustomobject] -or $run.id -isnot [string] -or $run.id -cne $expectedRunId) {
       throw 'Training status response did not identify the selected run.'
     }
+    # Status is an API token, not arbitrary terminal text. Reject malformed
+    # or case-aliased values before displaying metrics or deciding to exit.
+    if ($run.status -isnot [string] -or $run.status -cnotmatch '\A[a-z][a-z0-9_-]*\z') {
+      throw 'Training status response contained an invalid status token.'
+    }
     Clear-Host
     Write-Host ('ReefVision - {0}' -f (Format-SafeText $run.run_name))
     Write-Host ('Status: {0} | Stage: {1}' -f (Format-SafeText $run.status), (Format-SafeText $run.stage))
@@ -511,7 +516,7 @@ while ($true) {
       Write-Host 'Training job log unavailable (status/metrics remain live).'
     }
     if ($run.error_message) { Write-Host ('Error: {0}' -f (Format-SafeText $run.error_message)) }
-    if ($run.status -in @('completed', 'failed', 'cancelled')) {
+    if ($run.status -cin @('completed', 'failed', 'cancelled')) {
       Write-Host 'Run ended. This window can now be closed.'
       break
     }
