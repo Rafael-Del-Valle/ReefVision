@@ -201,3 +201,58 @@ def test_duplicate_import_reuses_asset_and_parse_job(client: TestClient) -> None
     second = _import(client, project_id, "coral.obj", OBJ)
     assert second["id"] == first["id"]
     assert second["parse_job_id"] == first["parse_job_id"]
+
+
+def test_successful_parse_requires_intact_request_and_result(client: TestClient) -> None:
+    project_id = str(create_project(client, "Spatial parse request integrity")["id"])
+    asset = _import(client, project_id, "coral.obj", OBJ)
+    app = cast(FastAPI, client.app)
+    assert process_spatial_source_parse_job(
+        app.state.settings,
+        app.state.session_factory,
+        asset["parse_job_id"],
+    )
+    base = f"/api/v1/projects/{project_id}/spatial/assets"
+    detail = f"{base}/{asset['id']}"
+    good = client.get(detail)
+    assert good.status_code == 200, good.text
+    assert good.json()["parse_status"] == "succeeded"
+    with app.state.session_factory() as session:
+        job = session.get(Job, asset["parse_job_id"])
+        assert job is not None and job.result_json is not None
+        request = dict(job.request_json)
+        result = dict(job.result_json)
+
+    corruptions = [
+        {"schema_version": "unknown"},
+        {"expected_source_sha256": "0" * 64},
+        {"source_format": "ply"},
+        {"managed_path": "wrong.obj"},
+        {"size_bytes": len(OBJ) + 1},
+        {"size_bytes": float(len(OBJ))},
+    ]
+    for overrides in [*corruptions, None]:
+        with app.state.session_factory() as session:
+            job = session.get(Job, asset["parse_job_id"])
+            assert job is not None
+            job.request_json = request if overrides is None else {**request, **overrides}
+            job.result_json = None if overrides is None else result
+            session.commit()
+
+        for url in (detail, base):
+            rejected = client.get(url)
+            assert rejected.status_code == 400, rejected.text
+            assert "integrity" in rejected.json()["detail"].lower()
+        original = client.get(f"{detail}/content")
+        assert original.status_code == 200, original.text
+        assert original.content == OBJ
+
+    with app.state.session_factory() as session:
+        job = session.get(Job, asset["parse_job_id"])
+        assert job is not None
+        job.request_json = request
+        job.result_json = result
+        session.commit()
+    restored = client.get(detail)
+    assert restored.status_code == 200, restored.text
+    assert restored.json() == good.json()
