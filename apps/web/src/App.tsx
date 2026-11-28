@@ -595,6 +595,16 @@ function ReefVisionMainApp() {
     [],
   );
 
+  function openProjectQueue(queueId: string, datasetVersionId?: string) {
+    if (!selectedProject) return;
+    setWorkflowQueue({
+      projectId: selectedProject.id,
+      queueId,
+      datasetVersionId,
+    });
+    setActiveView("review_queue");
+  }
+
   const handleOpenReviewItem = useCallback(
     (item: ReviewQueueItem) => {
       if (preventQcNavigation()) return;
@@ -1409,14 +1419,7 @@ function ReefVisionMainApp() {
                   });
                   setActiveView("video");
                 }}
-                onOpenReviewQueue={(queueId, datasetVersionId) => {
-                  setWorkflowQueue({
-                    projectId: selectedProject.id,
-                    queueId,
-                    datasetVersionId,
-                  });
-                  setActiveView("review_queue");
-                }}
+                onOpenReviewQueue={openProjectQueue}
               />
             )}
             {activeView === "video" && (
@@ -1454,7 +1457,7 @@ function ReefVisionMainApp() {
             {activeView === "active_learning" && (
               <ActiveLearningWorkspace
                 project={selectedProject}
-                onOpenReviewQueue={() => setActiveView("review_queue")}
+                onOpenReviewQueue={openProjectQueue}
               />
             )}
             {activeView === "model_comparison" && (

@@ -35,8 +35,10 @@ from sqlalchemy import select
 from reefvision.config import Settings
 from reefvision.db.base import Base
 from reefvision.db.models import Job, VideoTrack
+from reefvision.domain.errors import ValidationError
 from reefvision.jobs.video_tracking import process_video_tracking_job
 from reefvision.main import create_app
+from reefvision.ml.model_bundles import require_checkpoint_trust
 from reefvision.ml.providers import UltralyticsDetectionProvider
 
 SCHEMA_VERSION = "reefvision-tracking-ground-truth-0001"
@@ -170,6 +172,11 @@ def main() -> int:
     parser.add_argument("--video", type=Path, required=True)
     parser.add_argument("--ground-truth", type=Path, required=True)
     parser.add_argument("--detector-checkpoint", type=Path, required=True)
+    parser.add_argument(
+        "--trust-checkpoint",
+        action="store_true",
+        help="Approve unrestricted loading of this detector checkpoint from a trusted source.",
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--state", type=Path)
     parser.add_argument("--biological-context", required=True)
@@ -185,6 +192,21 @@ def main() -> int:
     checkpoint_path = args.detector_checkpoint.resolve()
     output = args.output.resolve()
     state = args.state.resolve() if args.state else output / "reefvision-data"
+    settings = Settings(
+        env="acceptance",
+        data_dir=state,
+        database_url=f"sqlite:///{(state / 'reefvision.db').as_posix()}",
+        web_origin="http://testserver",
+        background_worker_enabled=False,
+    )
+    try:
+        require_checkpoint_trust(
+            settings.allow_unsafe_pickled_models, approved=args.trust_checkpoint
+        )
+    except ValidationError as exc:
+        if settings.allow_unsafe_pickled_models is False:
+            parser.error(str(exc))
+        parser.error(f"{exc} Use --trust-checkpoint only for a checkpoint you trust.")
     for required in (video_path, truth_path, checkpoint_path):
         if not required.is_file():
             raise RuntimeError(f"Required acceptance input does not exist: {required}")
@@ -215,14 +237,6 @@ def main() -> int:
     if args.device.startswith("cuda") and not torch.cuda.is_available():
         raise RuntimeError("CUDA unavailable; requested tracking acceptance cannot pass")
 
-    settings = Settings(
-        env="acceptance",
-        data_dir=state,
-        database_url=f"sqlite:///{(state / 'reefvision.db').as_posix()}",
-        web_origin="http://testserver",
-        background_worker_enabled=False,
-        allow_unsafe_pickled_models=True,
-    )
     app = create_app(settings)
     Base.metadata.create_all(app.state.engine)
     started = time.perf_counter()
@@ -274,6 +288,7 @@ def main() -> int:
                 data={
                     "purpose": "detector",
                     "provider_name": "ultralytics",
+                    "trust_checkpoint": str(args.trust_checkpoint).lower(),
                     "display_name": "Real tracking acceptance detector",
                     "notes": f"Trusted local checkpoint SHA-256 {sha256(checkpoint_path)}",
                 },

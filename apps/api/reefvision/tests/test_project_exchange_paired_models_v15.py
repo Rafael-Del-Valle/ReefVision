@@ -2,6 +2,7 @@
 
 import json
 from copy import deepcopy
+from hashlib import sha256
 from io import BytesIO
 from typing import Any, cast
 from uuid import uuid4
@@ -30,6 +31,7 @@ from reefvision.tests.test_model_comparison_stills_v15 import (
 )
 from reefvision.tests.test_model_comparison_video_v15 import VideoFixture
 from reefvision.tests.test_model_comparison_video_v15 import video_comparison as video_fixture
+from reefvision.tests.test_model_inference import approve_generated_checkpoint
 from reefvision.tests.test_paired_growth_contrast import _run_graph
 from reefvision.tests.test_reproducibility_v15 import (
     REPRO,
@@ -107,6 +109,15 @@ def _compare(client: TestClient, task: str) -> tuple[str, str, dict[str, Any]]:
     return project, job, receipt["result_json"]
 
 
+def _approve_copied_fixture_models(client: TestClient, project_id: str) -> None:
+    records = client.get(f"/api/v1/projects/{project_id}/models").raise_for_status().json()
+    assert {record["display_name"] for record in records} == {"left", "right"}
+    for record in records:
+        # The fixture writer stores the model's name as its entire checkpoint.
+        expected = sha256(record["display_name"].encode()).hexdigest()
+        approve_generated_checkpoint(client, project_id, record["id"], expected)
+
+
 @pytest.mark.parametrize("task", ["detector", "mask"])
 def test_paired_models_preserve_original_report_and_execute_copied_projects(
     client: TestClient,
@@ -157,6 +168,7 @@ def test_paired_models_preserve_original_report_and_execute_copied_projects(
         report = client.get(f"{url}/{mapped_job}").json()["result_json"]
         assert report["snapshot"] == original["snapshot"]
         assert report["content_sha256"] == original["content_sha256"]
+        _approve_copied_fixture_models(client, local)
         with app.state.session_factory() as session:
             assert replay(session, test_settings, local, mapped_job, report["content_sha256"]) == {
                 "snapshot": original["snapshot"],
@@ -404,6 +416,8 @@ def test_pre_inference_id_report_preserves_history_and_requires_proof(
         sheet = client.get(current + "/export?format=csv").text
         assert "verification_status,verification_message" in sheet.splitlines()[0]
         assert "unverified_legacy" in sheet and report["verification_message"] in sheet
+        if missing is None:
+            _approve_copied_fixture_models(client, target)
         with app.state.session_factory() as session:
             if missing is None:
                 assert (

@@ -57,8 +57,8 @@ def test_metric_summary_extracts_ultralytics_detection_metrics(harness) -> None:
             "metrics": {
                 "metrics/precision(B)": 0.4,
                 "metrics/recall(B)": 0.5,
-                "metrics/mAP50(B)": 0.6,
                 "metrics/mAP50-95(B)": 0.3,
+                "metrics/mAP50(B)": 0.6,
             }
         }
     }

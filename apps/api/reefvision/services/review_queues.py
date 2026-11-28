@@ -23,6 +23,7 @@ from reefvision.db.models.review_queue_item_event import ReviewQueueItemEvent
 from reefvision.domain.enums import QUALITY_CONTROL_ISSUE_STATUSES
 from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
 from reefvision.repositories.review_queues import ReviewQueueRepository
+from reefvision.schemas.active_learning import AcquisitionQueueScope
 from reefvision.schemas.review_queues import (
     ReviewQueueCreateRequest,
     ReviewQueueItemPageResponse,
@@ -146,6 +147,8 @@ class ReviewQueueService:
         dataset_version: DatasetVersion | None,
         request: ReviewQueueCreateRequest,
         regenerated_from_queue_id: str | None = None,
+        acquisition: AcquisitionQueueScope | None = None,
+        commit: bool = True,
     ) -> ReviewQueue:
         project = self.quality_control._project(project_id)
         # Before ranking a frozen study, bind each immutable per-image record
@@ -164,14 +167,17 @@ class ReviewQueueService:
                 "Frozen dataset versions do not snapshot pending predictions; "
                 "remove review_below_confidence or use a live project queue"
             )
-        # Dataset-version queues must rank the immutable snapshot, not the
-        # project's later annotation edits or unreviewed live predictions.
-        # Reuse the existing QC snapshot builder instead of reconstructing
-        # partially frozen evidence here.
+        # An acquisition uses live model proposals on the frozen image roster.
+        # Ordinary frozen QC queues use only the dataset's immutable evidence.
+        model_filter = acquisition.model_ids if acquisition is not None else None
         project_context = (
-            self.quality_control._build_dataset_version_context(dataset_version)
+            self.quality_control._build_dataset_version_context(
+                dataset_version, acquisition_model_ids=model_filter
+            )
             if dataset_version is not None
-            else self.quality_control._build_project_context(project)
+            else self.quality_control._build_project_context(
+                project, prediction_model_ids=model_filter
+            )
         )
         split_by_image_id: dict[str, str | None] = {}
         version_items_by_image_id: dict[str, DatasetVersionItem] = {}
@@ -231,10 +237,27 @@ class ReviewQueueService:
                 if issue.status not in {"open", "acknowledged"} or issue.image_id is None:
                     continue
                 issues_by_image[issue.image_id].append(issue)
+        historical_test_ids = (
+            self.quality_control.versions.project_test_image_ids(project_id)
+            if acquisition is not None
+            else set()
+        )
         scoped_images = [
-            image for image in project_context.images if image.image_id in scoped_image_ids
+            image
+            for image in project_context.images
+            if image.image_id in scoped_image_ids
+            and image.image_id not in historical_test_ids
+            and (
+                acquisition is None
+                or split_by_image_id.get(image.image_id) not in {"validation", "test"}
+            )
+            and (not model_filter or project_context.predictions_by_image.get(image.image_id))
         ]
         if not scoped_images:
+            if acquisition is not None:
+                raise ValidationError(
+                    "The acquisition strategy did not select any review candidates"
+                )
             raise ValidationError("No images are available in the requested review-queue scope")
 
         # Models imported from local tools may contain an invalid confidence
@@ -311,6 +334,7 @@ class ReviewQueueService:
             formula_id=FORMULA_ID,
             formula_version=FORMULA_VERSION,
             configuration_json={
+                **({"acquisition": acquisition.model_dump()} if acquisition else {}),
                 "weights": request.signal_weights.model_dump(mode="json"),
                 "review_below_confidence": request.review_below_confidence,
                 "ruleset_version": CURRENT_QC_RULESET_VERSION,
@@ -631,6 +655,8 @@ class ReviewQueueService:
             )
 
         items.sort(key=lambda item: (-item.score, item.image_id))
+        if acquisition is not None:
+            items = items[: acquisition.requested_size]
         for position, item in enumerate(items, start=1):
             item.rank_position = position
         queue.item_count = len(items)
@@ -668,9 +694,28 @@ class ReviewQueueService:
             "top_image_ids": [item.image_id for item in items[:10]],
         }
         self.queues.add_items(items)
-        self.session.commit()
-        self.session.refresh(queue)
+        if commit:
+            self.session.commit()
+            self.session.refresh(queue)
+        else:
+            self.session.flush()
         return queue
+
+    def prepare_acquisition_queue(
+        self,
+        project_id: str,
+        dataset_version: DatasetVersion | None,
+        request: ReviewQueueCreateRequest,
+        acquisition: AcquisitionQueueScope,
+    ) -> ReviewQueue:
+        """Stage the budgeted queue in the same transaction as its round."""
+        return self._create_queue(
+            project_id=project_id,
+            dataset_version=dataset_version,
+            request=request,
+            acquisition=acquisition,
+            commit=False,
+        )
 
     def create_queue_for_project(
         self,
@@ -845,5 +890,10 @@ class ReviewQueueService:
             dataset_version=dataset_version,
             request=request,
             regenerated_from_queue_id=queue.id,
+            acquisition=(
+                AcquisitionQueueScope.model_validate(queue.configuration_json["acquisition"])
+                if "acquisition" in queue.configuration_json
+                else None
+            ),
         )
         return ReviewQueueResponse.model_validate(regenerated)

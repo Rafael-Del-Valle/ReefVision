@@ -51,7 +51,12 @@ def main() -> int:
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--imgsz", type=int, default=640)
     parser.add_argument("--batch", type=int, default=2)
+    parser.add_argument(
+        "--synthetic", action="store_true", help="Label the supplied images as generated fixtures."
+    )
     args = parser.parse_args()
+    study = "Synthetic detector fixture" if args.synthetic else "APAL coral ova"
+    label_name = "Generated target" if args.synthetic else "Egg"
     source = args.dataset.resolve()
     output = args.output.resolve()
     state = args.state.resolve() if args.state else output / "reefvision-data"
@@ -75,7 +80,7 @@ def main() -> int:
     with TestClient(app) as client:
         project = require(
             client.post(
-                "/api/v1/projects", json={"name": "APAL coral ova acceptance", "template": "blank"}
+                "/api/v1/projects", json={"name": f"{study} acceptance", "template": "blank"}
             ),
             201,
         )
@@ -85,9 +90,9 @@ def main() -> int:
                 json={
                     "class_index": 0,
                     "display_order": 0,
-                    "name": "Egg",
-                    "scientific_name": "Acropora palmata",
-                    "description": "Coral ova/egg detection class imported from APAL InitialModel",
+                    "name": label_name,
+                    "scientific_name": None if args.synthetic else "Acropora palmata",
+                    "description": f"Detection class imported from {study}",
                     "display_color": "#CA962C",
                 },
             ),
@@ -176,7 +181,7 @@ def main() -> int:
             client.post(
                 f"/api/v1/projects/{project['id']}/dataset-versions",
                 json={
-                    "name": "APAL InitialModel immutable acceptance snapshot",
+                    "name": f"{study} immutable acceptance snapshot",
                     "notes": f"Read-only source lineage: {source}",
                     "creator": "ReefVision release acceptance",
                     "eligible_annotation_statuses": ["reviewed"],
@@ -190,8 +195,10 @@ def main() -> int:
             client.post(
                 f"/api/v1/projects/{project['id']}/training-drafts",
                 json={
-                    "name": "Real APAL coral detection acceptance",
-                    "run_name": "apal-coral-detect-acceptance",
+                    "name": f"{study} detection acceptance",
+                    "run_name": (
+                        "synthetic-detect-acceptance" if args.synthetic else "apal-coral-detect-acceptance"
+                    ),
                     "dataset_version_id": version["id"],
                     "task": "detect",
                     "provider_id": "ultralytics",
@@ -245,7 +252,7 @@ def main() -> int:
                 f"/api/v1/projects/{project['id']}/models/register-from-run",
                 json={
                     "training_run_id": run["id"],
-                    "display_name": "APAL coral ova YOLO11n acceptance",
+                    "display_name": f"{study} YOLO11n acceptance",
                 },
             ),
             200,
@@ -323,10 +330,12 @@ def main() -> int:
         "dataset": {
             "source": str(source),
             "biological_context": (
-                "APAL (Acropora palmata) coral ova/eggs; real microscopy imagery and "
+                "Generated images and box labels for engineering verification."
+                if args.synthetic
+                else "APAL (Acropora palmata) coral ova/eggs; real microscopy imagery and "
                 "real YOLO boxes; not coral polyp annotations"
             ),
-            "classes": ["Egg"],
+            "classes": [label_name],
             "image_counts": split_counts,
             "annotation_counts": annotation_counts,
             "reefvision_project_id": project["id"],

@@ -18,6 +18,7 @@ from reefvision.tests.test_annotations import create_project, import_one
 from reefvision.tests.test_model_inference import (
     FakeDetectorRegistrationProvider,
     FakeDetectorWorkerProvider,
+    approve_generated_checkpoint,
     register_model,
 )
 from reefvision.tests.test_scientific_project_exchange import import_archive, rewrite
@@ -244,6 +245,9 @@ def test_exchange_restores_runtime_receipt_model_and_mapped_classes_across_two_c
         assert copied["snapshot"] == saved["snapshot"] and copied["content_sha256"] == original
         assert copied["model_id"] == local[saved["model_id"]]
         image = local[image]
+        approve_generated_checkpoint(
+            client, report["project_id"], copied["model_id"], model["sha256"]
+        )
         job = client.post(
             base + "/inference-jobs",
             json={
@@ -395,13 +399,14 @@ def test_historical_receipt_keeps_original_digest_and_requires_a_new_execution_r
     )
     assert fresh.status_code == 201 and fresh.json()["requires_re_review"] is False, fresh.text
     assert client.get(f"{address}/{selection_id}").json()["snapshot"] == snapshot
-    ready = client.post(
-        f"{base}/inference-jobs",
-        json={
-            "model_id": local_model,
-            "image_ids": [image],
-            "runtime_selection_id": fresh.json()["id"],
-        },
-    )
+    request = {
+        "model_id": local_model,
+        "image_ids": [image],
+        "runtime_selection_id": fresh.json()["id"],
+    }
+    pending = client.post(f"{base}/inference-jobs", json=request)
+    assert pending.status_code == 400 and "approve" in pending.json()["detail"].lower()
+    approve_generated_checkpoint(client, row["project_id"], local_model, model["sha256"])
+    ready = client.post(f"{base}/inference-jobs", json=request)
     assert ready.status_code == 200, ready.text
     assert process_inference_job(app.state.settings, app.state.session_factory, ready.json()["id"])

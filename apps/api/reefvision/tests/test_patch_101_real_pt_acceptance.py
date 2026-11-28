@@ -8,6 +8,7 @@ be represented as a scientifically validated detector.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -24,12 +25,16 @@ from reefvision.tests.test_annotations import import_one
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(("device", "tiled"), [("cpu", False), ("cpu", True), ("cuda", True)])
 def test_actual_ultralytics_pt_metadata_and_inference_job(
-    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, device: str, tiled: bool
 ) -> None:
+    import torch
     import ultralytics
     from ultralytics import YOLO
 
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("The physical CUDA tile inference check requires a CUDA device")
     base_config_path = Path(ultralytics.__file__).resolve().parent / "cfg/models/11/yolo11.yaml"
     assert base_config_path.is_file(), "Installed Ultralytics has no YOLO11 YAML"
     config = yaml.safe_load(base_config_path.read_text(encoding="utf-8"))
@@ -75,7 +80,9 @@ def test_actual_ultralytics_pt_metadata_and_inference_job(
     )
     assert created.status_code == 201, created.text
     project_id = created.json()["id"]
-    image_id = import_one(client, project_id, filename="coral-pt.png")["successful"][0]["image_id"]
+    image_id = import_one(
+        client, project_id, filename="coral-pt.png", size=(3072, 2150) if tiled else (80, 60)
+    )["successful"][0]["image_id"]
 
     registered = client.post(
         f"/api/v1/projects/{project_id}/models/register",
@@ -89,6 +96,7 @@ def test_actual_ultralytics_pt_metadata_and_inference_job(
         data={
             "purpose": "detector",
             "display_name": "Locally generated two-class model",
+            "trust_checkpoint": "true",
         },
     )
     assert registered.status_code == 200, registered.text
@@ -109,15 +117,37 @@ def test_actual_ultralytics_pt_metadata_and_inference_job(
 
     job_response = client.post(
         f"/api/v1/projects/{project_id}/inference-jobs",
-        json={"model_id": model["id"], "image_ids": [image_id], "device": "cpu"},
+        json={
+            "model_id": model["id"],
+            "image_ids": [image_id],
+            "device": device,
+            **(
+                {
+                    "tiling": {
+                        "width": 1920,
+                        "height": 1344,
+                        "overlap_x": 0.4,
+                        "overlap_y": 0.4,
+                        "batch_size": 2,
+                        "input_size": 320,
+                    }
+                }
+                if tiled
+                else {}
+            ),
+        },
     )
     assert job_response.status_code == 200, job_response.text
     job_id = job_response.json()["id"]
     app = cast(FastAPI, client.app)
+    visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
     assert process_inference_job(app.state.settings, app.state.session_factory, job_id)
+    assert os.environ.get("CUDA_VISIBLE_DEVICES") == visible_devices
     completed = client.get(f"/api/v1/jobs/{job_id}")
     assert completed.status_code == 200, completed.text
     assert completed.json()["status"] == "succeeded", completed.json().get("error_message")
+    if tiled:
+        assert completed.json()["request_json"]["tiling"]["width"] == 1920
 
     proposals = client.get(f"/api/v1/images/{image_id}/prediction-proposals")
     assert proposals.status_code == 200, proposals.text

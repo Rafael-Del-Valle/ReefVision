@@ -63,7 +63,11 @@ def test_generated_exchange_artifacts_follow_model_weight_choice(
     )
     registered = client.post(
         f"/api/v1/projects/{project['id']}/models/register-from-run",
-        json={"training_run_id": run_id, "display_name": "Reviewed checkpoint"},
+        json={
+            "training_run_id": run_id,
+            "display_name": "Reviewed checkpoint",
+            "approved_checkpoint_sha256": sha256(best.read_bytes()).hexdigest(),
+        },
     )
     assert registered.status_code == 200, registered.text
     model_id = registered.json()["id"]

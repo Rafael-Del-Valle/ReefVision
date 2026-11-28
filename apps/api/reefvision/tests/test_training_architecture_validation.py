@@ -2,13 +2,81 @@ import pytest
 from fastapi.testclient import TestClient
 
 from reefvision.schemas.training import TrainingProviderArchitectureResponse
+from reefvision.services.models import ModelService
 from reefvision.services.segmentation_training import SegmentationTrainingService
 from reefvision.services.training import TrainingService, _ultralytics_architecture_available
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_training_workspace import (
+    FakeTrainingRegistrationProvider,
     _patch_training_foundation,
     _seed_training_dataset,
 )
+
+
+def test_imported_detector_checkpoint_seeds_a_run_without_scratch_yaml(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_training_foundation(monkeypatch)
+    monkeypatch.setattr(
+        ModelService, "_provider_for_registration", lambda *args: FakeTrainingRegistrationProvider()
+    )
+    project, version = _seed_training_dataset(client)
+    prefix = f"/api/v1/projects/{project['id']}"
+    model = client.post(
+        f"{prefix}/models/register",
+        data={"purpose": "detector", "provider_name": "ultralytics", "trust_checkpoint": "true"},
+        files={"file": ("best.pt", b"test detector checkpoint", "application/octet-stream")},
+    )
+    assert model.status_code == 200, model.text
+    draft = client.post(
+        f"{prefix}/training-drafts",
+        json={
+            "name": "Second round",
+            "dataset_version_id": version["id"],
+            "task": "detect",
+            "provider_id": "ultralytics",
+            "initial_checkpoint_source": "registered_model",
+            "initial_checkpoint_model_id": model.json()["id"],
+        },
+    )
+    assert draft.status_code == 200, draft.text
+    assert draft.json()["validation_state"]["status"] != "blocked"
+    run = client.post(f"{prefix}/training-runs", json={"draft_id": draft.json()["id"]})
+    assert run.status_code == 200, run.text
+    assert run.json()["initial_checkpoint_model_id"] == model.json()["id"]
+
+
+def test_manual_detector_rate_requires_an_explicit_optimizer_and_survives_launch(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_training_foundation(monkeypatch)
+    project, version = _seed_training_dataset(client)
+    prefix = f"/api/v1/projects/{project['id']}"
+    config = {"epochs": 2, "optimizer": "auto", "lr0": 0.0025}
+    payload = {
+        "name": "Fixed step",
+        "task": "detect",
+        "dataset_version_id": version["id"],
+        "architecture": "yolo11n.yaml",
+        "training_config": config,
+    }
+    draft = client.post(f"{prefix}/training-drafts", json=payload).json()
+    assert draft["validation_state"]["status"] == "blocked"
+    launch = client.post(f"{prefix}/training-runs", json={"draft_id": draft["id"]})
+    assert launch.status_code == 400, launch.text
+    assert "optimizer" in launch.json()["detail"].lower()
+    config["optimizer"] = "AdamW"
+    change = client.patch(
+        f"/api/v1/training-drafts/{draft['id']}", json={"training_config": config}
+    )
+    assert change.status_code == 200, change.text
+    persisted = client.get(f"/api/v1/training-drafts/{draft['id']}").json()
+    assert persisted["training_config"]["lr0"] == 0.0025
+    run = client.post(f"{prefix}/training-runs", json={"draft_id": draft["id"]})
+    assert run.status_code == 200, run.text
+    assert run.json()["training_config"]["optimizer"] == "AdamW"
+    assert run.json()["training_config"]["lr0"] == 0.0025
 
 
 def test_scaled_yolo_catalog_architectures_match_base_ultralytics_yaml() -> None:

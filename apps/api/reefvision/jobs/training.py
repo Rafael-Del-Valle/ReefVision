@@ -42,6 +42,8 @@ from reefvision.ml.ultralytics_tuning import (
     effective_search_space,
     normalize_tuning_csv,
 )
+from reefvision.repositories.jobs import JobRepository
+from reefvision.storage.checkpoint_approvals import verified_registered_checkpoint
 from reefvision.storage.datasets import write_yolo_detection_export
 from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
@@ -89,7 +91,9 @@ def _complete_training_run(session: Session, run: TrainingRun, job: Job) -> None
         )
 
 
-def recover_training_run(session: Session, settings: Settings | None, job: Job) -> None:
+def recover_training_run(
+    session: Session, settings: Settings | None, job: Job, *, interruption_reason: str | None = None
+) -> None:
     """Finalize interrupted training conservatively; never execute or remove output."""
     run = session.scalar(select(TrainingRun).where(TrainingRun.job_id == job.id))
     if run is not None and run.status == "completed":
@@ -109,7 +113,8 @@ def recover_training_run(session: Session, settings: Settings | None, job: Job) 
     message = (
         "Training cancellation finalized after application restart."
         if cancelled
-        else "Training was interrupted by an application restart; complete final artifacts "
+        else interruption_reason
+        or "Training was interrupted by an application restart; complete final artifacts "
         "could not be verified. Training was not restarted."
     ) + " Existing checkpoints, metrics, logs and artifacts were preserved."
     now = datetime.now(UTC)
@@ -165,7 +170,13 @@ def _recover_completed_artifacts(
     if checkpoint is None:
         return False
     _collect_training_results(settings, run, job, save_dir, results_csv)
-    run.result_checkpoint_path = _relative_to_data_dir(settings, checkpoint)
+    selected = _relative_to_data_dir(settings, checkpoint)
+    if run.result_checkpoint_path != selected:
+        run.result_checkpoint_path = selected
+        run.artifact_manifest_json = {
+            **run.artifact_manifest_json,
+            "result_checkpoint_sha256": hash_model_file(checkpoint)[0],
+        }
     run.progress_epoch = run.progress_total_epochs = total
     _complete_training_run(session, run, job)
     job.result_json = {**(job.result_json or {}), "recovered_after_restart": True}
@@ -177,7 +188,7 @@ def process_training_job(settings: Settings, factory: sessionmaker[Session], job
     dataset_archive_path: str | None = None
     run_id: str | None = None
     with factory() as session:
-        job = session.get(Job, job_id)
+        job = JobRepository(session).get_for_update(job_id)
         if job is None or job.job_type != "training" or job.status != "queued":
             return False
         run_id = str(job.request_json["training_run_id"])
@@ -495,10 +506,8 @@ def _resolve_model_source(settings: Settings, session: Session, run: TrainingRun
             raise ValidationError(
                 "The selected registered checkpoint does not match this project/task"
             )
-        checksum, _ = hash_model_file(path)
-        if checksum != model.sha256 or (
-            run.resolved_model_checksum and checksum != run.resolved_model_checksum
-        ):
+        verified_registered_checkpoint(settings, model)
+        if run.resolved_model_checksum and model.sha256 != run.resolved_model_checksum:
             raise ValidationError("The selected registered checkpoint checksum changed")
         return str(path)
     if resolved_asset_id.startswith("builtin_architecture:"):
@@ -520,10 +529,8 @@ def _resolve_model_source(settings: Settings, session: Session, run: TrainingRun
             raise ValidationError(
                 "The selected registered checkpoint does not match this project/task"
             )
-        checksum, _ = hash_model_file(path)
-        if checksum != model.sha256 or (
-            run.resolved_model_checksum and checksum != run.resolved_model_checksum
-        ):
+        verified_registered_checkpoint(settings, model)
+        if run.resolved_model_checksum and model.sha256 != run.resolved_model_checksum:
             raise ValidationError("The selected registered checkpoint checksum changed")
         return str(path)
     if run.architecture:
@@ -782,3 +789,9 @@ def _collect_training_results(
         if last_ckpt.is_file()
         else None
     )
+    if run.result_checkpoint_path:
+        selected_path = resolve_managed_project_path(settings, run.result_checkpoint_path)
+        run.artifact_manifest_json = {
+            **run.artifact_manifest_json,
+            "result_checkpoint_sha256": hash_model_file(selected_path)[0],
+        }

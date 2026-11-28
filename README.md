@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/Rafael-Del-Valle/ReefVision/releases/latest/download/ReefVision_Windows_Downloader.exe">
-    <img alt="Download ReefVision 1.0.2 for Windows" src="https://img.shields.io/badge/Download-ReefVision_1.0.2_for_Windows-2165ac?style=for-the-badge&logo=windows11&logoColor=white">
+    <img alt="Download the latest stable ReefVision for Windows" src="https://img.shields.io/badge/Download-ReefVision_for_Windows-2165ac?style=for-the-badge&logo=windows11&logoColor=white">
   </a>
 </p>
 
@@ -97,11 +97,13 @@ The distinction between model predictions and reviewed annotations is intentiona
 
 ## Documentation
 
+- [ReefVision 2.0 research candidate quick start and qualification limits](docs/RESEARCH_CANDIDATE_QUICKSTART.md)
 - [Desktop installation and packaging](docs/DESKTOP_BUILD_AND_INSTALL.md)
 - [Developer setup and validation](docs/DEVELOPMENT.md)
 - [Feature reference](docs/FEATURE_REFERENCE.md)
 - [Quality-control guide](docs/QUALITY_CONTROL_GUIDE.md)
 - [Review queue guide](docs/REVIEW_QUEUE_GUIDE.md)
+- [Improve a detector from a local best.pt](docs/DETECTOR_ACTIVE_LEARNING.md)
 - [Known issues](docs/KNOWN_ISSUES.md)
 - [1.0.1 release notes](docs/RELEASE_1.0.1.md)
 - [1.0.2 release notes](docs/RELEASE_1.0.2.md)

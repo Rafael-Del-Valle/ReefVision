@@ -40,6 +40,14 @@ The database stores `projects/<project-uuid>` rather than an absolute path. Reso
 
 Configuration is read from `REEFVISION_*` environment variables. Development defaults use `.reefvision` beneath the current repository. Tests override all paths with temporary directories.
 
+### Local checkpoint approval
+
+Model Hub asks the researcher to approve the source of each legacy PyTorch checkpoint. A client posting to `/api/v1/projects/{project_id}/models/register` supplies the multipart field `trust_checkpoint=true` after confirmation. ReefVision records the source decision and SHA-256 with the registration. The native ReefPose reader enforces weights-only loading. Transformer archives containing only safetensors weights also support registration without pickle approval.
+
+With `REEFVISION_ALLOW_UNSAFE_PICKLED_MODELS` unset, completed local training jobs can register their own checksummed outputs. An older or exchanged run can return HTTP 409 with `checkpoint_approval_required`, the filename and the SHA-256. Approve the exact file by resubmitting `approved_checkpoint_sha256` to the same register-from-run route. Explicit `false` disables unrestricted checkpoint loading even after approval. Explicit `true` retains the previous trusted-environment policy.
+
+After a Project Exchange import or full-profile restore, open **Model Hub > Registered Models > Review checkpoint trust**. Compare the filename, source and full SHA-256, then approve the checkpoint on the device. The local API verifies project ownership, bytes and size before recording the decision outside project storage. The `POST /api/v1/projects/{project_id}/models/{model_id}/approve-checkpoint` request accepts the reviewed `sha256`. Project Exchange carries historical provenance. Full-profile backups preserve model registrations and weights. A restored profile requires fresh checkpoint approval, including when recovering an older backup. The original profile retains its local approvals.
+
 ## Runtime model
 
 For development:

@@ -330,6 +330,8 @@ def test_queued_pose_worker_refuses_frozen_frame_overlap_before_output(
         run_id, job_id = run.id, job.id
 
     reached_fit = Mock(side_effect=AssertionError("Overlapping frames reached model fitting"))
+    readiness = Mock(side_effect=AssertionError("Provider readiness ran before split validation"))
+    monkeypatch.setattr("reefvision.jobs.pose_training.require_provider_ready", readiness)
     monkeypatch.setattr(YOLO, "train", reached_fit)
     monkeypatch.setattr(ReefPoseTrainer, "fit", reached_fit)
 
@@ -356,6 +358,7 @@ def test_queued_pose_worker_refuses_frozen_frame_overlap_before_output(
             is None
         )
     reached_fit.assert_not_called()
+    readiness.assert_not_called()
     managed = resolve_managed_project_path(
         test_settings, f"{project['storage_root']}/training/{run_id}"
     )
@@ -530,11 +533,13 @@ def test_saved_pose_retry_revalidates_frozen_frames_from_completed_child(
         assert _checked(registration, 200)["sha256"] == sha256
 
 
+@pytest.mark.parametrize("checkpoint_io_error", [False, True])
 def test_cancelling_a_workflow_during_frozen_pose_preparation_cancels_parent(
     client: TestClient,
     test_settings: Settings,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    checkpoint_io_error: bool,
 ) -> None:
     project, training, holdout = _frozen_split(client, tmp_path, overlapping=False)
     project_id = project["id"]
@@ -574,6 +579,11 @@ def test_cancelling_a_workflow_during_frozen_pose_preparation_cancels_parent(
         return export(service, dataset_id, export_format)
 
     with monkeypatch.context() as preparing:
+        if checkpoint_io_error:
+            preparing.setattr(
+                "reefvision.jobs.reefpose_training.capture_checkpoints",
+                Mock(side_effect=OSError("checkpoint volume unavailable")),
+            )
         preparing.setattr(PoseTrainingExportService, "export", cancel_during_export)
         assert not process_workflow_run_job(test_settings, factory, parent_job_id)
 
@@ -582,7 +592,11 @@ def test_cancelling_a_workflow_during_frozen_pose_preparation_cancels_parent(
     assert child["status"] == "cancelled" and child["progress_epoch"] == 0
     assert child["metrics"] == {} and child["result_checkpoint_path"] is None
     assert child["registered_model_id"] is None
-    assert _checked(client.get(f"/api/v1/jobs/{child['job_id']}"), 200)["status"] == "cancelled"
+    child_job = _checked(client.get(f"/api/v1/jobs/{child['job_id']}"), 200)
+    assert child_job["status"] == "cancelled"
+    if checkpoint_io_error:
+        assert "checkpoint volume unavailable" in child_job["error_message"]
+        assert "resume_checkpoint_path" not in child["artifact_manifest"]
     assert _checked(client.get(f"{url}/models"), 200) == []
     assert _checked(client.get(f"{url}/experiments"), 200) == []
     parent = _checked(client.get(f"/api/v1/workflow-runs/{queued['id']}"), 200)

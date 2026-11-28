@@ -77,18 +77,37 @@ class InferenceSourcePins(BaseModel):
     images: dict[UUID, Digest] = Field(min_length=1)
 
 
+class DetectionTiling(BaseModel):
+    """Crop dimensions are source pixels. Overlap is a fraction of each axis."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    width: int = Field(default=1920, ge=32, le=8192)
+    height: int = Field(default=1344, ge=32, le=8192)
+    overlap_x: FiniteFloat = Field(default=0.4, ge=0, lt=1)
+    overlap_y: FiniteFloat = Field(default=0.4, ge=0, lt=1)
+    batch_size: int = Field(default=1, ge=1, le=32)
+    input_size: int | None = Field(default=None, ge=32, le=8192)
+    merge_iou: FiniteFloat = Field(default=0.45, ge=0, le=1)
+
+
 class InferenceJobCreateRequest(BaseModel):
     model_id: str = Field(min_length=1, max_length=36)
     source_pins: InferenceSourcePins | None = None
     runtime_selection_id: str | None = Field(default=None, min_length=36, max_length=36)
     image_ids: list[str] = Field(min_length=1)
     image_adjustment: ImageAdjustmentPin | None = None
+    tiling: DetectionTiling | None = None
     confidence_threshold: FiniteFloat | None = Field(default=None, ge=0, le=1)
     iou_threshold: FiniteFloat | None = Field(default=None, ge=0, le=1)
     device: str = Field(default="auto", min_length=1, max_length=20)
 
 
+class CheckpointApprovalRequest(BaseModel):
+    sha256: Digest
+
+
 class RegisterModelFromRunRequest(BaseModel):
+    approved_checkpoint_sha256: Digest | None = None
     training_run_id: str = Field(min_length=1, max_length=36)
     display_name: str | None = Field(default=None, max_length=200)
     notes: str | None = Field(default=None, max_length=5000)

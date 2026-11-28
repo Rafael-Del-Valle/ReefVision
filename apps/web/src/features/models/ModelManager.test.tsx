@@ -131,7 +131,19 @@ function bootstrap(modelCatalog: ModelCatalogResponse) {
     application_version: "1.0.1",
     catalog: modelCatalog,
     models: [],
-    providers: [],
+    providers: [
+      {
+        provider_id: "ultralytics",
+        display_name: "Ultralytics",
+        registerable: true,
+        default_registration_purpose: "detector",
+        capabilities: { image_detection: true },
+        known_limitations: [],
+        supported_model_families: ["YOLO"],
+        supported_tasks: ["detect"],
+        supported_execution_runtimes: ["pytorch"],
+      },
+    ],
     provider_preflight: null,
     runtime_statuses: [],
     training_compatibility: null,
@@ -279,7 +291,7 @@ describe("ModelManager catalog", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getAllByText(
-        /Model required .*register a compatible model to use this feature/,
+        /Model required.*register a compatible model to use this feature/i,
       ).length,
     ).toBeGreaterThan(0);
     expect(
@@ -301,7 +313,7 @@ describe("ModelManager catalog", () => {
       await screen.findByRole("heading", { name: "YOLO11 X" })
     ).closest("article")!;
     expect(
-      within(card).getByText(/Model required .*register a compatible model/),
+      within(card).getByText(/Model required.*register a compatible model/i),
     ).toBeInTheDocument();
     expect(
       within(card).queryByRole("button", { name: "Train New Model" }),
@@ -323,19 +335,23 @@ describe("ModelManager catalog", () => {
       framework: "ultralytics",
       task: "detect",
       provider_name: "ultralytics",
-      sha256: "abcdef123456".repeat(5),
+      sha256: "abcdef123456".repeat(5) + "1234",
       class_map_json: { labels: ["Coral"], mapping: { Coral: "class-1" } },
       metadata_json: {},
       created_at: "2026-10-07T12:00:00Z",
       notes: "Researcher-provided checkpoint",
     };
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      if (String(input).includes("/model-hub/bootstrap"))
-        return jsonResponse({ ...response, models: [registered] });
-      if (String(input).includes("/model-catalog"))
-        return jsonResponse(response.catalog);
-      return new Promise<Response>(() => undefined);
-    });
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        if (String(input).endsWith("/approve-checkpoint"))
+          return jsonResponse(registered);
+        if (String(input).includes("/model-hub/bootstrap"))
+          return jsonResponse({ ...response, models: [registered] });
+        if (String(input).includes("/model-catalog"))
+          return jsonResponse(response.catalog);
+        return new Promise<Response>(() => undefined);
+      });
     renderManager();
     const card = (
       await screen.findByRole("heading", { name: registered.display_name })
@@ -348,6 +364,25 @@ describe("ModelManager catalog", () => {
       within(card).getByText(`Project: ${project.id}`),
     ).toBeInTheDocument();
     expect(within(card).getByText(/Registered: /)).toBeInTheDocument();
+    const review = within(card).getByText("Review checkpoint trust");
+    await userEvent.click(review);
+    const approve = within(card).getByRole("button", {
+      name: "Approve checkpoint on this device",
+    });
+    expect(approve).toBeDisabled();
+    await userEvent.click(
+      within(card).getByLabelText(/trust the source of coral-custom.pt/i),
+    );
+    await userEvent.click(approve);
+    expect(
+      await within(card).findByText("Checkpoint approved on this device."),
+    ).toBeInTheDocument();
+    const call = fetchSpy.mock.calls.find(([url]) =>
+      String(url).endsWith("/approve-checkpoint"),
+    );
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+      sha256: registered.sha256,
+    });
   });
 
   it("shows ReefPose anatomy and training provenance and offers pose inference", async () => {
@@ -592,7 +627,62 @@ describe("ModelManager catalog", () => {
     expect(detectorTraining).not.toHaveBeenCalled();
   });
 
-  it("registers a researcher provider bundle locally and displays its provenance", async () => {
+  it("requires separate trust for each external checkpoint", async () => {
+    const fixture = bootstrap(catalog("Model Required"));
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        if (String(input).includes("/model-hub/bootstrap"))
+          return jsonResponse({
+            ...fixture,
+            providers: [
+              {
+                provider_id: "ultralytics",
+                display_name: "Ultralytics",
+                registerable: true,
+                capabilities: { image_detection: true },
+                known_limitations: [],
+                supported_model_families: ["YOLO"],
+                default_registration_purpose: "detector",
+                supported_tasks: ["detect"],
+                supported_execution_runtimes: ["pytorch"],
+              },
+            ],
+          });
+        if (String(input).includes("/model-catalog"))
+          return jsonResponse(fixture.catalog);
+        if (String(input).endsWith("/models/register")) return jsonResponse({});
+        return new Promise<Response>(() => undefined);
+      });
+    renderManager();
+    await userEvent.click(
+      screen.getByText("Register Existing Model", { selector: "summary" }),
+    );
+    const input = await screen.findByLabelText("Checkpoint file");
+    const submit = within(input.closest("form")!).getByRole("button", {
+      name: "Register Existing Model",
+    });
+    await userEvent.upload(input, new File(["a"], "first.pt"));
+    expect(submit).toBeDisabled();
+    await userEvent.click(
+      screen.getByLabelText(/trust the source of first.pt/i),
+    );
+    expect(submit).toBeEnabled();
+    await userEvent.upload(input, new File(["b"], "best.pt"));
+    expect(submit).toBeDisabled();
+    await userEvent.click(
+      screen.getByLabelText(/trust the source of best.pt/i),
+    );
+    await userEvent.click(submit);
+    const registration = fetchSpy.mock.calls.find(([url]) =>
+      String(url).endsWith("/models/register"),
+    );
+    expect((registration?.[1]?.body as FormData).get("trust_checkpoint")).toBe(
+      "true",
+    );
+  });
+
+  it("shows setup information without offering uploads for providers without registration", async () => {
     const modelCatalog = catalog("Model Required");
     Object.assign(modelCatalog.models[0], {
       category: "provider_requirement",
@@ -601,59 +691,20 @@ describe("ModelManager catalog", () => {
       selection_kind: "model_required",
       trainable: false,
     });
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (input) => {
-        const url = String(input);
-        if (url.endsWith("/provider-models/smolvlm/register"))
-          return jsonResponse({
-            id: "provider-model-1",
-            provider_id: "smolvlm",
-            task: "visual_question",
-            original_filename: "my-smolvlm.zip",
-            sha256: "b".repeat(64),
-            project_id: project.id,
-            registered_at: "2026-10-07T12:00:00Z",
-          });
-        if (url.includes("/model-hub/bootstrap"))
-          return jsonResponse(bootstrap(modelCatalog));
-        if (url.includes("/model-catalog")) return jsonResponse(modelCatalog);
-        return new Promise<Response>(() => undefined);
-      });
+    serve(modelCatalog);
     renderManager();
     const card = (
       await screen.findByRole("heading", { name: "YOLO11 X" })
     ).closest("article")!;
-    await userEvent.click(
-      within(card).getByRole("button", { name: "Register Existing Model" }),
-    );
-    expect(screen.getByLabelText("Optional model provider")).toHaveValue(
-      "smolvlm",
-    );
-    const file = new File(["local checkpoint bundle"], "my-smolvlm.zip", {
-      type: "application/zip",
-    });
-    await userEvent.upload(screen.getByLabelText("Provider model file"), file);
-    await userEvent.click(
-      screen.getByRole("button", { name: "Register provider model" }),
-    );
     expect(
-      await screen.findByText(/Registered my-smolvlm.zip/),
-    ).toBeInTheDocument();
-    expect(screen.getByText("b".repeat(64))).toBeInTheDocument();
-    const upload = fetchSpy.mock.calls.find(([input]) =>
-      String(input).includes("/provider-models/smolvlm/register"),
-    );
-    expect(upload?.[1]?.method).toBe("POST");
-    const uploadedFile = (upload?.[1]?.body as FormData).get("file");
-    expect(uploadedFile).toBeInstanceOf(File);
-    expect((uploadedFile as File).name).toBe("my-smolvlm.zip");
-    expect((uploadedFile as File).size).toBe(file.size);
+      within(card).queryByRole("button", { name: "Register Existing Model" }),
+    ).not.toBeInTheDocument();
     expect(
-      fetchSpy.mock.calls.some(([input]) =>
-        String(input).includes("/model-installs"),
-      ),
-    ).toBe(false);
+      within(card).getByText(/see advanced diagnostics .* provider setup/i),
+    ).toBeVisible();
+    expect(
+      screen.queryByLabelText("Provider model file"),
+    ).not.toBeInTheDocument();
   });
 
   it("never reports zero catalog entries while loading", () => {

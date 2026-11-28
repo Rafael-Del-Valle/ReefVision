@@ -12,11 +12,13 @@ from PIL import Image, ImageDraw
 from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
 from reefvision.storage.masks import write_mask_png
-from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.projects import filesystem_io_path, resolve_managed_project_path
 
 
 def read_source(settings: Settings, managed_path: str) -> Image.Image:
-    with Image.open(resolve_managed_project_path(settings, managed_path)) as source:
+    with Image.open(
+        filesystem_io_path(resolve_managed_project_path(settings, managed_path))
+    ) as source:
         source.load()
         converted: Image.Image = source.convert("RGB")
         return converted
@@ -31,7 +33,9 @@ def read_reference_mask(
     import numpy as np
 
     if mask_path:
-        with Image.open(resolve_managed_project_path(settings, mask_path)) as source:
+        with Image.open(
+            filesystem_io_path(resolve_managed_project_path(settings, mask_path))
+        ) as source:
             if source.size != size:
                 raise ValidationError("Existing mask dimensions do not match source image")
             return np.asarray(source.convert("L")) > 0
@@ -70,4 +74,4 @@ def store_candidate(
 
 def remove_candidates(settings: Settings, paths: list[str]) -> None:
     for path in paths:
-        resolve_managed_project_path(settings, path).unlink(missing_ok=True)
+        filesystem_io_path(resolve_managed_project_path(settings, path)).unlink(missing_ok=True)

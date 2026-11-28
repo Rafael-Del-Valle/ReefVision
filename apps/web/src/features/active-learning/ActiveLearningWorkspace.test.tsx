@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Project } from "../../api/client";
@@ -57,13 +57,16 @@ const project: Project = {
   label_classes: [],
 };
 
-function renderWorkspace() {
+function renderWorkspace(onOpenReviewQueue = vi.fn()) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <ActiveLearningWorkspace project={project} />
+      <ActiveLearningWorkspace
+        project={project}
+        onOpenReviewQueue={onOpenReviewQueue}
+      />
     </QueryClientProvider>,
   );
 }
@@ -124,7 +127,8 @@ describe("ActiveLearningWorkspace", () => {
   });
 
   it("shows strategy guidance, acquisition reasons, and feedback dataset lineage", async () => {
-    renderWorkspace();
+    const open = vi.fn();
+    renderWorkspace(open);
 
     expect(await screen.findByText("Active learning")).toBeInTheDocument();
     expect(screen.getByText("Input dataset")).toBeInTheDocument();
@@ -137,6 +141,8 @@ describe("ActiveLearningWorkspace", () => {
     ).toBeInTheDocument();
     expect(await screen.findByText("Feedback dataset")).toBeInTheDocument();
     expect(screen.getByText("Dataset manifest")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open Review Queue" }));
+    expect(open).toHaveBeenCalledWith("queue-1234567890", undefined);
     expect(
       screen.getByRole("button", {
         name: "Complete round + snapshot feedback",

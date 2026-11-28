@@ -206,7 +206,14 @@ export function QualityControlDashboard({
   }, [datasetVersionId, project.id, queryClient, scopeType, selectedRun.data]);
 
   const createRun = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (check: "configured" | "split-images") => {
+      if (check === "split-images") {
+        return createDatasetVersionQualityControlRun(datasetVersionId, {
+          rule_categories: ["dataset_versions"],
+          selected_rule_ids: ["cross_split_similar_images"],
+          thresholds,
+        });
+      }
       const payload = {
         rule_categories: ruleCategories.filter(
           (category) => enabledCategories[category],
@@ -452,10 +459,23 @@ export function QualityControlDashboard({
                   !Object.values(enabledCategories).some(Boolean) ||
                   (scopeType === "dataset_version" && !datasetVersionId)
                 }
-                onClick={() => createRun.mutate()}
+                onClick={() => createRun.mutate("configured")}
               >
                 {createRun.isPending ? "Queueing..." : "Run quality control"}
               </button>
+              {scopeType === "dataset_version" && (
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={
+                    createRun.isPending ||
+                    selectedVersion?.status !== "complete"
+                  }
+                  onClick={() => createRun.mutate("split-images")}
+                >
+                  Check for similar images across splits
+                </button>
+              )}
               {activeRun &&
                 ["queued", "running", "cancel_requested"].includes(
                   activeRun.status,
@@ -536,6 +556,21 @@ export function QualityControlDashboard({
                     : "not complete"}
                 </span>
               </div>
+              {activeRun.summary_json.cross_split_similar_images && (
+                <p>
+                  Images checked across splits:{" "}
+                  {
+                    activeRun.summary_json.cross_split_similar_images
+                      .checked_images
+                  }
+                  . Pairs flagged for review:{" "}
+                  {
+                    activeRun.summary_json.cross_split_similar_images
+                      .flagged_pairs
+                  }
+                  .
+                </p>
+              )}
               {activeRun.summary_json.acquisition && (
                 <AcquisitionQualityResults
                   key={activeRun.id}

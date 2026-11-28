@@ -8,6 +8,7 @@ import json
 import shutil
 import sys
 import zipfile
+from collections.abc import Callable
 from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
@@ -208,6 +209,7 @@ def materialize_pose_training_exports(
     training_content: bytes,
     validation_content: bytes | None,
     destination: Path,
+    before_extract: Callable[[], None] | None = None,
 ) -> dict[str, object]:
     """Materialize immutable pose exports without reusing train frames as validation."""
 
@@ -237,6 +239,8 @@ def materialize_pose_training_exports(
         ]
         frame_separation = verify_pose_export_frame_separation(training_content, validation_content)
 
+    if before_extract is not None:
+        before_extract()
     _safe_extract_zip(
         training_content,
         destination,
@@ -454,11 +458,6 @@ def _process_ultralytics_pose_training_job(
                     dataset=training_dataset,
                 )
 
-            require_provider_ready(
-                "ultralytics",
-                settings,
-            )
-
             run.status = "preparing_dataset"
             run.stage = "preparing_dataset"
 
@@ -503,6 +502,7 @@ def _process_ultralytics_pose_training_job(
                     validation_export.content if validation_export is not None else None
                 ),
                 destination=dataset_root,
+                before_extract=lambda: require_provider_ready("ultralytics", settings),
             )
 
             save_root = resolve_managed_project_path(

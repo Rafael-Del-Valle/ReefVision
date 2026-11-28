@@ -189,13 +189,11 @@ test("restores a contextual panel layout and an unavailable plugin without losin
       name: "Local plugins",
       exact: true,
     });
-    await plugins
-      .getByLabel("Plugin package (JSON)")
-      .setInputFiles({
-        name: "layout-fixture.rvplugin.json",
-        mimeType: "application/json",
-        buffer: bytes,
-      });
+    await plugins.getByLabel("Plugin package (JSON)").setInputFiles({
+      name: "layout-fixture.rvplugin.json",
+      mimeType: "application/json",
+      buffer: bytes,
+    });
     const recovery = page.waitForResponse(
       (response) =>
         response.url() === `${api}/plugins` &&

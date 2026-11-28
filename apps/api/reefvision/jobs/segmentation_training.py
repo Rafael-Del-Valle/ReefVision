@@ -41,6 +41,7 @@ from reefvision.ml.dependencies import (
     require_provider_ready,
 )
 from reefvision.ml.providers import resolve_torch_device
+from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.storage.segmentation_exports import (
     write_yolo_segmentation_export,
@@ -365,6 +366,17 @@ def process_segmentation_training_job(
                     (f"[{datetime.now(UTC).isoformat()}] segmentation training cancelled"),
                 )
             else:
+                if not run.result_checkpoint_path:
+                    raise RuntimeError("Segmentation training finished without a checkpoint")
+                checkpoint = resolve_managed_project_path(settings, run.result_checkpoint_path)
+                digest, size_bytes = hash_model_file(checkpoint)
+                if not size_bytes:
+                    raise RuntimeError("Segmentation training produced an empty checkpoint")
+                run.artifact_manifest_json = {
+                    **run.artifact_manifest_json,
+                    "result_checkpoint_sha256": digest,
+                    "result_checkpoint_size_bytes": size_bytes,
+                }
                 job.status = "succeeded"
                 job.progress_current = max(job.progress_total, 1)
                 job.result_json = {

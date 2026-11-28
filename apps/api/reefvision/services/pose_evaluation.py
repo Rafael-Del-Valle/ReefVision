@@ -49,6 +49,7 @@ from reefvision.schemas.pose_evaluation import (
     PoseEvaluationRunResponse,
 )
 from reefvision.services.pose_schemas import definition_for_revision
+from reefvision.storage.checkpoint_approvals import require_local_execution_approval
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
@@ -463,6 +464,7 @@ class PoseEvaluationService:
         checkpoint_sha, checkpoint_size = hash_model_file(checkpoint_path)
         if checkpoint_sha != model.sha256 or checkpoint_size != model.file_size_bytes:
             raise ValidationError("Registered ReefPose checkpoint integrity check failed")
+        require_local_execution_approval(self.settings, model, checkpoint_path)
         items = list(
             self.session.scalars(
                 select(PoseTrainingDatasetItem)

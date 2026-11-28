@@ -13,6 +13,8 @@ from reefvision.config import Settings
 from reefvision.jobs.backups import process_backup_job
 from reefvision.jobs.restores import process_restore_job
 from reefvision.jobs.worker import process_thumbnail_job
+from reefvision.storage.backups import write_backup_completion_marker, write_backup_manifest
+from reefvision.storage.worker_lock import worker_leadership
 
 from .test_images import create_project, import_one
 
@@ -72,6 +74,65 @@ def test_backup_job_creates_verified_managed_backup(
     assert verification["completion_marker_present"] is True
     assert not verification["errors"]
     assert not verification["checksum_failures"]
+
+
+def test_backup_succeeds_while_profile_workers_hold_their_locks(
+    client: TestClient, test_settings: Settings
+) -> None:
+    root = test_settings.resolved_data_dir
+    nested = root / "projects" / "example" / "compute-worker.lock"
+    nested.parent.mkdir(parents=True)
+    nested.write_bytes(b"portable project attachment")
+    with (
+        worker_leadership(root) as worker,
+        worker_leadership(root / "runtime", filename="headless-session.lock") as session,
+    ):
+        assert worker and session
+        _, backup = create_completed_backup(client, test_settings)
+    manifest = json.loads((root / backup["manifest_path"]).read_bytes())
+    names = {entry["path"] for entry in manifest["file_inventory"]}
+    assert "data/compute-worker.lock" not in names
+    assert "data/runtime/headless-session.lock" not in names
+    assert "data/projects/example/compute-worker.lock" in names
+
+
+def test_restore_verifies_old_worker_locks_and_omits_them_from_the_recovery(
+    client: TestClient, test_settings: Settings
+) -> None:
+    root = test_settings.resolved_data_dir
+    _, backup = create_completed_backup(client, test_settings)
+    media = root / backup["destination_path"]
+    manifest_path = root / backup["manifest_path"]
+    marker_path = root / backup["completion_marker_path"]
+    manifest = json.loads(manifest_path.read_bytes())
+    marker = json.loads(marker_path.read_bytes())
+    payload = b"old worker state"
+    for relative in ("data/compute-worker.lock", "data/runtime/headless-session.lock"):
+        member = media / relative
+        member.parent.mkdir(parents=True, exist_ok=True)
+        member.write_bytes(payload)
+        manifest["file_inventory"].append(
+            {"path": relative, "size_bytes": len(payload), "sha256": sha256(payload).hexdigest()}
+        )
+        manifest["total_expected_size_bytes"] += len(payload)
+    marker["manifest_sha256"], _ = write_backup_manifest(manifest_path, manifest)
+    write_backup_completion_marker(marker_path, marker)
+    route = f"/api/v1/backups/{backup['id']}"
+    assert client.post(route + "/verify").json()["status"] == "valid"
+    response = client.post(route + "/restore", json={"destination_name": "old-worker-copy"})
+    assert response.status_code == 200, response.text
+    factory = cast(FastAPI, client.app).state.session_factory
+    job_id = response.json()["job"]["id"]
+    assert process_restore_job(test_settings, factory, job_id)
+    recovered = root / response.json()["destination_path"]
+    assert (recovered / manifest["database_filename"]).is_file()
+    assert not (recovered / "compute-worker.lock").exists()
+    assert not (recovered / "runtime" / "headless-session.lock").exists()
+    result = client.get(f"/api/v1/jobs/{job_id}").json()["result_json"]
+    assert result["restored_file_count"] == len(manifest["file_inventory"]) - 2
+    assert result["restored_total_size_bytes"] == manifest["total_expected_size_bytes"] - 2 * len(
+        payload
+    )
 
 
 def test_backup_preserves_deep_live_training_asset_in_portable_inventory(

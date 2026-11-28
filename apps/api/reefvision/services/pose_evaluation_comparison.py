@@ -27,6 +27,7 @@ from reefvision.schemas.pose_evaluation import (
     PoseEvaluationComparisonCreateRequest,
     PoseEvaluationComparisonListResponse,
 )
+from reefvision.storage.checkpoint_approvals import require_local_execution_approval
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
@@ -151,6 +152,7 @@ class PoseEvaluationComparisonService:
                 raise ValidationError(
                     f"Registered pose checkpoint integrity check failed: {model.display_name}"
                 )
+            require_local_execution_approval(self.settings, model, checkpoint_path)
             models.append(model)
             model_identities.append(
                 {

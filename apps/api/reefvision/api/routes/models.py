@@ -31,6 +31,7 @@ from reefvision.schemas.bootstrap import (
 )
 from reefvision.schemas.jobs import JobResponse
 from reefvision.schemas.models import (
+    CheckpointApprovalRequest,
     InferenceJobCreateRequest,
     ModelProviderCapabilityMatrixResponse,
     ModelProviderResponse,
@@ -202,6 +203,20 @@ def get_model(
 
 
 @router.post(
+    "/projects/{project_id}/models/{model_id}/approve-checkpoint",
+    response_model=ModelRegistrationResponse,
+)
+def approve_model_checkpoint(
+    project_id: str,
+    model_id: str,
+    payload: CheckpointApprovalRequest,
+    request: Request,
+    session: DbSession,
+) -> ModelRegistrationResponse:
+    return service(request, session).approve_checkpoint(project_id, model_id, payload.sha256)
+
+
+@router.post(
     "/projects/{project_id}/models/register",
     response_model=ModelRegistrationResponse,
 )
@@ -211,6 +226,7 @@ async def register_model(
     session: DbSession,
     file: Annotated[UploadFile, File(...)],
     purpose: Annotated[str, Form(...)],
+    trust_checkpoint: Annotated[bool, Form()] = False,
     provider_name: Annotated[str | None, Form()] = None,
     display_name: Annotated[str | None, Form()] = None,
     notes: Annotated[str | None, Form()] = None,
@@ -221,6 +237,7 @@ async def register_model(
         provider_name=provider_name,
         upload_filename=file.filename,
         upload_stream=file.file,
+        trust_checkpoint=trust_checkpoint,
         display_name=display_name,
         notes=notes,
     )

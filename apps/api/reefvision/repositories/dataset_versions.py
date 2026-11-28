@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, load_only, selectinload
 
-from reefvision.db.models import DatasetVersion, DatasetVersionItem, ExportRecord
+from reefvision.db.models import DatasetVersion, DatasetVersionItem, ExportRecord, ImageAsset
 
 
 class DatasetVersionRepository:
@@ -73,6 +75,52 @@ class DatasetVersionRepository:
             )
         )
         return list(self.session.scalars(statement))
+
+    def project_test_image_ids(self, project_id: str) -> set[str]:
+        """Resolve historical test identities across frozen and current project membership."""
+        versions = select(DatasetVersion.id).where(
+            DatasetVersion.project_id == project_id,
+            DatasetVersion.status.in_(("complete", "archived")),
+        )
+        holdouts = set(
+            self.session.scalars(
+                select(DatasetVersionItem.image_id).where(
+                    DatasetVersionItem.dataset_version_id.in_(versions),
+                    DatasetVersionItem.split == "test",
+                )
+            )
+        )
+        if not holdouts:
+            return holdouts
+        identities = (
+            select(ImageAsset.id, ImageAsset.sha256, ImageAsset.group_key)
+            .where(ImageAsset.project_id == project_id)
+            .union(
+                select(
+                    DatasetVersionItem.image_id,
+                    DatasetVersionItem.image_sha256,
+                    DatasetVersionItem.group_key,
+                ).where(DatasetVersionItem.dataset_version_id.in_(versions))
+            )
+        )
+        keys_by_image: dict[str, set[tuple[str, str]]] = defaultdict(set)
+        members: dict[tuple[str, str], set[str]] = defaultdict(set)
+        for image_id, checksum, group in self.session.execute(identities):
+            keys = {("sha256", checksum)}
+            if group is not None:
+                keys.add(("group", group))
+            keys_by_image[image_id].update(keys)
+            for key in keys:
+                members[key].add(image_id)
+        # A renamed group or restored copy can link two historical identities.
+        # Each distinct checksum/group is expanded at most once.
+        pending = list(holdouts)
+        while pending:
+            for key in keys_by_image[pending.pop()]:
+                related = members.pop(key, set()) - holdouts
+                holdouts.update(related)
+                pending.extend(related)
+        return holdouts
 
 
 class ExportRepository:

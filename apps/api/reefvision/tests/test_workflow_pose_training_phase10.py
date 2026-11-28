@@ -63,8 +63,10 @@ from reefvision.services.workflow_pose_training import (
 from reefvision.services.workflow_runtime_adapters import (
     RUNTIME_ADAPTER_NODE_TYPES,
 )
+from reefvision.storage.checkpoint_approvals import verified_registered_checkpoint
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import (
+    filesystem_io_path,
     resolve_managed_project_path,
 )
 from reefvision.tests.test_pose_training_datasets_phase9 import (
@@ -189,6 +191,7 @@ def _seed_model(
         )
 
         session.commit()
+        verified_registered_checkpoint(app.state.settings, model, approving_sha256=sha256)
 
     return model_id
 
@@ -1088,7 +1091,7 @@ def test_native_reefpose_cancellation_retries_from_resumable_checkpoint(
             test_settings,
             str(run.artifact_manifest_json["resume_best_checkpoint_path"]),
         )
-        assert managed_best.is_file()
+        assert filesystem_io_path(managed_best).is_file()
         JobService(session).retry(job_id)
         session.refresh(run)
         assert run.status == "queued"

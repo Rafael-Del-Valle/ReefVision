@@ -14,7 +14,7 @@ import {
 
 interface ActiveLearningWorkspaceProps {
   project: Project;
-  onOpenReviewQueue?: () => void;
+  onOpenReviewQueue?: (queueId: string, datasetVersionId?: string) => void;
 }
 
 const strategyDescriptions: Record<ActiveLearningStrategy, string> = {
@@ -204,6 +204,18 @@ export function ActiveLearningWorkspace({
               <option value="quality">Quality risk</option>
             </select>
           </label>
+          <p className="annotation-helper">
+            Images previously assigned to test in this project, their matching
+            source files, and their related groups stay out of acquisition and
+            feedback datasets.
+          </p>
+          {datasetVersionId && (
+            <p className="annotation-helper">
+              The round ranks training and unassigned images in this snapshot
+              using current model proposals. Validation and test images are
+              reserved for evaluation.
+            </p>
+          )}
           <p className="annotation-helper">{strategyDescriptions[strategy]}</p>
           <label>
             Review budget
@@ -313,7 +325,14 @@ export function ActiveLearningWorkspace({
             <button
               type="button"
               className="secondary"
-              onClick={onOpenReviewQueue}
+              disabled={!selectedRound}
+              onClick={() =>
+                selectedRound &&
+                onOpenReviewQueue?.(
+                  selectedRound.review_queue_id,
+                  selectedRound.dataset_version_id ?? undefined,
+                )
+              }
             >
               Open Review Queue
             </button>

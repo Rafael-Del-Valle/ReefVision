@@ -1238,6 +1238,10 @@ export interface QualityControlRunRecord {
   input_checksums_json: Record<string, unknown>;
   summary_json: Record<string, unknown> & {
     acquisition?: AcquisitionQualityReport;
+    cross_split_similar_images?: {
+      checked_images: number;
+      flagged_pairs: number;
+    };
   };
   acquisition_stale_reasons?: string[];
   issue_count: number;
@@ -2715,35 +2719,13 @@ export async function validateUltralyticsTrainingConfiguration(payload: {
   );
 }
 
-export interface ProviderModelRegistration {
-  id: string;
-  provider_id: string;
-  task: string;
-  original_filename: string;
-  sha256: string;
-  registered_at: string;
-  project_id: string;
-}
-
-export async function registerProviderModel(
-  projectId: string,
-  providerId: string,
-  file: File,
-): Promise<ProviderModelRegistration> {
-  const formData = new FormData();
-  formData.append("file", file, file.name);
-  return request<ProviderModelRegistration>(
-    `/projects/${encodeURIComponent(projectId)}/provider-models/${encodeURIComponent(providerId)}/register`,
-    { method: "POST", body: formData },
-  );
-}
-
 export async function registerModel(
   projectId: string,
   payload: {
     file: File;
     purpose: "detector" | "assist";
     providerName?: string;
+    trustCheckpoint?: boolean;
     displayName?: string;
     notes?: string;
   },
@@ -2751,6 +2733,7 @@ export async function registerModel(
   const formData = new FormData();
   formData.append("file", payload.file, payload.file.name);
   formData.append("purpose", payload.purpose);
+  if (payload.trustCheckpoint) formData.append("trust_checkpoint", "true");
   if (payload.providerName) {
     formData.append("provider_name", payload.providerName);
   }
@@ -2770,11 +2753,51 @@ export async function registerModelFromRun(
     notes?: string;
   },
 ): Promise<ModelRegistration> {
+  const path = `/projects/${projectId}/models/register-from-run`;
+  const register = (approvedCheckpointSha256?: string) =>
+    request<ModelRegistration>(path, {
+      method: "POST",
+      body: JSON.stringify({
+        ...payload,
+        approved_checkpoint_sha256: approvedCheckpointSha256,
+      }),
+    });
+  try {
+    return await register();
+  } catch (error) {
+    if (
+      !(error instanceof ApiRequestError) ||
+      error.code !== "checkpoint_approval_required"
+    )
+      throw error;
+    const digest = error.details?.sha256;
+    const filename = error.details?.filename;
+    if (
+      typeof digest !== "string" ||
+      !/^[0-9a-f]{64}$/.test(digest) ||
+      typeof filename !== "string"
+    )
+      throw error;
+    if (
+      !window.confirm(
+        `Trust the source of ${filename} and load this checkpoint? A legacy PyTorch checkpoint can execute code during inspection.\n\nSHA-256: ${digest}`,
+      )
+    )
+      throw error;
+    return register(digest);
+  }
+}
+
+export async function approveModelCheckpoint(
+  projectId: string,
+  modelId: string,
+  sha256: string,
+): Promise<ModelRegistration> {
   return request<ModelRegistration>(
-    `/projects/${projectId}/models/register-from-run`,
+    `/projects/${encodeURIComponent(projectId)}/models/${encodeURIComponent(modelId)}/approve-checkpoint`,
     {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ sha256 }),
     },
   );
 }
@@ -2783,12 +2806,23 @@ export async function deleteModel(modelId: string): Promise<void> {
   await request<void>(`/models/${modelId}`, { method: "DELETE" });
 }
 
+export interface DetectionTiling {
+  width: number;
+  height: number;
+  overlap_x: number;
+  overlap_y: number;
+  batch_size: number;
+  input_size: number | null;
+  merge_iou: number;
+}
+
 export async function createInferenceJob(
   projectId: string,
   payload: {
     model_id: string;
     image_ids: string[];
     image_adjustment?: ImageAdjustmentPin;
+    tiling?: DetectionTiling;
     confidence_threshold?: number;
     iou_threshold?: number;
     device: string;

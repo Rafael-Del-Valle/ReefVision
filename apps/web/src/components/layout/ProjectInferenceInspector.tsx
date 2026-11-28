@@ -6,10 +6,69 @@ import {
   createInferenceJob,
   getJob,
   getModels,
+  type DetectionTiling,
   type JobRecord,
 } from "../../api/client";
 
 const TERMINAL_JOB_STATES = ["succeeded", "failed", "cancelled"];
+const TILE_FIELDS = [
+  {
+    key: "width",
+    label: "Tile width (px)",
+    initial: "1920",
+    min: 32,
+    max: 8192,
+    step: 1,
+  },
+  {
+    key: "height",
+    label: "Tile height (px)",
+    initial: "1344",
+    min: 32,
+    max: 8192,
+    step: 1,
+  },
+  {
+    key: "overlap_x",
+    label: "Horizontal overlap (%)",
+    initial: "40",
+    min: 0,
+    max: 99.99,
+    step: "any",
+  },
+  {
+    key: "overlap_y",
+    label: "Vertical overlap (%)",
+    initial: "40",
+    min: 0,
+    max: 99.99,
+    step: "any",
+  },
+  {
+    key: "batch_size",
+    label: "Tiles per model batch",
+    initial: "1",
+    min: 1,
+    max: 32,
+    step: 1,
+  },
+  {
+    key: "input_size",
+    label: "Model input long side (px, optional)",
+    initial: "",
+    min: 32,
+    max: 8192,
+    step: 1,
+  },
+  {
+    key: "merge_iou",
+    label: "Global merge IoU",
+    initial: "0.45",
+    min: 0,
+    max: 1,
+    step: "any",
+  },
+] as const;
 
 export function ProjectInferenceInspector({
   projectId,
@@ -27,6 +86,11 @@ export function ProjectInferenceInspector({
   const [selectedModelId, setSelectedModelId] = useState("");
   const [confidenceThreshold, setConfidenceThreshold] = useState("0.25");
   const [device, setDevice] = useState("cpu");
+  const [tileEnabled, setTileEnabled] = useState(false);
+  const [tileFields, setTileFields] = useState<Record<string, string>>(() =>
+    Object.fromEntries(TILE_FIELDS.map((field) => [field.key, field.initial])),
+  );
+  const [perTileIou, setPerTileIou] = useState("0.45");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
   const detectorModels = useQuery({
@@ -54,6 +118,7 @@ export function ProjectInferenceInspector({
         image_ids: selectedImageIds,
         confidence_threshold: Number(confidenceThreshold),
         device,
+        ...(tiled ? { tiling, iou_threshold: Number(perTileIou) } : {}),
       }),
     onSuccess: (job) => {
       setActiveJobId(job.id);
@@ -81,6 +146,35 @@ export function ProjectInferenceInspector({
 
   const selectedModel =
     detectorModels.data?.find((model) => model.id === selectedModelId) ?? null;
+  const tileSupported =
+    selectedModel?.provider_name === "ultralytics" &&
+    selectedModel.task === "detect";
+  const tiled = tileSupported && tileEnabled;
+  const tiling: DetectionTiling = {
+    width: Number(tileFields.width),
+    height: Number(tileFields.height),
+    overlap_x: Number(tileFields.overlap_x) / 100,
+    overlap_y: Number(tileFields.overlap_y) / 100,
+    batch_size: Number(tileFields.batch_size),
+    merge_iou: Number(tileFields.merge_iou),
+    input_size:
+      tileFields.input_size === "" ? null : Number(tileFields.input_size),
+  };
+  const tileFieldsValid =
+    TILE_FIELDS.every(({ key, min, max, step }) => {
+      const raw = tileFields[key];
+      if (!raw.trim()) return key === "input_size";
+      const value = Number(raw);
+      return (
+        Number.isFinite(value) &&
+        value >= min &&
+        value <= max &&
+        (step !== 1 || Number.isInteger(value))
+      );
+    }) &&
+    perTileIou.trim() !== "" &&
+    Number(perTileIou) >= 0 &&
+    Number(perTileIou) <= 1;
 
   const confidence = Number(confidenceThreshold);
   const confidenceValid =
@@ -95,6 +189,7 @@ export function ProjectInferenceInspector({
     !selectedModel ||
     selectedImageIds.length === 0 ||
     !confidenceValid ||
+    (tiled && !tileFieldsValid) ||
     inference.isPending ||
     jobRunning;
 
@@ -213,6 +308,65 @@ export function ProjectInferenceInspector({
             </select>
           </label>
 
+          {tileSupported && (
+            <details>
+              <summary>Advanced inference settings</summary>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={tileEnabled}
+                  onChange={(e) => setTileEnabled(e.target.checked)}
+                />
+                Use rectangular tiles
+              </label>
+              {tiled && (
+                <fieldset>
+                  <legend>Detection tiles</legend>
+                  {TILE_FIELDS.map(({ key, label, min, max, step }) => (
+                    <label key={key}>
+                      {label}
+                      <input
+                        type="number"
+                        min={min}
+                        max={max}
+                        step={step}
+                        value={tileFields[key]}
+                        onChange={(e) =>
+                          setTileFields({
+                            ...tileFields,
+                            [key]: e.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                  ))}
+                  <label>
+                    Per-tile IoU
+                    <input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="any"
+                      value={perTileIou}
+                      onChange={(e) => setPerTileIou(e.target.value)}
+                    />
+                  </label>
+                  <p>
+                    Leave the model input size blank to use each crop’s
+                    dimensions with model-stride padding. Set a long side to
+                    resize proportionally. Overlapping boxes of the same class
+                    are merged across tiles.
+                  </p>
+                  {!tileFieldsValid && (
+                    <p className="form-error" role="alert">
+                      Check the tile dimensions, overlap, batch size and IoU
+                      thresholds.
+                    </p>
+                  )}
+                </fieldset>
+              )}
+            </details>
+          )}
           <div className="rv-inference-actions">
             <button
               type="button"

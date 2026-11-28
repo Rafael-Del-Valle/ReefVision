@@ -13,7 +13,7 @@ from PIL import Image, UnidentifiedImageError
 
 from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
-from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.projects import filesystem_io_path, resolve_managed_project_path
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
@@ -54,9 +54,11 @@ def write_mask_png(
         raise ValidationError("Assist mask output is empty")
 
     project_root = resolve_managed_project_path(settings, project_storage_root)
-    destination_directory = project_root / "masks" / image_id
+    managed = project_root / "masks" / image_id / f"{mask_annotation_id}.png"
+    relative_path = managed.relative_to(settings.resolved_data_dir).as_posix()
+    destination_directory = filesystem_io_path(managed.parent)
     destination_directory.mkdir(parents=True, exist_ok=True)
-    destination = destination_directory / f"{mask_annotation_id}.png"
+    destination = destination_directory / managed.name
     temporary = destination_directory / f".{uuid4().hex}.tmp"
     try:
         temporary.write_bytes(payload)
@@ -64,7 +66,6 @@ def write_mask_png(
     finally:
         temporary.unlink(missing_ok=True)
 
-    relative_path = destination.relative_to(settings.resolved_data_dir).as_posix()
     x_min, y_min, x_max, y_max = bounds
     return (
         relative_path,

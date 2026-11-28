@@ -247,7 +247,7 @@ def _implemented_ultralytics_descriptor(
         supported_precision_modes=("fp32", "amp"),
         video_support=True,
         training_support=True,
-        tiling_support=False,
+        tiling_support=True,
         supported_execution_runtimes=("pytorch",),
         required_packages=_packages_from_preflight(report),
         required_model_files=(".pt", ".pth"),
@@ -258,6 +258,7 @@ def _implemented_ultralytics_descriptor(
             "Current boxed-proposal workflow is validated against the pinned PyTorch runtime only.",
         ),
         known_limitations=(
+            "Rectangular tiled inference supports still images with detection checkpoints.",
             "Image review still reduces detection, segmentation, and pose checkpoints to box proposals.",
             "Pose landmarks are currently exposed through the video tracking workflow, not the still-image annotation editor.",
             (
@@ -279,6 +280,7 @@ def _implemented_ultralytics_descriptor(
         registerable=True,
         capabilities=ProviderCapabilityMatrix(
             image_detection=True,
+            tiled_inference=True,
             multi_object_tracking=True,
             training=True,
             validation=True,

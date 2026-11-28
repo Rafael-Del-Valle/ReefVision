@@ -40,7 +40,7 @@ from reefvision.repositories.images import ImageRepository
 from reefvision.repositories.jobs import paired_owner_active
 from reefvision.repositories.models import ModelRepository
 from reefvision.schemas.image_adjustments_v18 import ImageAdjustmentPin
-from reefvision.schemas.models import InferenceSourcePins
+from reefvision.schemas.models import DetectionTiling, InferenceSourcePins
 from reefvision.services.annotations import _polygon_area, _polygon_self_intersects
 from reefvision.services.image_adjustments_v18 import (
     ImageAdjustmentService,
@@ -48,6 +48,7 @@ from reefvision.services.image_adjustments_v18 import (
 )
 from reefvision.services.inference_pins import verify_inference_pins
 from reefvision.services.model_runtime import verify_checkpoint, verify_queued_selection
+from reefvision.storage.checkpoint_approvals import verified_registered_checkpoint
 from reefvision.storage.projects import resolve_managed_project_path
 
 
@@ -369,6 +370,21 @@ def process_inference_job(
         model_task = str(request.get("model_task") or model.task or "detect")
         try:
             require_image_inference_provider(model.provider_name, model_task)
+            if model.project_id != job.project_id:
+                raise ValidationError("The inference checkpoint must belong to the job project")
+            model_path = verified_registered_checkpoint(settings, model)
+            tiling = (
+                DetectionTiling.model_validate(request["tiling"]) if "tiling" in request else None
+            )
+            if tiling is not None and (
+                model.provider_name != "ultralytics"
+                or model.task != "detect"
+                or model_task != "detect"
+                or "runtime_selection_id" in request
+            ):
+                raise ValidationError(
+                    "Queued tiling is incompatible with the model or reviewed selection"
+                )
             verify_queued_selection(session, settings, model.project_id, request)
             if "source_pins" in request:
                 verify_inference_pins(
@@ -403,11 +419,11 @@ def process_inference_job(
             job.completed_at = _utc_now()
             session.commit()
             return False
-        model_path = resolve_managed_project_path(settings, model.managed_path)
         inference_settings = DetectionSettings(
             confidence_threshold=float(request["confidence_threshold"]),
             iou_threshold=float(request["iou_threshold"]),
             device=str(request.get("device", "auto")),
+            tiling=tiling,
         )
         provider_name = model.provider_name
         provider_version = model.provider_version
@@ -571,6 +587,7 @@ def process_inference_job(
                                     "iou_threshold": inference_settings.iou_threshold,
                                     "device": inference_settings.device,
                                     "task": model_task,
+                                    **({"tiling": tiling.model_dump()} if tiling else {}),
                                 },
                                 provenance_json={
                                     "provider_name": provider_name,

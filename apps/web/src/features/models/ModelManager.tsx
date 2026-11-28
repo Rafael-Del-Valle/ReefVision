@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
   ApiRequestError,
+  approveModelCheckpoint,
   createPoseEvaluation,
   deleteModel,
   getModelProviderPreflight,
@@ -17,7 +18,6 @@ import {
   type PoseEvaluationRun,
   poseEvaluationExportUrl,
   registerModel,
-  registerProviderModel,
   type ModelRegistration,
   type ProviderDependencyStatus,
   type Project,
@@ -32,18 +32,6 @@ import { PoseEvaluationComparisonPanel } from "./PoseEvaluationComparisonPanel";
 import { ReviewedModelRuntime } from "./ReviewedModelRuntime";
 import { ReefPoseValidationPanel } from "../video/ReefPoseValidationPanel";
 import { StaticComparisonPanel } from "../video/StaticComparisonPanel";
-
-const optionalModelProviders = [
-  { id: "grounding_dino", label: "Grounding DINO", extension: ".zip" },
-  { id: "sam2", label: "SAM2", extension: ".zip" },
-  { id: "smolvlm", label: "SmolVLM", extension: ".zip" },
-  { id: "scale_label_ocr", label: "Scale label OCR", extension: ".zip" },
-  {
-    id: "video_depth_anything",
-    label: "Metric Video Depth Anything",
-    extension: ".pth",
-  },
-];
 
 function ModelRow({
   model,
@@ -65,6 +53,13 @@ function ModelRow({
   onEvaluate: (modelId: string, datasetId: string) => void;
 }) {
   const [evaluationDatasetId, setEvaluationDatasetId] = useState("");
+  const [reviewTrust, setReviewTrust] = useState(false);
+  const [reviewedSha, setReviewedSha] = useState<string | null>(null);
+  const approval = useMutation({
+    mutationFn: () =>
+      approveModelCheckpoint(model.project_id, model.id, model.sha256),
+  });
+
   const labelEntries = useMemo(() => {
     const labels = Array.isArray(model.class_map_json.labels)
       ? (model.class_map_json.labels as string[])
@@ -139,6 +134,58 @@ function ModelRow({
         </small>
         <small>Project: {model.project_id}</small>
         <small>Registered: {new Date(model.created_at).toLocaleString()}</small>
+        {model.provider_name !== "reefpose" &&
+          /\.(pt|pth|zip)$/i.test(model.source_filename) && (
+            <div>
+              <button
+                type="button"
+                className="secondary"
+                aria-expanded={reviewTrust}
+                onClick={() => {
+                  setReviewTrust(!reviewTrust);
+                  setReviewedSha(null);
+                }}
+              >
+                Review checkpoint trust
+              </button>
+              {reviewTrust && (
+                <div>
+                  <p>
+                    Approval is local to this device. A legacy checkpoint can
+                    execute code when loaded.
+                  </p>
+                  <code>SHA-256: {model.sha256}</code>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={reviewedSha === model.sha256}
+                      onChange={(event) =>
+                        setReviewedSha(
+                          event.target.checked ? model.sha256 : null,
+                        )
+                      }
+                    />
+                    I trust the source of {model.source_filename}.
+                  </label>
+                  <button
+                    type="button"
+                    disabled={
+                      approval.isPending || reviewedSha !== model.sha256
+                    }
+                    onClick={() => approval.mutate()}
+                  >
+                    Approve checkpoint on this device
+                  </button>
+                  {approval.isSuccess && (
+                    <p role="status">Checkpoint approved on this device.</p>
+                  )}
+                  {approval.error && (
+                    <p role="alert">{approval.error.message}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         {labelEntries.length > 0 && (
           <div className="annotation-selection-list">
             {labelEntries.map((entry) => (
@@ -440,7 +487,9 @@ function CatalogModelCard({
           </p>
         ) : !registered ? (
           <p className="annotation-helper">
-            Model required — register a compatible model to use this feature.
+            {onRegister
+              ? "Model required. Register a compatible model to use this feature."
+              : "See Advanced diagnostics & provider setup for local model requirements."}
           </p>
         ) : (
           <p>
@@ -527,9 +576,7 @@ export function ModelManager({
 }) {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
-  const [providerFile, setProviderFile] = useState<File | null>(null);
-  const [optionalProviderId, setOptionalProviderId] =
-    useState("grounding_dino");
+  const [trustedFile, setTrustedFile] = useState<File | null>(null);
   const [purpose, setPurpose] = useState<"detector" | "assist">("detector");
   const [providerName, setProviderName] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -623,6 +670,8 @@ export function ModelManager({
     registerableProviders.find((item) => item.provider_id === providerName) ??
     registerableProviders[0] ??
     null;
+  const requiresTrust =
+    file !== null && selectedProvider?.provider_id !== "reefpose";
   const selectedProviderPreflight = selectedProvider
     ? (preflightByName.get(selectedProvider.provider_id) ?? null)
     : null;
@@ -766,12 +815,14 @@ export function ModelManager({
         file,
         purpose,
         providerName: selectedProvider?.provider_id,
+        trustCheckpoint: requiresTrust && trustedFile === file,
         displayName: displayName.trim() || undefined,
         notes: notes.trim() || undefined,
       });
     },
     onSuccess: async () => {
       setFile(null);
+      setTrustedFile(null);
       setDisplayName("");
       setNotes("");
       await Promise.all([
@@ -784,36 +835,6 @@ export function ModelManager({
         queryClient.invalidateQueries({
           queryKey: ["projects"],
         }),
-      ]);
-    },
-  });
-
-  const registerProviderMutation = useMutation({
-    mutationFn: () => {
-      if (!providerFile)
-        throw new Error("Choose a compatible local model file first");
-      return registerProviderModel(
-        project.id,
-        optionalProviderId,
-        providerFile,
-      );
-    },
-    onSuccess: () => {
-      setProviderFile(null);
-      void Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["model_catalog", project.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["model_hub_bootstrap", project.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["advanced-provider-model-catalog", project.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["reefvision-assistant-model-catalog", project.id],
-        }),
-        providerPreflight.refetch(),
       ]);
     },
   });
@@ -1117,52 +1138,53 @@ export function ModelManager({
         )}
 
         <div className="image-grid model-ai-model-grid">
-          {filteredArchitectureCatalogModels.map((model) => (
-            <CatalogModelCard
-              key={model.catalog_id}
-              model={model}
-              onSelect={
-                onSelectCatalogModel
-                  ? (item) => {
-                      setOperationMessage(
-                        `${item.display_name} selected for training from scratch.`,
-                      );
-                      if (item.task === "pose") {
-                        if (item.architecture_reference)
-                          onTrainPoseArchitecture?.(
-                            item.architecture_reference,
-                          );
-                      } else if (item.task === "classify") {
-                        if (item.architecture_reference)
-                          onTrainClassificationArchitecture?.(
-                            item.architecture_reference,
-                          );
-                      } else {
-                        onSelectCatalogModel(item.catalog_id);
+          {filteredArchitectureCatalogModels.map((model) => {
+            const provider = providerCatalog.find(
+              (item) =>
+                item.provider_id === model.provider_id && item.registerable,
+            );
+            const registrationPurpose = provider?.default_registration_purpose;
+            return (
+              <CatalogModelCard
+                key={model.catalog_id}
+                model={model}
+                onSelect={
+                  onSelectCatalogModel
+                    ? (item) => {
+                        setOperationMessage(
+                          `${item.display_name} selected for training from scratch.`,
+                        );
+                        if (item.task === "pose") {
+                          if (item.architecture_reference)
+                            onTrainPoseArchitecture?.(
+                              item.architecture_reference,
+                            );
+                        } else if (item.task === "classify") {
+                          if (item.architecture_reference)
+                            onTrainClassificationArchitecture?.(
+                              item.architecture_reference,
+                            );
+                        } else {
+                          onSelectCatalogModel(item.catalog_id);
+                        }
                       }
-                    }
-                  : undefined
-              }
-              onRegister={() => {
-                if (
-                  optionalModelProviders.some(
-                    (provider) => provider.id === model.provider_id,
-                  )
-                ) {
-                  setOptionalProviderId(model.provider_id);
-                  setProviderFile(null);
-                  document
-                    .getElementById("optional-provider-registration")
-                    ?.setAttribute("open", "");
-                  jumpToModelSection("optional-provider-registration");
-                  return;
+                    : undefined
                 }
-                const form = document.getElementById("model-registration");
-                form?.setAttribute("open", "");
-                jumpToModelSection("model-registration");
-              }}
-            />
-          ))}
+                onRegister={
+                  provider && registrationPurpose
+                    ? () => {
+                        setPurpose(registrationPurpose);
+                        setProviderName(provider.provider_id);
+                        const form =
+                          document.getElementById("model-registration");
+                        form?.setAttribute("open", "");
+                        jumpToModelSection("model-registration");
+                      }
+                    : undefined
+                }
+              />
+            );
+          })}
         </div>
       </section>
 
@@ -1368,96 +1390,6 @@ export function ModelManager({
       </details>
 
       <details
-        id="optional-provider-registration"
-        className="gallery-panel model-ai-import-shell"
-      >
-        <summary>Register optional provider model</summary>
-        <form
-          className="new-class-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            registerProviderMutation.mutate();
-          }}
-        >
-          <h3>Optional provider model</h3>
-          <p>
-            Provide your own compatible trained model. Transformers bundles must
-            contain the configuration, processor/tokenizer files and trained
-            weights in a ZIP. Metric video depth accepts a local .pth
-            checkpoint.
-          </p>
-          <p>
-            This registration activates the local model for this provider across
-            ReefVision projects. Existing model files are preserved.
-          </p>
-          <label>
-            Optional model provider
-            <select
-              value={optionalProviderId}
-              onChange={(event) => {
-                setOptionalProviderId(event.target.value);
-                setProviderFile(null);
-                registerProviderMutation.reset();
-              }}
-            >
-              {optionalModelProviders.map((provider) => (
-                <option key={provider.id} value={provider.id}>
-                  {provider.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Provider model file
-            <input
-              key={optionalProviderId}
-              type="file"
-              accept={
-                optionalModelProviders.find(
-                  (provider) => provider.id === optionalProviderId,
-                )?.extension
-              }
-              onChange={(event) =>
-                setProviderFile(event.target.files?.[0] ?? null)
-              }
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={!providerFile || registerProviderMutation.isPending}
-          >
-            {registerProviderMutation.isPending
-              ? "Registering..."
-              : "Register provider model"}
-          </button>
-          {registerProviderMutation.error && (
-            <p className="form-error" role="alert">
-              {registerProviderMutation.error.message}
-            </p>
-          )}
-          {registerProviderMutation.data && (
-            <div role="status">
-              <p>
-                Registered {registerProviderMutation.data.original_filename}
-              </p>
-              <p>
-                Provider: {registerProviderMutation.data.provider_id} | Task:{" "}
-                {registerProviderMutation.data.task}
-              </p>
-              <p>Project: {registerProviderMutation.data.project_id}</p>
-              <p>
-                Registered:{" "}
-                {new Date(
-                  registerProviderMutation.data.registered_at,
-                ).toLocaleString()}
-              </p>
-              <code>{registerProviderMutation.data.sha256}</code>
-            </div>
-          )}
-        </form>
-      </details>
-
-      <details
         id="model-registration"
         className="gallery-panel model-ai-import-shell"
       >
@@ -1516,9 +1448,26 @@ export function ModelManager({
             <input
               type="file"
               accept=".pt,.pth"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              onChange={(event) => {
+                setFile(event.target.files?.[0] ?? null);
+                setTrustedFile(null);
+              }}
             />
           </label>
+          {file && requiresTrust && (
+            <label>
+              <input
+                type="checkbox"
+                checked={trustedFile === file}
+                onChange={(event) =>
+                  setTrustedFile(event.target.checked ? file : null)
+                }
+              />
+              I trust the source of {file.name} and approve loading this
+              checkpoint. A legacy PyTorch model can execute code during
+              inspection.
+            </label>
+          )}
           <p className="annotation-helper">
             Register a local trained checkpoint. ReefVision preserves its
             source, checksum, provider and class mapping. Pose checkpoints use
@@ -1542,6 +1491,8 @@ export function ModelManager({
             type="submit"
             disabled={
               registerMutation.isPending ||
+              !file ||
+              (requiresTrust && trustedFile !== file) ||
               !selectedProvider ||
               Boolean(
                 selectedProviderPreflight && !selectedProviderPreflight.ready,

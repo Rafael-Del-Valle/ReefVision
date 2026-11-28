@@ -25,7 +25,7 @@ from reefvision.schemas.learning_evaluation import (
     LearningEvaluationRequest,
     LearningEvaluationResponse,
 )
-from reefvision.storage.learning_evaluation import verify_learning_content
+from reefvision.storage.checkpoint_approvals import verified_registered_checkpoint
 
 
 def _now() -> datetime:
@@ -51,7 +51,10 @@ class LearningEvaluationService:
             raise NotFoundError("Project detector model not found")
         if model.task != "detect":
             raise ValidationError("Learning evaluation currently supports detection models only")
-        verify_learning_content(self.settings, model.managed_path, model.sha256)
+        try:
+            verified_registered_checkpoint(self.settings, model)
+        except ConflictError as exc:
+            raise ValidationError(str(exc)) from exc
         return model
 
     def _validate_lineage(

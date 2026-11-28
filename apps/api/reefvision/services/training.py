@@ -370,17 +370,6 @@ class TrainingService:
             if resolved_catalog_selection is not None
             else payload.architecture or ""
         )
-        if not architecture:
-            blockers.append("Choose a local Ultralytics architecture before launching training")
-        elif not _ultralytics_architecture_available(
-            architecture,
-            {item.architecture_id for item in self._cached_ultralytics_detect_architectures()},
-        ):
-            blockers.append(
-                "The selected architecture is not available in the installed pinned "
-                "Ultralytics package"
-            )
-
         if payload.precision not in TRAINING_PRECISIONS:
             blockers.append("Supported precision modes are fp32 and amp")
 
@@ -394,6 +383,7 @@ class TrainingService:
             if resolved_catalog_selection is not None
             else payload.initial_checkpoint_model_id
         )
+        blockers.extend(self._architecture_blockers(architecture, initial_checkpoint_source))
 
         if initial_checkpoint_source == "registered_model":
             if not initial_checkpoint_model_id:
@@ -402,7 +392,11 @@ class TrainingService:
                 )
             else:
                 model = self._model(initial_checkpoint_model_id)
-                if model.project_id != project.id or model.purpose != "detector":
+                if (
+                    model.project_id != project.id
+                    or model.purpose != "detector"
+                    or model.task != "detect"
+                ):
                     blockers.append(
                         "The selected checkpoint must be a detector model from the same project"
                     )
@@ -414,6 +408,7 @@ class TrainingService:
             blockers.append("Unsupported checkpoint source")
 
         training_config = self._merged_training_config(payload.training_config)
+        blockers.extend(self._optimizer_blockers(training_config))
         training_config["amp"] = payload.precision == "amp"
         try:
             validation = validate_ultralytics_training_configuration(
@@ -1050,6 +1045,14 @@ class TrainingService:
     def _merged_training_config(self, config: dict[str, Any]) -> dict[str, Any]:
         return {**DEFAULT_TRAINING_CONFIG, **(config or {})}
 
+    def _optimizer_blockers(self, config: dict[str, Any]) -> list[str]:
+        if "lr0" in config and str(config.get("optimizer", "auto")).lower() == "auto":
+            return [
+                "Choose an explicit optimizer to set the initial learning rate (lr0), "
+                "or clear lr0 to use the automatic optimizer."
+            ]
+        return []
+
     def _merged_tuning_config(self, config: dict[str, Any]) -> dict[str, Any]:
         return {**DEFAULT_TUNING_CONFIG, **(config or {})}
 
@@ -1141,6 +1144,22 @@ class TrainingService:
             ttl_seconds=TRAINING_PROVIDER_ARCHITECTURE_TTL_SECONDS,
         ).value
 
+    def _architecture_blockers(self, architecture: str | None, checkpoint_source: str) -> list[str]:
+        if checkpoint_source == "registered_model":
+            # The verified checkpoint carries the network definition.
+            return []
+        if not architecture:
+            return ["Choose a local Ultralytics architecture before launching training"]
+        if not _ultralytics_architecture_available(
+            architecture,
+            {item.architecture_id for item in self._cached_ultralytics_detect_architectures()},
+        ):
+            return [
+                "The selected architecture is not available in the installed pinned "
+                "Ultralytics package"
+            ]
+        return []
+
     def _draft_validation_snapshot(
         self,
         project_id: str,
@@ -1168,16 +1187,10 @@ class TrainingService:
             blockers.append(
                 "Only the pinned Ultralytics provider is trainable in this foundation slice"
             )
-        if not draft.architecture:
-            blockers.append("Choose a local Ultralytics architecture before launching training")
-        elif not _ultralytics_architecture_available(
-            draft.architecture,
-            {item.architecture_id for item in self._cached_ultralytics_detect_architectures()},
-        ):
-            blockers.append(
-                "The selected architecture is not available in the installed pinned "
-                "Ultralytics package"
-            )
+        blockers.extend(
+            self._architecture_blockers(draft.architecture, draft.initial_checkpoint_source)
+        )
+        blockers.extend(self._optimizer_blockers(draft.training_config_json))
         if draft.precision not in TRAINING_PRECISIONS:
             blockers.append("Supported precision modes are fp32 and amp")
         if (

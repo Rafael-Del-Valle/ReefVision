@@ -28,6 +28,7 @@ from reefvision.ml.depth_anything_v2_provider import (
     DepthRegistrationProvider,
     TransformersDepthAnythingV2Provider,
 )
+from reefvision.ml.model_bundles import checkpoint_requires_trust, require_checkpoint_trust
 from reefvision.ml.provider_hub import provider_for_registration
 from reefvision.ml.providers import (
     AnnotationAssistProvider,
@@ -46,6 +47,10 @@ from reefvision.schemas.models import (
     InferenceJobCreateRequest,
     ModelRegistrationResponse,
     RegisterModelFromRunRequest,
+)
+from reefvision.storage.checkpoint_approvals import (
+    remember_checkpoint_approval,
+    verified_registered_checkpoint,
 )
 from reefvision.storage.models import (
     copy_model_file,
@@ -182,6 +187,15 @@ class ModelService:
     def get_model(self, model_id: str) -> ModelRegistrationResponse:
         return ModelRegistrationResponse.model_validate(self._model(model_id))
 
+    def approve_checkpoint(
+        self, project_id: str, model_id: str, sha256: str
+    ) -> ModelRegistrationResponse:
+        model = self._model(model_id)
+        if model.project_id != project_id:
+            raise NotFoundError("Model not found in this project")
+        verified_registered_checkpoint(self.settings, model, approving_sha256=sha256)
+        return ModelRegistrationResponse.model_validate(model)
+
     def _register_model_path(
         self,
         project_id: str,
@@ -193,6 +207,7 @@ class ModelService:
         display_name: str | None,
         notes: str | None,
         metadata_overrides: dict[str, object] | None = None,
+        upload_approval: bool | None = None,
     ) -> ModelRegistrationResponse:
         if purpose not in MODEL_PURPOSES:
             raise ValidationError("Unknown model purpose")
@@ -218,6 +233,16 @@ class ModelService:
             if provider_name
             else self._provider_for_purpose(purpose)
         )
+        if upload_approval is not None and checkpoint_requires_trust(
+            source_path, purpose=purpose, provider_name=provider_name
+        ):
+            reason = require_checkpoint_trust(
+                self.settings.allow_unsafe_pickled_models, approved=upload_approval
+            )
+            metadata_overrides = {
+                **(metadata_overrides or {}),
+                "checkpoint_trust": {"source": reason, "sha256": sha256},
+            }
         metadata = provider.inspect_model(source_path)
         model_id = str(uuid4())
         suffix = Path(filename).suffix.lower()
@@ -250,6 +275,8 @@ class ModelService:
                 },
                 notes=notes.strip() if notes else None,
             )
+            if upload_approval is True:
+                remember_checkpoint_approval(self.settings, model)
             self.models.add(model)
             self.session.commit()
             self.session.refresh(model)
@@ -269,11 +296,11 @@ class ModelService:
         upload_stream: BinaryIO,
         display_name: str | None,
         notes: str | None,
+        trust_checkpoint: bool = False,
     ) -> ModelRegistrationResponse:
         filename = safe_model_name(upload_filename)
+        ensure_supported_model_extension(filename)
         suffix = Path(filename).suffix.lower()
-        if suffix in {".pt", ".pth"} and not self.settings.allow_unsafe_pickled_models:
-            raise ValidationError("Trusted PyTorch-style checkpoints are disabled by configuration")
         project = self._project(project_id)
         directories = project_model_directories(self.settings, project.storage_root)
         staging_path = directories["staging"] / f"{uuid4()}{suffix}"
@@ -287,6 +314,7 @@ class ModelService:
                 source_filename=filename,
                 display_name=display_name,
                 notes=notes,
+                upload_approval=trust_checkpoint,
             )
             staging_path.unlink(missing_ok=True)
             return response

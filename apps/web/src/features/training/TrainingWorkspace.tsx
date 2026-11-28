@@ -380,6 +380,8 @@ export function TrainingWorkspace({
   });
 
   const selectedDraft = selectedDraftQuery.data ?? null;
+  const trainingConfig = asRecord(selectedDraft?.training_config);
+  const optimizer = String(trainingConfig.optimizer ?? "auto");
   const trainingCatalogEntries = useMemo(
     () => (modelCatalog?.models ?? []).filter((item) => item.trainable),
     [modelCatalog?.models],
@@ -1840,23 +1842,48 @@ export function TrainingWorkspace({
                       <label>
                         Optimizer
                         <select
-                          value={String(
-                            asRecord(selectedDraft.training_config).optimizer ??
-                              "auto",
-                          )}
-                          onChange={(event) =>
-                            patchConfig(
-                              "training_config",
-                              "optimizer",
-                              event.target.value,
-                            )
-                          }
+                          value={optimizer}
+                          onChange={(event) => {
+                            const next: Record<string, unknown> = {
+                              ...trainingConfig,
+                              optimizer: event.target.value,
+                            };
+                            if (event.target.value === "auto") delete next.lr0;
+                            patchDraft({ training_config: next });
+                          }}
                         >
                           <option value="auto">Auto</option>
                           <option value="SGD">SGD</option>
                           <option value="Adam">Adam</option>
                           <option value="AdamW">AdamW</option>
                         </select>
+                      </label>
+                      <label>
+                        Initial learning rate (lr0)
+                        <input
+                          key={selectedDraft.id + optimizer}
+                          type="number"
+                          step="any"
+                          min="0.00001"
+                          max="0.1"
+                          disabled={optimizer === "auto"}
+                          placeholder={
+                            optimizer === "auto"
+                              ? "Automatic"
+                              : "Provider default"
+                          }
+                          defaultValue={
+                            typeof trainingConfig.lr0 === "number"
+                              ? trainingConfig.lr0
+                              : ""
+                          }
+                          onChange={(event) => {
+                            const next = { ...trainingConfig };
+                            if (event.target.value === "") delete next.lr0;
+                            else next.lr0 = event.target.valueAsNumber;
+                            patchDraft({ training_config: next });
+                          }}
+                        />
                       </label>
                       <label>
                         Workers

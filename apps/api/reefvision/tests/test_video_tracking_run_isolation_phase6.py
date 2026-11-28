@@ -17,8 +17,10 @@ from reefvision.ml.video_tracking import (
     VideoTrackingProgressCallback,
 )
 from reefvision.services import video_assets as video_assets_module
+from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_model_inference import approve_generated_checkpoint
 
 
 class MultiTrackerProvider:
@@ -120,7 +122,7 @@ def test_separate_tracker_jobs_from_same_model_keep_both_track_sets(
                 display_name="Fish detector",
                 source_filename="fish.pt",
                 managed_path=managed_relative,
-                sha256="b" * 64,
+                sha256=hash_model_file(managed_path)[0],
                 file_size_bytes=len(b"detector"),
                 framework="ultralytics",
                 task="detect",
@@ -132,6 +134,9 @@ def test_separate_tracker_jobs_from_same_model_keep_both_track_sets(
             )
         )
         session.commit()
+    approve_generated_checkpoint(
+        client, str(project["id"]), model_id, hash_model_file(managed_path)[0]
+    )
 
     monkeypatch.setattr(
         tracking_module,

@@ -19,9 +19,16 @@ from reefvision.db.models import (
     PoseLandmarkSchemaRevision,
     PoseModelSchemaBinding,
     PoseTrainingDataset,
+    ProjectExchangePackage,
     TrainingRun,
 )
-from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
+from reefvision.domain.errors import (
+    CheckpointApprovalRequired,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
+from reefvision.ml.model_bundles import checkpoint_requires_trust, require_checkpoint_trust
 from reefvision.ml.provider_hub import require_image_inference_provider
 from reefvision.ml.semantic_segmentation import (
     NNUNET_PROVIDER_ID,
@@ -44,6 +51,10 @@ from reefvision.services.project_exchange_pose_training import (
 )
 from reefvision.services.segmentation_models import SegmentationModelService
 from reefvision.services.workflow_pose_sources import verify_pose_dataset_separation
+from reefvision.storage.checkpoint_approvals import (
+    remember_checkpoint_approval,
+    verified_registered_checkpoint,
+)
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import copy_model_file, hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
@@ -438,6 +449,58 @@ class SemanticModelService(SegmentationModelService):
 
         return ModelRegistrationResponse.model_validate(model)
 
+    def _check_run_checkpoint_trust(
+        self,
+        run: TrainingRun,
+        checkpoint: Path,
+        approved_sha256: str | None,
+    ) -> str | None:
+        project = self._project(run.project_id)
+        project_root = resolve_managed_project_path(self.settings, project.storage_root)
+        if not checkpoint.is_relative_to(project_root):
+            raise ValidationError("The completed training checkpoint must belong to its project")
+        policy = self.settings.allow_unsafe_pickled_models
+        if not checkpoint_requires_trust(
+            checkpoint,
+            purpose="detector" if run.task == "pose" else run.task,
+            provider_name=run.provider_id,
+        ):
+            return None
+        if policy is not None:
+            require_checkpoint_trust(policy, approved=False)
+            return None
+        actual, _ = hash_model_file(checkpoint)
+        manifest = run.artifact_manifest_json or {}
+        expected = manifest.get("result_checkpoint_sha256") or manifest.get("bundle_sha256")
+        if expected and actual != expected:
+            raise ValidationError("The training checkpoint checksum changed after completion")
+        if approved_sha256 == actual:
+            return actual
+        job = self.session.get(Job, run.job_id) if run.job_id else None
+        root = resolve_managed_project_path(
+            self.settings, f"{project.storage_root}/training/{run.id}"
+        )
+        if (
+            expected == actual
+            and checkpoint.is_relative_to(root)
+            and job is not None
+            and job.status == "succeeded"
+            and job.job_type == "training"
+            and job.project_id == run.project_id
+            and job.request_json.get("training_run_id") == run.id
+        ):
+            # Exchange imports recreate both runs and jobs. Only a local completion
+            # may convey automatic trust in the checkpoint bytes.
+            imports = self.session.scalars(
+                select(ProjectExchangePackage).where(
+                    ProjectExchangePackage.project_id == project.id,
+                    ProjectExchangePackage.direction == "import",
+                )
+            )
+            if not any(run.id in item.options_json.get("id_map", {}).values() for item in imports):
+                return actual
+        raise CheckpointApprovalRequired(checkpoint.name, actual)
+
     def register_model_from_run(
         self,
         project_id: str,
@@ -448,6 +511,13 @@ class SemanticModelService(SegmentationModelService):
             raise NotFoundError("Training run not found")
         if run.project_id != project_id:
             raise ValidationError("Training runs must belong to the selected project")
+        approved_digest = None
+        if run.status == "completed" and run.result_checkpoint_path:
+            candidate_path = resolve_managed_project_path(self.settings, run.result_checkpoint_path)
+            if candidate_path.is_file():
+                approved_digest = self._check_run_checkpoint_trust(
+                    run, candidate_path, payload.approved_checkpoint_sha256
+                )
         if run.registered_model_id and run.result_checkpoint_path:
             original = self._model(run.registered_model_id)
             checkpoint = resolve_managed_project_path(self.settings, run.result_checkpoint_path)
@@ -465,6 +535,10 @@ class SemanticModelService(SegmentationModelService):
             raise ConflictError(
                 "The registered checkpoint does not match this training task and provider"
             )
+        if approved_digest is not None:
+            if model.sha256 != approved_digest:
+                raise ConflictError("The registered checkpoint changed after approval")
+            remember_checkpoint_approval(self.settings, model)
         if run.registered_model_id != model.id:
             linked = self.session.scalar(
                 update(TrainingRun)
@@ -729,6 +803,13 @@ class SemanticModelService(SegmentationModelService):
             )
         require_image_inference_provider(model.provider_name, model.task)
         pinned: dict[str, Any] = {}
+        if payload.tiling is not None:
+            if model.provider_name != "ultralytics" or model.task != "detect":
+                raise ValidationError("Rectangular tiling requires an Ultralytics detection model")
+            if payload.runtime_selection_id is not None:
+                raise ConflictError(
+                    "The reviewed runtime selection specifies whole-image inference"
+                )
         if payload.runtime_selection_id is not None:
             selection = ModelRuntimeService(self.session, self.settings).verify(
                 project_id, payload.runtime_selection_id, model_id=model.id
@@ -749,6 +830,7 @@ class SemanticModelService(SegmentationModelService):
 
             verify_inference_pins(self.settings, model, images, payload.source_pins)
             pinned["source_pins"] = payload.source_pins.model_dump(mode="json")
+        verified_registered_checkpoint(self.settings, model)
         adjusted = (
             adjusted_inference_binding(
                 self.session,
@@ -783,6 +865,7 @@ class SemanticModelService(SegmentationModelService):
                 ),
                 **pinned,
                 **adjusted,
+                **({"tiling": payload.tiling.model_dump()} if payload.tiling is not None else {}),
             },
         )
         self.session.add(job)
