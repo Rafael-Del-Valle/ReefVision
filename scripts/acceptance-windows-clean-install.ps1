@@ -351,7 +351,22 @@ try {
     if (@($yoloSession.annotations).Count -ne 1) {
         throw 'YOLO import did not create a native image annotation.'
     }
-    $report.external_annotation_imports = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed backend COCO box/mask, unused class, idempotence; YOLO boxes and all data.yaml class names; project $interopId."
+    # Snapshot the imported scientific records after all imports have finished.
+    # Restart/upgrade must retain their identities, geometry, labels and review
+    # metadata, not merely leave the project directory or row counts intact.
+    $interopBefore = @{}
+    foreach ($importedImageId in @($cocoImageId, $yoloImageId)) {
+        $importedSession = Invoke-RestMethod "$api/images/$importedImageId/annotations"
+        $interopBefore[$importedImageId] = ConvertTo-Json -InputObject ([ordered]@{
+            boxes = @($importedSession.annotations | Sort-Object id)
+            masks = @($importedSession.mask_annotations | Sort-Object id)
+        }) -Depth 40 -Compress
+    }
+    $interopClassesBefore = ConvertTo-Json -InputObject @(
+        (Invoke-RestMethod "$api/projects/$interopId").label_classes |
+            Sort-Object id | Select-Object id, class_index, name
+    ) -Depth 10 -Compress
+    # Report PASS only after the persisted records have also been checked.
 
     # Real online acquisition uses only the installed backend, not a developer
     # Python process. The default offline installer smoke test is unchanged.
@@ -451,6 +466,24 @@ try {
     if ($persisted.id -ne $projectId) { throw 'Project ID changed across restart.' }
     $persistedAnnotations = Invoke-RestMethod "$api/images/$imageId/annotations"
     if (-not ($persistedAnnotations.annotations | Where-Object id -eq $annotationId)) { throw 'Acceptance annotation did not persist across restart.' }
+    foreach ($importedImageId in @($cocoImageId, $yoloImageId)) {
+        $importedSession = Invoke-RestMethod "$api/images/$importedImageId/annotations"
+        $persistedImport = ConvertTo-Json -InputObject ([ordered]@{
+            boxes = @($importedSession.annotations | Sort-Object id)
+            masks = @($importedSession.mask_annotations | Sort-Object id)
+        }) -Depth 40 -Compress
+        if ($persistedImport -cne $interopBefore[$importedImageId]) {
+            throw "Imported scientific annotation records changed across restart/upgrade: $importedImageId"
+        }
+    }
+    $interopClassesAfter = ConvertTo-Json -InputObject @(
+        (Invoke-RestMethod "$api/projects/$interopId").label_classes |
+            Sort-Object id | Select-Object id, class_index, name
+    ) -Depth 10 -Compress
+    if ($interopClassesAfter -cne $interopClassesBefore) {
+        throw 'Imported class identities, indices or names changed across restart/upgrade.'
+    }
+    $report.external_annotation_imports = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed backend COCO box/mask, unused class, idempotence; YOLO boxes and all data.yaml class names; persisted imported records and class identities after restart/upgrade; project $interopId."
     if ($LiveSam2Acceptance) {
         $persistedSamSession = Invoke-RestMethod "$api/images/$samImageId/annotations"
         if (-not ($persistedSamSession.mask_annotations | Where-Object id -eq $samAcceptedMaskId)) {
