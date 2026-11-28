@@ -1075,3 +1075,17 @@ Check the two-unit shared trunk against the remaining 3 + sqrt(13) units,
 reverse trace order, split seam indices, and repeat passes within one trace.
 Verify the independent directed-scan oracle and identical standalone API
 and twice-replayed saved typed workflow payloads/hashes.
+
+The exact selected-edge union also decomposes redundant source length into
+`within_trace_redundant_source_length_mesh_units` (extra traversals within
+each selection) and `cross_trace_redundant_source_length_mesh_units`
+(extra distinct-selection memberships beyond the first on each edge).
+Their rational sum equals the original redundant traversal length before
+binary64 rounding. The `cross_trace_shared_source_length_mesh_units`
+counts each edge supported by at least two selections only once; it is not
+the same as cross-selection redundant length when three or more selections
+share an edge. All three measures are zero for an empty nonzero-edge union.
+Check no overlap, a shared trunk, repeated within-selection passes and
+three selections sharing the unit edge, with standalone API and twice
+replayed persisted typed workflow parity. These are geometric redundancy
+descriptors, not independent biological replicates or anatomical lengths.
