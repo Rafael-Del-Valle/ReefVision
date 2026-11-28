@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import os
+import py_compile
 import subprocess
 import sys
 from pathlib import Path
@@ -373,12 +374,45 @@ def test_runtime_manifest_requires_dependency_free_unlabeled_graph(
     assert not (root / "__pycache__").exists()
 
 
+def test_runtime_source_check_bypasses_stale_timestamp_bytecode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_module, script_module = _alembic_modules()
+    monkeypatch.setattr(sys, "dont_write_bytecode", True)
+    monkeypatch.setattr(sys, "pycache_prefix", None)
+    root = tmp_path / "versions"
+    source = _migration(root, "0001.py", "0001", "None")
+    os.utime(source, (1700000000, 1700000000))
+    cache = Path(
+        py_compile.compile(
+            str(source), doraise=True, invalidation_mode=py_compile.PycInvalidationMode.TIMESTAMP
+        )
+    )
+    cached = cache.read_bytes()
+    _migration(root, "0001.py", "0002", "None")
+    os.utime(source, (1700000000, 1700000000))
+    before = source.read_bytes()
+    config = config_module.Config()
+    config.set_main_option("script_location", str(tmp_path))
+
+    # dont_write_bytecode prevents writes, not reads of valid-looking old caches.
+    assert script_module.ScriptDirectory.from_config(config).get_heads() == ["0001"]
+    prefix = tmp_path / "unused-cache"
+    monkeypatch.setattr(sys, "pycache_prefix", str(prefix))
+    assert script_module.ScriptDirectory.from_config(config).get_heads() == ["0002"]
+    assert not prefix.exists()
+    assert source.read_bytes() == before
+    assert cache.read_bytes() == cached
+
+
 def test_packaged_16_graph_matches_runtime_alembic_loader(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Compare static evidence with the trusted packaged Alembic configuration."""
     config_module, script_module = _alembic_modules()
     monkeypatch.setattr(sys, "dont_write_bytecode", True)
+    prefix = tmp_path / "unused-cache"
+    monkeypatch.setattr(sys, "pycache_prefix", str(prefix))
     api = SCRIPT.parents[1] / "apps" / "api"
     root = api / "migrations" / "versions"
     before = {path: path.read_bytes() for path in root.glob("*.py")}
@@ -401,6 +435,7 @@ def test_packaged_16_graph_matches_runtime_alembic_loader(
 
     assert len(observed) == report["revision_count"]
     assert observed == expected
+    assert not prefix.exists()
     assert {path: path.read_bytes() for path in root.glob("*.py")} == before
     assert report["safe_to_reconcile_automatically"] is False
 
