@@ -462,6 +462,24 @@ try {
         if ($reviewAfterAccept.item_count -ne 0) {
             throw 'Confidence review incorrectly includes a researcher-accepted prediction.'
         }
+        # Capture the durable accepted prediction and mask before stopping the
+        # desktop. IDs alone cannot establish that review status, source model
+        # provenance or raster geometry survived a migration or restart.
+        $acceptedSession = Invoke-RestMethod "$api/images/$samImageId/annotations"
+        $acceptedMasks = @($acceptedSession.mask_annotations | Where-Object id -eq $samAcceptedMaskId)
+        $acceptedPredictions = Invoke-RestMethod "$api/images/$samImageId/prediction-proposals"
+        $acceptedProposals = @($acceptedPredictions.items | Where-Object id -eq $samProposalId)
+        if ($acceptedMasks.Count -ne 1 -or $acceptedMasks[0].status -ne 'verified' -or
+            $acceptedProposals.Count -ne 1 -or
+            $acceptedProposals[0].review_status -notin @('accepted','edited_and_accepted') -or
+            $acceptedProposals[0].accepted_mask_annotation_id -ne $samAcceptedMaskId -or
+            $acceptedProposals[0].model_checksum -ne $samReady[0].weight_sha256) {
+            throw 'Accepted SAM prediction, verified mask or source model lineage was not durably saved.'
+        }
+        $samReviewBefore = ConvertTo-Json -InputObject ([ordered]@{
+            mask = $acceptedMasks[0]
+            proposal = $acceptedProposals[0]
+        }) -Depth 40 -Compress
         $report.confidence_review = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Packaged API included pending SAM prediction at confidence cutoff 1.0, excluded it after explicit acceptance; queue $($reviewQueue.id)."
         $report.sam2_live = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed app's backend downloaded SAM 2.1 Tiny, verified revision $($samReady[0].revision) and SHA256 $($samReady[0].weight_sha256), inferred image $samImageId (area $($samInference.result.area_pixels)), persisted pending proposal $samProposalId and accepted verified mask $samAcceptedMaskId; GUI hotkeys not exercised."
     }
@@ -501,9 +519,20 @@ try {
     $report.external_annotation_imports = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Installed backend COCO box/mask, unused class, idempotence; YOLO boxes and all data.yaml class names; persisted imported records and class identities after restart/upgrade; project $interopId."
     if ($LiveSam2Acceptance) {
         $persistedSamSession = Invoke-RestMethod "$api/images/$samImageId/annotations"
-        if (-not ($persistedSamSession.mask_annotations | Where-Object id -eq $samAcceptedMaskId)) {
-            throw 'Accepted SAM 2.1 mask did not persist across packaged Windows desktop restart.'
+        $persistedMasks = @($persistedSamSession.mask_annotations | Where-Object id -eq $samAcceptedMaskId)
+        $persistedPredictions = Invoke-RestMethod "$api/images/$samImageId/prediction-proposals"
+        $persistedProposals = @($persistedPredictions.items | Where-Object id -eq $samProposalId)
+        if ($persistedMasks.Count -ne 1 -or $persistedProposals.Count -ne 1) {
+            throw 'Accepted SAM 2.1 mask or prediction did not persist across packaged Windows desktop restart.'
         }
+        $samReviewAfter = ConvertTo-Json -InputObject ([ordered]@{
+            mask = $persistedMasks[0]
+            proposal = $persistedProposals[0]
+        }) -Depth 40 -Compress
+        if ($samReviewAfter -cne $samReviewBefore) {
+            throw 'Accepted SAM 2.1 mask or prediction provenance changed across restart/upgrade.'
+        }
+        $report.sam2_live.detail += ' Verified complete accepted mask and source prediction records after restart/upgrade.'
     }
     if ($PreviousInstallerPath -and -not $SkipUpgrade) {
         $report.upgrade = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Previous installer $InitialProductVersion upgraded to $ProductVersion; packaged backend version and scientific records verified."
