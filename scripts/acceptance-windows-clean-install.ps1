@@ -43,6 +43,15 @@ $ProductVersion = Get-ReefVisionMsiProductVersion -InstallerPath $InstallerPath
 $InitialProductVersion = if ($PreviousInstallerPath -and -not $SkipUpgrade) {
     Get-ReefVisionMsiProductVersion -InstallerPath $PreviousInstallerPath
 } else { $ProductVersion }
+$PreviousInstallerHash = $null
+if ($PreviousInstallerPath -and -not $SkipUpgrade) {
+    # Reinstalling the same ProductVersion or downgrading cannot establish
+    # cross-version upgrade acceptance, even when the backend starts.
+    if ([version]$InitialProductVersion -ge [version]$ProductVersion) {
+        throw "Upgrade acceptance requires an older MSI ProductVersion; got $InitialProductVersion -> $ProductVersion."
+    }
+    $PreviousInstallerHash = (Get-FileHash -LiteralPath $PreviousInstallerPath -Algorithm SHA256).Hash
+}
 
 $report = [ordered]@{
     schema_version = 'reefvision-windows-clean-acceptance-1'
@@ -52,6 +61,8 @@ $report = [ordered]@{
     installer_path = $InstallerPath
     installer_sha256 = $InstallerHash
     previous_installer_path = if ($PreviousInstallerPath) { $PreviousInstallerPath } else { $null }
+    previous_installer_sha256 = $PreviousInstallerHash
+    previous_installer_version = if ($PreviousInstallerHash) { $InitialProductVersion } else { $null }
     windows_version = [Environment]::OSVersion.VersionString
     architecture = $env:PROCESSOR_ARCHITECTURE
     acceptance_root = $AcceptanceRoot
