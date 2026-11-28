@@ -435,6 +435,11 @@ def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
                 )
             migration_files += 1
             source = path.read_bytes()
+            if verify_parent_graph:
+                # AST parsing alone accepts some sources that Python cannot
+                # compile (e.g. a module-level return). Check the same bytes
+                # without executing imports, migration functions or DDL.
+                compile(source, str(path), "exec", dont_inherit=True)
             revision = revision_from_source(path, source)
             if revision is None:
                 raise ValueError(f"{path}: missing literal revision assignment")

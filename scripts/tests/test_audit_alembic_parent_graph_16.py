@@ -309,3 +309,50 @@ def test_packaged_16_graph_matches_current_lineage() -> None:
     assert not result.stderr
     assert json.loads(result.stdout) == report
     assert {path: path.read_bytes() for path in root.glob("*.py")} == before
+
+
+@pytest.mark.parametrize(
+    "invalid_body",
+    [
+        "return\n",
+        "break\n",
+        "continue\n",
+        "def broken():\n    nonlocal x\n",
+        "from __future__ import annotations\n",
+    ],
+)
+def test_strict_graph_refuses_ast_only_invalid_python(tmp_path: Path, invalid_body: str) -> None:
+    root = tmp_path / "versions"
+    path = _migration(root, "0001.py", "0001", "None")
+    path.write_text(path.read_text(encoding="utf-8") + invalid_body, encoding="utf-8")
+    before = path.read_bytes()
+
+    # Legacy inventory still diagnoses the declared revision.
+    assert _module().audit([root])["revision_count"] == 1
+    with pytest.raises(SyntaxError):
+        _module().audit([root], verify_parent_graph=True)
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--verify-parent-graph", str(root)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert not result.stdout
+    assert path.name in result.stderr
+    assert path.read_bytes() == before
+
+
+def test_strict_compile_check_never_executes_migration(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    path = _migration(root, "0001.py", "0001", "None")
+    path.write_text(
+        path.read_text(encoding="utf-8") + 'raise RuntimeError("do not execute")\n',
+        encoding="utf-8",
+    )
+    before = path.read_bytes()
+
+    report = _module().audit([root], verify_parent_graph=True)
+    assert report["parent_graph_consistent"] is True
+    assert report["safe_to_reconcile_automatically"] is False
+    assert path.read_bytes() == before

@@ -549,3 +549,20 @@ The current main/1.6 comparison is diverged (2556 ahead, 358 behind at audit);
 1.1 still contains distinct 0038–0042 scientific migrations. Do not merge or
 renumber either branch automatically. New tests require exact-head CI; local
 checkout is blocked by github.com DNS. Release HOLD remains unchanged.
+
+
+## 2026-11-27 — Strict migration compilation boundary
+
+Python's AST parser accepts some invalid modules, including module-level
+return, break and continue, unbound nonlocal declarations and misplaced
+future imports. Independent Alembic 1.18.4 loader probes reproduced all
+five failures. Strict ancestry verification now compiles the exact source
+snapshot without executing it before deriving revision or ancestry evidence.
+Legacy inventory remains unchanged; strict CLI rejects invalid code before
+emitting a report. Compilation alone cannot establish import success, DDL
+equivalence or runtime migration safety. A valid module that would raise
+if imported is intentionally still statically auditable. Five negative
+CLI regressions and a non-execution control preserve source bytes.
+No migration, database or scientific workflow is altered. Exact-head CI,
+coordinated migration reconciliation and real Windows/scientific acceptance
+remain required.
