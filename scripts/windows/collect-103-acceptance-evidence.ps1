@@ -213,8 +213,17 @@ if (-not [string]::IsNullOrWhiteSpace($ProvenancePath)) {
         $manifest.msi_verified -ne $true) {
         throw 'Build provenance does not match the candidate version, SHA, or verification flags.'
     }
+    # Require a flat array of artifact objects. PowerShell member-access
+    # enumeration can otherwise unwrap a singleton nested array and make its
+    # name/hash look scalar, accepting a malformed provenance inventory.
+    if ($manifest.files -isnot [array] -or $manifest.files.Count -notin @(6, 7)) {
+        throw 'Build provenance files must be an array of six or seven artifact objects.'
+    }
     $declared = @{}
-    foreach ($entry in @($manifest.files)) {
+    foreach ($entry in $manifest.files) {
+        if ($entry -isnot [pscustomobject]) {
+            throw 'Build provenance entries must be individual JSON objects.'
+        }
         if ($entry.name -isnot [string] -or $entry.sha256 -isnot [string]) {
             throw 'Build-provenance artifact name and SHA-256 must be scalar JSON strings.'
         }
