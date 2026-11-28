@@ -1122,11 +1122,19 @@ contiguous revision numbers and checking each ancestor's source binding,
 immediate predecessor, schema and content digest against the verified original.
 Read the original once for the pre-append audit rather than once per ancestor.
 A three-revision fixture must reject an append when either the first or second
-digest is corrupted even though direct readback of the third remains valid.
+digest is corrupted even when the third revision's own digest remains valid.
 Restore the disposable fixture, verify the original bytes and all three records
 remain unchanged, and require the next valid append to be revision four.
 
-This extends the write-integrity safeguard to historical ancestors. Direct
-readback still validates only the requested record and immediate ancestry;
-neither operation is a cryptographic signature, authenticated human review,
+This extends the write-integrity safeguard to historical ancestors. Individual
+readback now validates the contiguous prefix through the requested revision.
+Paginated readback validates the preceding revisions as well as the requested
+page, so an offset cannot hide a corrupted ancestor. The original source bytes
+are verified once per read. In the three-revision fixture, reject both direct
+readback of revision three and a one-item page at offset two when an ancestor
+digest is corrupted. A valid earlier prefix remains readable when only a
+later revision is corrupted. After fixture restoration, require identical
+readback and page content before appending revision four.
+
+These operations are not cryptographic signatures, authenticated human review,
 or proof of biological calibration. No measurement node contract changes.
