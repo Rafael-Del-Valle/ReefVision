@@ -1941,6 +1941,22 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
         # Compute from source waypoints and round each final bound only once.
         # A rounded nominal meter chord is not an exact uncertainty oracle.
         waypoints = chain["source_waypoints_mesh_units"]
+        lengths = [Fraction(dist(a, b)) for a, b in pairwise(waypoints)]
+        offset = chain["source_arc_midpoint_chain_edge_offset"]
+        locator = chain["source_arc_midpoint_edge_fraction"]
+        edge_fraction = Fraction(int(locator["numerator"]), int(locator["denominator"]))
+        assert 0 < edge_fraction <= 1
+        assert locator == {
+            "numerator": str(edge_fraction.numerator),
+            "denominator": str(edge_fraction.denominator),
+        }
+        assert sum(lengths[:offset], Fraction(0)) + edge_fraction * lengths[offset] == sum(
+            lengths, Fraction(0)
+        ) / 2
+        assert chain["source_arc_midpoint_mesh_units"] == [
+            float((1 - edge_fraction) * Fraction(a) + edge_fraction * Fraction(b))
+            for a, b in zip(waypoints[offset], waypoints[offset + 1], strict=True)
+        ]
         chord = Fraction(dist(waypoints[0], waypoints[-1]))
         calibrated_chord = chord * Fraction(params["meters_per_unit"])
         nominal_chord = float(calibrated_chord)
@@ -2978,6 +2994,7 @@ def test_chain_arc_midpoint_at_shared_vertex_uses_earlier_edge() -> None:
     ][0]
     assert chain["source_arc_midpoint_mesh_units"] == [1.0, 0.0, 0.0]
     assert chain["source_arc_midpoint_chain_edge_offset"] == 0
+    assert chain["source_arc_midpoint_edge_fraction"] == {"numerator": "1", "denominator": "1"}
     assert chain["biological_validation_status"] == "not_verified_anatomical_centerline"
 
 
