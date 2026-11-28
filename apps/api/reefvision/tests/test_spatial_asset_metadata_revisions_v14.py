@@ -197,9 +197,51 @@ def test_spatial_metadata_revisions_reject_rehashed_broken_ancestry(
         response = client.get(f"{base}/metadata-revisions/{second.json()['id']}")
         assert response.status_code == 400, response.text
         assert "ancestry" in response.json()["detail"].lower()
+        rejected_append = client.post(f"{base}/metadata-revisions", json=payload)
+        assert rejected_append.status_code == 400, rejected_append.text
+        assert "ancestry" in rejected_append.json()["detail"].lower()
         listed = client.get(f"{base}/metadata-revisions")
         assert listed.status_code == 400, listed.text
 
     unchanged = client.get(f"{base}/metadata-revisions/{first.json()['id']}")
     assert unchanged.status_code == 200, unchanged.text
     assert unchanged.json() == first.json()
+
+
+def test_spatial_metadata_append_rejects_corrupt_head_without_writing(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Spatial metadata append integrity")["id"])
+    asset = _import_asset(client, project_id)
+    base = f"/api/v1/projects/{project_id}/spatial/assets/{asset['id']}"
+    payload = {"coordinate_unit": "unknown", "created_by_identity": "local_user"}
+    first = client.post(f"{base}/metadata-revisions", json=payload)
+    assert first.status_code == 201, first.text
+    record = first.json()
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        row = session.get(SpatialAssetMetadataRevision, record["id"])
+        assert row is not None
+        row.content_sha256 = "0" * 64
+        session.commit()
+
+    rejected = client.post(f"{base}/metadata-revisions", json=payload)
+    assert rejected.status_code == 400, rejected.text
+    assert "integrity" in rejected.json()["detail"].lower()
+
+    with app.state.session_factory() as session:
+        row = session.get(SpatialAssetMetadataRevision, record["id"])
+        assert row is not None
+        row.content_sha256 = record["content_sha256"]
+        session.commit()
+
+    listed = client.get(f"{base}/metadata-revisions")
+    assert listed.status_code == 200, listed.text
+    assert listed.json() == [record]
+    assert client.get(f"{base}/content").content == OBJ
+
+    next_revision = client.post(f"{base}/metadata-revisions", json=payload)
+    assert next_revision.status_code == 201, next_revision.text
+    assert next_revision.json()["revision"] == 2
+    assert next_revision.json()["previous_revision_id"] == record["id"]
