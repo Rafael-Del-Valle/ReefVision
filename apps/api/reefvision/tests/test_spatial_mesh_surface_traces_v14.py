@@ -1950,9 +1950,18 @@ def test_saved_typed_mesh_trace_matches_standalone_and_provenance(
             "numerator": str(edge_fraction.numerator),
             "denominator": str(edge_fraction.denominator),
         }
-        assert sum(lengths[:offset], Fraction(0)) + edge_fraction * lengths[offset] == sum(
-            lengths, Fraction(0)
-        ) / 2
+        assert (
+            sum(lengths[:offset], Fraction(0)) + edge_fraction * lengths[offset]
+            == sum(lengths, Fraction(0)) / 2
+        )
+        total = sum(lengths, Fraction(0))
+        weights = [length / total for length in lengths]
+        expected_centroid = []
+        for coordinates in zip(*waypoints, strict=True):
+            midpoints = [(Fraction(a) + Fraction(b)) / 2 for a, b in pairwise(coordinates)]
+            weighted = sum(w * m for w, m in zip(weights, midpoints, strict=True))
+            expected_centroid.append(float(weighted))
+        assert chain["source_arc_centroid_mesh_units"] == expected_centroid
         assert chain["source_arc_midpoint_mesh_units"] == [
             float((1 - edge_fraction) * Fraction(a) + edge_fraction * Fraction(b))
             for a, b in zip(waypoints[offset], waypoints[offset + 1], strict=True)
@@ -2980,6 +2989,9 @@ def test_chain_arc_midpoint_is_source_bound_and_direction_invariant(scale: float
             [fraction, 1 - fraction, 0.0]
         )
         assert chain["source_arc_midpoint_chain_edge_offset"] == 1
+        assert chain["source_arc_centroid_mesh_units"] == pytest.approx(
+            [sqrt(2) / (2 * (1 + sqrt(2))), 0.5, 0.0]
+        )
         assert chain["human_review_verified"] is False
 
 
