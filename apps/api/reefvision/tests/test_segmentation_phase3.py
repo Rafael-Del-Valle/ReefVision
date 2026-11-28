@@ -25,8 +25,10 @@ from reefvision.ml.segmentation_provider_catalog import segmentation_capability_
 from reefvision.schemas.training import TrainingProviderArchitectureResponse
 from reefvision.services.segmentation_catalog import SegmentationModelCatalogService
 from reefvision.services.segmentation_training import SegmentationTrainingService
+from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project, import_one
+from reefvision.tests.test_model_inference import approve_generated_checkpoint
 
 
 class FakeSegmentationProvider:
@@ -82,7 +84,7 @@ def _seed_segmenter(
             display_name="Test Segmenter",
             source_filename="test-segmenter.pt",
             managed_path=managed_path,
-            sha256="a" * 64,
+            sha256=hash_model_file(checkpoint)[0],
             file_size_bytes=checkpoint.stat().st_size,
             framework="ultralytics",
             task="segment",
@@ -97,6 +99,7 @@ def _seed_segmenter(
         )
         session.add(model)
         session.commit()
+        approve_generated_checkpoint(client, project_id, model.id, model.sha256)
         session.refresh(model)
         session.expunge(model)
         return model

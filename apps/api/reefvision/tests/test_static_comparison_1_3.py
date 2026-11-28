@@ -20,6 +20,7 @@ from reefvision.tests.test_dataset_versions import (
     save_annotations,
     update_image,
 )
+from reefvision.tests.test_model_inference import approve_generated_checkpoint
 from reefvision.tests.test_scientific_project_exchange import (
     export_archive,
     import_archive,
@@ -105,7 +106,9 @@ def test_saved_static_comparison_reuses_reviewed_counts_and_preserves_raw_output
     )
     assert dataset.status_code == 201, dataset.text
     settings = client.app.state.settings
-    checkpoint = settings.resolved_data_dir / "fixture.pt"
+    relative_path = f"projects/{project_id}/models/fixture.pt"
+    checkpoint = settings.resolved_data_dir / relative_path
+    checkpoint.parent.mkdir(parents=True, exist_ok=True)
     checkpoint.write_bytes(b"local fixture")
     digest, size = hash_model_file(checkpoint)
     with client.app.state.session_factory() as session:
@@ -114,7 +117,7 @@ def test_saved_static_comparison_reuses_reviewed_counts_and_preserves_raw_output
             purpose="detector",
             display_name="Coral detector",
             source_filename=checkpoint.name,
-            managed_path=checkpoint.name,
+            managed_path=relative_path,
             sha256=digest,
             file_size_bytes=size,
             framework="fixture",
@@ -126,6 +129,7 @@ def test_saved_static_comparison_reuses_reviewed_counts_and_preserves_raw_output
         session.add(registered)
         session.commit()
         model_id = registered.id
+    approve_generated_checkpoint(client, project_id, model_id, digest)
 
     response = client.get(f"{base}/static-comparisons/options")
     assert response.status_code == 200, response.text

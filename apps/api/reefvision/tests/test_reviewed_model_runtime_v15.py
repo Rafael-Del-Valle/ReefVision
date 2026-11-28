@@ -18,6 +18,7 @@ from reefvision.tests.test_annotations import create_project, import_one
 from reefvision.tests.test_model_inference import (
     FakeDetectorRegistrationProvider,
     FakeDetectorWorkerProvider,
+    approve_generated_checkpoint,
     register_model,
 )
 from reefvision.tests.test_scientific_project_exchange import import_archive, rewrite
@@ -244,6 +245,9 @@ def test_exchange_restores_runtime_receipt_model_and_mapped_classes_across_two_c
         assert copied["snapshot"] == saved["snapshot"] and copied["content_sha256"] == original
         assert copied["model_id"] == local[saved["model_id"]]
         image = local[image]
+        approve_generated_checkpoint(
+            client, report["project_id"], copied["model_id"], model["sha256"]
+        )
         job = client.post(
             base + "/inference-jobs",
             json={
