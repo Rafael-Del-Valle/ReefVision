@@ -336,6 +336,67 @@ class CameraFixtureInventoryTests(unittest.TestCase):
                             ),
                         )
 
+    def test_replay_validates_raw_exposure_evidence(self) -> None:
+        """Matching bytes and false QC flags cannot legitimize invalid timestamps."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            header = {
+                "path": "CAMERA.JPG",
+                "bytes": 42,
+                "sha256": "a" * 64,
+                "jpeg_boundary_markers": True,
+            }
+            decoded = {
+                **header,
+                "jpeg_decodable": True,
+                "jpeg_pixel_width": 12,
+                "jpeg_pixel_height": 8,
+                "jpeg_display_width": 12,
+                "jpeg_display_height": 8,
+                "jpeg_exif_orientation": None,
+                "jpeg_exif_datetime_original_local": "2026:04:03 14:00:00",
+                "jpeg_exif_offset_time_original": "-04:00",
+                "jpeg_exif_subsec_time_original": "001",
+                "jpeg_exif_capture_timezone_unknown": False,
+            }
+            def baseline(record):
+                return {"root": str(root), "errors": [], "files": [record]}
+
+            for valid in (
+                decoded,
+                {**decoded, "jpeg_exif_offset_time_original": None,
+                 "jpeg_exif_capture_timezone_unknown": True},
+                {**decoded, "jpeg_exif_datetime_original_local": None,
+                 "jpeg_exif_offset_time_original": None,
+                 "jpeg_exif_subsec_time_original": None},
+            ):
+                with self.subTest(valid=valid):
+                    self.assertEqual(
+                        MODULE.compare_source_manifest(root, [valid], baseline(valid)), []
+                    )
+            for patch in (
+                {"jpeg_exif_datetime_original_local": "2026:02:30 14:00:00"},
+                {"jpeg_exif_datetime_original_local": None},
+                {"jpeg_exif_offset_time_original": "+14:01"},
+                {"jpeg_exif_subsec_time_original": 1},
+                {"jpeg_exif_subsec_time_original": "1.5"},
+                {"jpeg_exif_camera_make": " "},
+                {"jpeg_exif_camera_model": 123},
+                {"jpeg_exif_capture_timezone_unknown": 0},
+                {"jpeg_exif_capture_timezone_unknown": True},
+                {"jpeg_exif_offset_time_original": None},
+            ):
+                with self.subTest(patch=patch):
+                    invalid = {**decoded, **patch}
+                    self.assertEqual(
+                        MODULE.compare_source_manifest(root, [invalid], baseline(invalid)),
+                        ["baseline JPEG manifest contains failed decoded QC evidence"],
+                    )
+                    self.assertIn(
+                        "source JPEG decoded QC failed: 'CAMERA.JPG'",
+                        MODULE.compare_source_manifest(root, [invalid], baseline(header)),
+                    )
+
     def test_replay_rejects_contradictory_exif_raster_evidence(self) -> None:
         """Matching bytes cannot certify inconsistent native EXIF dimensions."""
         with tempfile.TemporaryDirectory() as directory:

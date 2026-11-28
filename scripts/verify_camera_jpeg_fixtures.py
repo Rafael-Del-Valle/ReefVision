@@ -762,6 +762,42 @@ def _valid_decoded_qc(entry: dict[str, object]) -> bool:
     ):
         if field in entry and entry[field] is not False:
             return False
+    # A cleared QC flag must not certify malformed raw exposure evidence.
+    # Reuse the inventory validators, but require canonical JSON strings
+    # (the scanner has already removed any EXIF padding).
+    date_key = "jpeg_exif_datetime_original_local"
+    offset_key = "jpeg_exif_offset_time_original"
+    subsec_key = "jpeg_exif_subsec_time_original"
+    for key, validator in (
+        ("jpeg_exif_camera_make", _camera_exif_label),
+        ("jpeg_exif_camera_model", _camera_exif_label),
+        (date_key, _camera_exif_datetime_original),
+        (offset_key, _camera_exif_offset_time_original),
+        (subsec_key, _camera_exif_subsec_time_original),
+    ):
+        value = entry.get(key)
+        if value is not None:
+            if type(value) is not str:
+                return False
+            normalized, malformed = validator(value)
+            if malformed or normalized != value:
+                return False
+    # Offset or fractional seconds alone cannot establish an exposure time.
+    if entry.get(date_key) is None and any(
+        entry.get(key) is not None for key in (offset_key, subsec_key)
+    ):
+        return False
+    timezone_key = "jpeg_exif_capture_timezone_unknown"
+    if timezone_key in entry:
+        unknown = entry[timezone_key]
+        if type(unknown) is not bool:
+            return False
+        # Older partial manifests may omit the raw fields entirely. Do not
+        # infer missing legacy evidence, but check fully recorded timestamps.
+        if date_key in entry and offset_key in entry and unknown != (
+            entry[date_key] is not None and entry[offset_key] is None
+        ):
+            return False
     # Missing EXIF dimensions are legitimate; an explicit mismatch is not.
     dimensions_match = entry.get("jpeg_exif_dimensions_match_raster")
     if dimensions_match is not None and dimensions_match is not True:
