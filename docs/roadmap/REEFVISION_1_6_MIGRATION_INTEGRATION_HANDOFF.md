@@ -566,3 +566,56 @@ CLI regressions and a non-execution control preserve source bytes.
 No migration, database or scientific workflow is altered. Exact-head CI,
 coordinated migration reconciliation and real Windows/scientific acceptance
 remain required.
+
+
+## 2026-11-27 — Complete source manifest and cross-track overlap
+
+Exact-head CI #46099181696 on 4b94479f completed successfully (backend,
+frontend/E2E/build and native Windows preservation). A fresh Git tree
+inventory compared migration filenames and Git blob IDs at these fixed
+heads. All nine trees contain the same 38 original migration source blobs,
+including the historical 53ba400993db file. No original file is absent or
+different in the inspected trees.
+
+| Snapshot | Commit | Migration files |
+| --- | --- | ---: |
+| main | e94dad6a3bece7b776bf45776bc5d06cfbc2c0dc | 38 |
+| 1.0.3 | 2d588c297b02af488864c7cf1a9fe989d0681d9c | 38 |
+| 1.1 | a3ea9c7827c748a671bce7103d2f11b0af3a6c9a | 43 |
+| 1.2 | 28ab58b997bf79c48bb555f68938473700880d6d | 43 |
+| 1.2 PR 85 | 14eb83eb20eb1013915835e199ac00d041b55181 | 57 |
+| 1.3 PR 87 | f44053a90286ce57cc6f7356be922bcf8ba41e22 | 59 |
+| 1.4 | c34728b1c886dafc9377e74b3f9dfd0f66eb0445 | 63 |
+| 1.5 | bd8602a0ada6066fdaf3264452e50b61b1ce33a0 | 63 |
+| 1.6 | 4b94479f8a639408cb0dca93561ac739c87d1628 | 42 |
+
+1.4 and 1.5 contain identical migration filenames and blob IDs at these
+heads. Their 25 additional files include the five 1.1 scientific files,
+five identity files, seven ReefPose files, two 1.2 integration files,
+two 1.3 scientific/temporal files, two spatial files and two 1.4 files.
+The actual b12_integrated_0001 source joins 0042, b12_identity_0005 and
+reefpose_0044. The actual b14_integration_0001 source joins
+b13_temporal_0001 and spatial_0039; b14_spatial_0040 descends from that
+join. These are migration source inventory observations, not a runtime
+compatibility certification. The isolated 1.6 four QC files remain
+distinct from the scientific 0038–0041 files.
+
+Previously the strict source report emitted source and ancestry digests
+only for collided IDs. A unique integration head or QC-only successor
+could therefore be omitted from review evidence. The strict
+revision_manifests map now lists every source per input root with its
+revision ID, path, parent IDs, exact source SHA-256 and verified ancestry
+SHA-256 (null for any source in an inconsistent graph). Duplicate
+identifiers retain separate rows rather than being collapsed into one.
+Legacy report mode is unchanged; the report never authorizes automatic
+reconciliation. Two CLI regressions cover a unique multi-parent join,
+duplicate source retention, no ancestry assertion on an invalid graph,
+and source preservation. Three independent helper-level tests passed;
+new full-repository tests and exact-head CI still need verification.
+
+Use this evidence to prepare a reviewed multi-lineage migration design
+before any upgrade or remapping. No migration, database, existing
+standalone or typed saved QC Workflow Builder, review gate or user asset
+is altered. Release HOLD remains for coordinated migration reconciliation,
+representative biology, installed Windows MSI/CAB and GUI upgrade/rollback,
+full new-head CI and explicit researcher approval.

@@ -1,5 +1,6 @@
 """CLI regression tests for the read-only Alembic collision audit."""
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -421,5 +422,74 @@ def test_cli_strict_graph_accepts_numeric_and_namespaced_revision_ids(
     report = json.loads(result.stdout)
     assert report["parent_graph_consistent"] is True
     assert report["parent_graphs"][str(root)]["head_revisions"] == [revisions[-1]]
+    assert report["safe_to_reconcile_automatically"] is False
+    assert {path: path.read_bytes() for path in files} == files
+
+
+def test_cli_strict_manifest_includes_unique_heads_and_merge_edges(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    root.mkdir()
+    entries = (
+        ("0037", None),
+        ("science", "0037"),
+        ("qc", "0037"),
+        ("joined", ("science", "qc")),
+    )
+    files = {}
+    for index, (revision, parents) in enumerate(entries):
+        path = root / f"{index}.py"
+        path.write_text(
+            f"revision = {revision!r}\ndown_revision = {parents!r}\n",
+            encoding="utf-8",
+        )
+        files[path] = path.read_bytes()
+
+    result = _run(root, verify_parent_graph=True)
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["parent_graph_consistent"] is True
+    assert report["collision_ancestry_sha256"] == {}
+    manifest = report["revision_manifests"][str(root)]
+    assert [row["revision"] for row in manifest] == [item[0] for item in entries]
+    assert [row["parent_revisions"] for row in manifest] == [
+        [],
+        ["0037"],
+        ["0037"],
+        ["science", "qc"],
+    ]
+    for row, (path, contents) in zip(manifest, files.items(), strict=True):
+        assert row["path"] == str(path)
+        assert row["source_sha256"] == hashlib.sha256(contents).hexdigest()
+        assert len(row["ancestry_sha256"]) == 64
+    assert len({row["ancestry_sha256"] for row in manifest}) == 4
+    assert report["safe_to_reconcile_automatically"] is False
+    assert json.loads(_run(root).stdout).get("revision_manifests") is None
+    assert {path: path.read_bytes() for path in files} == files
+
+
+def test_cli_strict_manifest_retains_duplicate_sources_without_ancestry(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    root.mkdir()
+    files = {}
+    for name in ("science", "qc"):
+        path = root / f"{name}.py"
+        path.write_text(
+            f"revision = '0038'\ndown_revision = None\n# {name}\n",
+            encoding="utf-8",
+        )
+        files[path] = path.read_bytes()
+
+    result = _run(root, verify_parent_graph=True)
+    assert result.returncode == 2
+    report = json.loads(result.stdout)
+    assert report["parent_graph_consistent"] is False
+    manifest = report["revision_manifests"][str(root)]
+    assert len(manifest) == 2
+    assert {row["path"] for row in manifest} == {str(path) for path in files}
+    for row in manifest:
+        assert row["revision"] == "0038"
+        assert row["parent_revisions"] == []
+        assert row["source_sha256"] == hashlib.sha256(files[Path(row["path"])]).hexdigest()
+        assert row["ancestry_sha256"] is None
     assert report["safe_to_reconcile_automatically"] is False
     assert {path: path.read_bytes() for path in files} == files

@@ -386,6 +386,24 @@ def _canonical_graph_revision(value: str) -> bool:
     }
 
 
+def revision_manifest(
+    entries: list[tuple[str, str, tuple[str, ...]]],
+    source_sha256: dict[str, str],
+    ancestry_by_path: dict[str, str],
+) -> list[dict]:
+    """Retain every source, including unique heads and duplicate identifiers."""
+    return [
+        {
+            "revision": revision,
+            "path": path,
+            "parent_revisions": list(parents),
+            "source_sha256": source_sha256[path],
+            "ancestry_sha256": ancestry_by_path.get(path),
+        }
+        for revision, path, parents in entries
+    ]
+
+
 def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
     by_revision: dict[str, list[str]] = defaultdict(list)
     source_sha256: dict[str, str] = {}
@@ -393,6 +411,7 @@ def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
     seen_roots: set[Path] = set()
     parent_graphs: dict[str, dict] = {}
     ancestry_by_path: dict[str, str] = {}
+    revision_manifests: dict[str, list[dict]] = {}
     for root in roots:
         # A repeated directory must not manufacture a revision collision.
         # Check each path component before resolving so symlinked ancestors
@@ -419,6 +438,7 @@ def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
                 raise ValueError(f"Migration tree contains a symbolic link: {entry}")
         root_entries: list[tuple[str, tuple[str, ...]]] = []
         root_paths: dict[str, str] = {}
+        root_manifest_entries: list[tuple[str, str, tuple[str, ...]]] = []
         for path in sorted(root.rglob("*.py")):
             if path.is_symlink():
                 raise ValueError(f"Migration file is a symbolic link: {path}")
@@ -453,6 +473,7 @@ def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
                     raise ValueError(f"{path}: unsupported strict graph parent identifier")
                 root_entries.append((revision, parents))
                 root_paths[revision] = str(path)
+                root_manifest_entries.append((revision, str(path), parents))
             by_revision[revision].append(str(path))
             source_sha256[str(path)] = hashlib.sha256(source).hexdigest()
         if verify_parent_graph:
@@ -466,6 +487,9 @@ def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
                 ancestry_by_path.update(
                     {path: fingerprints[revision] for revision, path in root_paths.items()}
                 )
+            revision_manifests[str(root)] = revision_manifest(
+                root_manifest_entries, source_sha256, ancestry_by_path
+            )
     if migration_files == 0:
         raise ValueError("No migration revision files found")
     collisions = {
@@ -504,6 +528,7 @@ def audit(roots: list[Path], *, verify_parent_graph: bool = False) -> dict:
             for revision, paths in collisions.items()
         }
         report["parent_graphs"] = parent_graphs
+        report["revision_manifests"] = revision_manifests
         report["parent_graph_consistent"] = all(
             graph["consistent"] for graph in parent_graphs.values()
         )
