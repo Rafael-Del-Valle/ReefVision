@@ -32,8 +32,10 @@ from reefvision.ml.video_tracking import (
 )
 from reefvision.services import video_assets as video_assets_module
 from reefvision.services.workflow_pose import execute_pose_inference_adapter
+from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_model_inference import approve_generated_checkpoint
 
 
 def _sleap_bundle(
@@ -340,7 +342,7 @@ def _pose_model(
                 display_name="Canonical pose",
                 source_filename="pose.pt",
                 managed_path=managed_relative,
-                sha256="d" * 64,
+                sha256=hash_model_file(managed_path)[0],
                 file_size_bytes=len(b"pose-checkpoint"),
                 framework="ultralytics",
                 task="pose",
@@ -355,6 +357,9 @@ def _pose_model(
             )
         )
         session.commit()
+    approve_generated_checkpoint(
+        client, str(project["id"]), model_id, hash_model_file(managed_path)[0]
+    )
 
     if with_schema:
         bound = client.put(

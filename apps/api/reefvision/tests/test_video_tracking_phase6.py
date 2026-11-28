@@ -18,8 +18,10 @@ from reefvision.ml.video_tracking import (
 )
 from reefvision.schemas.georeferenced_observation import BoundingBoxPixels
 from reefvision.services import video_assets as video_assets_module
+from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
+from reefvision.tests.test_model_inference import approve_generated_checkpoint
 
 
 class FakeVideoTrackingProvider:
@@ -249,7 +251,7 @@ def test_fake_detector_tracker_creates_editable_machine_track(
                 display_name="Fish detector",
                 source_filename="fish.pt",
                 managed_path=managed_relative,
-                sha256="a" * 64,
+                sha256=hash_model_file(managed_path)[0],
                 file_size_bytes=len(b"fake-detector"),
                 framework="ultralytics",
                 task="detect",
@@ -261,6 +263,9 @@ def test_fake_detector_tracker_creates_editable_machine_track(
             )
         )
         session.commit()
+    approve_generated_checkpoint(
+        client, str(project["id"]), model_id, hash_model_file(managed_path)[0]
+    )
 
     monkeypatch.setattr(
         tracking_module,
@@ -755,7 +760,7 @@ def test_task12b_tracking_job_persists_geographic_observations(
                 display_name="Task 12B detector",
                 source_filename="task12b.pt",
                 managed_path=managed_relative,
-                sha256="c" * 64,
+                sha256=hash_model_file(managed_path)[0],
                 file_size_bytes=len(b"fake-detector"),
                 framework="ultralytics",
                 task="detect",
@@ -775,6 +780,9 @@ def test_task12b_tracking_job_persists_geographic_observations(
             )
         )
         session.commit()
+    approve_generated_checkpoint(
+        client, str(project["id"]), model_id, hash_model_file(managed_path)[0]
+    )
 
     monkeypatch.setattr(
         tracking_module,
@@ -899,7 +907,7 @@ def test_task20c_tracking_without_georeferencing_readiness_creates_no_coordinate
                 display_name="Fish detector",
                 source_filename="fish.pt",
                 managed_path=managed_relative,
-                sha256="a" * 64,
+                sha256=hash_model_file(managed_path)[0],
                 file_size_bytes=len(b"fake-detector"),
                 framework="ultralytics",
                 task="detect",
@@ -911,6 +919,9 @@ def test_task20c_tracking_without_georeferencing_readiness_creates_no_coordinate
             )
         )
         session.commit()
+    approve_generated_checkpoint(
+        client, str(project["id"]), model_id, hash_model_file(managed_path)[0]
+    )
 
     monkeypatch.setattr(
         tracking_module,

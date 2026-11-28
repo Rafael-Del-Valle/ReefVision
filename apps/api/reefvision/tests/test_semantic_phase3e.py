@@ -10,8 +10,10 @@ from PIL import Image
 
 import reefvision.jobs.inference as inference_module
 from reefvision.db.models import Job, MaskAnnotationEvent, ModelRegistration, Project
+from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project, import_one
+from reefvision.tests.test_model_inference import approve_generated_checkpoint
 
 
 class FakeSemanticProvider:
@@ -61,7 +63,7 @@ def _seed_semantic_segmenter(
             display_name="Test Semantic Segmenter",
             source_filename="test-semantic.zip",
             managed_path=managed_path,
-            sha256="b" * 64,
+            sha256=hash_model_file(checkpoint)[0],
             file_size_bytes=checkpoint.stat().st_size,
             framework="nnunetv2",
             task="semantic_segment",
@@ -97,6 +99,7 @@ def _seed_semantic_segmenter(
         )
         session.add(model)
         session.commit()
+        approve_generated_checkpoint(client, project_id, model.id, model.sha256)
         session.refresh(model)
         session.expunge(model)
         return model

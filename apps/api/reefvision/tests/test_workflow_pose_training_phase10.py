@@ -63,6 +63,7 @@ from reefvision.services.workflow_pose_training import (
 from reefvision.services.workflow_runtime_adapters import (
     RUNTIME_ADAPTER_NODE_TYPES,
 )
+from reefvision.storage.checkpoint_approvals import verified_registered_checkpoint
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import (
     resolve_managed_project_path,
@@ -189,6 +190,7 @@ def _seed_model(
         )
 
         session.commit()
+        verified_registered_checkpoint(app.state.settings, model, approving_sha256=sha256)
 
     return model_id
 

@@ -15,6 +15,7 @@ from reefvision.schemas.learning_evaluation import LearningEvaluationRequest
 from reefvision.services.learning_evaluation import LearningEvaluationService
 from reefvision.services.project_learning import ProjectLearningService
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.tests.test_model_inference import approve_generated_checkpoint
 from reefvision.tests.test_project_learning import config, seed
 from reefvision.tests.test_training_workspace import _patch_training_foundation
 
@@ -83,6 +84,7 @@ def evaluation_fixture(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> d
         )
         session.add(model)
         session.commit()
+        approve_generated_checkpoint(client, model.project_id, model.id, model.sha256)
         project.update(model_id=model.id, version_id=result.dataset_version.id)
     return project
 
@@ -203,6 +205,7 @@ def test_prior_incumbent_with_group_safe_parent_lineage_can_be_compared(
         )
         session.add(candidate)
         session.commit()
+        approve_generated_checkpoint(client, candidate.project_id, candidate.id, candidate.sha256)
 
         queued = LearningEvaluationService(session, app.state.settings).create(
             project["id"],

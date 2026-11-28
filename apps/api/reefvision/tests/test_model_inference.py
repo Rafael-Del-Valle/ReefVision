@@ -29,6 +29,17 @@ VALID_ASSIST_MASK_PNG_BASE64 = (
 )
 
 
+def approve_generated_checkpoint(
+    client: TestClient, project_id: str, model_id: str, digest: str
+) -> None:
+    """Record local approval for fixture bytes inserted directly into the registry."""
+    approved = client.post(
+        f"/api/v1/projects/{project_id}/models/{model_id}/approve-checkpoint",
+        json={"sha256": digest},
+    )
+    assert approved.status_code == 200, approved.text
+
+
 class FakeDetectorRegistrationProvider:
     provider_name = "ultralytics"
     provider_version = "test"

@@ -18,8 +18,10 @@ from reefvision.db.models import (
 )
 from reefvision.ml.providers import AssistPrediction, PixelBox
 from reefvision.services.workflow_prompt_assist import create_prompt_assist_mask_proposals
+from reefvision.storage.models import hash_model_file
 from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project, import_one
+from reefvision.tests.test_model_inference import approve_generated_checkpoint
 
 
 class FakeAssistProvider:
@@ -100,14 +102,19 @@ def _seed_reviewed_boxes(
             created_by="scientist",
             revision=1,
         )
+        relative_path = f"projects/{project['id']}/models/sam_vit_h_test.pth"
+        checkpoint = resolve_managed_project_path(app.state.settings, relative_path)
+        checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        checkpoint.write_bytes(b"assist-checkpoint-fixture")
+        digest, size = hash_model_file(checkpoint)
         model = ModelRegistration(
             project_id=project["id"],
             purpose="assist",
             display_name="Prompt Assist model",
             source_filename="sam_vit_h_test.pth",
-            managed_path=f"projects/{project['id']}/models/sam_vit_h_test.pth",
-            sha256="a" * 64,
-            file_size_bytes=10,
+            managed_path=relative_path,
+            sha256=digest,
+            file_size_bytes=size,
             framework="test",
             task="assist_segmentation",
             provider_name="fake_assist",
@@ -145,6 +152,7 @@ def _seed_reviewed_boxes(
         )
         session.add(artifact)
         session.commit()
+        approve_generated_checkpoint(client, model.project_id, model.id, digest)
         return project, annotation.id, model.id, artifact.id, run_id
 
 
