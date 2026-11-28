@@ -1,0 +1,248 @@
+"""Mutation regressions for the provisional Track C centerline reference validator.
+
+Run: python -m unittest discover -s docs/research/fixtures -p 'test_*.py'
+These tests validate synthetic reference integrity, not anatomical accuracy.
+"""
+from __future__ import annotations
+
+import copy
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from validate_centerline_reference_v14 import REFERENCE, validate_reference
+
+
+class CenterlineReferenceIntegrityTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.reference = json.loads(REFERENCE.read_text(encoding="utf-8"))
+
+    def check_mutation_rejected(self, mutate) -> None:
+        data = copy.deepcopy(self.reference)
+        mutate(data)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "mutated_reference.json"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaises((AssertionError, KeyError, TypeError, ValueError)):
+                validate_reference(path)
+
+    def test_verified_calibration_claim_is_rejected(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["calibration"].update(review_state="verified")
+        )
+
+    def test_total_uncertainty_claim_is_rejected(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data.update(interpretation="Validated total anatomical uncertainty.")
+        )
+
+    def test_unmodified_reference_passes(self) -> None:
+        self.assertEqual(len(validate_reference()), 5)
+
+    def test_duplicate_edge_is_rejected(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][1]["edges"].append(["junction", "root"])
+        )
+
+    def test_shared_trunk_double_count_is_rejected(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][1]["expected"].update(
+                unique_edge_total_raw=14
+            )
+        )
+
+    def test_degree_two_sampling_vertex_is_not_a_new_branch(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][2]["expected"].update(branch_count=2)
+        )
+
+    def test_fractional_branch_count_is_rejected(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][1]["expected"].update(branch_count=3.0)
+        )
+
+    def test_boolean_branch_count_is_rejected(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][1]["expected"].update(branch_count=True)
+        )
+
+    def test_cycle_cannot_be_silently_marked_resolved(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][3]["expected"].update(unresolved=False)
+        )
+
+    def test_numeric_unresolved_status_is_rejected(self) -> None:
+        # Python considers 1 == True, but a review status must be explicitly boolean.
+        self.check_mutation_rejected(
+            lambda data: data["cases"][3]["expected"].update(unresolved=1)
+        )
+
+    def test_numeric_resolved_status_is_rejected(self) -> None:
+        # Likewise 0 == False must not pass scientific review-state validation.
+        self.check_mutation_rejected(
+            lambda data: data["cases"][0]["expected"].update(unresolved=0)
+        )
+
+    def test_occlusion_cannot_be_silently_marked_resolved(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][4]["expected"].update(unresolved=False)
+        )
+
+    def test_calibration_bound_mismatch_is_rejected(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][0]["expected"].update(
+                scale_only_bound_m=0.0
+            )
+        )
+
+    def test_zero_length_edge_is_rejected(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][0]["nodes"][1].__setitem__(slice(1, 4), [0, 0, 0])
+        )
+
+    def test_isolated_vertex_is_rejected(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][0]["nodes"].append(["orphan", 8, 8, 8])
+        )
+
+    def test_disconnected_centerline_requires_explicit_gap_review(self) -> None:
+        data = copy.deepcopy(self.reference)
+        data["cases"][4].pop("missing_edge")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "unreviewed_gap.json"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaisesRegex(AssertionError, "unreviewed disconnected graph"):
+                validate_reference(path)
+
+    def test_gap_annotation_must_bridge_disconnected_components(self) -> None:
+        def mutate(data) -> None:
+            data["cases"][4]["missing_edge"] = ["root", "visible_end"]
+
+        self.check_mutation_rejected(mutate)
+
+    def test_one_gap_cannot_explain_three_components(self) -> None:
+        data = copy.deepcopy(self.reference)
+        case = data["cases"][4]
+        case["nodes"].extend([["island_a", 10, 0, 0], ["island_b", 11, 0, 0]])
+        case["edges"].append(["island_a", "island_b"])
+        case["expected"]["unique_edge_total_raw"] = 5
+        case["expected"]["observed_length_m"] = 0.05
+        case["expected"]["scale_only_bound_m"] = 0.001
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "unexplained_island.json"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaisesRegex(AssertionError, "one missing edge cannot explain 3 components"):
+                validate_reference(path)
+
+    def test_spurious_gap_on_connected_graph_is_rejected(self) -> None:
+        def mutate(data) -> None:
+            data["cases"][2]["missing_edge"] = ["root", "tip"]
+
+        self.check_mutation_rejected(mutate)
+
+    def test_nonfinite_coordinate_is_rejected(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][0]["nodes"][0].__setitem__(1, float("nan"))
+        )
+
+
+    def test_boolean_coordinate_is_rejected(self) -> None:
+        # False is numerically zero, so this does not change the reference length.
+        self.check_mutation_rejected(
+            lambda data: data["cases"][0]["nodes"][0].__setitem__(1, False)
+        )
+
+    def test_boolean_scale_bound_is_rejected(self) -> None:
+        def mutate(data) -> None:
+            data["calibration"]["absolute_scale_bound_meters_per_unit"] = False
+            for case in data["cases"]:
+                case["expected"]["scale_only_bound_m"] = 0.0
+
+        self.check_mutation_rejected(mutate)
+
+    def test_boolean_expected_measurement_is_rejected(self) -> None:
+        def mutate(data) -> None:
+            data["calibration"]["absolute_scale_bound_meters_per_unit"] = 0.0
+            for case in data["cases"]:
+                case["expected"]["scale_only_bound_m"] = False
+
+        self.check_mutation_rejected(mutate)
+
+    def test_units_cannot_be_relabelled_without_conversion(self) -> None:
+        self.check_mutation_rejected(lambda data: data.update(units="meters"))
+
+    def test_interpretation_cannot_append_verified_claim(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data.update(
+                interpretation=data["interpretation"] + " Verified anatomical length."
+            )
+        )
+
+    def test_resolved_reference_requires_branch_count(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][0]["expected"].pop("branch_count")
+        )
+
+    def test_unresolved_reference_cannot_claim_branch_count(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["cases"][3]["expected"].update(branch_count=3)
+        )
+
+    def test_blank_node_identity_is_rejected(self) -> None:
+        def mutate(data) -> None:
+            case = data["cases"][0]
+            case["nodes"][0][0] = " "
+            case["edges"][0][0] = " "
+
+        self.check_mutation_rejected(mutate)
+
+
+    def test_equivalent_lengths_cannot_hide_swapped_case_designs(self) -> None:
+        def mutate(data) -> None:
+            straight, sampled = data["cases"][0], data["cases"][2]
+            straight["id"], sampled["id"] = sampled["id"], straight["id"]
+
+        self.check_mutation_rejected(mutate)
+
+    def test_consistent_geometry_and_expected_length_mutation_is_rejected(self) -> None:
+        def mutate(data) -> None:
+            case = data["cases"][0]
+            case["nodes"][1][1:4] = [6, 8, 0]
+            case["expected"].update(
+                unique_edge_total_raw=10,
+                observed_length_m=0.1,
+                scale_only_bound_m=0.002,
+            )
+
+        self.check_mutation_rejected(mutate)
+
+    def test_saved_workflow_replay_contract_cannot_be_omitted(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["required_workflow_checks"].remove("reload graph")
+        )
+
+    def test_artifact_hash_comparison_cannot_be_omitted(self) -> None:
+        self.check_mutation_rejected(
+            lambda data: data["required_workflow_checks"].remove(
+                "compare immutable artifact hashes"
+            )
+        )
+
+    def test_case_and_edge_order_do_not_change_reference_designs(self) -> None:
+        data = copy.deepcopy(self.reference)
+        data["cases"].reverse()
+        for case in data["cases"]:
+            case["nodes"].reverse()
+            case["edges"].reverse()
+            for edge in case["edges"]:
+                edge.reverse()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "reordered_reference.json"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            self.assertEqual(validate_reference(path), validate_reference())
+
+
+if __name__ == "__main__":
+    unittest.main()

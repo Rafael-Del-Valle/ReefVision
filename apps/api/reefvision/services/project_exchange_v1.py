@@ -8,6 +8,7 @@ objects required to reproduce 1.0 workflows.
 from __future__ import annotations
 
 import json
+import shutil
 import zipfile
 from collections.abc import Mapping, Sequence
 from hashlib import sha256
@@ -33,7 +34,11 @@ from reefvision.db.models import (
     MaskAnnotationEvent,
     Project,
     ProjectClassVisibilityDefault,
+    ProjectExchangePackage,
     SkeletonAnalysisRevision,
+    SpatialAssetMetadataRevision,
+    SpatialCalibrationReviewRecord,
+    SpatialSourceAsset,
     TrainingDraft,
     VideoAsset,
     WorkflowArtifact,
@@ -62,8 +67,17 @@ from reefvision.db.models.pose_training_dataset import (
     PoseTrainingDataset,
     PoseTrainingDatasetItem,
 )
+from reefvision.domain.errors import ValidationError
 from reefvision.schemas.project_exchange import ProjectExchangePackageResponse
 from reefvision.services.project_exchange import MANIFEST_NAME, ProjectExchangeService
+from reefvision.services.project_exchange_integrated import (
+    FORMAT_VERSION as INTEGRATED_FORMAT_VERSION,
+)
+from reefvision.services.project_exchange_integrated import (
+    has_integrated_records,
+    integrated_records,
+)
+from reefvision.services.spatial_source_assets_v14 import SpatialSourceAssetService
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
 
@@ -127,6 +141,11 @@ def _parent_first_review_queues(records: Sequence[Base]) -> list[Base]:
 
 class ProjectExchangeV1Service(ProjectExchangeService):
     """Project exchange service with executable-workflow provenance included."""
+
+    def _format_version(self, project_id: str) -> str:
+        if has_integrated_records(self.session, project_id):
+            return INTEGRATED_FORMAT_VERSION
+        return super()._format_version(project_id)
 
     def _records(self, project: Project) -> dict[str, Sequence[Base]]:
         sections = super()._records(project)
@@ -235,6 +254,27 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                     )
                     if workflow_run_ids
                     else []
+                ),
+                "spatial_source_assets": list(
+                    self.session.scalars(
+                        select(SpatialSourceAsset).where(
+                            SpatialSourceAsset.project_id == project.id
+                        )
+                    )
+                ),
+                "spatial_calibration_reviews": list(
+                    self.session.scalars(
+                        select(SpatialCalibrationReviewRecord).where(
+                            SpatialCalibrationReviewRecord.project_id == project.id
+                        )
+                    )
+                ),
+                "spatial_asset_metadata_revisions": list(
+                    self.session.scalars(
+                        select(SpatialAssetMetadataRevision).where(
+                            SpatialAssetMetadataRevision.project_id == project.id
+                        )
+                    )
                 ),
             }
         )
@@ -500,6 +540,9 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             }
         )
 
+        integrated = integrated_records(self.session, project.id)
+        if any(integrated.values()):
+            sections.update(integrated)
         return sections
 
     def _telemetry_sidecars(
@@ -611,7 +654,7 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                 if isinstance(source_path, str) and source_path.strip():
                     original_paths.add(source_path.strip())
 
-        for section_name in ("images", "videos", "models"):
+        for section_name in ("images", "videos", "models", "spatial_source_assets"):
             for record in records.get(section_name, []):
                 managed_path = getattr(record, "managed_path", None)
                 if isinstance(managed_path, str):
@@ -643,11 +686,39 @@ class ProjectExchangeV1Service(ProjectExchangeService):
     def build_export(self, package_id: str) -> ProjectExchangePackageResponse:
         """Build a complete 1.0 archive and advertise its safe round-trip policy."""
 
+        queued_package = self._package(package_id)
+        has_spatial_sources = self.session.scalar(
+            select(SpatialSourceAsset.id)
+            .where(SpatialSourceAsset.project_id == queued_package.project_id)
+            .limit(1)
+        )
+        includes_media = bool(queued_package.options_json.get("include_media", False))
+        if not includes_media and has_spatial_sources:
+            raise ValidationError(
+                "Project Exchange must include original media when the project has spatial sources"
+            )
         super().build_export(package_id)
         package = self._package(package_id)
         project = self._project(package.project_id)
         manifest = dict(package.manifest_json)
         records = self._records(project)
+        spatial_sources: list[tuple[dict[str, object], Path]] = []
+        if bool(package.options_json.get("include_media", False)):
+            source_service = SpatialSourceAssetService(self.session, self.settings)
+            for asset in cast(Sequence[SpatialSourceAsset], records["spatial_source_assets"]):
+                original = source_service.read_verified(project.id, asset.id)
+                source_path = resolve_managed_project_path(self.settings, asset.managed_path)
+                descriptor: dict[str, object] = {
+                    "kind": "spatial_source",
+                    "record_id": asset.id,
+                    "path": f"media/spatial/{asset.id}.{asset.source_format}",
+                    "sha256": asset.sha256,
+                    "size_bytes": len(original),
+                }
+                spatial_sources.append((descriptor, source_path))
+            media = list(manifest.get("media", []))
+            media.extend(descriptor for descriptor, _ in spatial_sources)
+            manifest["media"] = media
         telemetry_sidecars = self._telemetry_sidecars(
             project,
             records,
@@ -665,6 +736,22 @@ class ProjectExchangeV1Service(ProjectExchangeService):
             "existing_projects_must_not_be_overwritten": True,
             "source_ids_are_preserved_in_import_provenance": True,
         }
+        if package.format_version == INTEGRATED_FORMAT_VERSION:
+            parent = self.session.scalar(
+                select(ProjectExchangePackage)
+                .where(
+                    ProjectExchangePackage.project_id == project.id,
+                    ProjectExchangePackage.direction == "import",
+                )
+                .order_by(ProjectExchangePackage.created_at.desc())
+                .limit(1)
+            )
+            if parent is not None:
+                source = parent.options_json
+                manifest["origin"] = {
+                    "manifest_sha256": parent.manifest_sha256,
+                    "id_map": source.get("origin_id_map") or source.get("id_map", {}),
+                }
 
         archive_path = resolve_managed_project_path(self.settings, package.archive_path)
         temporary = archive_path.with_suffix(archive_path.suffix + ".manifest.part")
@@ -677,8 +764,18 @@ class ProjectExchangeV1Service(ProjectExchangeService):
                 for info in source_archive.infolist():
                     if info.filename == MANIFEST_NAME:
                         continue
-                    target_archive.writestr(info, source_archive.read(info.filename))
+                    with (
+                        source_archive.open(info) as incoming,
+                        target_archive.open(info, "w", force_zip64=True) as outgoing,
+                    ):
+                        shutil.copyfileobj(incoming, outgoing)
                 for descriptor, source_path in telemetry_sidecars:
+                    target_archive.write(
+                        source_path,
+                        arcname=str(descriptor["path"]),
+                    )
+
+                for descriptor, source_path in spatial_sources:
                     target_archive.write(
                         source_path,
                         arcname=str(descriptor["path"]),

@@ -11,6 +11,7 @@ vi.mock("../../api/client", async (importOriginal) => ({
   ...(await importOriginal<typeof api>()),
   getTrainingRuns: vi.fn(),
   cancelTrainingRun: vi.fn(),
+  retryJob: vi.fn(),
 }));
 
 const activeRun = {
@@ -232,6 +233,34 @@ describe("ProjectTrainingMonitor", () => {
         name: "Swiftia detector progress",
       }),
     ).toHaveAttribute("value", "2");
+  });
+
+  it("shows ReefPose losses and resumes a cancelled checkpoint", async () => {
+    const reefposeRun = {
+      ...activeRun,
+      id: "run-reefpose",
+      job_id: "job-reefpose",
+      provider_id: "reefpose",
+      architecture: "reefpose-s",
+      task: "pose",
+      status: "cancelled",
+      stage: "cancelled",
+      metrics: { validation_loss: 0.42, learning_rate: 0.0002 },
+      metrics_history: { train_loss: [0.8, 0.5], validation_loss: [0.7, 0.42] },
+      artifact_manifest: { resume_checkpoint_path: "runs/reefpose/last.pt" },
+    } as api.TrainingRun;
+    vi.mocked(api.getTrainingRuns).mockResolvedValue([reefposeRun]);
+    vi.mocked(api.retryJob).mockResolvedValue({
+      id: "job-reefpose",
+    } as api.JobRecord);
+
+    renderMonitor();
+    await screen.findByText(/reefpose.*reefpose-s/);
+    expect(screen.getByText("validation loss")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Resume run" }));
+    await waitFor(() =>
+      expect(api.retryJob).toHaveBeenCalledWith("job-reefpose"),
+    );
   });
 
   it("shows real box, cls and dfl losses from epoch history before other metrics", async () => {

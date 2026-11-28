@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from math import isclose, isfinite
 from uuid import UUID, uuid4
 
@@ -16,7 +16,7 @@ from reefvision.geospatial.mavic3t_camera import (
     mavic3t_calibration_bundle_sha256,
     resolve_mavic3t_frame_camera,
 )
-from reefvision.geospatial.models import TelemetryProvenance
+from reefvision.geospatial.models import TelemetryMatch, TelemetryMetadata, TelemetryProvenance
 from reefvision.geospatial.projection import SurfaceReference, georeference_pixel
 from reefvision.geospatial.synchronization import TelemetrySource
 from reefvision.schemas.georeferenced_observation import (
@@ -38,6 +38,7 @@ from reefvision.schemas.video_georeferencing import (
     VideoGeoreferenceResponse,
 )
 from reefvision.services.georeferencing_configuration import (
+    GEOREFERENCING_SYNCHRONIZATION_VERSION,
     GeoreferencingConfigurationError,
     GeoreferencingConfigurationSnapshot,
     georeferencing_configuration_hash,
@@ -124,6 +125,10 @@ class VideoGeoreferencingService:
             return source_id, sample_count
 
         srt_source_id, srt_sample_count = telemetry_identity("telemetry")
+        try:
+            srt_metadata = TelemetryMetadata.model_validate(metadata.get("telemetry", {}))
+        except ValueError as exc:
+            raise ValidationError("Stored SRT telemetry metadata is invalid") from exc
 
         (
             airdata_source_id,
@@ -172,6 +177,9 @@ class VideoGeoreferencingService:
                 project_height_offset_m=float(project.georeference_height_offset_m),
                 project_height_evidence=(project.georeference_height_evidence or ""),
                 max_telemetry_delta_s=max_delta_s,
+                srt_content_sha256=self.video_assets.telemetry_content_sha256(video.id),
+                srt_utc_offset_minutes=srt_metadata.utc_offset_minutes,
+                srt_utc_offset_evidence=srt_metadata.utc_offset_evidence,
             )
 
             return georeferencing_configuration_hash(snapshot)
@@ -274,6 +282,20 @@ class VideoGeoreferencingService:
         metadata = dict(video.metadata_json or {})
 
         field_provenance = provenance.model_dump(mode="json") if provenance is not None else None
+        try:
+            srt_metadata = TelemetryMetadata.model_validate(metadata.get("telemetry", {}))
+        except ValueError as exc:
+            raise ValidationError("Stored SRT telemetry metadata is invalid") from exc
+        if srt_metadata.utc_offset_minutes is not None:
+            field_provenance = dict(field_provenance or {})
+            field_provenance.update(
+                {
+                    "srt_wall_clock_source": "timezone_naive_dji_srt",
+                    "srt_utc_offset_minutes": float(srt_metadata.utc_offset_minutes),
+                    "srt_utc_offset_evidence": srt_metadata.utc_offset_evidence,
+                    "srt_content_sha256": srt_metadata.content_sha256,
+                }
+            )
 
         used_sources: set[str] = set()
 
@@ -338,6 +360,7 @@ class VideoGeoreferencingService:
         video_id: str,
         *,
         frame_index: int,
+        frame_time_s: float | None = None,
         bbox: BoundingBoxPixels,
         representative_pixel: (tuple[float, float] | list[float] | None) = None,
         detection_id: str | UUID | None = None,
@@ -367,6 +390,7 @@ class VideoGeoreferencingService:
         response = self.georeference_point(
             video.id,
             frame_index=frame_index,
+            frame_time_s=frame_time_s,
             pixel_x=selected_pixel.x,
             pixel_y=selected_pixel.y,
             max_delta_s=max_delta_s,
@@ -392,9 +416,9 @@ class VideoGeoreferencingService:
                 "the geo-referenced observation"
             )
 
-        telemetry_match = telemetry_source.sample_for_frame(
-            frame_index,
-            video.fps,
+        resolved_frame_time_s = response.timestamp_seconds
+        telemetry_match = telemetry_source.sample_for_time(
+            resolved_frame_time_s,
             max_delta_s=max_delta_s,
         )
 
@@ -452,6 +476,7 @@ class VideoGeoreferencingService:
             stored_altitude_m = None
             stored_altitude_datum = None
 
+        telemetry_utc, observation_utc = self._absolute_telemetry_times(video, telemetry_match)
         telemetry_reference = TelemetryReference.model_validate(
             {
                 "source_id": telemetry_source_id,
@@ -459,7 +484,7 @@ class VideoGeoreferencingService:
                 "sample_index": sample.sample_index,
                 "synchronization_method": "nearest",
                 "telemetry_time_s": sample.time_s,
-                "telemetry_utc": None,
+                "telemetry_utc": telemetry_utc,
                 "signed_time_delta_ms": (telemetry_match.delta_s * 1000.0),
                 "absolute_time_error_ms": (abs(telemetry_match.delta_s) * 1000.0),
                 "within_sync_tolerance": (abs(telemetry_match.delta_s) <= max_delta_s),
@@ -515,9 +540,15 @@ class VideoGeoreferencingService:
             bbox=bbox,
             representative_pixel=selected_pixel,
             timestamp=ObservationTimestamp(
-                frame_time_s=frame_index / video.fps,
-                utc=None,
-                source="frame_index_fps",
+                frame_time_s=resolved_frame_time_s,
+                utc=observation_utc,
+                source=(
+                    "video_pts"
+                    if frame_time_s is not None
+                    else "telemetry"
+                    if observation_utc is not None
+                    else "frame_index_fps"
+                ),
                 fps=video.fps,
             ),
             pose=ObservationPose(
@@ -599,11 +630,40 @@ class VideoGeoreferencingService:
                 version=result.method,
                 surface_model="local_horizontal_plane",
                 representative_pixel_policy_version="1.0.0",
-                synchronization_version="nearest-frame-time-v1",
+                synchronization_version=GEOREFERENCING_SYNCHRONIZATION_VERSION,
                 pose_convention_version=("absolute-gimbal-ned-to-enu-v1"),
             ),
             created_at=datetime.now(UTC),
         )
+
+    @staticmethod
+    def _absolute_telemetry_times(
+        video: VideoAsset,
+        match: TelemetryMatch,
+    ) -> tuple[datetime | None, datetime | None]:
+        raw_metadata = dict(video.metadata_json or {}).get("telemetry", {})
+        try:
+            metadata = TelemetryMetadata.model_validate(raw_metadata)
+        except ValueError as exc:
+            raise ValidationError("Stored telemetry UTC alignment metadata is invalid") from exc
+        wall_clock = match.sample.wall_clock
+        if (
+            wall_clock is None
+            or metadata.utc_offset_minutes is None
+            or metadata.utc_offset_evidence is None
+        ):
+            return None, None
+        if wall_clock.tzinfo is not None and wall_clock.utcoffset() is not None:
+            raise ValidationError("DJI SRT wall-clock timestamps must not embed an inferred zone")
+        source_zone = timezone(timedelta(minutes=metadata.utc_offset_minutes))
+        telemetry_utc = wall_clock.replace(tzinfo=source_zone).astimezone(UTC)
+        srt_delta_s = (
+            match.provenance.srt_delta_s
+            if match.provenance is not None and match.provenance.srt_delta_s is not None
+            else match.delta_s
+        )
+        observation_utc = telemetry_utc - timedelta(seconds=srt_delta_s)
+        return telemetry_utc, observation_utc
 
     @staticmethod
     def _failure(
@@ -642,6 +702,7 @@ class VideoGeoreferencingService:
         video_id: str,
         *,
         frame_index: int,
+        frame_time_s: float | None = None,
         pixel_x: float,
         pixel_y: float,
         max_delta_s: float = DEFAULT_MAX_TELEMETRY_DELTA_S,
@@ -668,6 +729,19 @@ class VideoGeoreferencingService:
                 reason="frame_out_of_range",
                 message="Video frame is outside the source frame range",
             )
+
+        if frame_time_s is not None:
+            if (
+                isinstance(frame_time_s, bool)
+                or not isinstance(frame_time_s, (int, float))
+                or not isfinite(frame_time_s)
+                or frame_time_s < 0
+                or frame_time_s > video.duration_seconds
+            ):
+                raise ValidationError(
+                    "Explicit video presentation timestamp must be finite and within duration"
+                )
+            timestamp_seconds = float(frame_time_s)
 
         if not isfinite(max_delta_s) or max_delta_s < 0:
             raise ValidationError("Maximum telemetry delta must be finite and nonnegative")
@@ -730,9 +804,8 @@ class VideoGeoreferencingService:
                 message="Video has no usable telemetry source",
             )
 
-        telemetry_match = telemetry_source.sample_for_frame(
-            frame_index,
-            video.fps,
+        telemetry_match = telemetry_source.sample_for_time(
+            timestamp_seconds,
             max_delta_s=max_delta_s,
         )
         if telemetry_match is None:

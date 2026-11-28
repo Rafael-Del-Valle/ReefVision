@@ -7,7 +7,6 @@ from typing import Literal
 from pydantic import BaseModel
 
 PoseInteroperabilityFormat = Literal[
-    "slp",
     "nwb",
     "coco",
     "dlc_csv",

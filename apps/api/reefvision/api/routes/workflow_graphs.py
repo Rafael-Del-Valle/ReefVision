@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
+from reefvision.api.routes.spatial_mesh_preview_v14 import router as mesh_preview_router
 from reefvision.schemas.workflow_execution import (
     WorkflowGraphRecordResponse,
     WorkflowGraphSaveRequest,
@@ -134,3 +135,6 @@ def resume_workflow_review(
     session: DbSession,
 ) -> WorkflowRunResponse:
     return resume_review_gate(session, node_run_id, payload)
+
+
+router.include_router(mesh_preview_router)

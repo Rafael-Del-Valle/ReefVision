@@ -18,45 +18,6 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
-def test_cab_upload_partitions_are_complete_and_bounded() -> None:
-    """Every generated cabinet must be uploaded without oversized artifact parts."""
-    workflow = (ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
-    build_job = workflow.split("  build-windows-installer:", 1)[1].split(
-        "  windows-clean-install-acceptance:", 1
-    )[0]
-    assert "$actual.Count -notin @(5, 6)" in build_job
-    assert '$expected = @(1..$actual.Count | ForEach-Object { "rv$_.cab" })' in build_job
-    assert "if ($bytes -ge 2GB)" in build_job
-    assert "MSI before artifact upload" in build_job
-    assert MODULE.check_cab_artifact_partition(workflow) == []
-
-
-def test_repository_workflow_matches_tauri_version() -> None:
-    config = json.loads(
-        (ROOT / "apps" / "web" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
-    )
-    workflow = (ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
-
-    assert MODULE.check_workflow(workflow, str(config["version"])) == []
-
-
-def test_repository_workflow_runs_provenance_verified_102_upgrade() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "build-desktop.yml").read_text(encoding="utf-8")
-    clean_job = workflow.split("  windows-clean-install-acceptance:", 1)[1]
-
-    assert 'REEFVISION_PREVIOUS_RELEASE_VERSION: "1.0.2"' in clean_job
-    assert "REEFVISION_PREVIOUS_PROVENANCE_SHA256" in clean_job
-    assert 'gh release download "v$previousVersion"' in clean_job
-    assert "$previousProvenance.version -ne $previousVersion" in clean_job
-    assert "$previousActualHash -ne $previousExpectedHash" in clean_job
-    assert "-PreviousInstallerPath $previousMsi" in clean_job
-    assert "-PreviousInstallerSupportsIsolatedAcceptance" in clean_job
-    assert clean_job.count("-SkipUpgrade") == 1
-    assert clean_job.count("-InstallerPath $msi") == 2
-    assert '"C:\\reefvision-$releaseSlug-fresh-install-acceptance"' in clean_job
-    assert '"C:\\reefvision-$releaseSlug-upgrade-acceptance"' in clean_job
-
-
 def valid_workflow() -> str:
     workflow = r"""name: Build Windows Desktop
   historical_document: docs/RELEASE_1.0.2.md
@@ -246,67 +207,96 @@ def test_missing_provenance_guard_is_rejected(required_fragment: str) -> None:
     assert any("provenance" in error.lower() for error in MODULE.check_workflow(workflow, "1.0.3"))
 
 
-CAB_WORKFLOW = (ROOT / ".github/workflows/build-desktop.yml").read_text(encoding="utf-8")
+WORKFLOW = (ROOT / ".github/workflows/build-desktop.yml").read_text(encoding="utf-8")
+VERIFIER = (ROOT / "scripts/verify-windows-installer-payload.ps1").read_text(encoding="utf-8")
+VERSION = json.loads((ROOT / "apps/web/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))[
+    "version"
+]
 
 
-def test_windows_cab_guard_accepts_five_or_six_contiguous_cabinets() -> None:
-    """CAB counts vary with payload size; the MSI Media table remains authoritative."""
-    assert "$actual.Count -notin @(5, 6)" in CAB_WORKFLOW
-    assert '$expected = @(1..$actual.Count | ForEach-Object { "rv$_.cab" })' in CAB_WORKFLOW
-    assert "MSI-declared cabinet payload" in CAB_WORKFLOW
-
-    modified = CAB_WORKFLOW.replace(
-        "$lastPartitionCabs = @($actual | Where-Object { $_ -in @('rv5.cab', 'rv6.cab') })",
-        "$lastPartitionCabs = @('rv5.cab', 'rv6.cab')",
-        1,
-    )
-    assert any(
-        "derive its final size-check partition" in error
-        for error in MODULE.check_cab_artifact_partition(modified)
-    )
+def test_split_repository_workflow_checks_packaged_version_and_published_baseline() -> None:
+    assert MODULE.check_workflow(WORKFLOW, VERSION) == []
+    assert MODULE.check_cab_artifact_partition(WORKFLOW, VERSION, VERIFIER) == []
 
 
-def test_windows_cab_artifact_manifest_preflight_matches_real_workflow() -> None:
-    assert MODULE.check_cab_artifact_partition(CAB_WORKFLOW) == []
+@pytest.mark.parametrize(
+    ("original", "replacement", "diagnostic"),
+    [
+        (f"-Version '{VERSION}'", "-Version '1.1.0'", "candidate provenance"),
+        (f"-ExpectedVersion '{VERSION}'", "-ExpectedVersion '1.1.0'", "candidate installer"),
+        ("-RequireProvenance", "-UnusedGuard", "candidate provenance"),
+        ("-SkipUpgrade", "-KeepArtifacts", "fresh install"),
+        ("-PreviousInstallerPath $previousMsi", "", "upgrade baseline"),
+        (
+            "$manifest.source_commit -ne 'e94dad6a3bece7b776bf45776bc5d06cfbc2c0dc'",
+            "$false",
+            "upgrade baseline",
+        ),
+        (
+            "fc5dfd8ce3fd8e4d1ea9d3040d139aff1304c472b42d671262ef0077c119505d",
+            "0" * 64,
+            "upgrade baseline",
+        ),
+        ("Compare-Object $expected $actual", "$false", "upgrade baseline"),
+        ("-DisposableTest", "-DisposableTest -LiveSam2Acceptance", "network model downloads"),
+        ("  windows-upgrade-acceptance:", "  removed-upgrade-job:", "upgrade job"),
+        (
+            "run: python scripts/check-windows-installer-acceptance-version.py",
+            "run: echo bypass",
+            "preflight must run",
+        ),
+    ],
+)
+def test_split_preflight_rejects_missing_release_safeguards(
+    original: str, replacement: str, diagnostic: str
+) -> None:
+    assert original in WORKFLOW
+    mutated = WORKFLOW.replace(original, replacement, 1)
+    assert any(diagnostic in error for error in MODULE.check_workflow(mutated, VERSION))
 
 
 @pytest.mark.parametrize(
     ("original", "replacement"),
     [
-        ("msi/rv4.cab", "msi/rv3.cab"),
-        ("msi/rv6.cab", "msi/rv7.cab"),
-        ("name: ReefVision-Windows-Installer-Part-3", "name: ReefVision-Windows-Installer-Part-2"),
-        ("pattern: ReefVision-Windows-Installer-Part-*", "pattern: unrelated-*"),
+        ("foreach ($entry in $payload.files)", "foreach ($entry in $payload.files[0])"),
+        ("$entry.size_bytes -ge 2GB", "$entry.size_bytes -ge 3GB"),
+        ("$partBytes + $entry.size_bytes -ge 2GB", "$partBytes + $entry.size_bytes -ge 3GB"),
+        ("$parts.Count -gt 4", "$parts.Count -gt 5"),
+        ("outputs.part4 }}", "outputs.part3 }}"),
+        ("RC-Installer-Part-4", "RC-Installer-Part-3"),
+        ("RC-Installer-Part-*", "RC-Other-Part-*"),
         ("merge-multiple: true", "merge-multiple: false"),
-        ("msi/*.msi", "msi/incorrect.msi"),
+        ("if-no-files-found: error", "if-no-files-found: warn"),
     ],
 )
-def test_windows_cab_preflight_rejects_missing_or_duplicated_artifacts(
+def test_split_cab_preflight_rejects_broken_artifact_partition(
     original: str, replacement: str
 ) -> None:
-    assert original in CAB_WORKFLOW
-    modified = CAB_WORKFLOW.replace(original, replacement, 1)
-    assert MODULE.check_cab_artifact_partition(modified)
+    assert original in WORKFLOW
+    mutated = WORKFLOW.replace(original, replacement, 1)
+    assert MODULE.check_cab_artifact_partition(mutated, VERSION, VERIFIER)
 
 
-def test_windows_cab_preflight_requires_missing_file_upload_failure() -> None:
-    assert "if-no-files-found: error" in CAB_WORKFLOW
-    modified = CAB_WORKFLOW.replace("if-no-files-found: error", "if-no-files-found: warn", 1)
+@pytest.mark.parametrize(
+    "fragment",
+    [
+        "$database.OpenView('SELECT `DiskId`, `Cabinet` FROM `Media` ORDER BY `DiskId`')",
+        "$external.Count -ne $cabs.Count",
+        "$name -notin $cabs.Name",
+        "$identity.ProductVersion -ne $ProductVersion",
+        "$manifest.source_commit -ne $SourceCommit",
+        "$manifest.msi_verified -ne $true",
+        "$manifest.source_tree_clean -ne $true",
+        "sha256 = Get-ReefVisionArtifactSha256 -Path $item.FullName",
+        "-cne ($expected | ConvertTo-Json -Depth 8 -Compress)",
+    ],
+)
+def test_split_cab_preflight_requires_shared_media_and_provenance_verification(
+    fragment: str,
+) -> None:
+    assert fragment in VERIFIER
+    mutated = VERIFIER.replace(fragment, "", 1)
     assert any(
-        "must reject missing upload files" in error
-        for error in MODULE.check_cab_artifact_partition(modified)
+        "shared installer verifier" in error
+        for error in MODULE.check_cab_artifact_partition(WORKFLOW, VERSION, mutated)
     )
-
-
-def test_windows_cab_preflight_rejects_removed_msi_media_verification() -> None:
-    for required in (
-        "$database.OpenView('SELECT `Cabinet` FROM `Media`')",
-        "$missing = @($requiredCabs | Where-Object { $_ -notin $actualCabs })",
-        "$unexpected = @($actualCabs | Where-Object { $_ -notin $requiredCabs })",
-    ):
-        assert required in CAB_WORKFLOW
-        modified = CAB_WORKFLOW.replace(required, "# removed", 1)
-        assert any(
-            "must verify MSI Media table" in error
-            for error in MODULE.check_cab_artifact_partition(modified)
-        )

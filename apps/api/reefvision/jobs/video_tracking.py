@@ -28,7 +28,9 @@ from reefvision.services.georeferenced_observations import GeoReferencedObservat
 from reefvision.services.pose_temporal_tracking import PoseTemporalTrackingService
 from reefvision.services.video_georeferencing import VideoGeoreferencingService
 from reefvision.services.video_georeferencing_readiness import VideoGeoreferencingReadinessService
+from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.results_packages import sha256_file
 
 LOGGER = logging.getLogger("reefvision.video_tracking")
 PROGRESS_WRITE_INTERVAL_SECONDS = 0.5
@@ -70,6 +72,35 @@ def _project_class_mapping(model: ModelRegistration) -> dict[str, str]:
     return {}
 
 
+def _validate_reefpose_schema_binding(
+    metadata: dict[str, object],
+    pose_landmark_schema: dict[str, object],
+) -> None:
+    """Keep checkpoint landmark order bound to its immutable registration."""
+
+    expected_labels = metadata.get("pose_landmark_labels")
+    actual_labels = pose_landmark_schema.get("expanded_labels")
+    if isinstance(expected_labels, list) and (
+        not isinstance(actual_labels, list)
+        or [str(item) for item in actual_labels] != [str(item) for item in expected_labels]
+    ):
+        raise ValidationError(
+            "ReefPose landmark schema does not match the checkpoint anatomy order"
+        )
+
+    identity_fields = (
+        ("source_pose_schema_id", "schema_id"),
+        ("source_pose_schema_revision", "schema_revision"),
+        ("source_pose_schema_content_hash", "content_hash"),
+    )
+    for source_field, schema_field in identity_fields:
+        expected = metadata.get(source_field)
+        if expected is not None and pose_landmark_schema.get(schema_field) != expected:
+            raise ValidationError(
+                "ReefPose landmark schema identity does not match the checkpoint anatomy"
+            )
+
+
 def _keyframes(
     observations: list[TrackObservation],
     pose_landmark_schema: dict[str, object] | None = None,
@@ -78,6 +109,10 @@ def _keyframes(
         pose_landmark_schema.get("expanded_labels") if pose_landmark_schema is not None else None
     )
     expanded_labels = [str(item) for item in labels_raw] if isinstance(labels_raw, list) else None
+    landmarks_raw = (
+        pose_landmark_schema.get("landmarks") if pose_landmark_schema is not None else None
+    )
+    landmarks = landmarks_raw if isinstance(landmarks_raw, list) else None
 
     keyframes: list[dict[str, object]] = []
     for item in observations:
@@ -86,6 +121,8 @@ def _keyframes(
             "bbox": list(item.bbox),
             "confidence": item.confidence,
         }
+        if item.timestamp_seconds is not None:
+            payload["timestamp_seconds"] = item.timestamp_seconds
         if item.pose_uncertainty is not None:
             payload["pose_uncertainty"] = dict(item.pose_uncertainty)
         if item.mask_polygons:
@@ -134,6 +171,14 @@ def _keyframes(
                             ),
                             "status": "visible" if visible else "absent",
                             "source": "model",
+                            **(
+                                {"landmark_id": str(landmarks[index]["id"])}
+                                if landmarks is not None
+                                and index < len(landmarks)
+                                and isinstance(landmarks[index], dict)
+                                and landmarks[index].get("id")
+                                else {}
+                            ),
                         }
                     )
                 payload["pose_observations"] = pose_observations
@@ -323,10 +368,12 @@ def process_video_tracking_job(
             class_mapping[f"project:{class_id}"] = class_id
         project_id = video.project_id
         video_id = video.id
+        video_sha256 = video.sha256
         model_id = model.id
         model_task = "hybrid" if hybrid else model.task
         secondary_model_id = secondary.id if secondary is not None else None
-        raw_pose_landmark_schema = dict(model.metadata_json or {}).get("pose_landmark_schema")
+        model_metadata = dict(model.metadata_json or {})
+        raw_pose_landmark_schema = model_metadata.get("pose_landmark_schema")
         pose_landmark_schema = (
             dict(raw_pose_landmark_schema) if isinstance(raw_pose_landmark_schema, dict) else None
         )
@@ -438,6 +485,8 @@ def process_video_tracking_job(
             )
 
     try:
+        if provider_name == "reefpose" and pose_landmark_schema is not None:
+            _validate_reefpose_schema_binding(model_metadata, pose_landmark_schema)
         report_progress(
             VideoTrackingProgress(
                 frames_processed=0,
@@ -479,9 +528,22 @@ def process_video_tracking_job(
         iou = float(request.get("iou", 0.5))
         device = str(request.get("device", "auto"))
 
+        checkpoint_path = resolve_managed_project_path(settings, model_path)
+        source_video_path = resolve_managed_project_path(settings, video_path)
+        # Record actual input hashes for scientific provenance. Existing fake/provider
+        # fixtures may lack managed files and retain their ordinary inference behavior.
+        input_hashes = (
+            {
+                "model_sha256": sha256_file(checkpoint_path),
+                "video_sha256": sha256_file(source_video_path),
+            }
+            if model_task == "pose" and checkpoint_path.is_file() and source_video_path.is_file()
+            else {}
+        )
+
         observations = provider.track(
-            resolve_managed_project_path(settings, model_path),
-            resolve_managed_project_path(settings, video_path),
+            checkpoint_path,
+            source_video_path,
             tracker=tracker_name,
             confidence=confidence,
             iou=iou,
@@ -613,6 +675,7 @@ def process_video_tracking_job(
             )
 
             created = 0
+            pose_outputs: dict[str, str] = {}
             observation_count = 0
             pose_landmark_track_count = 0
             pose_temporal_observation_count = 0
@@ -680,6 +743,8 @@ def process_video_tracking_job(
                 # We need the persistent ReefVision track UUID before
                 # constructing GeoReferencedObservation.track_id.
                 session.flush()
+                if model_task == "pose":
+                    pose_outputs[track.id] = canonical_json_sha256(track.keyframes_json)
 
                 if (
                     model_task == "pose"
@@ -734,6 +799,25 @@ def process_video_tracking_job(
                 "project_id": project_id,
                 "video_id": video_id,
                 "model_id": model_id,
+                **(
+                    {
+                        "pose_input_hashes": input_hashes,
+                        "pose_track_hashes": pose_outputs,
+                        "source_video_sha256": video_sha256,
+                        "pose_inference_protocol": {
+                            "tracker": tracker_name,
+                            "confidence": confidence,
+                            "iou": iou,
+                            "link_detections": link_detections,
+                            "device": device,
+                            "minimum_frames": minimum_frames,
+                            "provider": provider.provider_id,
+                            "version": provider.provider_version,
+                        },
+                    }
+                    if model_task == "pose"
+                    else {}
+                ),
                 "model_task": model_task,
                 "tracking_mode": tracking_mode if tracking_mode != "auto" else model.task,
                 "segmentation_model_id": secondary_model_id,

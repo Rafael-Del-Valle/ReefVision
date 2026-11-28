@@ -1,0 +1,373 @@
+"""Immutable revisions bind units, frames, transforms, calibration and review state."""
+
+from __future__ import annotations
+
+from typing import cast
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from reefvision.db.models import SpatialAssetMetadataRevision
+from reefvision.schemas.spatial_asset_metadata_revision_v14 import (
+    SpatialAssetMetadataRevisionCreate,
+)
+from reefvision.services.spatial_asset_metadata_revisions_v14 import (
+    spatial_asset_metadata_content,
+)
+from reefvision.storage.datasets import canonical_json_sha256
+from reefvision.tests.test_annotations import create_project
+
+OBJ = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
+
+
+def _import_asset(client: TestClient, project_id: str) -> dict[str, object]:
+    response = client.post(
+        f"/api/v1/projects/{project_id}/spatial/assets",
+        files={"file": ("coral.obj", OBJ, "text/plain")},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_spatial_metadata_revisions_are_append_only_and_integrity_checked(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Spatial metadata revisions")["id"])
+    asset = _import_asset(client, project_id)
+    base = f"/api/v1/projects/{project_id}/spatial/assets/{asset['id']}"
+    original_before = client.get(f"{base}/content").content
+
+    first = client.post(
+        f"{base}/metadata-revisions",
+        json={
+            "coordinate_unit": "millimeter",
+            "meters_per_unit": 0.001,
+            "coordinate_frame_id": "photogrammetry-local-A",
+            "transform_to_project_frame": [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            "calibration_evidence": "Unverified ruler reconstruction scale",
+            "review_state": "unreviewed",
+            "reviewed_by_identity": None,
+            "review_note": None,
+            "created_by_identity": "local_user",
+        },
+    )
+    assert first.status_code == 201, first.text
+    assert first.json()["revision"] == 1
+    assert first.json()["source_sha256"] == asset["sha256"]
+    assert first.json()["reviewer_authenticated"] is False
+    assert first.json()["calibration_verified"] is False
+
+    second = client.post(
+        f"{base}/metadata-revisions",
+        json={
+            "coordinate_unit": "millimeter",
+            "meters_per_unit": 0.001,
+            "coordinate_frame_id": "photogrammetry-local-A",
+            "transform_to_project_frame": [
+                [1.0, 0.0, 0.0, 0.01],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            "calibration_evidence": "Unverified ruler reconstruction scale",
+            "review_state": "attributed_unverified",
+            "reviewed_by_identity": "reviewer-2",
+            "review_note": "Transform checked against local control points",
+            "created_by_identity": "local_user",
+        },
+    )
+    assert second.status_code == 201, second.text
+    assert second.json()["revision"] == 2
+    assert second.json()["previous_revision_id"] == first.json()["id"]
+    assert second.json()["content_sha256"] != first.json()["content_sha256"]
+
+    listed = client.get(f"{base}/metadata-revisions?limit=10&offset=0")
+    assert listed.status_code == 200, listed.text
+    assert [item["revision"] for item in listed.json()] == [1, 2]
+    reopened_first = client.get(f"{base}/metadata-revisions/{first.json()['id']}")
+    assert reopened_first.status_code == 200, reopened_first.text
+    assert reopened_first.json() == first.json()
+    assert client.get(f"{base}/content").content == original_before == OBJ
+
+    app = cast(FastAPI, client.app)
+    with app.state.session_factory() as session:
+        row = session.get(SpatialAssetMetadataRevision, first.json()["id"])
+        assert row is not None
+        row.content_sha256 = "0" * 64
+        session.commit()
+    rejected = client.get(f"{base}/metadata-revisions/{first.json()['id']}")
+    assert rejected.status_code == 400, rejected.text
+    assert "integrity" in rejected.json()["detail"].lower()
+
+
+def test_spatial_metadata_revision_rejects_invalid_or_unbound_evidence(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Spatial metadata validation")["id"])
+    other_id = str(create_project(client, "Other spatial project")["id"])
+    asset = _import_asset(client, project_id)
+    base = f"/api/v1/projects/{project_id}/spatial/assets/{asset['id']}"
+    invalid_review = client.post(
+        f"{base}/metadata-revisions",
+        json={
+            "coordinate_unit": "unknown",
+            "meters_per_unit": None,
+            "coordinate_frame_id": None,
+            "transform_to_project_frame": None,
+            "calibration_evidence": None,
+            "review_state": "attributed_unverified",
+            "reviewed_by_identity": None,
+            "review_note": None,
+            "created_by_identity": "local_user",
+        },
+    )
+    assert invalid_review.status_code == 422, invalid_review.text
+
+    invalid_transform = client.post(
+        f"{base}/metadata-revisions",
+        json={
+            "coordinate_unit": "meter",
+            "meters_per_unit": 1.0,
+            "coordinate_frame_id": "frame-A",
+            "transform_to_project_frame": [[1.0, 0.0], [0.0, 1.0]],
+            "calibration_evidence": "Instrument scale pending independent review",
+            "review_state": "unreviewed",
+            "created_by_identity": "local_user",
+        },
+    )
+    assert invalid_transform.status_code == 422, invalid_transform.text
+
+    wrong_project = client.post(
+        f"/api/v1/projects/{other_id}/spatial/assets/{asset['id']}/metadata-revisions",
+        json={
+            "coordinate_unit": "meter",
+            "meters_per_unit": 1.0,
+            "coordinate_frame_id": "frame-A",
+            "transform_to_project_frame": None,
+            "calibration_evidence": "Instrument scale pending independent review",
+            "review_state": "unreviewed",
+            "created_by_identity": "local_user",
+        },
+    )
+    assert wrong_project.status_code == 404, wrong_project.text
+
+
+def test_spatial_metadata_revisions_reject_rehashed_broken_ancestry(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Spatial ancestry integrity")["id"])
+    asset = _import_asset(client, project_id)
+    asset_id = str(asset["id"])
+    base = f"/api/v1/projects/{project_id}/spatial/assets/{asset_id}"
+    payload = {"coordinate_unit": "unknown", "created_by_identity": "local_user"}
+
+    first = client.post(f"{base}/metadata-revisions", json=payload)
+    second = client.post(f"{base}/metadata-revisions", json=payload)
+    assert first.status_code == second.status_code == 201
+    assert second.json()["previous_revision_id"] == first.json()["id"]
+
+    other_project = str(create_project(client, "Unrelated spatial ancestry")["id"])
+    other_asset = _import_asset(client, other_project)
+    foreign_base = f"/api/v1/projects/{other_project}/spatial/assets/{other_asset['id']}"
+    foreign = client.post(f"{foreign_base}/metadata-revisions", json=payload)
+    assert foreign.status_code == 201
+
+    app = cast(FastAPI, client.app)
+    for forged_predecessor in (None, foreign.json()["id"]):
+        with app.state.session_factory() as session:
+            row = session.get(SpatialAssetMetadataRevision, second.json()["id"])
+            assert row is not None
+            row.previous_revision_id = forged_predecessor
+            row.content_sha256 = canonical_json_sha256(
+                spatial_asset_metadata_content(
+                    project_id=project_id,
+                    asset_id=asset_id,
+                    source_sha256=str(asset["sha256"]),
+                    revision=2,
+                    previous_revision_id=forged_predecessor,
+                    payload=SpatialAssetMetadataRevisionCreate.model_validate(payload),
+                )
+            )
+            session.commit()
+        response = client.get(f"{base}/metadata-revisions/{second.json()['id']}")
+        assert response.status_code == 400, response.text
+        assert "ancestry" in response.json()["detail"].lower()
+        rejected_append = client.post(f"{base}/metadata-revisions", json=payload)
+        assert rejected_append.status_code == 400, rejected_append.text
+        assert "ancestry" in rejected_append.json()["detail"].lower()
+        listed = client.get(f"{base}/metadata-revisions")
+        assert listed.status_code == 400, listed.text
+
+    unchanged = client.get(f"{base}/metadata-revisions/{first.json()['id']}")
+    assert unchanged.status_code == 200, unchanged.text
+    assert unchanged.json() == first.json()
+
+
+def test_spatial_metadata_append_rejects_corrupt_head_without_writing(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Spatial metadata append integrity")["id"])
+    asset = _import_asset(client, project_id)
+    base = f"/api/v1/projects/{project_id}/spatial/assets/{asset['id']}"
+    payload = {"coordinate_unit": "unknown", "created_by_identity": "local_user"}
+    first = client.post(f"{base}/metadata-revisions", json=payload)
+    assert first.status_code == 201, first.text
+    record = first.json()
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        row = session.get(SpatialAssetMetadataRevision, record["id"])
+        assert row is not None
+        row.content_sha256 = "0" * 64
+        session.commit()
+
+    rejected = client.post(f"{base}/metadata-revisions", json=payload)
+    assert rejected.status_code == 400, rejected.text
+    assert "integrity" in rejected.json()["detail"].lower()
+
+    with app.state.session_factory() as session:
+        row = session.get(SpatialAssetMetadataRevision, record["id"])
+        assert row is not None
+        row.content_sha256 = record["content_sha256"]
+        session.commit()
+
+    listed = client.get(f"{base}/metadata-revisions")
+    assert listed.status_code == 200, listed.text
+    assert listed.json() == [record]
+    assert client.get(f"{base}/content").content == OBJ
+
+    next_revision = client.post(f"{base}/metadata-revisions", json=payload)
+    assert next_revision.status_code == 201, next_revision.text
+    assert next_revision.json()["revision"] == 2
+    assert next_revision.json()["previous_revision_id"] == record["id"]
+
+
+def test_spatial_metadata_append_rejects_corrupt_ancestor(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Spatial metadata full history")["id"])
+    asset = _import_asset(client, project_id)
+    base = f"/api/v1/projects/{project_id}/spatial/assets/{asset['id']}"
+    payload = {"coordinate_unit": "unknown", "created_by_identity": "local_user"}
+    records = []
+    for _ in range(3):
+        response = client.post(f"{base}/metadata-revisions", json=payload)
+        assert response.status_code == 201, response.text
+        records.append(response.json())
+    app = cast(FastAPI, client.app)
+
+    for ancestor in records[:2]:
+        with app.state.session_factory() as session:
+            row = session.get(SpatialAssetMetadataRevision, ancestor["id"])
+            assert row is not None
+            row.content_sha256 = "0" * 64
+            session.commit()
+
+        # A valid head digest cannot hide a corrupted historical ancestor.
+        head = client.get(f"{base}/metadata-revisions/{records[-1]['id']}")
+        assert head.status_code == 400, head.text
+        assert "integrity" in head.json()["detail"].lower()
+        page = client.get(f"{base}/metadata-revisions?limit=1&offset=2")
+        assert page.status_code == 400, page.text
+        assert "integrity" in page.json()["detail"].lower()
+        # A valid earlier prefix is not invalidated by corruption in the future.
+        if ancestor["revision"] == 2:
+            first = client.get(f"{base}/metadata-revisions/{records[0]['id']}")
+            assert first.status_code == 200, first.text
+            assert first.json() == records[0]
+            first_page = client.get(f"{base}/metadata-revisions?limit=1&offset=0")
+            assert first_page.status_code == 200, first_page.text
+            assert first_page.json() == records[:1]
+        rejected = client.post(f"{base}/metadata-revisions", json=payload)
+        assert rejected.status_code == 400, rejected.text
+        assert "integrity" in rejected.json()["detail"].lower()
+
+        with app.state.session_factory() as session:
+            row = session.get(SpatialAssetMetadataRevision, ancestor["id"])
+            assert row is not None
+            row.content_sha256 = ancestor["content_sha256"]
+            session.commit()
+
+        listed = client.get(f"{base}/metadata-revisions")
+        assert listed.status_code == 200, listed.text
+        assert listed.json() == records
+        head = client.get(f"{base}/metadata-revisions/{records[-1]['id']}")
+        assert head.status_code == 200, head.text
+        assert head.json() == records[-1]
+        page = client.get(f"{base}/metadata-revisions?limit=1&offset=2")
+        assert page.status_code == 200, page.text
+        assert page.json() == records[2:]
+        assert client.get(f"{base}/content").content == OBJ
+
+    appended = client.post(f"{base}/metadata-revisions", json=payload)
+    assert appended.status_code == 201, appended.text
+    assert appended.json()["revision"] == 4
+    assert appended.json()["previous_revision_id"] == records[-1]["id"]
+
+
+def test_spatial_metadata_history_rejects_misbound_tail(
+    client: TestClient,
+) -> None:
+    project_id = str(create_project(client, "Spatial metadata owner")["id"])
+    other_id = str(create_project(client, "Other metadata owner")["id"])
+    asset = _import_asset(client, project_id)
+    asset_id = str(asset["id"])
+    base = f"/api/v1/projects/{project_id}/spatial/assets/{asset_id}"
+    other_base = f"/api/v1/projects/{other_id}/spatial/assets/{asset_id}"
+    payload = {"coordinate_unit": "unknown", "created_by_identity": "local_user"}
+    first = client.post(f"{base}/metadata-revisions", json=payload)
+    second = client.post(f"{base}/metadata-revisions", json=payload)
+    assert first.status_code == second.status_code == 201
+    record = second.json()
+    app = cast(FastAPI, client.app)
+
+    with app.state.session_factory() as session:
+        row = session.get(SpatialAssetMetadataRevision, record["id"])
+        assert row is not None
+        row.project_id = other_id
+        row.content_sha256 = canonical_json_sha256(
+            spatial_asset_metadata_content(
+                project_id=other_id,
+                asset_id=asset_id,
+                source_sha256=str(asset["sha256"]),
+                revision=2,
+                previous_revision_id=first.json()["id"],
+                payload=SpatialAssetMetadataRevisionCreate.model_validate(payload),
+            )
+        )
+        session.commit()
+
+    for suffix in ("", f"/{record['id']}", "?limit=1&offset=1"):
+        response = client.get(f"{base}/metadata-revisions{suffix}")
+        assert response.status_code == 400, response.text
+        assert "source binding" in response.json()["detail"].lower()
+    rejected = client.post(f"{base}/metadata-revisions", json=payload)
+    assert rejected.status_code == 400, rejected.text
+    assert "source binding" in rejected.json()["detail"].lower()
+    # The foreign project still has no access to the asset or its revisions.
+    assert client.get(f"{other_base}/metadata-revisions").status_code == 404
+    assert client.get(f"{other_base}/metadata-revisions/{record['id']}").status_code == 404
+    prefix = client.get(f"{base}/metadata-revisions?limit=1&offset=0")
+    assert prefix.status_code == 200, prefix.text
+    assert prefix.json() == [first.json()]
+
+    with app.state.session_factory() as session:
+        row = session.get(SpatialAssetMetadataRevision, record["id"])
+        assert row is not None
+        row.project_id = project_id
+        row.content_sha256 = record["content_sha256"]
+        session.commit()
+
+    restored = client.get(f"{base}/metadata-revisions")
+    assert restored.status_code == 200, restored.text
+    assert restored.json() == [first.json(), record]
+    assert client.get(f"{base}/content").content == OBJ
+    appended = client.post(f"{base}/metadata-revisions", json=payload)
+    assert appended.status_code == 201, appended.text
+    assert appended.json()["revision"] == 3
+    assert appended.json()["previous_revision_id"] == record["id"]

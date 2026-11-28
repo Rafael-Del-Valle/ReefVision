@@ -1,4 +1,4 @@
-﻿import { getApiBaseUrl } from "../../runtime";
+import { getApiBaseUrl } from "../../runtime";
 
 export interface GeoBoundingBoxPixels {
   x_min: number;
@@ -33,6 +33,7 @@ export interface GeoReferencedObservationSummary {
   representative_pixel: GeoRepresentativePixel;
   location: GeoLocation;
   uncertainty_available: boolean;
+  is_stale?: boolean;
   method_version: string;
   created_at: string;
 }

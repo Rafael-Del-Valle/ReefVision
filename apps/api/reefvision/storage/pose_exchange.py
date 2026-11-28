@@ -8,11 +8,11 @@ from reefvision.domain.errors import ValidationError
 
 
 def load_exchange(sio: Any, content: bytes, filename: str, fmt: str) -> Any:
+    if fmt not in {"nwb", "coco", "dlc_csv", "ultralytics_pose"}:
+        raise ValidationError(f"Unsupported pose interoperability format: {fmt}")
     with TemporaryDirectory(prefix="reefvision-pose-import-") as temp:
         source = Path(temp) / Path(filename).name
         source.write_bytes(content)
-        if fmt == "slp":
-            return sio.load_slp(str(source), open_videos=False)
         if fmt == "nwb":
             from reefvision.storage.pose_nwb import read_nwb
 
@@ -23,13 +23,11 @@ def load_exchange(sio: Any, content: bytes, filename: str, fmt: str) -> Any:
 
 
 def save_exchange(sio: Any, labels: Any, stem: str, fmt: str) -> tuple[str, str, bytes]:
+    if fmt not in {"nwb", "coco", "dlc_csv", "ultralytics_pose"}:
+        raise ValidationError(f"Unsupported pose interoperability format: {fmt}")
     with TemporaryDirectory(prefix="reefvision-pose-export-") as temp:
         root = Path(temp)
-        if fmt == "slp":
-            path = root / f"{stem}.pose.slp"
-            sio.save_slp(labels, str(path), embed="all", verbose=False)
-            media_type = "application/octet-stream"
-        elif fmt == "nwb":
+        if fmt == "nwb":
             from reefvision.storage.pose_nwb import write_nwb
 
             path = root / f"{stem}.pose.nwb"

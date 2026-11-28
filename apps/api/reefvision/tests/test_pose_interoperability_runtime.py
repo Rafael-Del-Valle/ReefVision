@@ -14,10 +14,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from reefvision.db.models import VideoAsset, VideoTrack
+from reefvision.db.models import VideoTrack
 from reefvision.ml.sleap_nn_provider import SLEAP_IO_SUPPORTED_VERSION
 from reefvision.services.pose_interoperability import PoseInteroperabilityService
-from reefvision.storage.projects import resolve_managed_project_path
 from reefvision.tests.test_annotations import create_project
 from reefvision.tests.test_pose_interoperability import _persist_pose_track
 
@@ -200,7 +199,7 @@ def _native_or_bundle_bytes(
 @pytest.mark.filterwarnings("ignore::ResourceWarning")
 @pytest.mark.parametrize(
     "exchange_format",
-    ["slp", "nwb", "coco", "dlc_csv", "ultralytics_pose"],
+    ["nwb", "coco", "dlc_csv", "ultralytics_pose"],
 )
 def test_real_sleap_io_round_trip_preserves_reefvision_pose_identity(
     tmp_path: Path,
@@ -278,7 +277,7 @@ def real_service_pose(client: TestClient, tmp_path: Path):
 @pytest.mark.filterwarnings("ignore::ResourceWarning")
 @pytest.mark.parametrize(
     "exchange_format",
-    ["slp", "nwb", "coco", "dlc_csv", "ultralytics_pose"],
+    ["nwb", "coco", "dlc_csv", "ultralytics_pose"],
 )
 def test_real_service_export_import_round_trip(
     client: TestClient,
@@ -358,40 +357,15 @@ def test_real_service_export_import_round_trip(
 @pytest.mark.integration
 @pytest.mark.filterwarnings("ignore::DeprecationWarning")
 @pytest.mark.filterwarnings("ignore::ResourceWarning")
-def test_real_slp_export_remains_self_contained_after_source_removal(
+def test_api_rejects_retired_slp_export(
     client: TestClient,
     real_service_pose,
     tmp_path: Path,
 ) -> None:
-    import sleap_io as sio
-
     _, video, _ = real_service_pose
-    with cast(FastAPI, client.app).state.session_factory() as session:
-        asset = session.get(VideoAsset, video["id"])
-        assert asset is not None
-        source = resolve_managed_project_path(
-            cast(FastAPI, client.app).state.settings,
-            asset.managed_path,
-        )
-    expected = sio.Video.from_filename(
-        str(source),
-        grayscale=False,
-        keep_open=False,
-    )[4]
-
     response = client.get(
         f"/api/v1/videos/{video['id']}/pose-interoperability/export",
         params={"format": "slp"},
     )
-    assert response.status_code == 200, response.text
-
-    output = tmp_path / "self-contained.slp"
-    output.write_bytes(response.content)
-    source.unlink()
-
-    labels = sio.load_slp(str(output))
-    np.testing.assert_array_equal(labels.videos[0][4], expected)
-    np.testing.assert_allclose(
-        labels.labeled_frames[0].instances[0].points["xy"][:2],
-        [[15, 16], [17, 18]],
-    )
+    assert response.status_code == 422, response.text
+    assert "Input should be 'nwb'" in response.text

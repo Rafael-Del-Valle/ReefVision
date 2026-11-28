@@ -1,0 +1,105 @@
+"""Strict request contract for unverified XYZ point-cloud measurements."""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    Field,
+    StrictBool,
+    StrictInt,
+    field_validator,
+    model_validator,
+)
+
+from reefvision.schemas.spatial_mesh_preview_v14 import MeshCalibrationReviewEvidence
+
+
+class PointCloudPreviewRequest(BaseModel):
+    # Project-owned immutable PLY original, resolved and SHA-256 checked at execution.
+    asset_id: str | None = Field(default=None, min_length=1, max_length=64)
+    ply_text: str | None = Field(default=None, max_length=256_000)
+    points: list[list[float]] | None = Field(default=None, min_length=1, max_length=2_000)
+    meters_per_unit: float = Field(gt=0, le=1_000_000)
+    calibration_method: Literal["ruler", "photogrammetry_control", "instrument", "other"]
+    calibration_evidence: str = Field(min_length=1, max_length=2_000)
+    relative_scale_uncertainty: float | None = Field(default=None, ge=0, le=1)
+    calibration_review: MeshCalibrationReviewEvidence | None = None
+    # Project-scoped immutable review receipt; resolved only at execution.
+    calibration_review_id: str | None = Field(default=None, min_length=1, max_length=64)
+    source_label: str | None = Field(default=None, max_length=200)
+    # Optional byte-exact replay guard for the submitted ASCII PLY text.
+    # A matching digest does not verify calibration or specimen identity.
+    expected_source_payload_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    specimen_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    observation_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    observed_at_utc: AwareDatetime | None = None
+    # A caller-supplied source-frame label, never proof of registration.
+    coordinate_frame_id: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    )
+    point_index_pairs: list[list[StrictInt]] | None = Field(default=None, max_length=32)
+    preserve_axis_extrema_in_preview: StrictBool = False
+    preserve_measured_chord_endpoints_in_preview: StrictBool = False
+    # Pin one source row per distinct coordinate level bordering every
+    # equally largest axis-projected gap; reject oversubscribed displays.
+    preserve_largest_axis_gap_boundaries_in_preview: StrictBool = False
+    # Retain the first acquisition row for every distinct XYZ locus at all
+    # maximal projected-gap boundary levels, rejecting previews over 512 points.
+    preserve_largest_axis_gap_boundary_loci_in_preview: StrictBool = False
+    # Pin one source row per unique XYZ location across the entire cloud.
+    # Fail when the requested distinct locations exceed the display budget.
+    preserve_distinct_xyz_loci_in_preview: StrictBool = False
+    # Pin each unique XYZ/RGB observation in colored ASCII PLY, or fail closed
+    # when the 512-point display cannot represent all observed color variants.
+    preserve_distinct_xyz_rgb_pairs_in_preview: StrictBool = False
+    # Retain one original acquisition per unique source RGB triplet even when
+    # more than 512 distinct XYZ/RGB pairs exist. This is raw sensor QC only.
+    preserve_distinct_rgb_triplets_in_preview: StrictBool = False
+
+    @field_validator("meters_per_unit", "relative_scale_uncertainty", mode="before")
+    @classmethod
+    def calibration_numbers_are_not_coerced(cls, value: object) -> object:
+        # Pydantic otherwise converts True to 1.0 and numeric strings to floats.
+        if value is not None and type(value) not in (int, float):
+            raise ValueError("Calibration values must be JSON numbers, not booleans or strings")
+        return value
+
+    @field_validator("points", mode="before")
+    @classmethod
+    def xyz_numbers_are_not_coerced(cls, value: object) -> object:
+        if isinstance(value, list):
+            for point in value:
+                if isinstance(point, list) and any(
+                    type(coordinate) not in (int, float) for coordinate in point
+                ):
+                    raise ValueError("XYZ coordinates must be JSON numbers")
+        return value
+
+    @model_validator(mode="after")
+    def geometry_is_unambiguous(self) -> PointCloudPreviewRequest:
+        if self.calibration_review_id is not None:
+            if self.asset_id is None:
+                raise ValueError("Saved calibration review requires a project asset ID")
+            if self.calibration_review is not None:
+                raise ValueError("Use a saved review ID or inline review, not both")
+        if not self.calibration_evidence.strip():
+            raise ValueError("Point-cloud calibration evidence cannot be blank")
+        if self.asset_id is not None:
+            if self.ply_text is not None or self.points is not None:
+                raise ValueError("Project asset ID cannot be combined with inline point geometry")
+        elif (self.ply_text is None) == (self.points is None):
+            raise ValueError("Provide exactly one of vertex-only ASCII PLY or XYZ points")
+        if (
+            self.expected_source_payload_sha256 is not None
+            and self.ply_text is None
+            and self.asset_id is None
+        ):
+            raise ValueError("Source SHA-256 binding requires ASCII PLY or a project asset")
+        return self

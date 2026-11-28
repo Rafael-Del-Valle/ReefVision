@@ -2,7 +2,7 @@ import { getApiBaseUrl } from "../../runtime";
 
 export type PoseActiveLearningSelectionUnit = "frame" | "clip";
 export type PoseTrainingExportFormat =
-  "slp" | "nwb" | "coco" | "dlc_csv" | "ultralytics_pose";
+  "nwb" | "coco" | "dlc_csv" | "ultralytics_pose";
 export type PoseActiveLearningSelectionMode =
   "uncertainty" | "uncertainty_diverse";
 

@@ -1,0 +1,885 @@
+# ReefVision 1.4 — provisional XYZ point-cloud preview
+
+The standalone `POST /api/v1/projects/{project_id}/spatial/point-cloud-preview` endpoint and executable persisted `point_cloud_preview` Workflow Builder node share one bounded measurement engine.
+
+Inputs are **either** up to 2,000 XYZ points **or** a vertex-only ASCII PLY 1.0 file with three floating-point XYZ properties and optional complete `uchar`/`uint8` red, green, blue properties in any column order. RGB values are validated as integers in [0, 255]; raw RGB for sampled display points is returned separately from geometry: measurements and geometry fingerprints use XYZ only, not color. For PLY inputs, `provenance.source_text_sha256` separately fingerprints the exact UTF-8 text received (including RGB and header); this is not a digest of the original disk file, an organism identifier, or evidence of human verification. Direct XYZ inputs report `null` for this source-text digest. Partial RGB, binary PLY, polygon meshes, normals, and other attributes remain unsupported. The original PLY is passed as text; **no persistent 3D asset is created**.
+
+Outputs include point count, duplicate-point QC, calibrated global-axis extents and diagonal, arithmetic centroid in the source coordinate frame, and scale-only uncertainties when supplied. Optional `point_index_pairs` (up to 32 pairs of distinct zero-based indices) returns calibrated straight-line chord distances and scale-only uncertainty for selected original input points. Pair indices are strictly integers and must be within bounds. Each chord also records its two calibrated endpoint coordinates in the original source frame and an ordered, scale-independent SHA-256 fingerprint of the selected raw endpoint geometry. This provides a reviewable guard against silently reassigning point-index measurements when source point ordering changes; it is not a persistent landmark or organism identity. Each chord includes `chord_distance_scale_interval_m` (lower/upper bounds) when scale uncertainty is provided; it is `null` when unknown. These are scale-only intervals, not statistical confidence intervals or biological branch lengths. These chords are not surface geodesics or biological branch lengths. An additional ordered-geometry SHA-256 fingerprint records the exact point order used for index selection; the existing order-independent geometry fingerprint is retained. The axis-aligned bounding-box **envelope** volume (m³) is the product of the three extents, **not** coral tissue volume or reconstructed occupied volume. Its scale-uncertainty interval applies the lower and upper scale factors cubically. Coplanar or collinear points have zero envelope volume, regardless of actual organism thickness. Surface area and branch length are **null**, not estimated from a point cloud. Scale evidence and exact geometry fingerprint are recorded, but calibration and coordinate registration are **not verified**. Dimensions are not anatomical branch measurements, and geometry fingerprints are not organism identities.
+
+**Signed-zero geometric identity (November 16, 2026):** IEEE-754 `-0.0` and `0.0` encode the same source-frame spatial coordinate, so direct XYZ and imported ASCII PLY preview measurements now canonicalize either representation to positive zero before calculating the ordered/unordered geometry and selected-chord fingerprints. This prevents notation-only sign changes from masquerading as a different coral scan or reference chord. For PLY, the original text SHA-256 still changes when the text changes; source-byte integrity remains distinct from geometric identity. Existing persisted review receipts bound to a legacy signed-zero geometry hash may require explicit reassessment rather than silent verification; hashes are not organism identities and all calibration/registration evidence remains provisional. Standalone, direct-service and repeated saved-workflow regressions check the distinction.
+
+**Numerical calibration integrity (November 2026):** A nonzero original XYZ coordinate that becomes floating-point zero after multiplication by the supplied meters-per-unit scale is rejected, rather than persisted as an apparently measured zero. This applies identically to direct XYZ and ASCII PLY preview requests, the standalone API, and executable saved Workflow Builder graphs. Truly zero source coordinates remain valid, and extremely small *representable* calibrated lengths are retained. The fail-closed rule protects sampled coordinates, selected chords, bounding measurements, and provenance against silent calibration underflow; it does **not** validate physical calibration, source capture accuracy, anatomical identity, or reconstruction uncertainty. Regression coverage requires failed workflows to produce no measurement artifact and successful tiny-scale workflows to reproduce the complete standalone artifact.
+
+**Envelope interval numerical resolution (November 2026):** A positive, representable three-dimensional bounding-box envelope can have a lower scale-only uncertainty bound that rounds to floating-point zero even though the lower scale factor is strictly positive. In this case, the nominal envelope remains available, but `axis_aligned_bounding_box_envelope_volume_scale_interval_m3` is `null` and `envelope_uncertainty_interval_below_numeric_resolution` is added to `qc_warnings`; zero must not be reported as a physically supported lower bound. This is distinct from `envelope_volume_below_numeric_resolution`, which indicates an unrepresentable **nominal** positive volume. A relative scale uncertainty of exactly 1.0 has a mathematically valid zero lower scale factor and retains its zero lower bound; ordinary representable intervals remain unchanged. Direct-service, XYZ/ASCII-PLY standalone API, and executable persisted Workflow Builder regression cases guard parity and provisional calibration. No coral tissue volume, physical measurement uncertainty, or biological verification is inferred.
+
+**Dimension uncertainty interval numerical resolution (November 16, 2026):** The
+optional `axis_aligned_dimension_scale_interval_m` reports lower/upper
+scale-only uncertainty bounds for each source-axis extent (or `null` when
+uncertainty is absent). If an axis has a positive calibrated nominal extent
+but a mathematically positive lower scale factor rounds its lower bound to
+zero, only that axis interval is `null`, with
+`dimension_uncertainty_interval_below_numeric_resolution` in `qc_warnings`.
+The nominal dimensions, other unaffected axis intervals and calibration
+provenance remain available. An actually zero source-axis extent retains
+`[0, 0]`; 100% relative scale uncertainty retains a genuinely zero lower
+bound. XYZ/ASCII PLY standalone, direct-service and saved executable
+Workflow Builder regression cases require identical provisional artifacts.
+These are numerical limits of scale propagation, not physical measurement
+accuracy, verified coral morphology or anatomical branch lengths.
+
+**Signed coordinate scale-interval numerical resolution (November 16, 2026):** The optional scale-only intervals for sampled preview XYZ coordinates, source-frame extrema and arithmetic centroid now use `null` for an individual coordinate interval if its nonzero signed nominal coordinate has a strictly positive lower scale factor but either nonzero uncertainty bound numerically rounds to zero. `coordinate_uncertainty_interval_below_numeric_resolution` identifies this loss in `qc_warnings`; other representable axes and actual zero coordinates retain their valid bounds. At 100% relative scale uncertainty a zero bound is mathematically valid and remains reported. Negative source-frame coordinates are handled symmetrically. The XYZ/ASCII PLY standalone API and executable saved Workflow Builder paths use the same measurement engine; synthetic direct-service regressions cover both signs and saved-workflow artifact equality. A `null` interval means **numeric precision is insufficient**, not that calibration was physically invalid or an organism coordinate was verified.
+
+**Selected-chord uncertainty interval resolution (November 2026):** When a provisional, positive calibrated source-index chord has positive lower scale factor but its lower uncertainty distance rounds to zero, the nominal `chord_distance_m` is retained, `chord_distance_scale_interval_m` is `null`, and per-chord/top-level `chord_uncertainty_interval_below_numeric_resolution` / `selected_chord_uncertainty_interval_below_numeric_resolution` warnings identify the missing numeric precision. A relative uncertainty of exactly 1.0 retains a mathematically valid zero lower bound. XYZ and ASCII PLY standalone endpoints and executable persisted Workflow Builder regressions require identical artifacts. This does not establish independently verified calibration, organism identity, or anatomical branch length.
+
+**Selected-chord absolute scale-uncertainty precision (November 16, 2026):** A positive subnormal chord can have nonzero supplied relative scale uncertainty even when the computed absolute `scale_uncertainty_m` rounds to zero. Whenever the corresponding chord scale interval is numerically unresolved, its absolute uncertainty is now `null` rather than falsely reported as zero. Exact zero relative uncertainty still returns a valid zero, and a mathematically valid zero lower scale bound (100% relative uncertainty) remains available. Direct XYZ/ASCII PLY measurements, the standalone API, and typed persisted Workflow Builder runs have synthetic regression coverage. This QC change does not verify physical calibration or convert chords into anatomical branch lengths.
+
+**Selected-chord precision guard:** A full point cloud can retain its calibrated axis extents while a pair of very close selected source points becomes numerically indistinguishable. Point-chord measurement now fails closed when distinct source endpoints produce zero calibrated separation or identical calibrated XYZ coordinates; truly coincident source XYZ still retains a zero-length chord with its explicit QC warning. This applies to standalone XYZ/ASCII-PLY requests and persisted typed Workflow Builder runs; a failed run must save no point-cloud measurement artifact. Positive controls retain representable subnormal chord lengths. This checks floating-point representability, not measurement accuracy, biological anatomy or field calibration.
+
+A regression test replays a persisted `point_cloud_preview` graph twice and requires identical artifact payloads and SHA-256 content digests, including unverified calibration and source-text provenance. This checks deterministic workflow reproducibility, not the accuracy of the source measurements.
+
+The optional `coordinate_frame_id` is a bounded caller-provided label for the source reconstruction coordinate system. It is preserved in `provenance.coordinate_frame_id` for both standalone API and executable saved Workflow Builder artifacts. Matching frame labels do **not** prove that separate observations are spatially registered or share a surveyed origin; `coordinate_registration_verified` remains `false`. Invalid, empty, or overlong frame labels are rejected by the request contract. The saved-workflow parity regression checks this label alongside other provenance fields.
+
+Both standalone API and saved-workflow artifacts remain `caller_supplied_unverified`. Do not promote to a verified scientific observation without human review and registration/calibration QC. Future work includes persistent 3D assets, large/binary clouds, registration and longitudinal comparisons.
+
+For visualization preparation, the result includes a deterministic sample of up to 512 source-indexed points with calibrated coordinates. For clouds exceeding 512 points, first and last indices remain included; selected measurement endpoints need not appear in the display sample. The full input, not the decimated sample, determines extents, centroid, fingerprints and point-pair measurements. This is display geometry only: it does not establish a validated organism surface or anatomical landmark, and the persisted Workflow Builder artifact now has a read-only interactive SVG viewer with yaw, pitch, zoom, reset, and optional sampled RGB. The standalone and saved-workflow previews must agree on sampled indices and coordinates.
+
+The preview also returns calibrated minimum and maximum XYZ coordinates in the **original source frame**. These axis-aligned bounds preserve negative coordinates and support future interactive camera framing; they are not registered geographic positions. Standalone API results and persisted Workflow Builder artifacts must agree on these bounds.
+
+The arithmetic point-sample centroid also includes `arithmetic_centroid_in_source_frame_scale_interval_m` when relative scale uncertainty is supplied, with lower and upper limits sorted correctly for negative source coordinates. It is `null` when uncertainty is unknown. This interval propagates **scale uncertainty only**; it does not account for reconstruction error, point-sampling density, or unverified coordinate registration. A sample centroid is not a validated organism center of mass. The standalone and saved-workflow results must match.
+
+**Calibrated centroid arithmetic precision (November 16, 2026):** The arithmetic point-sample centroid now sums the *calibrated* XYZ coordinates with compensated summation before dividing by the number of points. Previously, dividing a subnormal raw-coordinate sum by the point count could round a nonzero mean to zero before a large, valid meters-per-unit scale made it representable. For example, a three-point cloud with one source X coordinate of `5e-324` and an unverified scale of `1,000,000` m/unit has a representable positive calibrated mean X; the pre-calibration division reported zero. Synthetic positive/negative XYZ and ASCII PLY regressions require direct-service, standalone API, and executable persisted Workflow Builder parity (including provenance and scale intervals). This is a floating-point accuracy safeguard only: a point-sampling centroid is not a validated biological center, registration, or instrument calibration, and means below numeric resolution may remain unrepresentable.
+
+Selected point-index chords now carry per-chord `qc_warnings`. When two **distinct indices** resolve to the **same XYZ coordinate**, the preview retains the zero-distance chord and marks `coincident_endpoint_coordinates`; a distinct-index pair is not proof of a nonzero biological segment. The warning and measured zero remain in the saved Workflow Builder artifact, without promoting any measurement to verified status. The global `duplicate_points_present` warning remains independent of these pair-specific warnings.
+
+Preview RGB roadmap acceptance: retain validated raw PLY RGB only as aligned, bounded display metadata; do not use color for geometry hashes, biological condition, calibration, or automatic verification. Require standalone API versus saved typed Workflow Builder graph parity, deterministic decimation, and independent source-text provenance before enabling the viewer. Sampled RGB and read-only interactive rendering are implemented for saved Workflow Builder artifacts; scientifically calibrated biological color remains pending.
+
+`preview_point_colors_rgb_uint8` is `null` for XYZ-only and colorless PLY inputs, or a list aligned with `preview_point_indices` for complete RGB PLY. Color is raw display metadata, never a geometric fingerprint, biological condition measurement, or calibration verification. Standalone and persisted Workflow Builder outputs must match; the 513-point decimation regression checks color alignment at the display threshold.
+
+PLY RGB parsing is atomic for caller-provided color buffers: a malformed later vertex causes the import to fail without exposing partial RGB records. A valid colorless PLY leaves a preexisting color buffer unchanged. This behavior protects import integrity; RGB remains uncalibrated display metadata, never evidence of organism condition or human verification.
+
+## Persisted artifact viewer integrity (October 2026)
+
+The saved-workflow point-cloud viewer draws only bounded, validated, source-indexed display points. It deliberately fails closed when the artifact omits explicit unverified calibration provenance, claims verified calibration or coordinate registration, reports a non-provisional measurement status, or supplies non-null surface area or branch length. Such contradictions display an invalid-artifact message rather than a scientifically misleading 3D rendering. Frontend regression tests cover these cases. The viewer never writes or changes the persisted artifact, and its rotation/zoom do not affect full-input scientific measurements.
+
+A saved point-cloud viewer is **not** a standalone PLY file-picker, persistent geometry asset, organism identity, validated coral tissue measurement, or evidence that calibration has been reviewed. The standalone point-cloud API and executable typed persisted Workflow Builder node remain the two measurement paths; their scientific parity is covered by backend regression tests.
+
+## Standalone local-file preview (October 23, 2026)
+
+The Workflow Builder workspace now exposes a separate local ASCII PLY point-cloud file picker alongside the existing OBJ/PLY/GLB mesh picker. It calls the same `point-cloud-preview` endpoint used by the executable, typed and persisted `point_cloud_preview` workflow node. The file is read locally, decoded as strict UTF-8, checked for ASCII-only content and the 256,000-byte limit, and sent only to the local project's preview endpoint. The server remains authoritative for vertex-only PLY 1.0 validation, up to 2,000 points, optional complete RGB, and measurement provenance.
+
+The interactive point viewer shows only provisional sampled geometry. The file picker does not persist a 3D asset, mark calibration or registration verified, infer coral condition, or create biological branch length or surface area. The scientist must save and execute a typed workflow graph to persist the analysis and its provenance; the existing standalone-versus-saved-workflow backend parity tests remain the scientific reference.
+
+File/calibration changes invalidate in-flight preview responses; switching projects remounts an isolated preview session. Frontend API and component regression tests cover bounded local reading, invalid bytes and calibration, stale results, project isolation and failure handling. Full scientific acceptance, large/binary point clouds and persistent geometry assets remain future work.
+
+## Optional source-index chord selection (October 23, 2026)
+
+The standalone ASCII PLY preview now accepts an optional pair of zero-based **original source point indices**. Both indices must be supplied together; the frontend checks integer, distinct and 0–1999 bounds before sending a request, while the shared backend additionally checks indices against the actual imported point count. The optional `point_index_pairs` request uses the same scientific chord engine as saved executable `point_cloud_preview` workflows; the existing backend saved-workflow parity and reproducibility tests remain authoritative. The frontend tests cover the API payload, invalid index rejection and UI selection. The feature does not alter the imported point ordering or use the decimated display sample for measurements. Both the standalone and saved-artifact interactive viewers now display valid, bounded source-index chords as provisional straight-line distances, with scale-only uncertainty when available. Contradictory chord indices, nonfinite/negative distances, or invalid uncertainty cause the saved viewer to fail closed rather than present a misleading measurement.
+
+These are provisional **straight-line endpoint chords**, not coral branch lengths, geodesics, biological landmarks or verified scale measurements. A scientist must save and execute a typed workflow graph to retain the geometry-derived measurement artifact, provenance and human-review trail. The file picker does not automatically save its temporary preview as a workflow or persistent asset.
+
+## Chord display integrity check (October 23, 2026)
+
+When both original source-point indices for a selected chord are present in the bounded interactive display sample, the frontend independently recomputes their straight-line distance from the sampled, calibrated XYZ coordinates. A nonfinite or contradictory reported chord distance causes the viewer to reject the artifact rather than display inconsistent scientific metadata. The comparison uses a small relative tolerance plus an absolute-coordinate-magnitude guard for cancellation at very large source-frame offsets; this avoids falsely rejecting full-resolution chords lost to rounding in the display sample. When one or both endpoints were omitted by deterministic decimation, the viewer **does not** reconstruct them or pretend to validate their distance: the full-input backend remains authoritative, and the saved workflow preserves the original indices and ordered-geometry fingerprint. This is a consistency check on provisional display metadata, **not** human verification, calibration acceptance, an anatomical branch-length estimate, or an independent validation of the full point cloud.
+
+## Source-axis extrema coverage QC (October 23, 2026)
+
+The deterministic 512-point interactive sample can omit an isolated outlier even
+when the full 513–2,000-point input is valid. The shared standalone/API and saved
+`point_cloud_preview` Workflow Builder execution now compare raw XYZ extrema
+against the sampled XYZ extrema before scale multiplication. They persist
+`preview_omitted_axis_extrema` (any of `x_min`, `x_max`, `y_min`,
+`y_max`, `z_min`, `z_max`), `preview_axis_extrema_covered`, and the
+`preview_omits_axis_extrema` QC warning when applicable. The interactive
+saved-artifact viewer displays the omission explicitly; malformed or
+contradictory new coverage metadata fails closed. Older saved artifacts without
+this field remain readable but show coverage as **unassessed**.
+
+This checks whether the displayed sample reaches each *axis-aligned* source
+extremum. It does **not** establish full convex-hull coverage, adequate point
+density, a valid organism outline, anatomical branch length, tissue surface
+area, verified calibration, or source-frame registration. Full-cloud bounds,
+selected source-index chords, geometry fingerprints, uncertainty intervals,
+and scientific provenance are unchanged by display decimation. Tests include a
+513-point scan with a hidden extreme at original index 511, standalone versus
+saved executable workflow parity, and malformed frontend metadata.
+
+The saved viewer now independently compares displayed point extrema with the persisted full-cloud bounding box. If a missing axis extreme remains numerically visible after calibration scaling, its omission must appear in `preview_omitted_axis_extrema`; otherwise the artifact fails closed. Conversely, a reported omission is treated conservatively even if large source-frame offsets make the scaled sample and bound numerically equal: rounding can erase evidence of a genuinely missing raw extreme. This validation does not upgrade the preview to a verified measurement. Regression tests cover falsely claimed complete coverage, wrong-axis omission flags, and conservative warnings.
+
+
+## Provisional specimen/timepoint provenance
+
+Point-cloud previews accept optional `specimen_id`, `observation_id`, and
+timezone-aware `observed_at_utc` fields. The standalone endpoint and executable,
+persisted `point_cloud_preview` Workflow Builder node normalize the observation
+timestamp to UTC and save these fields in measurement provenance. Invalid IDs and
+timestamps without a timezone are rejected; omitted fields remain null.
+
+Both `specimen_identity_verified` and `observation_metadata_verified` are
+always false. These caller-provided labels do not establish a reviewed organism
+registry, point-cloud registration, longitudinal re-identification, growth,
+survival, or a confirmed observation. A geometry hash may match even when
+specimen labels differ; neither hash nor label is evidence of biological identity.
+Scale-only uncertainties do not account for scan reconstruction or registration
+errors. No user-trained model weights or cloud services are involved.
+
+## Opt-in extrema-preserving display sample (October 24, 2026)
+
+Both the standalone point-cloud preview request and the executable, persisted
+`point_cloud_preview` Workflow Builder node now accept the strict boolean
+`preserve_axis_extrema_in_preview` (default `false` for backward compatibility).
+When enabled for more than 512 points, the deterministic source-index sample
+retains the first source occurrence of each minimum and maximum XYZ coordinate,
+plus its original first and last point, within the same 512-point budget. Other
+uniformly sampled indices are displaced, never reindexed; the full input is
+still used for bounds, chords, hashes and calibration measurements.
+
+The result records `preview_extrema_source_indices` and
+`preview_sampling_strategy` alongside the existing
+`preview_axis_extrema_covered` QC fields. The opt-in sampling policy can make
+axis extrema visible in the interactive sample, but does not prove that a
+single isolated outlier is a biological feature or that a reconstruction is
+complete. No source points are deleted, no coordinates are registered, and
+calibration and specimen identity remain explicitly unverified. Scientists
+should compare the original scan with the preview before accepting biological
+interpretations. Regression coverage includes a 513-point hidden-extreme
+example, strict request validation and saved-workflow parity.
+
+
+## Optional measured-chord endpoint preservation (October 27, 2026)
+
+For scans larger than the 512-point display budget, the default deterministic
+index sample can omit original point indices used by an explicitly selected
+straight-line chord. The local ASCII PLY file picker now exposes an explicit checkbox; the
+same option is available as the request/workflow parameter
+`preserve_measured_chord_endpoints_in_preview: true`, which pins both original
+source indices of every validated `point_index_pairs` selection into the
+bounded preview (up to 32 pairs, at most 64 endpoints). The existing
+`preserve_axis_extrema_in_preview` flag can be combined with this option.
+The sampler reserves first/last source indices and any requested protected
+indices, then fills remaining slots evenly over the **entire** unprotected
+source index range rather than favoring early file rows.
+
+The result records `preview_omitted_selected_chord_endpoint_indices` and
+`preview_selected_chord_endpoints_covered`, so a default/legacy sampling
+decision remains auditable. The sampling strategy identifies chord-only,
+extrema-only, combined, or default uniform-index selection. The opt-in
+changes **display indices only**: calibrated full-input extents, source
+geometry hashes, original-index chord distances, and scale-only uncertainty
+remain unchanged. Standalone API and saved executable typed Workflow Builder
+graphs use the same service; scientific regression tests cover both, including
+512-point limits and distributed source-index coverage.
+
+An endpoint shown in the interactive viewer is **not** a reviewed anatomical
+landmark. Chords remain unverified Euclidean distances, never inferred coral
+branch lengths or geodesics. The flag does not create persistent point-cloud
+assets, establish calibration or registration, or promote model output to
+verified biological evidence. Existing requests retain their default behavior.
+
+The interactive point-cloud viewer now reports whether selected source-index
+chord endpoints are actually present in the bounded display sample. It
+cross-checks the reported omitted indices against the saved chord selections
+and sampled source indices; contradictory, duplicated, missing-pair, or
+incorrectly marked coverage metadata fails closed instead of hiding a display
+omission. Older persisted previews without these fields remain readable, with
+endpoint display coverage explicitly marked **unassessed**. This is a visual
+completeness check only: even when every endpoint is displayed, neither the
+chord nor its calibration becomes human-verified or an anatomical branch length.
+
+## Omitted selected-chord endpoint QC (October 27, 2026)
+
+When the 512-point display sample omits either original source index of a selected
+point-pair chord, the measurement result now adds the machine-readable
+`preview_omits_selected_chord_endpoints` warning to `qc_warnings`, alongside
+`preview_omitted_selected_chord_endpoint_indices` and
+`preview_selected_chord_endpoints_covered=false`. Opting into endpoint pinning
+keeps selected indices visible within the same bounded preview budget and clears
+this warning when all are covered. A hidden endpoint does **not** invalidate the
+full-input chord calculation, but its distance cannot be independently checked
+from the decimated display alone. Direct-service tests and standalone-versus-
+saved typed Workflow Builder regressions cover both omission and pinning. These
+warnings do not verify calibration, registration, coral identity or biological
+branch length; they preserve an explicit human-review limitation.
+
+
+## Repeated source-index chord QC (October 27, 2026)
+
+The shared point-cloud measurement engine now flags a selected point-index
+chord when its **unordered pair of original source indices** has already been
+measured in the same request. A reversed pair (such as `[1, 0]` following
+`[0, 1]`) and an exact repeat both receive the per-chord
+`repeated_point_pair` warning. The top-level
+`repeated_selected_point_pairs` QC warning signals that the selected
+measurement set contains repeated evidence. The first occurrence is retained
+without this warning, and the input order, endpoint geometry fingerprints,
+measured distances, and uncertainty intervals remain unchanged.
+
+This is an audit warning, not automatic deduplication: repeated chords must
+not be counted as independent branch segments or biological replicates.
+Distinct source indices that happen to share identical XYZ coordinates remain
+covered by the existing `coincident_endpoint_coordinates` warning, not by
+index-pair deduplication. Both the standalone API and executable persisted
+`point_cloud_preview` Workflow Builder node use the same rule, with saved
+artifact parity regression coverage. No calibration, organism identity,
+anatomical branch length, or human verification is inferred.
+
+
+## Repeated XYZ chord geometry QC (October 27, 2026)
+
+Point-cloud scans may contain multiple **different original point indices** with
+identical XYZ coordinates. Repeated source-index pair checks alone cannot
+recognize that two selected chords trace the same unordered geometric endpoints.
+The shared scientific measurement service now compares exact unordered endpoint
+coordinate pairs within each request. A subsequent chord with the same geometry
+but a different unordered source-index pair receives the per-chord
+`repeated_endpoint_geometry` warning, and the result receives
+`repeated_selected_endpoint_geometry`. Exact or reversed repeats of the
+**same source-index pair** continue to receive `repeated_point_pair` instead;
+the warnings distinguish source-index reuse from duplicated reconstruction
+geometry. The first geometric occurrence is retained unflagged.
+
+This check is deliberately exact (not tolerance-based): nearby points may
+represent different anatomy, and no spatial clustering or branch inference is
+attempted. Distances, scale-only uncertainty, original point indices,
+ordered-endpoint geometry fingerprints, full-cloud geometry fingerprints, and
+provenance remain unchanged. The standalone API and executable, persisted typed
+Workflow Builder graph share the implementation and regression coverage.
+Neither warning verifies coral identity, calibration, surface area, anatomical
+branch length, or independent biological replicates; human review is required.
+
+## Selected-chord QC summary (October 27, 2026)
+
+The provisional point-cloud result now includes a
+`selected_point_chord_qc_summary` with the number of requested chords,
+distinct unordered source-index pairs, distinct unordered exact XYZ endpoint
+geometries, and zero-distance chords whose two endpoint coordinates coincide.
+The top-level `coincident_selected_chord_endpoints` warning identifies any
+zero-distance selected chord; individual chord records continue to carry
+`coincident_endpoint_coordinates`. Empty selections report zero counts.
+
+These counts describe **user-selected geometric chords**, not coral branches,
+independent biological replicates, verified landmarks, or observations of
+growth. Duplicate source indices and duplicated reconstructed XYZ vertices
+remain distinguishable. The summary does not alter source geometry, chord
+distances, uncertainty intervals, calibration provenance, or provisional
+verification. The standalone endpoint and saved executable typed Workflow
+Builder graph use the same calculation, with regression checks for identical
+saved-artifact summaries and provenance.
+
+## Sampled preview-point scale uncertainty (October 27, 2026)
+
+The point-cloud preview now returns `preview_point_scale_intervals_m` for each
+displayed XYZ point, aligned exactly with `preview_point_indices` and
+`preview_points_in_source_frame_m`. Each point contains three signed
+`[minimum, maximum]` coordinate intervals in meters. The same positive
+scale-factor bounds are applied to the corresponding source-frame coordinate;
+negative values are sorted so the lower limit remains first. Zero coordinates
+retain zero-width intervals. An explicitly supplied uncertainty of zero yields
+`[coordinate, coordinate]`, whereas unknown uncertainty yields `null` for
+the entire field.
+
+These intervals propagate **only caller-supplied relative scale uncertainty**.
+They are not per-point reconstruction error bars, spatial-registration
+uncertainties, biological confidence intervals, or validated positions in a
+geographic coordinate system. Display decimation does not affect the underlying
+full-resolution point measurements. Calibration remains unverified and the
+measurement status remains `caller_supplied_unverified`.
+
+The standalone endpoint and executable persisted `point_cloud_preview`
+Workflow Builder node use the same engine. Regression coverage checks signed,
+zero and absent uncertainty, plus standalone/saved-graph parity for both direct
+XYZ points and imported ASCII PLY. The sampled uncertainty field is optional
+display/scientific-review metadata, not a replacement for persistent 3D assets,
+anatomical landmarks, or calibrated biological surface/branch measurements.
+
+## Interactive sampled-point inspection (October 27, 2026)
+
+The read-only point-cloud viewer now allows mouse or keyboard selection of
+displayed source-index points. The inspection readout reports calibrated XYZ
+coordinates in the **unregistered source frame** and, when supplied, signed
+scale-only coordinate intervals. The viewer preserves original source indices
+despite depth sorting and does not modify saved workflow artifacts or scientific
+measurements. When the selected point is not present in a new display sample,
+no stale coordinates are shown.
+
+The viewer validates the optional per-point intervals against the associated
+calibrated coordinates and the provenance relative scale uncertainty. Invalid,
+misaligned, nonfinite, inverted or contradictory intervals fail closed instead
+of appearing as verified positions. Legacy saved artifacts without interval
+metadata remain viewable and explicitly report unknown scale uncertainty.
+The same viewer is used for standalone and persisted Workflow Builder preview
+results; frontend regressions cover mouse/keyboard inspection, source-index
+alignment, immutable artifacts and malformed saved evidence.
+
+This is **not** spatial registration, calibration verification, anatomical
+landmark identification, coral condition assessment, or persistent 3D storage.
+A source-index selection is a display inspection, not a scientist-verified
+biological annotation.
+
+## Mesh viewer provenance guard (October 27, 2026)
+
+The sampled-triangle viewer rejects saved display payloads that explicitly
+claim verified calibration, coordinate registration, specimen identity,
+observation metadata, or a measurement status other than
+`caller_supplied_unverified`. Contradictory or malformed supplied calibration
+provenance also fails closed. This prevents a preview-only surface from
+silently presenting incompatible scientific review claims. Existing legacy
+display artifacts that omit optional review metadata remain viewable and are
+still labeled provisional.
+
+This is a frontend scientific-integrity check, not a verification workflow:
+source-file fingerprints, human review, calibration and registration evidence
+must still be assessed independently. It does not change standalone mesh
+measurements or saved Workflow Builder execution and does not create
+persistent project-scoped 3D assets. Regression tests cover invalid claims,
+the fail-closed display, and legacy compatibility.
+
+
+## Bounded RGB decimal tokens (November 1, 2026)
+
+ASCII PLY unsigned-byte RGB channels are validated as at most three ASCII
+decimal digits representing 0–255 before integer conversion. A long string of
+leading zeroes must not trigger Python's integer-string conversion limit or
+bypass a consistent scientific import error. Ordinary bounded representations,
+including `000`, remain supported. Invalid source rows fail atomically:
+a supplied color output buffer is not partially modified.
+
+The standalone point-cloud endpoint and executable, persisted, typed
+`point_cloud_preview` Workflow Builder node use the same parser. Regression
+tests reject both four-digit and oversized zero-padded channels and require
+failed graph execution to publish no point-cloud measurement artifact. Valid
+colors are display metadata only; they do not imply coral condition,
+independent calibration, verified biological identity, or surface area.
+
+## Strict ASCII PLY input boundary (November 2026)
+
+The backend now rejects **any non-ASCII code point** in imported PLY 1.0
+point-cloud text, including Unicode digits that Python might otherwise parse
+as floating-point coordinates, Unicode whitespace, and non-ASCII comments.
+The local picker already requires ASCII, but direct API and saved Workflow
+Builder submissions must enforce the same rule. An invalid PLY fails without
+a provisional measurement artifact; valid ASCII comments and numeric values
+remain supported. This also avoids silently treating Unicode-normalized
+inputs as interchangeable with the exact submitted source bytes.
+
+The prior RGB-token bound remains in force: each color channel must contain
+one to three ASCII decimal digits representing an unsigned byte from 0 to 255.
+These are import-integrity checks, **not** evidence of verified calibration,
+registered coordinates, biological condition, specimen identity, or accuracy.
+
+## ASCII PLY control-character integrity (November 2026)
+
+Imported ASCII PLY 1.0 point clouds now reject embedded ASCII control bytes
+other than tab, carriage return and line feed, including NUL, vertical tab,
+form feed, escape and DEL. Python's text splitting routines otherwise treat
+some control bytes as whitespace or line separators, potentially interpreting
+malformed source rows differently from the submitted file. Ordinary CRLF line
+endings and tab-delimited vertex coordinates remain accepted.
+
+The direct parser, standalone project point-cloud endpoint and executable,
+persisted, typed Workflow Builder node share this fail-closed validation.
+Regression tests require invalid imports to fail without publishing a
+point-cloud measurement artifact and preserve valid ASCII whitespace support.
+This is source-format integrity only: it does not authenticate calibration,
+coordinate registration, coral identity, anatomical branch length or
+biological condition. Source-file review and scientific verification remain
+necessary.
+
+## PLY error-contract and saved-workflow parity (November 2, 2026)
+
+A syntactically valid point-cloud request whose submitted ASCII PLY text fails
+the bounded scientific parser returns **HTTP 400** with a specific validation
+detail (for example, invalid vertex count, numeric token, precision underflow,
+or unsupported control byte). **HTTP 422** instead describes request-schema
+validation failures before the PLY parser runs. These statuses must not be
+interchanged in regression tests: parser rejection is an intentional,
+fail-closed outcome, not a failed schema validator.
+
+The same malformed source must fail a persisted, executable, typed
+`point_cloud_preview` Workflow Builder run without publishing a
+`point_cloud_measurement_preview` artifact. Regression tests now assert the
+standalone status and exact parser reason before exercising saved-graph
+execution. Atomic RGB rejection tests also track the strict numeric grammar:
+nonfinite `nan` is rejected as an invalid coordinate token before numeric
+conversion, and existing color buffers remain unchanged. Successful source
+parsing remains provisional and does not verify scale, reconstruction,
+registration, coral identity, biological condition, or anatomical branch length.
+
+## Nonplanar point-cloud envelope underflow QC (November 16, 2026)
+
+The optional axis-aligned bounding-box **envelope volume** is a geometric
+product of three measured extents, not coral tissue volume. With extremely
+small caller-supplied scales, all three lengths can remain finite and nonzero
+while their cubic product underflows the available floating-point precision.
+Previously, that case incorrectly reported a zero envelope volume, which is
+indistinguishable from a truly planar cloud.
+
+For a nondegenerate cloud in that condition the result now retains its three
+measured dimensions but reports
+`axis_aligned_bounding_box_envelope_volume_m3: null`, a null scale-only
+envelope-volume interval, and the explicit QC warning
+`envelope_volume_below_numeric_resolution`. A truly planar or collinear
+cloud still reports a genuine zero volume (and, when an uncertainty is
+provided, the interval [0, 0]). No uncertainty interval is fabricated for an
+unrepresentable nominal volume.
+
+XYZ and ASCII PLY synthetic regressions check direct service behavior,
+standalone project API responses, and **full checksummed artifact equality**
+through an executed, typed, persisted Workflow Builder graph. This is a
+numerical-integrity boundary, not validated biological volume, scientific
+scale calibration, registration, tissue completeness or coral reidentification.
+
+**Representable mixed-scale envelopes (November 16, 2026):** Axis-aligned
+envelope multiplication now evaluates the larger axis extents first. Extremely
+small X/Y extents multiplied before a large Z extent could previously round an
+intermediate product to zero even though the full three-axis product is a
+positive, representable subnormal number. The revised multiplication retains
+such provisional positive envelopes and their representable scale-only bounds.
+It still returns `null` plus `envelope_volume_below_numeric_resolution` when
+the final nominal envelope itself cannot be represented. XYZ/ASCII PLY standalone
+requests and executable saved Workflow Builder graphs are tested for exact
+artifact/provenance parity using a synthetic mixed-scale example. This numerical
+safeguard does **not** validate tissue volume, coordinate registration, physical
+calibration, or coral identity.
+
+## Quantized positive envelope-uncertainty bounds (November 16, 2026)
+
+A positive but subnormal axis-aligned envelope may be representable even when
+distinct mathematical scale-uncertainty bounds both round to the **same**
+floating-point number. Reporting that degenerate interval would falsely imply
+zero uncertainty. When relative scale uncertainty is strictly positive and
+the computed bounds are identical, the preview now retains the nominal
+envelope, sets its scale-only interval to `null`, and emits
+`envelope_uncertainty_interval_below_numeric_resolution`. The same warning
+continues to cover a positive lower bound that underflows to zero. An exactly
+zero caller-supplied scale uncertainty retains a legitimate [volume, volume]
+interval; a truly planar cloud remains [0, 0].
+
+Parameterized XYZ/ASCII PLY regressions exercise the direct scientific service,
+standalone endpoint, typed graph planning and fully executed persisted Workflow
+Builder, including complete saved-artifact equality and provisional provenance.
+The synthetic subnormal examples test numeric integrity only, **not** verified
+calibration, validated coral tissue volume or organism condition.
+ 
+## Dimension absolute-uncertainty parity at numeric limits (November 16, 2026)
+
+The axis-aligned dimension's absolute scale uncertainty now follows its
+`axis_aligned_dimension_scale_interval_m` availability. If a **positive**
+dimension and supplied positive relative uncertainty have an interval below
+binary64 resolution, the corresponding entry in
+`axis_aligned_dimension_scale_uncertainty_m` is `null`, not a misleading
+`0.0`. Other axes remain independently measurable. An exactly zero
+dimension or an explicitly zero relative uncertainty retains a genuine
+zero absolute scale uncertainty. The existing
+`dimension_uncertainty_interval_below_numeric_resolution` warning explains
+an unresolved interval; no new certainty or biological inference is implied.
+
+Parameterized XYZ and ASCII PLY direct-service, standalone endpoint and
+executable saved-workflow regressions cover underresolution, exact-zero and
+100%-relative-uncertainty inputs, with whole-artifact parity and unverified
+calibration provenance. This scale-only numerical safeguard does not provide
+reconstruction, photogrammetry, coral-anatomy or statistical confidence limits.
+
+## Bounding-diagonal scale uncertainty at numeric limits (November 16, 2026)
+
+The calibrated axis-aligned bounding-box diagonal now exposes
+`axis_aligned_bounding_box_diagonal_scale_interval_m` alongside the existing
+nominal diagonal. It propagates the caller's **relative scale uncertainty only**,
+not photogrammetric/reconstruction accuracy or a statistical confidence interval.
+When the diagonal is positive but its lower/upper scale bounds collapse to a
+false zero-width interval (or lose a mathematically positive bound through
+underflow), the interval and existing absolute diagonal uncertainty become
+`null`, and `diagonal_uncertainty_interval_below_numeric_resolution` appears
+in `qc_warnings`. A genuinely zero diagonal and exactly zero relative scale
+uncertainty retain valid exact bounds; 100% uncertainty preserves a genuine zero
+lower bound. Unknown scale uncertainty leaves the interval null without the
+numeric-resolution warning.
+
+Signed XYZ and vertex-only ASCII PLY inputs share the same engine. Synthetic
+regressions compare direct measurements, standalone API output, and complete
+provisional persisted artifacts from executable typed Workflow Builder graphs.
+An axis-aligned diagonal is **not** measured coral branch length, and no
+calibration, coordinate-frame registration, specimen identity, or biological
+condition is independently verified.
+
+**Exact source affine dimension (November 16, 2026):** `source_affine_dimension`
+is 0 for coincident points, 1 for collinear samples, 2 for planar samples,
+and 3 for affinely three-dimensional imported source-coordinate samples.
+Exact rational predicates on the finite binary-float coordinates avoid
+guessing a planarity threshold or silently losing subnormal geometry.
+Lower-dimensional clouds emit `source_point_cloud_affine_dimension_below_3`.
+A tilted straight line or plane can have positive global-axis XYZ spans and
+a positive 3D *bounding-envelope* volume without occupying three-dimensional
+volume. A rank of 3 does **not** validate watertightness, inferred coral
+tissue volume, reconstruction accuracy, physical calibration, biological
+anatomy or surface area. Capture noise can turn an otherwise planar specimen
+into exact rank 3; interpret this as source-coordinate QC only. Synthetic
+XYZ and ASCII PLY direct, standalone API and repeated executable persisted
+Workflow Builder tests verify identical rank and QC provenance.
+
+
+## Positive bounding envelope of a lower-dimensional point set (November 16, 2026)
+
+The source-coordinate affine-rank diagnostic now also emits
+`positive_bounding_envelope_for_lower_dimensional_source` **only** when a
+rank-0/1/2 point set nevertheless has a strictly positive, representable
+axis-aligned 3D bounding-envelope volume. A tilted line or plane may span
+nonzero X/Y/Z extents, so the bounding envelope remains a mathematically
+valid box measurement, but that number is **not** occupied volume, coral
+biomass, tissue volume, or a reconstructed surface. True zero envelopes and
+rank-3 scans do not receive this specific warning. The existing general
+`source_point_cloud_affine_dimension_below_3` warning remains independent.
+
+The XYZ and ASCII PLY synthetic affine-rank cases assert the new diagnostic
+across the direct measurement service, standalone API, typed executable
+Workflow Builder plan, and twice-executed persisted workflow artifacts.
+Provenance remains explicitly caller-supplied and unverified; discrete exact
+rank reflects imported floating-point coordinates and can be sensitive to
+capture noise, so no biological or registration inference is authorized.
+
+
+## Duplicate-insensitive exact XYZ-locus fingerprint (November 17, 2026)
+
+The point-cloud preview now returns `provenance.unique_coordinate_geometry_sha256`, a
+SHA-256 digest of **sorted distinct, normalized source-frame XYZ coordinate triples**.
+It is independent of scan-row order, repeated row multiplicities and ASCII PLY RGB
+presentation. The existing `geometry_sha256` still incorporates multiplicities,
+`ordered_geometry_sha256` retains input ordering, and `source_payload_sha256`
+retains imported PLY source-text bytes. Calibration-review receipts intentionally
+continue to bind the **full** `geometry_sha256`, not this new diagnostic.
+
+An equal unique-locus digest does **not** establish specimen reidentification,
+coordinate registration, unchanged biological condition, scan completeness or physical
+calibration: coordinate rounding, noise, coordinate-frame changes and sampling density
+can affect it. Synthetic XYZ and ASCII PLY regressions cover changing multiplicity,
+row permutation and exact standalone/API/persisted Workflow Builder artifact parity.
+Physical coral/photogrammetry reference validation and independent reviewer sign-off
+remain outstanding.
+
+## Duplicate scan-row fraction (November 17, 2026)
+
+The unverified XYZ/ASCII PLY preview reports `duplicate_point_row_fraction` as
+`duplicate_point_row_count / point_count`, alongside the existing raw and unique
+coordinate counts. This ratio is zero for entirely distinct coordinate rows and
+increases when the source contains identical XYZ rows. It supports comparing
+within-scan coordinate redundancy; a repeated row is **not** a separate coral
+observation or an independent biological replicate.
+
+Changing duplicate multiplicities changes this acquisition-QC ratio and the
+full geometry fingerprint while leaving the distinct-locus fingerprint
+unchanged. The measurement retains its provisional calibration and specimen
+identity, and the ratio **does not estimate** true reconstruction completeness,
+tissue coverage, accuracy, surface area or biological health. Synthetic XYZ
+and ASCII PLY regressions cover direct service, standalone API, typed persisted
+Workflow Builder execution and repeat saved-artifact parity.
+
+## Unique-coordinate display coverage QC (November 17, 2026)
+
+The bounded point-cloud preview now returns
+`preview_unique_coordinate_count` (distinct normalized XYZ coordinate triples
+actually visible among `preview_point_indices`) and
+`preview_unique_coordinate_coverage_fraction`, calculated as the number
+visible divided by `unique_point_count` in the **entire imported scan**.
+When that fraction is below one, `preview_omits_unique_coordinate_loci`
+is emitted even if `preview_axis_extrema_covered` is true. No source
+points are removed from the underlying measurements, and both full/ordered
+geometry and distinct-locus fingerprints remain tied to the original input.
+
+For a 513-distinct-point import, the fixed 512-point display reports
+512/513 coverage; a 600-row import with only two repeated coordinate
+locations can report 2/2 despite heavy duplicate-row redundancy. These
+metrics deliberately measure **display visibility of exact imported XYZ
+locations**, not field coverage, photogrammetric reconstruction quality,
+specimen completeness, tissue area, biological condition or a statistically
+random sample. Source order can influence which coordinate locations appear
+in the bounded display. No automatic specimen matching, inferred anatomical
+branch measurement or calibration verification is implied.
+
+XYZ and vertex-only ASCII PLY regressions compare the direct measurement
+engine, standalone project API and twice-executed persisted, typed Workflow
+Builder graph artifacts. Calibration, coordinate registration and biological
+identity stay provisional pending independent physical reference and human
+review. Windows installed GUI/GPU and full release acceptance are still open.
+
+## Exact preview RGB-frequency bias witness (November 22, 2026)
+
+A bounded colored ASCII PLY preview can retain **every distinct XYZ/RGB pair**
+yet alter how frequently each observation appears. The
+`preview_vs_source_xyz_rgb_observation_total_variation` compares normalized
+source acquisition-row counts against the displayed-row counts over **all**
+source XYZ/RGB pairs. A value of zero denotes equal row-frequency
+distributions; a positive value denotes display-sampling frequency distortion,
+not measured organism change. The companion
+`preview_vs_source_xyz_rgb_observation_total_variation_exact_fraction`
+records the reduced [numerator, denominator] of the count-derived rational
+quantity, avoiding a floating-point-only audit record. A nonzero value emits
+`preview_shifts_xyz_rgb_observation_frequency_distribution` even if
+`fraction_of_source_xyz_rgb_pairs_displayed` is 1.0.
+
+Synthetic tests independently calculate the expected rational metric from a
+600-row, three-pair scan with an off-preview rare color, as well as a 513-row
+source containing 512 distinct pairs (all retained, but one repeated row
+omitted). The standalone endpoint and twice-executed, persisted executable
+typed Workflow Builder graph must preserve the same complete scientific
+artifact and SHA-256 digest. The test also verifies a zero result when every
+row is shown. These are **sampling/QC diagnostics**, not unbiased random
+sampling, calibrated colorimetry, bleaching, health, specimen reidentification,
+independent biological replicates, verified calibration or statistical
+confidence intervals. Human review and representative coral validation remain
+mandatory.
+
+## Unordered source XYZ/RGB acquisition multiset integrity (November 22, 2026)
+
+The color-aware point-cloud service additionally records
+`provenance.source_unordered_xyz_rgb_multiset_sha256` and the explicit
+`source_unordered_xyz_rgb_multiset_canonicalization` version string. The digest
+sorts the **complete** normalized float64 XYZ / uint8 RGB acquisition-row
+multiset before compact UTF-8 JSON hashing. Unlike the existing ordered
+XYZ/RGB fingerprint, this digest remains equal when exporters rearrange valid
+PLY rows without changing observations. Unlike a distinct-pair set digest,
+it **does change** when acquisition-row multiplicities change, even when
+every distinct XYZ/RGB pair still occurs. Changing a sensor RGB triplet
+also changes the digest even if geometry and the visible preview do not.
+
+Exact imported PLY text retains its separate source-payload SHA-256;
+row ordering, comments and property order may change those bytes without
+changing the unordered normalized acquisition evidence. No RGB digest is
+claimed for uncolored XYZ sources. Matching multiset digests are not proof of
+common coral identity, identical calibration, registered coordinate frames,
+biological condition, independent technical replicates, or genuine
+longitudinal change. Human examination of provenance and specimen labels
+remains necessary.
+
+Direct-service regressions cover reversed row order, altered RGB, added
+duplicate acquisitions, and uncolored sources. Standalone colored PLY
+regressions cover different property/header arrangements and reversed
+acquisition-row order, while the existing saved executable typed Workflow
+Builder graph is run twice and requires byte-for-byte scientific-artifact and
+artifact-SHA-256 equality. Physical coral reference validation, reviewer
+sign-off, installed Windows GUI/MSI/CAB and GPU gates remain on hold.
+
+## Numerically unresolved preview-offset scale bounds (November 22, 2026)
+
+The signed X/Y/Z difference between a bounded display sample's row-weighted
+centroid and the full acquisition centroid reports scale-only uncertainty,
+not reconstruction, sampling, spatial-registration, or organism-motion error.
+When an extremely small but positive supplied relative calibration uncertainty
+rounds both bounds of a nonzero offset to the same float, the corresponding
+interval is `null` with
+`preview_centroid_offset_uncertainty_interval_below_numeric_resolution` QC.
+A genuinely zero coordinate offset retains `[0, 0]`; a zero *supplied*
+uncertainty retains exact bounds without that QC. The separation magnitude
+likewise withholds unresolvable scale-only bounds instead of suggesting false
+certainty. The strict-mypy regression and direct/API/twice-replayed executable
+persisted typed Workflow Builder test guard this behavior. Calibration and
+biological identity remain unverified pending independent scientific review.
+
+### RGB triplet palette retention QC (November 22, 2026)
+
+For imported **colored** ASCII PLY previews, `preview_rgb_variant_support`
+now reports `source_distinct_rgb_triplets`,
+`preview_distinct_rgb_triplets`,
+`fraction_of_source_rgb_triplets_displayed`, and
+`preview_omitted_distinct_rgb_triplets`. The
+`preview_omits_distinct_rgb_triplets` QC warning identifies a raw source
+RGB color entirely absent from the bounded 512-row display sample, even
+when sampled channel extrema or geometric XYZ coverage are unchanged.
+These fields compare distinct **raw uint8 triplets**, not XYZ/RGB pairs,
+acquisition frequencies, calibrated reflectance, biological condition, or
+specimen identity. They complement existing pair-retention and
+total-variation diagnostics; RGB triplet retention of 100% does not
+establish complete spatial observation coverage.
+
+A rare-color/identical-palette synthetic regression checks missing versus
+retained triplets, and the opt-in XYZ/RGB pair-preserving standalone endpoint
+is checked against two executions of the persisted typed Workflow Builder
+graph, including complete artifacts and their SHA-256 fingerprints. Colored
+source provenance remains provisional and requires scientist review.
+
+### Independent raw RGB frequency audit (November 22, 2026)
+
+A preview may retain every distinct raw RGB triplet but change its acquisition-row
+frequency, while a spatial XYZ/RGB pair distribution may shift even when every
+row has the same RGB color. These are different kinds of display sampling bias.
+Colored ASCII PLY results now expose
+`preview_vs_source_rgb_triplet_total_variation` and
+`preview_vs_source_rgb_triplet_total_variation_exact_fraction` in
+`preview_rgb_variant_support`. Both compare the source and sampled **raw
+RGB-triplet row-frequency distributions**; the latter is a reduced exact
+rational numerator/denominator from integer counts, with zero encoded as
+`[0, 1]`. Nonzero shift adds
+`preview_shifts_rgb_triplet_frequency_distribution` to `qc_warnings`.
+
+These are separate from the previously available XYZ/RGB *pair* total variation,
+which is sensitive to spatial association of identical raw colors. Exact
+frequency balance does **not** establish representative spatial sampling,
+calibrated reflectance, unchanged coral tissue, independent biological
+replicates, or verified specimen identity. Synthetic controls distinguish
+(1) retained palette with changed raw-color frequencies and (2) spatial-pair
+frequency bias with exactly constant raw RGB frequencies. Standalone endpoint
+results and twice-executed persisted executable typed Workflow Builder
+scientific artifacts remain under deterministic SHA-256 regression checks.
+
+### Exact spatial-versus-color preview TV gap (November 23, 2026)
+
+For a colored PLY preview, the joint XYZ/RGB acquisition-row distribution
+cannot have less total-variation distance from its source than the marginal
+RGB-triplet frequency distribution: discarding XYZ cannot increase total
+variation. `preview_xyz_rgb_vs_rgb_marginal_tv_gap` is the nonnegative
+difference between these two distances. Its companion
+`preview_xyz_rgb_vs_rgb_marginal_tv_gap_exact_fraction` retains the reduced,
+integer-count rational witness. A positive difference emits
+`preview_xyz_rgb_tv_exceeds_rgb_marginal_tv`. This diagnostic identifies
+spatial observation-frequency variation that a color-only frequency
+comparison **cannot reveal**; it is not an additive attribution of variance,
+a spatial-registration measure, an estimate of missing coral tissue, or a
+calibrated color/health metric.
+
+Synthetic checks cover two limiting cases: a 600-row acquisition in which
+raw RGB frequencies remain exactly balanced while 88 of 600 observations
+at different XYZ loci are hidden (TV gap = 11/75), and another in which
+each color uniquely identifies its XYZ/RGB pair (TV gap = 0 despite
+nonzero sampling variation). The tests assert exact fractions, QC warnings,
+the standalone imported PLY API, and full JSON/SHA-256 artifact parity
+across two replays of an executable persisted typed Workflow Builder graph.
+Complete source evidence, calibration status, and human-verification flags
+remain intact. Representative coral, independent reviewer and
+installed Windows MSI/CAB/GUI/GPU acceptance remain release gates.
+
+
+## XYZ-marginal exact total-variation audit (November 23, 2026)
+
+Colored ASCII PLY preview artifacts now separately report `preview_vs_source_xyz_locus_total_variation` and `preview_vs_source_xyz_locus_total_variation_exact_fraction`, calculated from acquisition-row frequencies at each exact source XYZ locus versus the bounded display sample. `preview_xyz_rgb_vs_xyz_marginal_tv_gap` and its exact reduced-fraction counterpart subtract that XYZ-only variation from the joint XYZ/RGB observation variation. Both calculations use integer cross-products and rational arithmetic before the optional floating-point display value. By marginalization, the joint variation cannot be less than the XYZ-only variation.
+
+`preview_shifts_xyz_locus_frequency_distribution` flags nonzero XYZ-frequency distortion; `preview_xyz_rgb_tv_exceeds_xyz_marginal_tv` flags additional distortion concealed by aggregating observed RGB values at each XYZ coordinate. The previously reported RGB-only marginal and joint-minus-RGB diagnostics remain independent: a balanced RGB histogram may conceal spatial sampling loss, whereas a balanced XYZ histogram may conceal selective omission of raw color variants acquired at the same position. A complete RGB palette or XYZ set does not guarantee faithful acquisition-row frequencies.
+
+Synthetic regressions independently calculate the exact fractions for 600-row colored PLY previews, with balanced XYZ frequencies and one omitted rare color, balanced RGB frequencies but omitted spatial acquisitions, and a uniform-color spatial-only control. The standalone project endpoint and twice-executed saved, typed `point_cloud_preview` Workflow Builder graph must produce identical full scientific artifacts and SHA-256 fingerprints. These are **display-decimation provenance and QC diagnostics only**: repeated acquisitions are not independent biological replicates, raw RGB values are not calibrated reflectance or tissue-condition measurements, and the analysis does not verify 3D registration, specimen identity, or coral health. Original PLY source hashes and the provisional calibration/review boundaries remain unchanged.
+
+## Full-row colored PLY identity control (November 23, 2026)
+
+A dedicated synthetic 3-row PLY control contains two different acquired RGB triplets at the same XYZ locus, plus another XYZ acquisition. All three rows are displayed without decimation. A valid preview must therefore preserve the joint XYZ/RGB distribution and both XYZ-only and RGB-only marginal distributions exactly, yielding zero total-variation distance, exact rational witnesses `[0, 1]`, and zero joint-minus-marginal gaps. It must not emit any preview sampling-frequency shift or marginal-gap QC warnings. The original `source_xyz_loci_have_multiple_rgb_values` observation remains present; it is **acquisition variation, not verified coral biology**.
+
+This is checked against the standalone project endpoint and the two full-artifact, hash-identical executions of its persisted typed Workflow Builder graph. The same regression suite also checks that an uncolored XYZ cloud cannot acquire RGB-specific QC warnings. This control distinguishes legitimate heterogeneous source observations from artifacts introduced by decimating the preview. It does not demonstrate experimental replication, color calibration, tissue assessment, or representative coral validation.
+
+
+## Protected raw color observations: saved-graph failure boundary (November 23, 2026)
+
+The opt-in `preserve_distinct_xyz_rgb_pairs_in_preview` flag is a strict
+retention request, not permission to discard observations silently. When
+513 **distinct** original XYZ/RGB acquisitions compete for the 512-row
+display budget, the standalone imported-PLY API and direct measurement engine
+reject the request. A persisted, typed executable `point_cloud_preview`
+Workflow Builder graph carrying the same settings must also terminate as
+**failed** with the display-budget explanation and **no point-cloud measurement
+artifact**, across repeated runs. The persisted graph is not modified or
+automatically relaxed to produce a misleading success.
+
+A repeated acquisition of one of the 512 unique pairs does not consume an
+additional protected slot: the feasible 513-row control preserves all 512
+distinct source pairs while its source-to-preview frequency QC still reveals
+the dropped repeated row. These are bounds on raw sensor/acquisition evidence,
+not limits on reconstructed coral morphology or verified tissue condition.
+Calibration, specimen identity, and biological interpretation remain
+provisional.
+
+
+## Opt-in distinct raw RGB-triplet retention (November 23, 2026)
+
+Colored ASCII PLY previews can request `preserve_distinct_rgb_triplets_in_preview=true`
+through the standalone project endpoint or a persisted executable typed
+`point_cloud_preview` Workflow Builder graph. This pins one original source
+acquisition row per **distinct uint8 RGB triplet**, even if many different XYZ
+locations or XYZ/RGB pairs share the same raw color. It differs from the
+existing stricter `preserve_distinct_xyz_rgb_pairs_in_preview` option, which
+requires a row for every distinct location/color combination. Neither option
+alters the unabridged source acquisition, the calibration, or measured geometry.
+
+The 512-row preview budget remains strict. An uncolored XYZ request cannot ask
+for RGB preservation. More than 512 distinct source RGB colors, or a combination
+of other protected requirements whose selected original rows exceed the budget,
+**fails closed** instead of silently omitting a protected color. A feasible
+512-color source with repeated colors retains every raw triplet, but it need
+not retain every XYZ observation or reproduce acquisition-row frequencies.
+`preview_distinct_rgb_triplets_preservation_requested` and the sampling
+strategy record the opt-in choice; existing palette-coverage, exact total-
+variation, source-fingerprint, QC and human-verification fields remain in the
+result. Raw camera colors do **not** establish verified reflectance, coral
+health, tissue condition, specimen reidentification or biological replication.
+
+
+When users combine XYZ-locus retention with raw RGB-palette retention, the
+sampler reuses an acquisition already protected for a location (or other
+requested constraint) if that row also represents the requested color. A
+513-row synthetic PLY with **512 distinct XYZ loci, 512 raw RGB colors, and
+513 distinct XYZ/RGB pairs** thus fits a 512-row preview: a redundant
+location/color acquisition can be omitted without losing either a locus
+or an RGB triplet. The omitted XYZ/RGB pair is still reported by QC.
+Standalone API and twice-executed saved typed workflows compare complete
+artifacts and reproducible fingerprints for this boundary.
+
+Representative selection is deterministic and greedy, **not an optimal
+minimum-row-cover solver**; unusual combinations of preservation
+requirements may still fail closed rather than silently discard protected
+acquisitions. Source geometry, raw RGB, and unverified biological
+interpretation remain separate.
+
+### Same-locus RGB representative replacement (November 23, 2026)
+
+A separately tested 513-acquisition boundary has 512 unique XYZ loci and 512
+raw RGB triplets. The first representative for one XYZ locus carries a color
+also acquired at another locus; its later acquisition carries the sole
+observation of the final color. Naively retaining every first-occurrence
+locus row and then adding the missing color would require **513** rows.
+The bounded sampler now replaces the redundant first representative with
+the later original row at the **same** XYZ locus, provided the displaced color
+still has another protected representative. Axis extrema, requested chords,
+gap boundaries and protected XYZ/RGB pairs cannot be displaced by this repair.
+
+This case retains all 512 observed loci and all 512 RGB triplets in the
+512-row display, while disclosing the omitted unique XYZ/RGB observation
+and the absent first acquisition endpoint. Standalone imported-PLY and
+twice-executed persisted typed Workflow Builder tests check the exact
+source-row selection, complete artifact parity, provenance and reproducible
+SHA-256 fingerprints. Requiring all 513 XYZ/RGB pairs still fails closed with
+no measurement artifact. This is a local deterministic feasibility repair,
+**not** a guarantee that every feasible joint-cover configuration can be
+found, and it is not a biological-condition or reidentification assessment.
+
+The strict boundary is also tested through **two independent executions** of a
+saved, typed Workflow Builder graph when protected XYZ axis extrema would
+require keeping the displaced source acquisition. Even though 512 locations
+and 512 colors can fit together without that extra restriction, requiring an
+independently protected extremum can make the 512-row preview impossible.
+The standalone API, direct service and both saved-graph runs must reject that
+configuration without persisting a point-cloud measurement artifact. The
+unmodified original PLY and unverified scale/organism identity remain outside
+the sample's asserted scientific coverage.
+
+### Exact joint XYZ-locus and raw RGB coverage (unverified preview evidence)
+
+When both `preserve_distinct_xyz_loci_in_preview` and
+`preserve_distinct_rgb_triplets_in_preview` are requested, source acquisitions
+form a bipartite graph: each original row connects one exact XYZ locus to one
+raw RGB triplet. The selector now uses deterministic augmenting-path maximum
+matching followed by minimum edge-cover completion **after** reserving any
+independently protected axes, chord endpoints, gap boundaries, or XYZ/RGB
+pairs. This finds a minimum number of additional **original acquisition rows**
+needed to display every source locus and every raw RGB triplet. It does not
+interpolate colors, modify measured coordinates, or create observations.
+
+A 514-acquisition synthetic control has 512 distinct loci and 512 colors. A
+single-swap heuristic would reserve 513 rows because maintaining color 2
+requires reassignment along the chain A/1 → A/2, B/2 → B/3, C/1.
+Maximum matching selects the feasible 512-row original-acquisition cover,
+retaining every locus and raw color, while reporting two omitted XYZ/RGB
+acquisition combinations and their sampling QC. Requiring **all 514 distinct
+XYZ/RGB pairs** or independently pinning the competing x-minimum row still
+exceeds the display capacity and fails closed. The standalone API and
+twice-executed saved typed Workflow Builder regressions test success,
+reproducible artifact fingerprints, and the absence of fabricated artifacts
+on rejected requests.
+
+The matching proof concerns the minimal **display-row coverage under these
+explicit constraints**, not minimum sensor effort, spatial coverage of a coral,
+registration, measured surface area, branch length, biological health, or
+verified specimen reidentification. Calibration and identity stay provisional
+until separately reviewed against physical reference evidence.

@@ -105,11 +105,11 @@ def test_invalid_import_is_atomic_and_identifies_source(
     monkeypatch.setattr(Service, "_load_labels", lambda *_a, **_kw: labels)
     response = client.post(
         f"/api/v1/videos/{video['id']}/pose-interoperability/import",
-        params={"format": "slp", "label_class_id": project["label_classes"][0]["id"]},
-        files={"file": ("broken.slp", b"data", "application/octet-stream")},
+        params={"format": "nwb", "label_class_id": project["label_classes"][0]["id"]},
+        files={"file": ("broken.nwb", b"data", "application/octet-stream")},
     )
     assert response.status_code == 400, response.text
-    assert "broken.slp" in response.json()["detail"]
+    assert "broken.nwb" in response.json()["detail"]
     assert "Nothing was imported" in response.json()["detail"]
     assert "atomic" in response.json()["detail"]
     with cast(FastAPI, client.app).state.session_factory() as session:
@@ -126,7 +126,7 @@ def test_invalid_extension_rejected_before_runtime(monkeypatch: pytest.MonkeyPat
         Service(
             cast(Any, None),
             cast(Any, None),
-        )._load_labels("slp", b"data", "wrong.csv")
+        )._load_labels("nwb", b"data", "wrong.csv")
 
 
 def test_corrupt_zip_has_actionable_error(tmp_path: Path) -> None:
@@ -160,8 +160,8 @@ def test_partial_write_failure_rolls_back_schema_and_tracks(
     monkeypatch.setattr(Service, "_resolve_import_schema", fail_after_schema)
     response = client.post(
         f"/api/v1/videos/{video['id']}/pose-interoperability/import",
-        params={"format": "slp", "label_class_id": project["label_classes"][0]["id"]},
-        files={"file": ("broken.slp", b"data", "application/octet-stream")},
+        params={"format": "coco", "label_class_id": project["label_classes"][0]["id"]},
+        files={"file": ("broken.json", b"data", "application/json")},
     )
     assert response.status_code == 400, response.text
     with cast(FastAPI, client.app).state.session_factory() as session:
@@ -192,7 +192,7 @@ def test_export_rejects_invalid_source_media(
             asset.width_px = 0
             session.commit()
     response = client.get(
-        f"/api/v1/videos/{video['id']}/pose-interoperability/export", params={"format": "slp"}
+        f"/api/v1/videos/{video['id']}/pose-interoperability/export", params={"format": "coco"}
     )
     assert response.status_code == 400, response.text
     assert {"missing_media": "missing", "changed_media": "checksum", "dimensions": "dimensional"}[

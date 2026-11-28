@@ -358,7 +358,6 @@ def test_corrected_pose_observations_take_precedence_and_preserve_visibility() -
 @pytest.mark.parametrize(
     ("exchange_format", "expected_content_type"),
     [
-        ("slp", "application/octet-stream"),
         ("nwb", "application/zip"),
         ("coco", "application/zip"),
         ("dlc_csv", "application/zip"),
@@ -536,10 +535,10 @@ def test_pose_interoperability_import_restores_repeated_labels_and_track_groupin
     response = client.post(
         f"/api/v1/videos/{video['id']}/pose-interoperability/import",
         params={
-            "format": "slp",
+            "format": "nwb",
             "label_class_id": str(label_classes[0]["id"]),
         },
-        files={"file": ("pose.slp", io.BytesIO(b"external-pose"), "application/octet-stream")},
+        files={"file": ("pose.nwb", io.BytesIO(b"external-pose"), "application/octet-stream")},
     )
 
     assert response.status_code == 201, response.text
@@ -639,10 +638,10 @@ def test_reefvision_pose_import_rejects_source_video_hash_mismatch(
     response = client.post(
         f"/api/v1/videos/{video['id']}/pose-interoperability/import",
         params={
-            "format": "slp",
+            "format": "nwb",
             "label_class_id": str(label_classes[0]["id"]),
         },
-        files={"file": ("pose.slp", io.BytesIO(b"external-pose"), "application/octet-stream")},
+        files={"file": ("pose.nwb", io.BytesIO(b"external-pose"), "application/octet-stream")},
     )
 
     assert response.status_code == 400
@@ -691,10 +690,10 @@ def test_reefvision_pose_import_rejects_duplicate_live_source_tracks(
     response = client.post(
         f"/api/v1/videos/{video['id']}/pose-interoperability/import",
         params={
-            "format": "slp",
+            "format": "nwb",
             "label_class_id": str(label_classes[0]["id"]),
         },
-        files={"file": ("pose.slp", io.BytesIO(b"external-pose"), "application/octet-stream")},
+        files={"file": ("pose.nwb", io.BytesIO(b"external-pose"), "application/octet-stream")},
     )
 
     assert response.status_code == 400

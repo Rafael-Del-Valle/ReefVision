@@ -1,7 +1,7 @@
 import { getApiBaseUrl } from "../../runtime";
 
 export type PoseInteroperabilityFormat =
-  "slp" | "nwb" | "coco" | "dlc_csv" | "ultralytics_pose";
+  "nwb" | "coco" | "dlc_csv" | "ultralytics_pose";
 
 export function poseInteroperabilityExportUrl(
   videoId: string,

@@ -8,6 +8,10 @@ from sqlalchemy.orm import Session
 
 from reefvision.api.dependencies import get_db_session
 from reefvision.config import Settings
+from reefvision.schemas.connected_branch_editing import (
+    ConnectedBranchPreviewRequest,
+    ConnectedBranchPreviewResponse,
+)
 from reefvision.schemas.skeletonization import (
     SkeletonAnalysisCorrectionRequest,
     SkeletonAnalysisCreateRequest,
@@ -15,6 +19,7 @@ from reefvision.schemas.skeletonization import (
     SkeletonAnalysisReviewRequest,
     SkeletonAnalysisRevisionResponse,
 )
+from reefvision.services.connected_branch_preview import preview_saved_branch_addition
 from reefvision.services.skeletonization import SkeletonizationService
 
 router = APIRouter(tags=["skeletonization"])
@@ -93,6 +98,24 @@ def correct_skeleton_analysis(
     session: DbSession,
 ) -> SkeletonAnalysisRevisionResponse:
     return service(request, session).correct_persisted_analysis(
+        analysis_id,
+        payload,
+    )
+
+
+@router.post(
+    "/skeleton-analyses/{analysis_id}/branch-edits/preview",
+    response_model=ConnectedBranchPreviewResponse,
+)
+def preview_connected_branch_edit(
+    analysis_id: str,
+    payload: ConnectedBranchPreviewRequest,
+    request: Request,
+    session: DbSession,
+) -> ConnectedBranchPreviewResponse:
+    return preview_saved_branch_addition(
+        session,
+        request.app.state.settings,
         analysis_id,
         payload,
     )

@@ -20,6 +20,12 @@ import {
   type QualityControlThresholdConfig,
 } from "../../api/client";
 
+import {
+  AcquisitionQualityControls,
+  AcquisitionQualityResults,
+  defaultAcquisitionThresholds,
+} from "./AcquisitionQuality";
+
 const ruleCategories: QualityControlRuleCategory[] = [
   "annotation_geometry",
   "annotation_semantics",
@@ -27,6 +33,7 @@ const ruleCategories: QualityControlRuleCategory[] = [
   "predictions",
   "statistics",
   "dataset_versions",
+  "acquisition",
 ];
 
 const defaultThresholds: QualityControlThresholdConfig = {
@@ -41,6 +48,7 @@ const defaultThresholds: QualityControlThresholdConfig = {
   suspicious_bulk_acceptance_min_count: 12,
   suspicious_bulk_acceptance_window_minutes: 10,
   overlap_spatial_cell_px: 128,
+  acquisition: defaultAcquisitionThresholds,
 };
 
 function stringifyRecord(record: Record<string, unknown>): string {
@@ -81,6 +89,7 @@ export function QualityControlDashboard({
     predictions: true,
     statistics: true,
     dataset_versions: true,
+    acquisition: false,
   });
   const [thresholds, setThresholds] =
     useState<QualityControlThresholdConfig>(defaultThresholds);
@@ -158,8 +167,22 @@ export function QualityControlDashboard({
   }, [runs.data, selectedRunId]);
 
   useEffect(() => {
+    setSelectedRunId("");
+    setCompareRunId("");
+    setDatasetVersionId("");
+    setScopeType("project");
+  }, [project.id]);
+
+  useEffect(() => {
     setIssuePage(1);
-  }, [issueSeverity, issueRuleId, issueClassId, issueImageId, issueStatus]);
+  }, [
+    issueSeverity,
+    issueRuleId,
+    issueClassId,
+    issueImageId,
+    issueStatus,
+    selectedRunId,
+  ]);
 
   useEffect(() => {
     if (!selectedRun.data) {
@@ -168,6 +191,9 @@ export function QualityControlDashboard({
     if (
       ["succeeded", "failed", "cancelled"].includes(selectedRun.data.status)
     ) {
+      void queryClient.invalidateQueries({
+        queryKey: ["quality_control_issues", selectedRun.data.id],
+      });
       void queryClient.invalidateQueries({
         queryKey: [
           "quality_control_runs",
@@ -235,10 +261,40 @@ export function QualityControlDashboard({
       versions.data?.find((version) => version.id === datasetVersionId) ?? null,
     [datasetVersionId, versions.data],
   );
-  const activeRun = selectedRun.data ?? null;
+  const candidateRun = selectedRun.data;
+  const activeRun =
+    candidateRun?.project_id === project.id &&
+    candidateRun.dataset_version_id ===
+      (scopeType === "dataset_version" ? datasetVersionId : null)
+      ? candidateRun
+      : null;
+  const acquisition = thresholds.acquisition ?? defaultAcquisitionThresholds;
+  const configurationInvalid =
+    enabledCategories.acquisition &&
+    (!Object.values(acquisition).every(
+      (value) => typeof value === "boolean" || Number.isFinite(value),
+    ) ||
+      ![
+        acquisition.min_width_px,
+        acquisition.min_height_px,
+        acquisition.dark_luma_max,
+        acquisition.bright_luma_min,
+      ].every(Number.isInteger) ||
+      acquisition.dark_luma_max >= acquisition.bright_luma_min ||
+      acquisition.min_width_px < 1 ||
+      acquisition.min_height_px < 1 ||
+      acquisition.min_sharpness < 0 ||
+      acquisition.dark_luma_max < 0 ||
+      acquisition.bright_luma_min > 255 ||
+      acquisition.max_clipped_fraction < 0 ||
+      acquisition.max_clipped_fraction > 1);
+  const resetSelection = () => {
+    setSelectedRunId("");
+    setCompareRunId("");
+  };
 
   return (
-    <section className="dashboard-panel">
+    <section className="dashboard-panel quality-control-dashboard">
       <div className="section-heading">
         <div>
           <p className="eyebrow">Automated checks</p>
@@ -260,11 +316,12 @@ export function QualityControlDashboard({
               Scope
               <select
                 value={scopeType}
-                onChange={(event) =>
+                onChange={(event) => {
+                  resetSelection();
                   setScopeType(
                     event.target.value as "project" | "dataset_version",
-                  )
-                }
+                  );
+                }}
               >
                 <option value="project">Entire project</option>
                 <option value="dataset_version">Dataset version</option>
@@ -275,7 +332,10 @@ export function QualityControlDashboard({
                 Dataset version
                 <select
                   value={datasetVersionId}
-                  onChange={(event) => setDatasetVersionId(event.target.value)}
+                  onChange={(event) => {
+                    resetSelection();
+                    setDatasetVersionId(event.target.value);
+                  }}
                 >
                   <option value="">Choose a version</option>
                   {versions.data?.map((version) => (
@@ -299,7 +359,9 @@ export function QualityControlDashboard({
                       }))
                     }
                   />
-                  {category.replaceAll("_", " ")}
+                  {category === "acquisition"
+                    ? "Image acquisition checks"
+                    : category.replaceAll("_", " ")}
                 </label>
               ))}
             </div>
@@ -364,11 +426,30 @@ export function QualityControlDashboard({
                 />
               </label>
             </div>
+            {enabledCategories.acquisition && (
+              <AcquisitionQualityControls
+                thresholds={acquisition}
+                onChange={(value) =>
+                  setThresholds((current) => ({
+                    ...current,
+                    acquisition: value,
+                  }))
+                }
+              />
+            )}
+            {configurationInvalid && (
+              <p className="form-error" role="alert">
+                Enter valid acquisition thresholds. The dark luma maximum must
+                be lower than the bright luma minimum.
+              </p>
+            )}
             <div className="version-actions">
               <button
                 type="button"
                 disabled={
                   createRun.isPending ||
+                  configurationInvalid ||
+                  !Object.values(enabledCategories).some(Boolean) ||
                   (scopeType === "dataset_version" && !datasetVersionId)
                 }
                 onClick={() => createRun.mutate()}
@@ -455,6 +536,23 @@ export function QualityControlDashboard({
                     : "not complete"}
                 </span>
               </div>
+              {activeRun.summary_json.acquisition && (
+                <AcquisitionQualityResults
+                  key={activeRun.id}
+                  report={activeRun.summary_json.acquisition}
+                  staleReasons={activeRun.acquisition_stale_reasons ?? []}
+                  onReuseThresholds={(value) => {
+                    setEnabledCategories((current) => ({
+                      ...current,
+                      acquisition: true,
+                    }));
+                    setThresholds((current) => ({
+                      ...current,
+                      acquisition: value,
+                    }));
+                  }}
+                />
+              )}
               {activeRun.error_message && (
                 <p className="form-error">{activeRun.error_message}</p>
               )}
@@ -556,60 +654,67 @@ export function QualityControlDashboard({
               <p className="form-error">{issues.error.message}</p>
             )}
             <div className="dashboard-list">
-              {issues.data?.items.map((issue) => (
-                <article
-                  key={issue.id}
-                  className={`dashboard-row severity-${issue.severity}`}
-                >
-                  <div>
-                    <div className="image-card-topline">
-                      <strong>{issue.title}</strong>
-                      <span className="count-chip">{issue.severity}</span>
-                      <span className="count-chip secondary-chip">
-                        {issue.status}
-                      </span>
+              {activeRun &&
+                issues.data?.items.map((issue) => (
+                  <article
+                    key={issue.id}
+                    className={`dashboard-row severity-${issue.severity}`}
+                  >
+                    <div>
+                      <div className="image-card-topline">
+                        <strong>{issue.title}</strong>
+                        <span className="count-chip">{issue.severity}</span>
+                        <span className="count-chip secondary-chip">
+                          {issue.status}
+                        </span>
+                      </div>
+                      <p>{issue.explanation}</p>
+                      <small>{issue.rule_id}</small>
+                      <details>
+                        <summary>Evidence and thresholds</summary>
+                        <pre className="json-block">
+                          {stringifyRecord(issue.measured_values_json)}
+                        </pre>
+                        {Object.keys(issue.thresholds_json).length > 0 && (
+                          <pre className="json-block">
+                            {stringifyRecord(issue.thresholds_json)}
+                          </pre>
+                        )}
+                      </details>
                     </div>
-                    <p>{issue.explanation}</p>
-                    <small>{issue.rule_id}</small>
-                    <pre className="json-block">
-                      {stringifyRecord(issue.measured_values_json)}
-                    </pre>
-                    {Object.keys(issue.thresholds_json).length > 0 && (
-                      <pre className="json-block">
-                        {stringifyRecord(issue.thresholds_json)}
-                      </pre>
-                    )}
-                  </div>
-                  <div className="dashboard-actions">
-                    {issue.image_id && (
-                      <button type="button" onClick={() => onOpenImage(issue)}>
-                        Open image
+                    <div className="dashboard-actions">
+                      {issue.image_id && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenImage(issue)}
+                        >
+                          Open image
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => acknowledgeIssue.mutate(issue.id)}
+                        disabled={
+                          acknowledgeIssue.isPending ||
+                          issue.status === "dismissed"
+                        }
+                      >
+                        Acknowledge
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => acknowledgeIssue.mutate(issue.id)}
-                      disabled={
-                        acknowledgeIssue.isPending ||
-                        issue.status === "dismissed"
-                      }
-                    >
-                      Acknowledge
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => dismissIssue.mutate(issue.id)}
-                      disabled={
-                        dismissIssue.isPending || issue.status === "dismissed"
-                      }
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                </article>
-              ))}
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => dismissIssue.mutate(issue.id)}
+                        disabled={
+                          dismissIssue.isPending || issue.status === "dismissed"
+                        }
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </article>
+                ))}
             </div>
             {issues.data && issues.data.pages > 1 && (
               <nav className="pagination" aria-label="QC issue pages">
