@@ -23,6 +23,7 @@ from reefvision.domain.errors import ConflictError
 from reefvision.ml.pose_evaluation import PoseEvaluationProviderExclusion
 from reefvision.schemas.pose_evaluation import PoseEvaluationCreateRequest
 from reefvision.services.models import ModelService
+from reefvision.tests.test_model_inference import approve_generated_checkpoint
 
 PROJECT_ID = "11000000-0000-0000-0000-000000000001"
 DATASET_ID = "12000000-0000-0000-0000-000000000001"
@@ -50,17 +51,18 @@ def _model_metadata() -> dict[str, object]:
 
 def _seed(client: TestClient) -> None:
     settings = client.app.state.settings
+    storage_root = f"projects/{PROJECT_ID}"
     with client.app.state.session_factory() as session:
         session.add(
             Project(
                 id=PROJECT_ID,
                 name="Phase 3B project",
                 slug="phase-3b-project",
-                storage_root="projects/phase-3b",
+                storage_root=storage_root,
             )
         )
         for index, model_id in enumerate(MODEL_IDS, start=1):
-            relative_path = f"projects/phase-3b/models/model-{index}.pt"
+            relative_path = f"{storage_root}/models/model-{index}.pt"
             checkpoint = settings.resolved_data_dir / relative_path
             checkpoint.parent.mkdir(parents=True, exist_ok=True)
             checkpoint.write_bytes(f"checkpoint-{index}".encode())
@@ -223,8 +225,10 @@ def test_ultralytics_model_uses_authoritative_schema_binding(client: TestClient)
                 schema_revision=2,
             )
         )
+        digest = model.sha256
         session.commit()
 
+    approve_generated_checkpoint(client, PROJECT_ID, MODEL_IDS[0], digest)
     response = client.post(
         f"/api/v1/projects/{PROJECT_ID}/pose-evaluation-comparisons",
         json=_payload([MODEL_IDS[0]]),
