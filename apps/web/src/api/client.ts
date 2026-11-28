@@ -1238,6 +1238,10 @@ export interface QualityControlRunRecord {
   input_checksums_json: Record<string, unknown>;
   summary_json: Record<string, unknown> & {
     acquisition?: AcquisitionQualityReport;
+    cross_split_similar_images?: {
+      checked_images: number;
+      flagged_pairs: number;
+    };
   };
   acquisition_stale_reasons?: string[];
   issue_count: number;

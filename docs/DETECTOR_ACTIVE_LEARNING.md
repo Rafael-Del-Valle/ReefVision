@@ -11,6 +11,10 @@ This walkthrough starts with a trained Ultralytics **object detector** and ends 
 
 ## Register R0 and collect proposals
 
+Before training, open **Quality control**, select **Dataset version**, choose the frozen split and select **Check for similar images across splits**. The background job checks each assigned image against its frozen checksum and flags visually similar full-frame pairs across training, validation and test. Each finding identifies both files, both splits, their digests and the measured differences. Open the originals to adjudicate the finding. If they share a sampling unit, group the original images and freeze a corrected version.
+
+The screen targets renamed, resized and recompressed full frames with nearly equal aspect ratios. Different crops, camera angles, rotations, illumination and repeated views of the same animal can escape the screen. Keep the sampling-unit metadata even after a scan returns no flags.
+
 1. Open **Models & AI → Model Hub → Register Existing Model**. Choose **Detector**, the Ultralytics provider and your local `best.pt`. Set the display name and document the source dataset and class ordering in **Notes**. Verify the origin of the file and select its file-specific trust confirmation before registering it. Record its SHA-256.
 2. Inspect its class mappings in **Registered Models**. Registration matches active project classes by name and can create a class for a new name. Resolve differences in the project taxonomy before accepting predictions. A class marked *Unmapped* requires attention. The detector's class names and biological definitions must agree with the reference labels.
 3. In **Gallery**, select the acquisition images using their checkboxes. In the inference inspector choose **Detector model**, **Confidence threshold**, and **Device**, then **Run model on selected images**. Record the model, image set and settings. A high threshold can hide uncertain proposals. A model-filtered acquisition only includes images with proposals from that model. Inspect a sample of zero-proposal images separately for missed objects.
