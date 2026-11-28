@@ -270,6 +270,16 @@ export function summarizeCurrentSlice(
   const seenComponents = new Set<string>();
   const seenLocations = new Set<string>();
   for (const vector of vectors) {
+    // The public summary helper may receive cached or externally assembled
+    // vectors. Reject corrupt components or inconsistent derived magnitudes
+    // rather than letting invalid values bias an otherwise finite mean.
+    if (
+      !Number.isFinite(vector.east) ||
+      !Number.isFinite(vector.north) ||
+      !Number.isFinite(vector.speed) ||
+      vector.speed !== Math.hypot(vector.east, vector.north)
+    )
+      return null;
     // Distinct record IDs can still describe the same grid cell in overlapping
     // selections. With the shared provenance above, that is not a second cell.
     // Treat +180 and -180 as the same WGS84 longitude without rounding nearby
