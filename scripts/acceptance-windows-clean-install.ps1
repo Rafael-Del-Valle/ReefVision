@@ -568,8 +568,72 @@ try {
     Invoke-WebRequest "$api/exchange-packages/$($exchange.package.id)/download" -OutFile $archive
     if ((Get-Item $archive).Length -le 0) { throw 'Project Exchange archive is empty.' }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $zip = [IO.Compression.ZipFile]::OpenRead($archive); try { if (-not ($zip.Entries | Where-Object FullName -eq 'reefvision-exchange-manifest.json')) { throw 'Project Exchange archive has no reefvision-exchange-manifest.json.' } } finally { $zip.Dispose() }
-    $report.project_exchange = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Exported inspectable archive: $archive"
+    # A manifest filename alone does not prove a usable scientific backup.
+    # Verify the actual packaged export without unpacking or modifying user data.
+    $zip = [IO.Compression.ZipFile]::OpenRead($archive)
+    try {
+        $manifestEntry = @($zip.Entries | Where-Object FullName -ceq 'reefvision-exchange-manifest.json')
+        if ($manifestEntry.Count -ne 1) { throw 'Project Exchange must contain exactly one manifest.' }
+        $reader = [IO.StreamReader]::new($manifestEntry[0].Open())
+        try { $manifest = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+        if ($manifest.format_name -cne 'reefvision-project-exchange' -or
+            $manifest.application_version -cne $ProductVersion -or
+            $manifest.project.id -cne $projectId) {
+            throw 'Project Exchange manifest does not identify the installed version and saved project.'
+        }
+
+        $requiredRecords = @{
+            project = $projectId
+            label_classes = $testClass.id
+            images = $imageId
+            annotations = $annotationId
+        }
+        $verifiedSections = 0
+        foreach ($section in $manifest.sections.PSObject.Properties) {
+            $descriptor = $section.Value
+            $members = @($zip.Entries | Where-Object FullName -ceq $descriptor.path)
+            if ($members.Count -ne 1) { throw "Missing or duplicate Project Exchange section: $($section.Name)" }
+            $stream = $members[0].Open()
+            try {
+                $digest = (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash
+            } finally { $stream.Dispose() }
+            if ($digest -ine $descriptor.sha256) { throw "Project Exchange section digest mismatch: $($section.Name)" }
+            $reader = [IO.StreamReader]::new($members[0].Open())
+            $rowCount = 0
+            $requiredMatches = 0
+            try {
+                while ($null -ne ($line = $reader.ReadLine())) {
+                    $record = $line | ConvertFrom-Json
+                    $rowCount++
+                    if ($requiredRecords.ContainsKey($section.Name) -and
+                        $record.id -ceq $requiredRecords[$section.Name]) { $requiredMatches++ }
+                }
+            } finally { $reader.Dispose() }
+            if ($rowCount -ne $descriptor.count) { throw "Project Exchange section count mismatch: $($section.Name)" }
+            if ($requiredRecords.ContainsKey($section.Name)) {
+                if ($requiredMatches -ne 1) { throw "Project Exchange lost a saved scientific record: $($section.Name)" }
+                $requiredRecords.Remove($section.Name)
+            }
+            $verifiedSections++
+        }
+        if ($requiredRecords.Count -ne 0) { throw 'Project Exchange is missing required scientific record sections.' }
+
+        $exportedImage = @($manifest.media | Where-Object { $_.kind -eq 'image' -and $_.record_id -ceq $imageId })
+        if ($exportedImage.Count -ne 1) { throw 'Project Exchange did not include the original acceptance image.' }
+        foreach ($media in $manifest.media) {
+            $members = @($zip.Entries | Where-Object FullName -ceq $media.path)
+            if ($members.Count -ne 1 -or $members[0].Length -ne $media.size_bytes) {
+                throw "Project Exchange media missing, duplicated or wrong size: $($media.path)"
+            }
+            $stream = $members[0].Open()
+            try {
+                $digest = (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash
+            } finally { $stream.Dispose() }
+            if ($digest -ine $media.sha256) { throw "Project Exchange media digest mismatch: $($media.path)" }
+        }
+    } finally { $zip.Dispose() }
+    $archiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
+    $report.project_exchange = New-ReefVisionEvidenceResult -Status 'PASS' -Detail "Verified $verifiedSections record sections, saved project/class/image/annotation identities, and all included media sizes and digests; archive SHA-256 $archiveHash"
     Stop-AcceptanceDesktop $desktop
 
     if (-not $SkipUninstall) {
