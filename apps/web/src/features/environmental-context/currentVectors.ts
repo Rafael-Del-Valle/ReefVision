@@ -265,7 +265,25 @@ export function summarizeCurrentSlice(
   // immutable component would give that observation extra statistical weight.
   // Reject the ambiguous summary rather than silently deduplicating records.
   const seenComponents = new Set<string>();
+  const seenLocations = new Set<string>();
   for (const vector of vectors) {
+    // Distinct record IDs can still describe the same grid cell in overlapping
+    // selections. With the shared provenance above, that is not a second cell.
+    // Treat +180 and -180 as the same WGS84 longitude without rounding nearby
+    // cells or changing their original stored coordinates.
+    if (
+      !Number.isFinite(vector.latitude) ||
+      Math.abs(vector.latitude) > 90 ||
+      !Number.isFinite(vector.longitude) ||
+      Math.abs(vector.longitude) > 180
+    )
+      return null;
+    const locationKey = JSON.stringify([
+      vector.latitude,
+      vector.longitude === 180 ? -180 : vector.longitude,
+    ]);
+    if (seenLocations.has(locationKey)) return null;
+    seenLocations.add(locationKey);
     if (vector.recordIds.length !== 2) return null;
     for (const id of vector.recordIds) {
       if (!id || seenComponents.has(id)) return null;
