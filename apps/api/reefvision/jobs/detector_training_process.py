@@ -130,8 +130,8 @@ def _terminate_child(process: subprocess.Popen[bytes]) -> None:
     for child in remaining:
         with suppress(psutil.NoSuchProcess):
             child.kill()
-    if remaining:
-        psutil.wait_procs(remaining)
+    # A terminated grandchild may remain a zombie until a different process reaps it.
+    # Only the scheduler's direct child must be joined before releasing the lease.
     try:
         process.wait(timeout=3)
     except subprocess.TimeoutExpired:

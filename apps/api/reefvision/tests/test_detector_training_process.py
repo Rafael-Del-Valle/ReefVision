@@ -92,3 +92,21 @@ def test_detector_child_dispatches_the_profile_and_keeps_the_parent_gpu_mask(
     assert launch.call_args.kwargs["creationflags"] == getattr(subprocess, "CREATE_NO_WINDOW", 0)
     assert launch.call_args.kwargs["env"]["CUDA_VISIBLE_DEVICES"] == "1"
     assert launch.call_args.kwargs["env"]["REEFVISION_DATABASE_URL"] == settings.database_url
+
+
+def test_terminated_descendant_wait_is_bounded_when_another_parent_must_reap_it() -> None:
+    from unittest.mock import Mock
+
+    from reefvision.jobs.detector_training_process import _terminate_child
+
+    process = Mock(pid=4321)
+    descendant = Mock()
+    with (
+        patch("psutil.Process") as parent,
+        patch("psutil.wait_procs", side_effect=[([], [descendant]), ([], [descendant])]) as wait,
+    ):
+        parent.return_value.children.return_value = [descendant]
+        _terminate_child(process)
+    descendant.terminate.assert_called_once()
+    descendant.kill.assert_called_once()
+    assert all(call.kwargs.get("timeout") is not None for call in wait.call_args_list)
