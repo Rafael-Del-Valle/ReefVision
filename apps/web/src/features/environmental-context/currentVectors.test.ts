@@ -867,3 +867,36 @@ it("pairs equivalent antimeridian components without modifying stored coordinate
     [],
   );
 });
+
+it("rejects inconsistent or nonfinite current magnitudes before aggregation", () => {
+  const first = currentVectors([
+    component("current_eastward_velocity", 3, { id: "east-a" }),
+    component("current_northward_velocity", 4, { id: "north-a" }),
+  ])[0];
+  const second = {
+    ...first,
+    latitude: first.latitude + 0.1,
+    recordIds: ["east-b", "north-b"],
+  };
+  for (const patch of [
+    { speed: -5 },
+    { speed: 0 },
+    { speed: 6 },
+    { speed: Number.NaN },
+    { speed: Number.POSITIVE_INFINITY },
+    { east: Number.NaN },
+    { north: Number.NEGATIVE_INFINITY },
+    { east: Number.MAX_VALUE, north: Number.MAX_VALUE },
+  ]) {
+    expect(summarizeCurrentSlice([first, { ...second, ...patch }])).toBeNull();
+  }
+  expect(summarizeCurrentSlice([first, second])).toMatchObject({
+    count: 2,
+    meanSpeed: 5,
+    maximumSpeed: 5,
+    vectorMeanSpeed: 5,
+  });
+  expect(
+    summarizeCurrentSlice([{ ...first, east: 0, north: 0, speed: 0 }]),
+  ).toMatchObject({ count: 1, meanSpeed: 0, vectorMeanBearing: null });
+});
