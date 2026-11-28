@@ -12,7 +12,11 @@ from reefvision.jobs.workflow import process_workflow_run_job
 from reefvision.ml.providers import DetectionPrediction, DetectionSettings
 from reefvision.services.models import ModelService
 from reefvision.tests.test_image_adjustments_v18 import make_source, save_recipe
-from reefvision.tests.test_model_inference import FakeDetectorRegistrationProvider, register_model
+from reefvision.tests.test_model_inference import (
+    FakeDetectorRegistrationProvider,
+    approve_generated_checkpoint,
+    register_model,
+)
 from reefvision.tests.test_scientific_project_exchange import import_archive
 
 
@@ -131,6 +135,7 @@ def test_saved_adjustment_replays_two_identical_typed_artifacts_and_rejects_wron
 
     image = image_id
     recipe = saved["id"]
+    model_id = model["id"]
     project_base = base
     for _ in range(2):
         package = client.post(
@@ -148,6 +153,8 @@ def test_saved_adjustment_replays_two_identical_typed_artifacts_and_rejects_wron
         project_base = "/api/v1/projects/" + copy["project_id"]
         mapping = copy["package"]["options_json"]["id_map"]
         image, recipe, graph_id = mapping[image], mapping[recipe], mapping[graph_id]
+        model_id = mapping[model_id]
+        approve_generated_checkpoint(client, copy["project_id"], model_id, model["sha256"])
         assert client.get(f"/api/v1/images/{image}/content").content == original
         record = client.get(f"/api/v1/images/{image}/adjustments/{recipe}").json()
         assert record["receipt"] == receipt and record["content_sha256"] == saved["content_sha256"]
