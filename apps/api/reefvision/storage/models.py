@@ -10,7 +10,7 @@ from typing import BinaryIO
 from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
 from reefvision.storage.images import stream_to_staging
-from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.projects import filesystem_io_path, resolve_managed_project_path
 
 SUPPORTED_MODEL_EXTENSIONS = {".pt", ".pth", ".zip"}
 
@@ -65,7 +65,7 @@ def commit_staged_model(staged_path: Path, destination: Path) -> None:
 def hash_model_file(path: Path) -> tuple[str, int]:
     digest = hashlib.sha256()
     total = 0
-    with path.open("rb") as source:
+    with filesystem_io_path(path).open("rb") as source:
         while chunk := source.read(1024 * 1024):
             digest.update(chunk)
             total += len(chunk)

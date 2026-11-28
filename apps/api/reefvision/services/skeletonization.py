@@ -59,7 +59,7 @@ from reefvision.services.skeleton_algorithms import (
     zhang_suen_thin,
 )
 from reefvision.storage.datasets import canonical_json_sha256
-from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.projects import filesystem_io_path, resolve_managed_project_path
 from reefvision.storage.skeleton_exports import (
     build_skeleton_export,
     skeleton_export_stem,
@@ -318,7 +318,7 @@ def _branch_angle_responses(
 
 def _binary_mask_from_image(path: Path, *, width: int, height: int) -> BinaryMask:
     try:
-        with Image.open(path) as image:
+        with Image.open(filesystem_io_path(path)) as image:
             image.load()
             if image.size != (width, height):
                 raise ValidationError("Raster mask dimensions do not match the source image")
@@ -1150,7 +1150,7 @@ class SkeletonizationService:
             self.settings,
             f"{project.storage_root}/skeletonization/exports",
         )
-        archive = export_root / f"{skeleton_export_stem(record.id)}.zip"
+        archive = filesystem_io_path(export_root / f"{skeleton_export_stem(record.id)}.zip")
         if not archive.is_file():
             raise NotFoundError("Skeleton analysis export archive not found")
         return archive

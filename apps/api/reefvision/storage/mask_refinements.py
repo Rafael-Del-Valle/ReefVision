@@ -13,7 +13,7 @@ from reefvision.config import Settings
 from reefvision.domain.errors import ValidationError
 from reefvision.ml.providers import mask_to_png_base64
 from reefvision.storage.masks import write_mask_png
-from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.projects import filesystem_io_path, resolve_managed_project_path
 
 MAX_REFINEMENT_PIXELS = 16_000_000
 
@@ -61,7 +61,7 @@ def load_prior(settings: Settings, snapshot: dict[str, Any], width: int, height:
 
 
 def verified_file(settings: Settings, relative_path: str, checksum: str | None = None) -> Path:
-    path = resolve_managed_project_path(settings, relative_path)
+    path = filesystem_io_path(resolve_managed_project_path(settings, relative_path))
     if not path.is_file():
         raise ValidationError("Mask content is missing from managed storage")
     if checksum is not None and sha256(path.read_bytes()).hexdigest() != checksum:

@@ -11,22 +11,24 @@ from uuid import UUID, uuid4
 from reefvision.config import Settings
 from reefvision.domain.errors import ConflictError
 from reefvision.storage.models import hash_model_file
-from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.projects import filesystem_io_path, resolve_managed_project_path
 
 
 def capture_checkpoints(settings: Settings, source: Path, destination: Path) -> dict[str, Any]:
+    source = filesystem_io_path(source)
     current = source / "cancelled.pt"
     if not current.is_file():
         current = source / "last.pt"
     if not current.is_file():
         return {}
-    destination.mkdir(parents=True, exist_ok=True)
+    io_destination = filesystem_io_path(destination)
+    io_destination.mkdir(parents=True, exist_ok=True)
     saved = destination / f"resume-{uuid4()}"
     snapshot: dict[str, Any] = {
         "resume_best_checkpoint_path": None,
         "resume_best_checkpoint_sha256": None,
     }
-    with TemporaryDirectory(prefix=".staging-", dir=destination) as tmp:
+    with TemporaryDirectory(prefix=".staging-", dir=io_destination) as tmp:
         incoming = Path(tmp) / "pair"
         incoming.mkdir()
         for field, original in (
@@ -41,7 +43,7 @@ def capture_checkpoints(settings: Settings, source: Path, destination: Path) -> 
             snapshot[field + "_path"] = (
                 (saved / original.name).relative_to(settings.resolved_data_dir).as_posix()
             )
-        os.replace(incoming, saved)
+        os.replace(incoming, filesystem_io_path(saved))
     return snapshot
 
 
@@ -76,6 +78,7 @@ def retire_previous_pair(settings: Settings, root: Path, previous: object, curre
         UUID(folder.name.removeprefix("resume-"))
     except ValueError:
         return
+    folder = filesystem_io_path(folder)
     with suppress(OSError):
         for filename in ("last.pt", "cancelled.pt", "best.pt"):
             (folder / filename).unlink(missing_ok=True)

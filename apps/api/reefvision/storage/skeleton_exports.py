@@ -13,6 +13,7 @@ from typing import Any
 from uuid import UUID
 
 from reefvision.schemas.skeletonization import SkeletonAnalysisRevisionResponse
+from reefvision.storage.projects import filesystem_io_path
 
 EXPORT_SCHEMA_VERSION = "skeleton-export-0001"
 CHUNK_SIZE = 1024 * 1024
@@ -93,6 +94,7 @@ def _angle_rows(angles: list[Any]) -> list[dict[str, Any]]:
 
 
 def verify_skeleton_export(package: Path) -> dict[str, Any]:
+    package = filesystem_io_path(package)
     manifest_path = package / "manifest.json"
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -159,16 +161,17 @@ def build_skeleton_export(
 ) -> dict[str, Any]:
     """Create an atomic directory + ZIP with reproducibility metadata."""
 
-    export_root.mkdir(parents=True, exist_ok=True)
+    io_root = filesystem_io_path(export_root)
+    io_root.mkdir(parents=True, exist_ok=True)
     stem = skeleton_export_stem(record.id)
-    final_dir = export_root / stem
-    archive = export_root / f"{stem}.zip"
+    final_dir = io_root / stem
+    archive = io_root / f"{stem}.zip"
     shutil.rmtree(final_dir, ignore_errors=True)
     archive.unlink(missing_ok=True)
 
     with tempfile.TemporaryDirectory(
         prefix="rv-skeleton-",
-        dir=export_root,
+        dir=io_root,
     ) as temporary:
         package = Path(temporary) / stem
         package.mkdir()
@@ -321,8 +324,8 @@ def build_skeleton_export(
         )
     )
     return {
-        "package_dir": final_dir,
-        "archive_path": archive_path,
+        "package_dir": export_root / stem,
+        "archive_path": export_root / archive_path.name,
         "archive_size_bytes": archive_path.stat().st_size,
         "archive_sha256": _sha256(archive_path),
         "manifest_sha256": _sha256(final_dir / "manifest.json"),

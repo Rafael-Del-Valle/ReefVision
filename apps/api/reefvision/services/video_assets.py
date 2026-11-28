@@ -24,7 +24,7 @@ from reefvision.services.georeferencing_invalidation import (
     STALE_REASON_TELEMETRY_CONFIGURATION_CHANGED,
     GeoreferencingInvalidationService,
 )
-from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.projects import filesystem_io_path, resolve_managed_project_path
 from reefvision.storage.telemetry import (
     MAX_SRT_BYTES,
     find_paired_airdata,
@@ -300,7 +300,7 @@ class VideoAssetService:
                         path_kind="external",
                     )
                     source = load_dji_srt(paired)
-                    data = paired.read_bytes()
+                    data = filesystem_io_path(paired).read_bytes()
                     metadata = TelemetryMetadata(
                         found=True,
                         available=True,
@@ -481,7 +481,7 @@ class VideoAssetService:
         digest = hashlib.sha256()
         size = 0
         try:
-            with path.open("rb") as stream:
+            with filesystem_io_path(path).open("rb") as stream:
                 while chunk := stream.read(1024 * 1024):
                     size += len(chunk)
                     if size > MAX_SRT_BYTES:

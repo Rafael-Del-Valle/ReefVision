@@ -44,7 +44,7 @@ from reefvision.services.project_exchange_pose_training import checkpoint_schema
 from reefvision.services.workflow_pose_sources import verify_pose_dataset_separation
 from reefvision.storage.datasets import canonical_json_sha256
 from reefvision.storage.models import hash_model_file
-from reefvision.storage.projects import resolve_managed_project_path
+from reefvision.storage.projects import filesystem_io_path, resolve_managed_project_path
 from reefvision.storage.training_resume import capture_checkpoints, retire_previous_pair
 
 
@@ -259,14 +259,14 @@ def process_reefpose_training_job(
             manifest = dict(run.artifact_manifest_json or {})
             resume_relative = str(manifest.get("resume_checkpoint_path") or "") or None
             if resume_relative is None:
-                shutil.rmtree(native_root, ignore_errors=True)
-            native_root.mkdir(parents=True, exist_ok=True)
+                shutil.rmtree(filesystem_io_path(native_root), ignore_errors=True)
+            filesystem_io_path(native_root).mkdir(parents=True, exist_ok=True)
             managed_output_dir = native_root / "checkpoints"
-            managed_output_dir.mkdir(parents=True, exist_ok=True)
+            filesystem_io_path(managed_output_dir).mkdir(parents=True, exist_ok=True)
             work_root = Path(tempfile.mkdtemp(prefix="reefpose-run-"))
             output_dir = work_root / "checkpoints"
             output_dir.mkdir(parents=True, exist_ok=True)
-            export_root = native_root / "exports"
+            export_root = filesystem_io_path(native_root / "exports")
             shutil.rmtree(export_root, ignore_errors=True)
             export_root.mkdir(parents=True, exist_ok=True)
             extraction_root = Path(tempfile.mkdtemp(prefix="reefpose-dataset-"))
@@ -351,6 +351,7 @@ def process_reefpose_training_job(
             checkpoint_source = resume_from or registered_seed
             resume_state = None
             if checkpoint_source is not None:
+                checkpoint_source = filesystem_io_path(checkpoint_source)
                 short_resume = output_dir / (
                     "resume-input.pt" if resume_from is not None else "seed-input.pt"
                 )
@@ -450,7 +451,7 @@ def process_reefpose_training_job(
                     deterministic=bool(configuration["deterministic"]),
                 ),
             )
-            managed_log = managed_output_dir / "training.jsonl"
+            managed_log = filesystem_io_path(managed_output_dir / "training.jsonl")
             if resume_from is not None and managed_log.is_file():
                 shutil.copy2(managed_log, trainer.log_path)
             run.status = run.stage = "training"
@@ -564,10 +565,12 @@ def process_reefpose_training_job(
                 raise RuntimeError("ReefPose managed checkpoint directory is unavailable")
             managed_best = managed_output_dir / "best.pt"
             managed_last = managed_output_dir / "last.pt"
-            shutil.copy2(result.best_checkpoint, managed_best)
-            shutil.copy2(result.last_checkpoint, managed_last)
+            shutil.copy2(result.best_checkpoint, filesystem_io_path(managed_best))
+            shutil.copy2(result.last_checkpoint, filesystem_io_path(managed_last))
             if trainer.log_path.is_file():
-                shutil.copy2(trainer.log_path, managed_output_dir / "training.jsonl")
+                shutil.copy2(
+                    trainer.log_path, filesystem_io_path(managed_output_dir / "training.jsonl")
+                )
             best_relative = _relative_to_data_dir(settings, managed_best)
             last_relative = _relative_to_data_dir(settings, managed_last)
             best_sha256, best_size = hash_model_file(managed_best)
@@ -622,7 +625,9 @@ def process_reefpose_training_job(
                         )
                         log_path = output_dir / "training.jsonl"
                         if log_path.is_file():
-                            shutil.copy2(log_path, managed_output_dir / "training.jsonl")
+                            shutil.copy2(
+                                log_path, filesystem_io_path(managed_output_dir / "training.jsonl")
+                            )
                     except OSError as storage_error:
                         message += f". Saving recovery files failed: {storage_error}"
                 run.result_checkpoint_path = None
@@ -653,7 +658,9 @@ def process_reefpose_training_job(
                         )
                         log_path = output_dir / "training.jsonl"
                         if log_path.is_file():
-                            shutil.copy2(log_path, managed_output_dir / "training.jsonl")
+                            shutil.copy2(
+                                log_path, filesystem_io_path(managed_output_dir / "training.jsonl")
+                            )
                 run.result_checkpoint_path = None
                 run.status = run.stage = "failed"
                 run.error_message = str(exc)
