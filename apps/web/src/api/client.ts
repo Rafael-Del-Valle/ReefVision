@@ -2715,29 +2715,6 @@ export async function validateUltralyticsTrainingConfiguration(payload: {
   );
 }
 
-export interface ProviderModelRegistration {
-  id: string;
-  provider_id: string;
-  task: string;
-  original_filename: string;
-  sha256: string;
-  registered_at: string;
-  project_id: string;
-}
-
-export async function registerProviderModel(
-  projectId: string,
-  providerId: string,
-  file: File,
-): Promise<ProviderModelRegistration> {
-  const formData = new FormData();
-  formData.append("file", file, file.name);
-  return request<ProviderModelRegistration>(
-    `/projects/${encodeURIComponent(projectId)}/provider-models/${encodeURIComponent(providerId)}/register`,
-    { method: "POST", body: formData },
-  );
-}
-
 export async function registerModel(
   projectId: string,
   payload: {

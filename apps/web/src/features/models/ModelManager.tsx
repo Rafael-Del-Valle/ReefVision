@@ -17,7 +17,6 @@ import {
   type PoseEvaluationRun,
   poseEvaluationExportUrl,
   registerModel,
-  registerProviderModel,
   type ModelRegistration,
   type ProviderDependencyStatus,
   type Project,
@@ -32,18 +31,6 @@ import { PoseEvaluationComparisonPanel } from "./PoseEvaluationComparisonPanel";
 import { ReviewedModelRuntime } from "./ReviewedModelRuntime";
 import { ReefPoseValidationPanel } from "../video/ReefPoseValidationPanel";
 import { StaticComparisonPanel } from "../video/StaticComparisonPanel";
-
-const optionalModelProviders = [
-  { id: "grounding_dino", label: "Grounding DINO", extension: ".zip" },
-  { id: "sam2", label: "SAM2", extension: ".zip" },
-  { id: "smolvlm", label: "SmolVLM", extension: ".zip" },
-  { id: "scale_label_ocr", label: "Scale label OCR", extension: ".zip" },
-  {
-    id: "video_depth_anything",
-    label: "Metric Video Depth Anything",
-    extension: ".pth",
-  },
-];
 
 function ModelRow({
   model,
@@ -440,7 +427,9 @@ function CatalogModelCard({
           </p>
         ) : !registered ? (
           <p className="annotation-helper">
-            Model required — register a compatible model to use this feature.
+            {onRegister
+              ? "Model required. Register a compatible model to use this feature."
+              : "See Advanced diagnostics & provider setup for local model requirements."}
           </p>
         ) : (
           <p>
@@ -528,9 +517,6 @@ export function ModelManager({
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [trustedFile, setTrustedFile] = useState<File | null>(null);
-  const [providerFile, setProviderFile] = useState<File | null>(null);
-  const [optionalProviderId, setOptionalProviderId] =
-    useState("grounding_dino");
   const [purpose, setPurpose] = useState<"detector" | "assist">("detector");
   const [providerName, setProviderName] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -789,36 +775,6 @@ export function ModelManager({
         queryClient.invalidateQueries({
           queryKey: ["projects"],
         }),
-      ]);
-    },
-  });
-
-  const registerProviderMutation = useMutation({
-    mutationFn: () => {
-      if (!providerFile)
-        throw new Error("Choose a compatible local model file first");
-      return registerProviderModel(
-        project.id,
-        optionalProviderId,
-        providerFile,
-      );
-    },
-    onSuccess: () => {
-      setProviderFile(null);
-      void Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["model_catalog", project.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["model_hub_bootstrap", project.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["advanced-provider-model-catalog", project.id],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["reefvision-assistant-model-catalog", project.id],
-        }),
-        providerPreflight.refetch(),
       ]);
     },
   });
@@ -1122,52 +1078,53 @@ export function ModelManager({
         )}
 
         <div className="image-grid model-ai-model-grid">
-          {filteredArchitectureCatalogModels.map((model) => (
-            <CatalogModelCard
-              key={model.catalog_id}
-              model={model}
-              onSelect={
-                onSelectCatalogModel
-                  ? (item) => {
-                      setOperationMessage(
-                        `${item.display_name} selected for training from scratch.`,
-                      );
-                      if (item.task === "pose") {
-                        if (item.architecture_reference)
-                          onTrainPoseArchitecture?.(
-                            item.architecture_reference,
-                          );
-                      } else if (item.task === "classify") {
-                        if (item.architecture_reference)
-                          onTrainClassificationArchitecture?.(
-                            item.architecture_reference,
-                          );
-                      } else {
-                        onSelectCatalogModel(item.catalog_id);
+          {filteredArchitectureCatalogModels.map((model) => {
+            const provider = providerCatalog.find(
+              (item) =>
+                item.provider_id === model.provider_id && item.registerable,
+            );
+            const registrationPurpose = provider?.default_registration_purpose;
+            return (
+              <CatalogModelCard
+                key={model.catalog_id}
+                model={model}
+                onSelect={
+                  onSelectCatalogModel
+                    ? (item) => {
+                        setOperationMessage(
+                          `${item.display_name} selected for training from scratch.`,
+                        );
+                        if (item.task === "pose") {
+                          if (item.architecture_reference)
+                            onTrainPoseArchitecture?.(
+                              item.architecture_reference,
+                            );
+                        } else if (item.task === "classify") {
+                          if (item.architecture_reference)
+                            onTrainClassificationArchitecture?.(
+                              item.architecture_reference,
+                            );
+                        } else {
+                          onSelectCatalogModel(item.catalog_id);
+                        }
                       }
-                    }
-                  : undefined
-              }
-              onRegister={() => {
-                if (
-                  optionalModelProviders.some(
-                    (provider) => provider.id === model.provider_id,
-                  )
-                ) {
-                  setOptionalProviderId(model.provider_id);
-                  setProviderFile(null);
-                  document
-                    .getElementById("optional-provider-registration")
-                    ?.setAttribute("open", "");
-                  jumpToModelSection("optional-provider-registration");
-                  return;
+                    : undefined
                 }
-                const form = document.getElementById("model-registration");
-                form?.setAttribute("open", "");
-                jumpToModelSection("model-registration");
-              }}
-            />
-          ))}
+                onRegister={
+                  provider && registrationPurpose
+                    ? () => {
+                        setPurpose(registrationPurpose);
+                        setProviderName(provider.provider_id);
+                        const form =
+                          document.getElementById("model-registration");
+                        form?.setAttribute("open", "");
+                        jumpToModelSection("model-registration");
+                      }
+                    : undefined
+                }
+              />
+            );
+          })}
         </div>
       </section>
 
@@ -1370,96 +1327,6 @@ export function ModelManager({
             )}
           </section>
         </div>
-      </details>
-
-      <details
-        id="optional-provider-registration"
-        className="gallery-panel model-ai-import-shell"
-      >
-        <summary>Register optional provider model</summary>
-        <form
-          className="new-class-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            registerProviderMutation.mutate();
-          }}
-        >
-          <h3>Optional provider model</h3>
-          <p>
-            Provide your own compatible trained model. Transformers bundles must
-            contain the configuration, processor/tokenizer files and trained
-            weights in a ZIP. Metric video depth accepts a local .pth
-            checkpoint.
-          </p>
-          <p>
-            This registration activates the local model for this provider across
-            ReefVision projects. Existing model files are preserved.
-          </p>
-          <label>
-            Optional model provider
-            <select
-              value={optionalProviderId}
-              onChange={(event) => {
-                setOptionalProviderId(event.target.value);
-                setProviderFile(null);
-                registerProviderMutation.reset();
-              }}
-            >
-              {optionalModelProviders.map((provider) => (
-                <option key={provider.id} value={provider.id}>
-                  {provider.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Provider model file
-            <input
-              key={optionalProviderId}
-              type="file"
-              accept={
-                optionalModelProviders.find(
-                  (provider) => provider.id === optionalProviderId,
-                )?.extension
-              }
-              onChange={(event) =>
-                setProviderFile(event.target.files?.[0] ?? null)
-              }
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={!providerFile || registerProviderMutation.isPending}
-          >
-            {registerProviderMutation.isPending
-              ? "Registering..."
-              : "Register provider model"}
-          </button>
-          {registerProviderMutation.error && (
-            <p className="form-error" role="alert">
-              {registerProviderMutation.error.message}
-            </p>
-          )}
-          {registerProviderMutation.data && (
-            <div role="status">
-              <p>
-                Registered {registerProviderMutation.data.original_filename}
-              </p>
-              <p>
-                Provider: {registerProviderMutation.data.provider_id} | Task:{" "}
-                {registerProviderMutation.data.task}
-              </p>
-              <p>Project: {registerProviderMutation.data.project_id}</p>
-              <p>
-                Registered:{" "}
-                {new Date(
-                  registerProviderMutation.data.registered_at,
-                ).toLocaleString()}
-              </p>
-              <code>{registerProviderMutation.data.sha256}</code>
-            </div>
-          )}
-        </form>
       </details>
 
       <details
