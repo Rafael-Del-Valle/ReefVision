@@ -19,9 +19,16 @@ from reefvision.db.models import (
     PoseLandmarkSchemaRevision,
     PoseModelSchemaBinding,
     PoseTrainingDataset,
+    ProjectExchangePackage,
     TrainingRun,
 )
-from reefvision.domain.errors import ConflictError, NotFoundError, ValidationError
+from reefvision.domain.errors import (
+    CheckpointApprovalRequired,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
+from reefvision.ml.model_bundles import checkpoint_requires_trust, require_checkpoint_trust
 from reefvision.ml.provider_hub import require_image_inference_provider
 from reefvision.ml.semantic_segmentation import (
     NNUNET_PROVIDER_ID,
@@ -438,6 +445,57 @@ class SemanticModelService(SegmentationModelService):
 
         return ModelRegistrationResponse.model_validate(model)
 
+    def _check_run_checkpoint_trust(
+        self,
+        run: TrainingRun,
+        checkpoint: Path,
+        approved_sha256: str | None,
+    ) -> None:
+        policy = self.settings.allow_unsafe_pickled_models
+        if not checkpoint_requires_trust(
+            checkpoint,
+            purpose="detector" if run.task == "pose" else run.task,
+            provider_name=run.provider_id,
+        ):
+            return
+        if policy is not None:
+            require_checkpoint_trust(policy, approved=False)
+            return
+        actual, _ = hash_model_file(checkpoint)
+        manifest = run.artifact_manifest_json or {}
+        expected = manifest.get("result_checkpoint_sha256") or manifest.get("bundle_sha256")
+        if expected and actual != expected:
+            raise ValidationError(
+                "The completed training checkpoint checksum changed before registration"
+            )
+        if approved_sha256 == actual:
+            return
+        job = self.session.get(Job, run.job_id) if run.job_id else None
+        project = self._project(run.project_id)
+        root = resolve_managed_project_path(
+            self.settings, f"{project.storage_root}/training/{run.id}"
+        )
+        if (
+            expected == actual
+            and checkpoint.is_relative_to(root)
+            and job is not None
+            and job.status == "succeeded"
+            and job.job_type == "training"
+            and job.project_id == run.project_id
+            and job.request_json.get("training_run_id") == run.id
+        ):
+            # Exchange imports recreate both runs and jobs. Only a local completion
+            # may convey automatic trust in the checkpoint bytes.
+            imports = self.session.scalars(
+                select(ProjectExchangePackage).where(
+                    ProjectExchangePackage.project_id == project.id,
+                    ProjectExchangePackage.direction == "import",
+                )
+            )
+            if not any(run.id in item.options_json.get("id_map", {}).values() for item in imports):
+                return
+        raise CheckpointApprovalRequired(checkpoint.name, actual)
+
     def register_model_from_run(
         self,
         project_id: str,
@@ -448,6 +506,12 @@ class SemanticModelService(SegmentationModelService):
             raise NotFoundError("Training run not found")
         if run.project_id != project_id:
             raise ValidationError("Training runs must belong to the selected project")
+        if run.status == "completed" and run.result_checkpoint_path:
+            candidate_path = resolve_managed_project_path(self.settings, run.result_checkpoint_path)
+            if candidate_path.is_file():
+                self._check_run_checkpoint_trust(
+                    run, candidate_path, payload.approved_checkpoint_sha256
+                )
         if run.registered_model_id and run.result_checkpoint_path:
             original = self._model(run.registered_model_id)
             checkpoint = resolve_managed_project_path(self.settings, run.result_checkpoint_path)

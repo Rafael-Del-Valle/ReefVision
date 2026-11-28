@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import cast
 
@@ -93,6 +94,28 @@ def test_completed_segmentation_run_registers_as_segmenter(
             "display_name": "Segment worker best",
         },
     )
+    assert response.status_code == 409, response.text
+    details = response.json()["detail"]
+    checksum = hashlib.sha256(b"segmentation-best").hexdigest()
+    assert details["sha256"] == checksum
+    assert client.get(f"/api/v1/projects/{project['id']}/models").json() == []
+    strict = app.state.settings.allow_unsafe_pickled_models
+    app.state.settings.allow_unsafe_pickled_models = False
+
+    def submit(digest: str):
+        return client.post(
+            f"/api/v1/projects/{project['id']}/models/register-from-run",
+            json={
+                "training_run_id": run_id,
+                "approved_checkpoint_sha256": digest,
+                "display_name": "Segment worker best",
+            },
+        )
+
+    assert submit(checksum).status_code == 400
+    app.state.settings.allow_unsafe_pickled_models = strict
+    assert submit("a" * 64).status_code == 409
+    response = submit(checksum)
     assert response.status_code == 200, response.text
     model = response.json()
     assert model["purpose"] == "segmenter"

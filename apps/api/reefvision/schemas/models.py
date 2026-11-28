@@ -103,6 +103,7 @@ class InferenceJobCreateRequest(BaseModel):
 
 
 class RegisterModelFromRunRequest(BaseModel):
+    approved_checkpoint_sha256: Digest | None = None
     training_run_id: str = Field(min_length=1, max_length=36)
     display_name: str | None = Field(default=None, max_length=200)
     notes: str | None = Field(default=None, max_length=5000)

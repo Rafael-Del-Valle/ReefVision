@@ -17,6 +17,15 @@ class ValidationError(ReefVisionError):
     """Requested operation violates a domain rule."""
 
 
+class CheckpointApprovalRequired(ValidationError):
+    """A legacy checkpoint needs file-specific approval before loading."""
+
+    def __init__(self, filename: str, sha256: str) -> None:
+        super().__init__(f"Review the source of {filename} before loading this legacy checkpoint.")
+        self.filename = filename
+        self.sha256 = sha256
+
+
 class StorageCapacityError(ReefVisionError):
     """The database or managed storage ran out of space during a request."""
 

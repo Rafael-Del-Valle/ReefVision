@@ -96,6 +96,7 @@ def test_actual_ultralytics_pt_metadata_and_inference_job(
         data={
             "purpose": "detector",
             "display_name": "Locally generated two-class model",
+            "trust_checkpoint": "true",
         },
     )
     assert registered.status_code == 200, registered.text

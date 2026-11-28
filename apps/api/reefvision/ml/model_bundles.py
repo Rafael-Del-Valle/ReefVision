@@ -34,6 +34,41 @@ def _validated_members(archive: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
     return members
 
 
+def checkpoint_requires_trust(path: Path, *, purpose: str, provider_name: str | None) -> bool:
+    """Classify checkpoint containers without loading any model objects."""
+    provider = (provider_name or "").strip().casefold()
+    suffix = path.suffix.casefold()
+    if suffix in {".pt", ".pth"}:
+        # Only this specific project-owned adapter enforces weights_only=True.
+        return (purpose, provider) != ("detector", "reefpose")
+    if suffix != ".zip":
+        return False
+    if purpose in {"semantic_segment", "semantic_segmenter"}:
+        return True
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return any(
+                Path(member.filename).suffix.casefold() in {".bin", ".pt", ".pth", ".pkl", ".ckpt"}
+                for member in _validated_members(archive)
+                if not member.is_dir()
+            )
+    except zipfile.BadZipFile as exc:
+        raise ValidationError("The model bundle is not a valid ZIP archive") from exc
+
+
+def require_checkpoint_trust(policy: bool | None, *, approved: bool) -> str:
+    if policy is False:
+        raise ValidationError("Unrestricted checkpoint loading is disabled by configuration")
+    if approved:
+        return "researcher_approved"
+    if policy is True:
+        return "configured_policy"
+    raise ValidationError(
+        "Confirm that you trust the source of this checkpoint before registration. "
+        "Legacy PyTorch checkpoints may execute code during inspection."
+    )
+
+
 def _inspect_transformers_directory(model_path: Path) -> dict[str, object]:
     config_path = model_path / "config.json"
     if not config_path.is_file():

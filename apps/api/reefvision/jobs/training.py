@@ -165,7 +165,13 @@ def _recover_completed_artifacts(
     if checkpoint is None:
         return False
     _collect_training_results(settings, run, job, save_dir, results_csv)
-    run.result_checkpoint_path = _relative_to_data_dir(settings, checkpoint)
+    selected = _relative_to_data_dir(settings, checkpoint)
+    if run.result_checkpoint_path != selected:
+        run.result_checkpoint_path = selected
+        run.artifact_manifest_json = {
+            **run.artifact_manifest_json,
+            "result_checkpoint_sha256": hash_model_file(checkpoint)[0],
+        }
     run.progress_epoch = run.progress_total_epochs = total
     _complete_training_run(session, run, job)
     job.result_json = {**(job.result_json or {}), "recovered_after_restart": True}
@@ -782,3 +788,9 @@ def _collect_training_results(
         if last_ckpt.is_file()
         else None
     )
+    if run.result_checkpoint_path:
+        selected_path = resolve_managed_project_path(settings, run.result_checkpoint_path)
+        run.artifact_manifest_json = {
+            **run.artifact_manifest_json,
+            "result_checkpoint_sha256": hash_model_file(selected_path)[0],
+        }

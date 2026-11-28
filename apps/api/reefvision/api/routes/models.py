@@ -211,6 +211,7 @@ async def register_model(
     session: DbSession,
     file: Annotated[UploadFile, File(...)],
     purpose: Annotated[str, Form(...)],
+    trust_checkpoint: Annotated[bool, Form()] = False,
     provider_name: Annotated[str | None, Form()] = None,
     display_name: Annotated[str | None, Form()] = None,
     notes: Annotated[str | None, Form()] = None,
@@ -221,6 +222,7 @@ async def register_model(
         provider_name=provider_name,
         upload_filename=file.filename,
         upload_stream=file.file,
+        trust_checkpoint=trust_checkpoint,
         display_name=display_name,
         notes=notes,
     )

@@ -106,6 +106,7 @@ test("previews and reopens a raw-axis adjustment, runs a local model, and replay
           mimeType: "application/octet-stream",
           buffer: weights,
         },
+        trust_checkpoint: "true",
         purpose: "detector",
         display_name: "Synthetic local detector",
       },
