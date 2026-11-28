@@ -256,6 +256,46 @@ try {
         throw 'A stable provenance manifest could not be validated after its writer closed.'
     }
 
+    # Identical bytes from a different staging directory must not certify
+    # a single installer set. Exercise both the manifest and CAB paths,
+    # checking the intended rejection rather than any incidental error.
+    $otherStage = Join-Path $fixture 'other build staging'
+    New-Item -ItemType Directory -Path $otherStage -ErrorAction Stop | Out-Null
+    $otherManifest = Join-Path $otherStage 'build-provenance.json'
+    $otherCab = Join-Path $otherStage 'rv3.cab'
+    Copy-Item -LiteralPath $manifestPath -Destination $otherManifest
+    Copy-Item -LiteralPath $candidateCabPaths[2] -Destination $otherCab
+    $otherManifestRejected = $false
+    try {
+        $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $sixCabPaths -ProvenancePath $otherManifest
+    } catch {
+        if ($_.Exception.Message -notmatch 'Manifest and MSI must be in the same staging directory') { throw }
+        $otherManifestRejected = $true
+    }
+    if (-not $otherManifestRejected) { throw 'Identical manifest from another staging directory was accepted.' }
+    $mixedCabPaths = @($sixCabPaths | ForEach-Object { $_ })
+    $mixedCabPaths[2] = $otherCab
+    $otherCabRejected = $false
+    try {
+        $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $mixedCabPaths -ProvenancePath $manifestPath
+    } catch {
+        if ($_.Exception.Message -notmatch 'Artifact hash, name, or directory conflicts with build provenance') { throw }
+        $otherCabRejected = $true
+    }
+    if (-not $otherCabRejected) { throw 'Identical CAB from another staging directory was accepted.' }
+    # Rejected inputs must not change the original build or copied artifacts.
+    if ((Get-FileHash -LiteralPath $otherManifest -Algorithm SHA256).Hash -cne
+        (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash -or
+        (Get-FileHash -LiteralPath $otherCab -Algorithm SHA256).Hash -cne
+        (Get-FileHash -LiteralPath $candidateCabPaths[2] -Algorithm SHA256).Hash) {
+        throw 'A rejected cross-directory provenance check modified fixture bytes.'
+    }
+    $originalStage = (& $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath $sixCabPaths -ProvenancePath $manifestPath |
+        Out-String | ConvertFrom-Json)
+    if ($originalStage.provenance.status -cne 'matched_complete' -or $originalStage.provenance.verifiedArtifacts -ne 7) {
+        throw 'Cross-directory rejection prevented subsequent valid same-directory evidence.'
+    }
+
     $duplicatePathRejected = $false
     try { $null = & $collector -CandidateSha $sha -MsiPath $candidateMsi -CabPath @($candidateCab, $candidateCab) 2>&1 }
     catch { $duplicatePathRejected = $true }
